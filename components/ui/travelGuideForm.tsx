@@ -10,6 +10,7 @@ const TravelGuideForm: React.FC = () => {
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [error, setError] = useState<string>('');
+  const [saveresult, setSaveResult] = useState<string>('');
   const [showAddButtons, setShowAddButtons] = useState<boolean[]>([true]);
 
   const travelGuideService = new TravelGuideService();
@@ -74,7 +75,9 @@ const TravelGuideForm: React.FC = () => {
       description: description,
       highlights: highlights
     };
-    travelGuideService.saveCityGuide(cityGuide);
+    travelGuideService.saveCityGuide(cityGuide)
+      .then(() => setSaveResult('City guide saved successfully'))
+      .catch(() => setSaveResult('Failed to save city guide'));
   };
 
 
@@ -145,6 +148,7 @@ const TravelGuideForm: React.FC = () => {
         <button type="submit">
           Submit
         </button>
+        {saveresult && <div className="text-green-500 mb-4">{saveresult}</div>}
       </form>
     </div>
   );
