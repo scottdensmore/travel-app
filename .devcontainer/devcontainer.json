@@ -12,11 +12,20 @@
 	// "forwardPorts": [],
 
 	// Use 'postCreateCommand' to run commands after the container is created.
-	"postCreateCommand": "npm install"
+	"postCreateCommand": "npm install && npm run dev",
 
 	// Configure tool-specific properties.
-	// "customizations": {},
-
+	"customizations": {
+		// Configure properties specific to VS Code.
+		"vscode": {
+			"extensions": [
+				"github.copilot",
+				"github.copilot-workspace",
+				"github.vscode-pull-request-github",
+				"launchdarklyofficial.launchdarkly"
+			]
+		}
+	}
 	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
 	// "remoteUser": "root"
 }
