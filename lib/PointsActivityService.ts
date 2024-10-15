@@ -1,5 +1,5 @@
 import { PointsActivityData, StartingPoints } from "./data/PointsActivityData";
-import { PointsActivityDisplay, PointsActivityDisplayData, PointsActivityRawData } from "./types/PointsActivity";
+import { PointsActivityDisplayData, PointsActivityRawData } from "./types/PointsActivity";
 
 class PointsActivityService {
   getPointsActivity(): PointsActivityDisplayData[] {
@@ -40,9 +40,20 @@ class PointsActivityService {
       return dateA.getTime() - dateB.getTime();
     });
 
+    const startDate = new Date(sortedMonths[0]);
+    startDate.setMonth(startDate.getMonth() - 1);
+    const endDate = new Date(sortedMonths[sortedMonths.length - 1]);
+    const allMonths: string[] = [];
+
+    for (let date = new Date(startDate); date <= endDate; date.setMonth(date.getMonth() + 1)) {
+      allMonths.push(date.toLocaleString('default', { month: 'long', year: 'numeric' }));
+    }
+
     let cumulativePoints = StartingPoints;
-    const displayData: PointsActivityDisplayData[] = sortedMonths.map(monthYear => {
-      cumulativePoints += monthlyPointsMap[monthYear];
+    const displayData: PointsActivityDisplayData[] = allMonths.map(monthYear => {
+      if (monthlyPointsMap[monthYear]) {
+        cumulativePoints += monthlyPointsMap[monthYear];
+      }
       return {
         description: monthYear,
         date: monthYear,
@@ -56,7 +67,6 @@ class PointsActivityService {
   getCurrentPoints(): number {
     return PointsActivityData.reduce((total, activity) => total + activity.points, StartingPoints);
   }
-
 }
 
 export default PointsActivityService;
