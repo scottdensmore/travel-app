@@ -10,3 +10,5 @@ const MyComponentName: React.FC = () => {
       <div></div>
       );
   };
+
+For charting components, always add 'use client';

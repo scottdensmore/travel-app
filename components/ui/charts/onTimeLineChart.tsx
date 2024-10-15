@@ -3,12 +3,7 @@
 import React from 'react';
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 import {
-    Card,
     CardContent,
-    CardHeader,
-    CardTitle,
-    CardDescription,
-    CardFooter
 } from "@/components/ui/card"
 import {
     ChartTooltip,
@@ -60,10 +55,6 @@ const OnTimeLineChart: React.FC<{ ontimeData: { name: string, ontimepercent: num
                         </LineChart>
                     </ChartContainer>
                 </CardContent>
-                <CardFooter>
-                    On Time Percentage
-                </CardFooter>
-         
         </Suspense>
     );
 }
