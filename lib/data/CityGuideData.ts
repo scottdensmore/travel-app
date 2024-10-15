@@ -1,4 +1,4 @@
-import CityGuide from "../CityGuide";
+import CityGuide from "../types/CityGuide";
 
 const CityGuideData: CityGuide[] = [
   {
