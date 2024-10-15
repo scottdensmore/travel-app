@@ -2,7 +2,7 @@ When you create a new reusable React component, make sure you add a LaunchDarkly
 Only do this for React components that you create.
 The below is an example for the start of a component called MyComponentName.
 
-import { LaunchDarklyService } from '@/lib/LaunchDarklyService';
+import LaunchDarklyService from '@/lib/LaunchDarklyService';
 
 const MyComponentName: React.FC = () => {
   if (!new LaunchDarklyService().getFlagStatus('my-component-name')) {
