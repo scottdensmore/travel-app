@@ -67,6 +67,10 @@ class PointsActivityService {
   getCurrentPoints(): number {
     return PointsActivityData.reduce((total, activity) => total + activity.points, StartingPoints);
   }
+
+  getCurrentStatus(): string {
+    return "Gold";
+  }
 }
 
 export default PointsActivityService;
