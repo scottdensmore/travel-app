@@ -3,8 +3,12 @@
 import * as React from 'react'
 import { Suspense, useState, useEffect } from 'react'
 import Link from 'next/link'
+import LaunchDarklyService  from '@/lib/LaunchDarklyService';
 
 const FlightBookingForm: React.FC = () => {
+    if (!new LaunchDarklyService().getFlagStatus('FlightBookingForm-flag')) {
+        return ( <div></div> );
+    }
   const [departureDate, setDepartureDate] = useState<string>('');
   const [returnDate, setReturnDate] = useState<string>('');
   const [isOneWay, setIsOneWay] = useState(false);
