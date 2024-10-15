@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import TravelGuideService from '@/lib/TravelGuideService';
+import CityGuide from '@/lib/types/CityGuide';
 
 const TravelGuideForm: React.FC = () => {
   const [city, setCity] = useState('');
@@ -9,6 +11,8 @@ const TravelGuideForm: React.FC = () => {
   const [longitude, setLongitude] = useState<number | null>(null);
   const [error, setError] = useState<string>('');
   const [showAddButtons, setShowAddButtons] = useState<boolean[]>([true]);
+
+  const travelGuideService = new TravelGuideService();
 
   const handleHighlightChange = (index: number, value: string) => {
     const newHighlights = [...highlights];
@@ -62,6 +66,15 @@ const TravelGuideForm: React.FC = () => {
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     console.log({ city, country, description, highlights, latitude, longitude });
+    const cityGuide: CityGuide = {
+      id: 1,
+      city: city,
+      country: country,
+      latlong: [latitude || 0, longitude || 0],
+      description: description,
+      highlights: highlights
+    };
+    travelGuideService.saveCityGuide(cityGuide);
   };
 
 

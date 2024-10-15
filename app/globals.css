@@ -460,7 +460,7 @@ footer .title {
       position: absolute;
       top: 0;
       right: 0;
-      overflow: scroll;
+      overflow: auto;
       opacity: .9;
       height: 100%;
       backdrop-filter: blur(90px);
