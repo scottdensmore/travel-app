@@ -15,11 +15,11 @@
   "postCreateCommand": "npm install",
 
   // Use 8-core, 32GB memory and 64GB storage machine for Codespace
-  // "hostRequirements": {
-	// "cpus": 8,
-	// "memory": "32gb",
-	// "storage": "64gb"
-  //},
+   "hostRequirements": {
+	 "cpus": 8,
+	 "memory": "32gb",
+	 "storage": "64gb"
+  },
 
   // Configure tool-specific properties.
   "customizations": {
