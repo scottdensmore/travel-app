@@ -1,10 +1,11 @@
 "use client"
-import TravelGuideForm from "@/components/ui/travelGuideForm";
+import React from "react";
+import TravelGuideForm from "../../../components/ui/travelGuideForm";
 
 export default function Home() {
   return (
       <div className="page-container admin">
-      <div className="sidebar-menu">
+      <div className="sidebar-menu" id="sidebar">
         <ul>
           <li><a href="#">New Airports</a></li>
           <li><a href="#">Partners</a></li>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import TravelGuideService from '@/lib/TravelGuideService';
-import CityGuide from '@/lib/types/CityGuide';
+import TravelGuideService from '../../lib/TravelGuideService';
+import CityGuide from '../../lib/types/CityGuide';
 
 const TravelGuideForm: React.FC = () => {
   const [city, setCity] = useState('');
@@ -84,7 +84,7 @@ const TravelGuideForm: React.FC = () => {
   return (
     <div className="admin-card">   
       <h2>Add a New Travel Guide</h2>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} id="travelGuideForm">
         <div>
           <label htmlFor='city'> City: </label>
             <input
