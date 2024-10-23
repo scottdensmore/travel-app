@@ -34,7 +34,7 @@ describe('Home Page', () => {
   // check only the expected input fields are rendered
   it('renders the correct input fields', () => {
     const doc = render(<Home />);
-    const inputs = doc.container.querySelectorAll('input');
-    expect(inputs).toHaveLength(3);
+    const inputs = doc.container.querySelectorAll('input, textarea, select');
+    expect(inputs).toHaveLength(4);
   });
 });

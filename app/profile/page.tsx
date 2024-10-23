@@ -1,3 +1,4 @@
+import React from "react";
 import PointsActivityTable from "@/components/ui/pointsActivityTable";
 import NextStatusChart from "@/components/ui/charts/nextStatusChart";
 import PointsActivityService from "@/lib/PointsActivityService";
