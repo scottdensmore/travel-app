@@ -147,7 +147,7 @@ const FlightBookingForm: React.FC = () => {
 
                   <div className="checkbox-container">
                       <input type="checkbox" id="rewards" name="rewards" />
-                      <label htmlFor="rewards">Search rewards Flights</label>
+                      <label htmlFor="rewards">Search reward flights</label>
                   </div>
                   
                   <button type="submit">Find your Journey</button>
