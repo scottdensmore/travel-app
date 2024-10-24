@@ -26,7 +26,7 @@ class PointsActivityService {
     const monthlyPointsMap: { [key: string]: number } = {};
 
     PointsActivityData.forEach((activity: PointsActivityRawData) => {
-      const monthYear = activity.date.toLocaleString('default', { month: 'long', year: 'numeric' });
+      const monthYear = activity.date.toLocaleString('default', { month: 'short', year: 'numeric' });
       if (monthlyPointsMap[monthYear]) {
         monthlyPointsMap[monthYear] += activity.points;
       } else {
@@ -46,7 +46,7 @@ class PointsActivityService {
     const allMonths: string[] = [];
 
     for (let date = new Date(startDate); date <= endDate; date.setMonth(date.getMonth() + 1)) {
-      allMonths.push(date.toLocaleString('default', { month: 'long', year: 'numeric' }));
+      allMonths.push(date.toLocaleString('default', { month: 'short', year: 'numeric' }));
     }
 
     let cumulativePoints = StartingPoints;
