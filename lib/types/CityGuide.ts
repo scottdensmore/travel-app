@@ -1,5 +1,4 @@
 interface CityGuide {
-  id: number,
   city: string;
   country: string;
   latlong: [number, number];
