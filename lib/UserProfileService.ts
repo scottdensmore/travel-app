@@ -4,7 +4,7 @@ class UserProfileService {
   }
 
   getUserAvatar(): string {
-    return "/img/avatar.jpeg";
+    return "/img/profile-photo.jpg";
   }
 
 }
