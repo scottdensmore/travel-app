@@ -80,13 +80,13 @@ const FlightBookingForm: React.FC = () => {
                   <div className="fields-container">
                   <label htmlFor="from">From</label>
                   <select id="from" name="from">
+                    <option value="SFO">San Francisco (SFO)</option>
                     <option value="NYC">New York City (NYC)</option>
                     <option value="LAX">Los Angeles (LAX)</option>
                     <option value="CHI">Chicago (CHI)</option>
                     <option value="ATL">Atlanta (ATL)</option>
                     <option value="DFW">Dallas/Fort Worth (DFW)</option>
                     <option value="DEN">Denver (DEN)</option>
-                    <option value="SFO">San Francisco (SFO)</option>
                     <option value="SEA">Seattle (SEA)</option>
                     <option value="LAS">Las Vegas (LAS)</option>
                     <option value="MIA">Miami (MIA)</option>
@@ -147,10 +147,10 @@ const FlightBookingForm: React.FC = () => {
 
                   <div className="checkbox-container">
                       <input type="checkbox" id="rewards" name="rewards" />
-                      <label htmlFor="rewards">Search rewards Flights</label>
+                      <label htmlFor="rewards">Search reward flights</label>
                   </div>
                   
-                  <button type="submit">Find your Journey</button>
+                  <button type="submit">Find your trip</button>
               </form>
           </div>
       </div>

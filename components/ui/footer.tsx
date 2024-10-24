@@ -45,7 +45,7 @@ const Footer: React.FC = () => {
             <div className="footer-column">
             <ul>
                 <li className="title"><strong>Follow us on</strong></li>
-                <li>Mastodont</li>
+                <li>Mastodon</li>
                 <li>GitHub</li>
             </ul>
             </div>
