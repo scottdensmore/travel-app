@@ -150,7 +150,7 @@ const FlightBookingForm: React.FC = () => {
                       <label htmlFor="rewards">Search reward flights</label>
                   </div>
                   
-                  <button type="submit">Find your Journey</button>
+                  <button type="submit">Find your trip</button>
               </form>
           </div>
       </div>
