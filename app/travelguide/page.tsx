@@ -6,13 +6,13 @@ import CityGuideData from "@/lib/data/CityGuideData";
 
 
 export default function TravelGuidePage() {
-    const [selectedCity, setSelectedCity] = useState<number | null>(null);
+    const [selectedCityName, setSelectedCityName] = useState<string | null>(null);
 
     const cities = CityGuideData;
 
-    const handleMarkerClick = (cityId: number) => {
-        setSelectedCity(cityId);
-        console.log('cityId', cityId);
+    const handleMarkerClick = (cityName: string) => {
+        setSelectedCityName(cityName);
+        console.log('cityName', cityName);
     };
 
     return (
@@ -34,7 +34,7 @@ export default function TravelGuidePage() {
                             <Marker
                                 key={index}
                                 coordinates={[city.latlong[1], city.latlong[0]]}
-                                onClick={() => handleMarkerClick(city.id)}
+                                onClick={() => handleMarkerClick(city.city)}
                                 style={{ cursor: 'pointer' }}
                             >
                                 <circle r={5} fill="#4EA0E9" style={{ cursor: 'pointer' }} />
@@ -49,16 +49,16 @@ export default function TravelGuidePage() {
                 <div className="travel-guides">
                     <ul>
                         {CityGuideData.map((city, index) => (
-                            <li key={index} id={"city-" + city.id}>
-                                <h3 onClick={() => handleMarkerClick(city.id)}>{city.city}, {city.country}</h3>
+                            <li key={index} id={city.city}>
+                                <h3 onClick={() => handleMarkerClick(city.city)}>{city.city}, {city.country}</h3>
                             </li>
                         ))}
                     </ul>
                 </div>
 
                 {CityGuideData.map((city, index) => (
-                    <div className={"sticky-sidebar guide-extra " + (city.id === selectedCity ? 'highlight' : '')} id={"extras-" + city.id} >
-                        <div className={city.id === selectedCity ? 'highlight' : ''}>
+                    <div className={"sticky-sidebar guide-extra " + (city.city === selectedCityName ? 'highlight' : '')}>
+                        <div className={city.city === selectedCityName ? 'highlight' : ''}>
                             <strong><a href="#" onClick={() => handleMarkerClick(0)}>← Back</a></strong>
                             <h3>{city.city}, {city.country}</h3>
                             <p>{city.description}</p>

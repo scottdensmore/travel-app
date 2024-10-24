@@ -2,7 +2,6 @@ import CityGuide from "../types/CityGuide";
 
 const CityGuideData: CityGuide[] = [
   {
-    id: 1,
     city: "New York",
     country: "USA",
     latlong: [40.7128, -74.0060],
@@ -10,7 +9,6 @@ const CityGuideData: CityGuide[] = [
     highlights: ["Central Park", "Statue of Liberty", "Empire State Building"],
   },
   {
-    id: 2,
     city: "Los Angeles",
     country: "USA",
     latlong: [34.0522, -118.2437],
@@ -18,7 +16,6 @@ const CityGuideData: CityGuide[] = [
     highlights: ["Hollywood Sign", "Santa Monica Pier", "Griffith Observatory"],
   },
   {
-    id: 3,
     city: "Chicago",
     country: "USA",
     latlong: [41.8781, -87.6298],
@@ -26,7 +23,6 @@ const CityGuideData: CityGuide[] = [
     highlights: ["Willis Tower", "Millennium Park", "Navy Pier"],
   },
   {
-    id: 5,
     city: "Miami",
     country: "USA",
     latlong: [25.7617, -80.1918],
@@ -34,7 +30,6 @@ const CityGuideData: CityGuide[] = [
     highlights: ["South Beach", "Art Deco Historic District", "Little Havana"],
   },
   {
-    id: 6,
     city: "Orlando",
     country: "USA",
     latlong: [28.5383, -81.3792],
@@ -42,7 +37,6 @@ const CityGuideData: CityGuide[] = [
     highlights: ["Walt Disney World", "Universal Studios", "Lake Eola Park"],
   },
   {
-    id: 7,
     city: "Las Vegas",
     country: "USA",
     latlong: [36.1699, -115.1398],
@@ -50,7 +44,6 @@ const CityGuideData: CityGuide[] = [
     highlights: ["Las Vegas Strip", "Bellagio Fountains", "Fremont Street Experience"],
   },
   {
-    id: 8,
     city: "Seattle",
     country: "USA",
     latlong: [47.6062, -122.3321],
@@ -58,7 +51,6 @@ const CityGuideData: CityGuide[] = [
     highlights: ["Space Needle", "Pike Place Market", "Chihuly Garden and Glass"],
   },
   {
-    id: 9,
     city: "Detroit",
     country: "USA",
     latlong: [42.3314, -83.0458],
@@ -66,7 +58,6 @@ const CityGuideData: CityGuide[] = [
     highlights: ["Henry Ford Museum", "Motown Museum", "Detroit Institute of Arts"],
   },
   {
-    id: 10,
     city: "Boston",
     country: "USA",
     latlong: [42.3601, -71.0589],
@@ -74,7 +65,6 @@ const CityGuideData: CityGuide[] = [
     highlights: ["Freedom Trail", "Fenway Park", "Harvard Square"],
   },
   {
-    id: 11,
     city: "New Orleans",
     country: "USA",
     latlong: [29.9511, -90.0715],
