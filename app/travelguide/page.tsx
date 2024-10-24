@@ -57,7 +57,7 @@ export default function TravelGuidePage() {
                 </div>
 
                 {CityGuideData.map((city, index) => (
-                    <div className={"sticky-sidebar guide-extra " + (city.city === selectedCityName ? 'highlight' : '')}>
+                    <div key={city.city} className={"sticky-sidebar guide-extra " + (city.city === selectedCityName ? 'highlight' : '')}>
                         <div className={city.city === selectedCityName ? 'highlight' : ''}>
                             <strong><a href="#" onClick={() => handleMarkerClick(0)}>← Back</a></strong>
                             <h3>{city.city}, {city.country}</h3>
