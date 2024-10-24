@@ -28,7 +28,7 @@ import { usePathname } from 'next/navigation';
                     <ul>
                     <li className="avatar">
                             <Link href="/profile">
-                                <img src="/img/avatar.jpeg" width="32px" height="32px" />
+                                <img src="/img/profile-photo.jpg" width="32px" height="32px" />
                             </Link>
                         </li>
                     </ul>           
@@ -46,7 +46,7 @@ import { usePathname } from 'next/navigation';
                         </li>
                         <li className={pathname === '/profile' ? 'avatar' : 'avatar'}>
                             <Link href="/profile">
-                                <img src="/img/avatar.jpeg" width="32px" height="32px" />
+                                <img src="/img/profile-photo.jpg" width="32px" height="32px" />
                             </Link>
                         </li>
                     </ul>
