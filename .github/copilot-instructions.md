@@ -13,4 +13,4 @@ const MyComponentName: React.FC = () => {
 
 For charting components, always add 'use client';
 
-When adding new functionality, make sure you update the README and add tests where appropriate.
+When adding new functionality, make sure you update the README.
