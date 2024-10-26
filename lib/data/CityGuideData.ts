@@ -54,8 +54,8 @@ const CityGuideData: CityGuide[] = [
     city: "Detroit",
     country: "USA",
     latlong: [42.3314, -83.0458],
-    description: "Detroit is a city with a rich history and a vibrant cultural scene. Known as the Motor City, it was once the heart of the American auto industry and is home to iconic landmarks like the Henry Ford Museum and the Motown Museum.\n\nDetroit's neighborhoods, such as Corktown and Midtown, offer a mix of historic architecture, art, and cuisine. The city's museums, theaters, and music venues showcase its creative spirit and resilience. Detroit's revitalization efforts are transforming it into a hub for innovation and entrepreneurship.",
-    highlights: ["Henry Ford Museum", "Motown Museum", "Detroit Institute of Arts"],
+    description: "Detroit, also known as Motor City, is a city with a rich history and a vibrant cultural scene. It is the heart of the American auto industry and is home to iconic landmarks like the Henry Ford Museum and the Motown Museum.\n\nDetroit's neighborhoods, such as Corktown and Midtown, offer a mix of historic architecture, art, and cuisine. The city's museums, theaters, and music venues showcase its creative spirit and resilience. Detroit's revitalization efforts are transforming it into a hub for innovation and entrepreneurship.",
+    highlights: ["Henry Ford Museum", "GM Renaissance Center", "Automotive Hall of Fame"],
   },
   {
     city: "Boston",

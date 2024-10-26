@@ -4,9 +4,10 @@ import React, { useState, Suspense } from 'react';
 import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
 import CityGuideData from "@/lib/data/CityGuideData";
 
+const DEFAULT_CITY_NAME = 'Detroit';
 
 export default function TravelGuidePage() {
-    const [selectedCityName, setSelectedCityName] = useState<string | null>(null);
+    const [selectedCityName, setSelectedCityName] = useState<string | null>(DEFAULT_CITY_NAME);
 
     const cities = CityGuideData;
 
