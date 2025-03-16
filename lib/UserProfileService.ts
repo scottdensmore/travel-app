@@ -1,10 +1,10 @@
 class UserProfileService {
   getUserName(): string {
-    return "Mona Lisa";
+    return "Scott Densmore";
   }
 
   getUserAvatar(): string {
-    return "/img/profile-photo.jpg";
+    return "/img/my-profile-photo.jpg";
   }
 
 }
