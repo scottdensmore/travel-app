@@ -2,7 +2,19 @@ This is the website for Mona Airways. Fly with the Octocat!
 
 ## Getting Started
 
-First, install from npm
+### Using Docker (Recommended)
+
+To quickly get the application running with a database and demo data, use Docker:
+
+```bash
+docker compose up --build
+```
+
+This will automatically start the database, run migrations, seed data, and serve the app at [http://localhost:3000](http://localhost:3000).
+
+### Manual Setup
+
+If you prefer to run the application manually, first install dependencies from npm:
 
 ```bash
 npm install
@@ -14,7 +26,7 @@ Then run the development server:
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result. You may need to set up a local Postgres database and run migrations manually (`npx prisma migrate deploy` and `npx prisma db seed`) if using this method.
 
 ## Features
 

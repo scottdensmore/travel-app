@@ -1,0 +1,128 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id            String         @id @default(cuid())
+  name          String?
+  email         String?        @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  role          Role           @default(USER)
+  accounts      Account[]
+  sessions      Session[]
+  bookings      Booking[]
+  favorites     UserFavorite[]
+  reviews       Review[]
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model CityGuide {
+  id          Int      @id @default(autoincrement())
+  city        String
+  country     String
+  latlong     Float[]
+  description String
+  highlights  String[]
+  coverImage  String?
+
+  favorites UserFavorite[]
+  reviews   Review[]
+}
+
+model Booking {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+
+  flightId Int?
+  flight   Flight? @relation(fields: [flightId], references: [id])
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model Flight {
+  id            Int       @id @default(autoincrement())
+  flightNumber  String
+  airline       String
+  from          String
+  to            String
+  departureDate DateTime
+  returnDate    DateTime?
+  price         String
+
+  bookings Booking[]
+}
+
+model UserFavorite {
+  id          String   @id @default(cuid())
+  userId      String
+  cityGuideId Int
+  createdAt   DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cityGuide CityGuide @relation(fields: [cityGuideId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cityGuideId])
+}
+
+model Review {
+  id          String   @id @default(cuid())
+  content     String
+  rating      Int
+  userId      String
+  cityGuideId Int
+  createdAt   DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cityGuide CityGuide @relation(fields: [cityGuideId], references: [id], onDelete: Cascade)
+}

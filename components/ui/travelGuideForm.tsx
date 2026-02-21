@@ -1,5 +1,6 @@
+"use client"
 import React, { useState } from 'react';
-import TravelGuideService from '../../lib/TravelGuideService';
+import { saveCityGuideAction } from '@/app/actions';
 import CityGuide from '../../lib/types/CityGuide';
 
 const TravelGuideForm: React.FC = () => {
@@ -12,8 +13,19 @@ const TravelGuideForm: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [saveresult, setSaveResult] = useState<string>('');
   const [showAddButtons, setShowAddButtons] = useState<boolean[]>([true]);
+  const [coverImage, setCoverImage] = useState<string | null>(null);
 
-  const travelGuideService = new TravelGuideService();
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCoverImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleHighlightChange = (index: number, value: string) => {
     const newHighlights = [...highlights];
@@ -27,7 +39,7 @@ const TravelGuideForm: React.FC = () => {
     newShowAddButtons[index] = false; // Hide the button that was clicked
     newShowAddButtons.push(true); // Add a new button for the new highlight
     setShowAddButtons(newShowAddButtons);
-    };
+  };
 
   const fetchCoordinates = async (cityName: string, countryName: string) => {
     try {
@@ -66,62 +78,78 @@ const TravelGuideForm: React.FC = () => {
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    console.log({ city, country, description, highlights, latitude, longitude });
+    console.log({ city, country, description, highlights, latitude, longitude, coverImage });
     const cityGuide: CityGuide = {
       id: 1,
       city: city,
       country: country,
       latlong: [latitude || 0, longitude || 0],
       description: description,
-      highlights: highlights
+      highlights: highlights,
+      coverImage: coverImage || undefined
     };
-    travelGuideService.saveCityGuide(cityGuide)
+    saveCityGuideAction(cityGuide)
       .then(() => setSaveResult('City guide saved successfully'))
       .catch(() => setSaveResult('Failed to save city guide'));
   };
 
 
   return (
-    <div className="admin-card">   
+    <div className="admin-card">
       <h2>Add a New Travel Guide</h2>
       <form onSubmit={handleSubmit} id="travelGuideForm">
         <div>
           <label htmlFor='city'> City: </label>
-            <input
-              id="city"
-              placeholder="Enter city name"
-              type="text"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              onBlur={handleBlur}
-            />
-          
+          <input
+            id="city"
+            placeholder="Enter city name"
+            type="text"
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            onBlur={handleBlur}
+          />
+
+        </div>
+        <div>
+          <label htmlFor="coverImage">Cover Image:</label>
+          <input
+            id="coverImage"
+            type="file"
+            accept="image/*"
+            onChange={handleImageChange}
+            className="mb-4"
+          />
+          {coverImage && (
+            <div className="mb-4">
+              <img src={coverImage} alt="Cover Preview" className="max-w-xs h-auto rounded shadow" />
+            </div>
+          )}
         </div>
         <div>
           <label htmlFor='country'> Country: </label>
-            <input
-              id="country"
-              placeholder="Enter country name"
-              type="text"
-              value={country}
-              onChange={(e) => setCountry(e.target.value)}
-              onBlur={handleBlur}
-            />
-          
+          <input
+            id="country"
+            placeholder="Enter country name"
+            type="text"
+            value={country}
+            onChange={(e) => setCountry(e.target.value)}
+            onBlur={handleBlur}
+          />
+
         </div>
         <div>
-        {latitude && <div><i><strong>Location:</strong> {latitude},{longitude}</i></div>}
-        {error && <div className="text-red-500 mb-4">{error}</div>}
+          {latitude && <div><i><strong>Location:</strong> {latitude},{longitude}</i></div>}
+          {error && <div className="text-red-500 mb-4">{error}</div>}
         </div>
         <div>
           <label htmlFor='description'> Description: </label>
-            <textarea
-              id="description"
-              placeholder="Enter Description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          
+          <textarea
+            id="description"
+            placeholder="Enter Description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+
         </div>
         <div>
           <label>Highlights:</label>

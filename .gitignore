@@ -38,3 +38,5 @@ next-env.d.ts
 mise.toml
 
 .idea/
+
+/lib/generated/prisma
