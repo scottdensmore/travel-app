@@ -53,24 +53,29 @@ const TitleBar: React.FC = () => {
                     )}
 
                     {session ? (
+                        <li style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div className="avatar" style={{ display: 'flex', alignItems: 'center' }}>
+                                <Link href="/profile" style={{ display: 'flex' }}>
+                                    <img src={userAvatar} width="32" height="32" alt="Profile" style={{ borderRadius: '50%', display: 'block' }} />
+                                </Link>
+                            </div>
+                            <button onClick={() => signOut()} style={{ background: 'none', border: 'none', padding: 0, height: 'auto', width: 'auto', color: pathname?.startsWith('/admin') ? 'white' : 'inherit', cursor: 'pointer', fontWeight: 'bold', fontSize: 'inherit', fontFamily: 'inherit' }}>
+                                Sign Out
+                            </button>
+                        </li>
+                    ) : (
                         <>
-                            <li className="avatar">
-                                <Link href="/profile">
-                                    <img src={userAvatar} width="32" height="32" alt="Profile" style={{ borderRadius: '50%' }} />
+                            <li>
+                                <Link href="/login" style={{ color: pathname?.startsWith('/admin') ? 'white' : 'inherit', fontWeight: 'bold' }}>
+                                    Sign In
                                 </Link>
                             </li>
                             <li>
-                                <button onClick={() => signOut()} style={{ background: 'none', border: 'none', color: pathname?.startsWith('/admin') ? 'white' : 'inherit', cursor: 'pointer', fontWeight: 'bold' }}>
-                                    Sign Out
-                                </button>
+                                <Link href="/signup" style={{ color: pathname?.startsWith('/admin') ? 'white' : 'inherit', fontWeight: 'bold' }}>
+                                    Sign Up
+                                </Link>
                             </li>
                         </>
-                    ) : (
-                        <li>
-                            <button onClick={() => signIn()} style={{ background: 'none', border: 'none', color: pathname?.startsWith('/admin') ? 'white' : 'inherit', cursor: 'pointer', fontWeight: 'bold' }}>
-                                Sign In
-                            </button>
-                        </li>
                     )}
                 </ul>
             </nav>
