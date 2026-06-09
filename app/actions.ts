@@ -37,21 +37,12 @@ export async function searchFlightsAction(from: string, to: string) {
     return await prisma.flight.findMany();
 }
 
-export async function bookFlightAction(bookingData: {
-    flightId?: number;
-    flightNumber?: string;
-    airline?: string;
-    from?: string;
-    to?: string;
-    departureDate?: Date;
-    returnDate?: Date | null;
-    price?: string;
-}) {
+export async function bookFlightAction(bookingData: { flightId?: number }) {
     const session = await getServerSession(authOptions);
     const userId = session?.user ? (session.user as any).id : undefined;
 
     return await flightBookingService.bookFlight({
-        ...bookingData,
+        flightId: bookingData.flightId,
         userId
     });
 }

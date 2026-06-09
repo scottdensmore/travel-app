@@ -5,7 +5,7 @@ interface CityGuide {
   latlong: [number, number];
   description: string;
   highlights: string[];
-  coverImage?: string;
+  coverImage?: string | null;
 }
 
 export default CityGuide;

@@ -68,13 +68,13 @@ export default async function Home() {
                 </thead>
                 <tbody>
                   {userBookings.map((booking) => {
-                    const b = booking.flight || booking;
+                    const flight = booking.flight;
                     return (
                       <tr key={booking.id} className="border-b">
-                        <td className="py-2">{b.airline} {b.flightNumber}</td>
-                        <td className="py-2">{b.from} &rarr; {b.to}</td>
-                        <td className="py-2">{new Date((b as any).departureDate).toLocaleDateString()}</td>
-                        <td className="py-2">{b.price}</td>
+                        <td className="py-2">{flight ? `${flight.airline} ${flight.flightNumber}` : '—'}</td>
+                        <td className="py-2">{flight ? `${flight.from} → ${flight.to}` : '—'}</td>
+                        <td className="py-2">{flight ? new Date(flight.departureDate).toLocaleDateString() : '—'}</td>
+                        <td className="py-2">{flight?.price ?? '—'}</td>
                       </tr>
                     );
                   })}
