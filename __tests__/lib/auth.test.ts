@@ -65,3 +65,29 @@ describe('authOptions credential authorize', () => {
         expect(result.password).toBeUndefined();
     });
 });
+
+describe('authOptions jwt/session callbacks', () => {
+    const jwt = (authOptions.callbacks!.jwt as any);
+    const session = (authOptions.callbacks!.session as any);
+
+    it('jwt callback copies id and role from user onto the token', async () => {
+        const token = await jwt({
+            token: {},
+            user: { id: 'u1', role: 'ADMIN' },
+        });
+        expect(token).toMatchObject({ id: 'u1', role: 'ADMIN' });
+    });
+
+    it('jwt callback leaves the token unchanged when there is no user', async () => {
+        const token = await jwt({ token: { id: 'existing', role: 'USER' } });
+        expect(token).toMatchObject({ id: 'existing', role: 'USER' });
+    });
+
+    it('session callback exposes id and role on session.user', async () => {
+        const result = await session({
+            session: { user: { email: 'a@b.com' } },
+            token: { id: 'u1', role: 'ADMIN' },
+        });
+        expect(result.user).toMatchObject({ id: 'u1', role: 'ADMIN', email: 'a@b.com' });
+    });
+});

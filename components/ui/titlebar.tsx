@@ -19,7 +19,7 @@ const TitleBar: React.FC = () => {
 
     const pageTitle = pageTitles[pathname] || '';
     const userAvatar = session?.user?.image || "/img/my-profile-photo.jpg";
-    const isAdmin = (session?.user as any)?.role === 'ADMIN';
+    const isAdmin = session?.user?.role === 'ADMIN';
 
     return (
         <header className={pathname?.startsWith('/admin') ? 'admin-header' : ''}>

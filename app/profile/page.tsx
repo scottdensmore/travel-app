@@ -15,7 +15,7 @@ export default async function Home() {
   }
 
   const user = session.user;
-  const userId = (user as any).id;
+  const userId = user.id;
   const userName = user.name || "Traveler";
   const userAvatar = user.image || "https://i.pravatar.cc/150?u=" + userId;
 

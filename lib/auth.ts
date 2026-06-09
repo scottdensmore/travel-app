@@ -1,4 +1,5 @@
 import { NextAuthOptions } from 'next-auth';
+import { Adapter } from 'next-auth/adapters';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import { prisma } from '@/lib/prisma';
@@ -10,7 +11,9 @@ import bcrypt from 'bcryptjs';
 const DUMMY_PASSWORD_HASH = '$2b$10$m5cSUIfLL/USdiPzCLh47OC6nV84HHx2LHbBgT2c8Kw.YOCKKxBtS';
 
 export const authOptions: NextAuthOptions = {
-    adapter: PrismaAdapter(prisma) as any,
+    // @auth/prisma-adapter is typed against @auth/core's Adapter, which is
+    // structurally compatible with next-auth v4's Adapter but nominally distinct.
+    adapter: PrismaAdapter(prisma) as Adapter,
     providers: [
         CredentialsProvider({
             name: 'Credentials',
@@ -63,14 +66,14 @@ export const authOptions: NextAuthOptions = {
         async jwt({ token, user, account }) {
             if (user) {
                 token.id = user.id;
-                token.role = (user as any).role;
+                token.role = user.role;
             }
             return token;
         },
         async session({ session, token }) {
             if (session.user) {
-                (session.user as any).id = token.id as string;
-                (session.user as any).role = token.role as string;
+                session.user.id = token.id;
+                session.user.role = token.role;
             }
             return session;
         },

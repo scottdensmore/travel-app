@@ -17,6 +17,7 @@ import {
     ChartTooltipContent,
 } from "@/components/ui/chart"
 import PointsActivityService from "@/lib/PointsActivityService"
+import { PointsActivityDisplayData } from "@/lib/types/PointsActivity"
 
 const chartConfig = {
     points: {
@@ -26,7 +27,7 @@ const chartConfig = {
 } satisfies ChartConfig
 
 export default function PointsHistoryChart() {
-    const [chartData, setChartData] = React.useState<any[]>([])
+    const [chartData, setChartData] = React.useState<PointsActivityDisplayData[]>([])
 
     React.useEffect(() => {
         const service = new PointsActivityService()
