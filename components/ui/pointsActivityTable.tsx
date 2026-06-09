@@ -30,7 +30,6 @@ const columns = [
 
 const PointsActivityTable: React.FC<{ activityData: PointsActivityDisplayData[] }> = ({ activityData }) => {
   const [data, _setData] = React.useState(() => [...activityData])
-  const rerender = React.useReducer(() => ({}), {})[1]
 
   const table = useReactTable({
     data,

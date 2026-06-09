@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from 'react'
-import { Suspense, useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { bookFlightAction, searchFlightsAction } from '@/app/actions'
 
