@@ -1,46 +1,30 @@
+/** @jest-environment node */
 import FlightBookingService from '@/lib/FlightBookingService';
+import { prisma } from '@/lib/prisma';
 
-// Mock the Prisma client globally in this test file
-jest.mock('@prisma/client', () => {
-    return {
-        PrismaClient: jest.fn().mockImplementation(() => {
-            return {
-                booking: {
-                    create: jest.fn().mockResolvedValue({
-                        id: 1,
-                        flightNumber: 'MA101',
-                        airline: 'Mona Air',
-                        from: 'SFO',
-                        to: 'NYC',
-                        departureDate: new Date('2026-03-01'),
-                        returnDate: null,
-                        price: '$350',
-                        createdAt: new Date(),
-                    }),
-                },
-            };
-        }),
-    };
-});
+jest.mock('@/lib/prisma', () => ({
+    prisma: { booking: { create: jest.fn() } },
+}));
+
+const mockedPrisma = prisma as unknown as { booking: { create: jest.Mock } };
 
 describe('FlightBookingService', () => {
-    it('creates a new booking record via Prisma', async () => {
-        const service = new FlightBookingService();
+    beforeEach(() => jest.clearAllMocks());
 
-        const bookingData = {
-            flightNumber: 'MA101',
-            airline: 'Mona Air',
-            from: 'SFO',
-            to: 'NYC',
-            departureDate: new Date('2026-03-01'),
-            returnDate: null,
-            price: '$350'
-        };
+    it('creates a booking linked to a flight and user (normalized)', async () => {
+        mockedPrisma.booking.create.mockResolvedValue({
+            id: 1,
+            flightId: 7,
+            userId: 'u1',
+            createdAt: new Date('2026-03-01'),
+        });
 
-        const result = await service.bookFlight(bookingData);
+        const result = await new FlightBookingService().bookFlight({ flightId: 7, userId: 'u1' });
 
-        // Assert the returned value matches the mock object structure
-        expect(result).toHaveProperty('id', 1);
-        expect(result.flightNumber).toBe('MA101');
+        // Only the foreign keys are persisted — flight details live on the Flight row.
+        expect(mockedPrisma.booking.create).toHaveBeenCalledWith({
+            data: { flightId: 7, userId: 'u1' },
+        });
+        expect(result).toMatchObject({ id: 1, flightId: 7, userId: 'u1' });
     });
 });

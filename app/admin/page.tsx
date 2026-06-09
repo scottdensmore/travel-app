@@ -58,12 +58,12 @@ export default async function AdminDashboard() {
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {recentBookings.map((booking) => {
-                                    const b = booking.flight || booking;
+                                    const flight = booking.flight;
                                     return (
                                         <tr key={booking.id}>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-b">{booking.user?.name || booking.user?.email || 'Guest'}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-b">{b.airline} {b.flightNumber}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 border-b">{b.from} → {b.to}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-b">{flight ? `${flight.airline} ${flight.flightNumber}` : '—'}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 border-b">{flight ? `${flight.from} → ${flight.to}` : '—'}</td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 border-b">{new Date(booking.createdAt).toLocaleDateString()}</td>
                                         </tr>
                                     );
