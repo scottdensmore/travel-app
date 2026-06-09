@@ -1,7 +1,5 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import CityGuide from "./types/CityGuide";
-
-const prisma = new PrismaClient();
 
 class TravelGuideService {
 
