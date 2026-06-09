@@ -33,8 +33,20 @@ export async function deleteCityGuideAction(cityGuideId: number) {
 }
 
 export async function searchFlightsAction(from: string, to: string) {
-    // Mock search by just returning all flights so users can see data regardless of selection
-    return await prisma.flight.findMany();
+    return await prisma.flight.findMany({
+        where: { from, to },
+        orderBy: { departureDate: 'asc' },
+    });
+}
+
+export async function getFlightRoutesAction() {
+    // Distinct origin/destination pairs that actually have flights, so the
+    // booking form can offer only reachable routes.
+    return await prisma.flight.findMany({
+        distinct: ['from', 'to'],
+        select: { from: true, to: true },
+        orderBy: [{ from: 'asc' }, { to: 'asc' }],
+    });
 }
 
 export async function bookFlightAction(bookingData: { flightId?: number }) {

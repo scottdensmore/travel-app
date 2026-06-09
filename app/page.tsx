@@ -1,8 +1,10 @@
 import React from "react";
 import FlightBookingForm from "../components/ui/flightBookingForm";
+import { getFlightRoutesAction } from "./actions";
 
-export default function Home() {
+export default async function Home() {
+  const routes = await getFlightRoutesAction();
   return (
-        <FlightBookingForm />
+    <FlightBookingForm routes={routes} />
   );
 }
