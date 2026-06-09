@@ -14,49 +14,81 @@ jest.mock('@/app/actions', () => ({
 const mockSearch = searchFlightsAction as jest.Mock;
 const mockBook = bookFlightAction as jest.Mock;
 
+const routes = [
+    { from: 'Seattle, USA', to: 'Detroit, USA' },
+    { from: 'Seattle, USA', to: 'Tokyo, Japan' },
+    { from: 'New York, USA', to: 'London, UK' },
+];
+
 const mockFlights = [
     {
         id: 1,
-        flightNumber: 'MA101',
-        airline: 'Mona Air',
-        from: 'SFO',
-        to: 'NYC',
-        departureDate: '2026-03-01',
+        flightNumber: 'CA101',
+        airline: 'Gemini Airways',
+        from: 'Seattle, USA',
+        to: 'Detroit, USA',
+        departureDate: '2026-05-15',
         returnDate: null,
         price: '$350',
     },
 ];
 
+const renderForm = () => render(<FlightBookingForm routes={routes} />);
+
 describe('FlightBookingForm', () => {
     beforeEach(() => jest.clearAllMocks());
 
-    it('renders the generic search form', () => {
-        render(<FlightBookingForm />);
+    it('renders origins and the destinations reachable from the default origin', () => {
+        renderForm();
         expect(screen.getByText('Where Your Journey Takes Flight')).toBeInTheDocument();
-        expect(screen.getByLabelText('From')).toBeInTheDocument();
-        expect(screen.getByLabelText('To')).toBeInTheDocument();
-        expect(screen.getByText('Find your trip')).toBeInTheDocument();
+        // Origins (distinct departure cities)
+        expect(screen.getByRole('option', { name: 'Seattle, USA' })).toBeInTheDocument();
+        expect(screen.getByRole('option', { name: 'New York, USA' })).toBeInTheDocument();
+        // Destinations for the default origin (Seattle)
+        expect(screen.getByRole('option', { name: 'Detroit, USA' })).toBeInTheDocument();
+        expect(screen.getByRole('option', { name: 'Tokyo, Japan' })).toBeInTheDocument();
+        // London is only reachable from New York, so it must not appear yet
+        expect(screen.queryByRole('option', { name: 'London, UK' })).not.toBeInTheDocument();
     });
 
-    it('shows the flights returned by searchFlightsAction', async () => {
+    it('updates the destination options when the origin changes', () => {
+        renderForm();
+        fireEvent.change(screen.getByLabelText('From'), { target: { value: 'New York, USA' } });
+        expect(screen.getByRole('option', { name: 'London, UK' })).toBeInTheDocument();
+        expect(screen.queryByRole('option', { name: 'Detroit, USA' })).not.toBeInTheDocument();
+    });
+
+    it('searches using the selected origin and destination', async () => {
         mockSearch.mockResolvedValue(mockFlights);
 
-        render(<FlightBookingForm />);
+        renderForm();
         fireEvent.click(screen.getByText('Find your trip'));
 
         await waitFor(() => {
             expect(screen.getByText('Available Flights')).toBeInTheDocument();
-            expect(screen.getByText('MA101')).toBeInTheDocument();
+            expect(screen.getByText('CA101')).toBeInTheDocument();
         });
-        // Defaults are SFO -> NYC.
-        expect(mockSearch).toHaveBeenCalledWith('SFO', 'NYC');
+        // Defaults to the first origin and its first reachable destination.
+        expect(mockSearch).toHaveBeenCalledWith('Seattle, USA', 'Detroit, USA');
+    });
+
+    it('shows a no-results message when no flights match the route', async () => {
+        mockSearch.mockResolvedValue([]);
+
+        renderForm();
+        fireEvent.click(screen.getByText('Find your trip'));
+
+        await waitFor(() => {
+            expect(screen.getByText(/No flights found/i)).toBeInTheDocument();
+        });
+        expect(screen.queryByText('Available Flights')).not.toBeInTheDocument();
     });
 
     it('books a flight via bookFlightAction when "Book Now" is clicked', async () => {
         mockSearch.mockResolvedValue(mockFlights);
         mockBook.mockResolvedValue({ id: 999 });
 
-        render(<FlightBookingForm />);
+        renderForm();
         fireEvent.click(screen.getByText('Find your trip'));
 
         await waitFor(() => expect(screen.getByText('Available Flights')).toBeInTheDocument());
@@ -66,7 +98,7 @@ describe('FlightBookingForm', () => {
         await waitFor(() => {
             expect(mockBook).toHaveBeenCalledTimes(1);
             expect(mockBook).toHaveBeenCalledWith({ flightId: 1 });
-            expect(screen.getByText(/Successfully booked flight MA101/)).toBeInTheDocument();
+            expect(screen.getByText(/Successfully booked flight CA101/)).toBeInTheDocument();
         });
     });
 });

@@ -1,16 +1,27 @@
 "use client"
 
 import * as React from 'react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { bookFlightAction, searchFlightsAction } from '@/app/actions'
 import { Flight } from '@prisma/client'
 
-const FlightBookingForm: React.FC = () => {
+interface FlightBookingFormProps {
+    routes?: { from: string; to: string }[];
+}
+
+const FlightBookingForm: React.FC<FlightBookingFormProps> = ({ routes = [] }) => {
+    // Origins are the distinct departure cities; destinations depend on the
+    // selected origin so only reachable routes can be chosen.
+    const origins = useMemo(() => Array.from(new Set(routes.map((r) => r.from))), [routes]);
+    const [fromLocation, setFromLocation] = useState(origins[0] ?? '');
+    const destinations = useMemo(
+        () => routes.filter((r) => r.from === fromLocation).map((r) => r.to),
+        [routes, fromLocation]
+    );
+    const [toLocation, setToLocation] = useState(destinations[0] ?? '');
     const [departureDate, setDepartureDate] = useState<string>('');
     const [returnDate, setReturnDate] = useState<string>('');
-    const [fromLocation, setFromLocation] = useState('SFO');
-    const [toLocation, setToLocation] = useState('NYC');
     const [flightClass, setFlightClass] = useState('economy');
     const [isOneWay, setIsOneWay] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
@@ -51,6 +62,13 @@ const FlightBookingForm: React.FC = () => {
             setBookingState({ status: 'error', message: 'Failed to book flight. Please try again later.' });
         }
     };
+
+    // When the origin changes, keep the destination valid for the new origin.
+    useEffect(() => {
+        if (!destinations.includes(toLocation)) {
+            setToLocation(destinations[0] ?? '');
+        }
+    }, [destinations, toLocation]);
 
     useEffect(() => {
         const today = new Date();
@@ -114,38 +132,18 @@ const FlightBookingForm: React.FC = () => {
                             <div className="fields-container">
                                 <label htmlFor="from">From</label>
                                 <select id="from" name="from" value={fromLocation} onChange={e => setFromLocation(e.target.value)}>
-                                    <option value="SFO">San Francisco (SFO)</option>
-                                    <option value="NYC">New York City (NYC)</option>
-                                    <option value="LAX">Los Angeles (LAX)</option>
-                                    <option value="CHI">Chicago (CHI)</option>
-                                    <option value="ATL">Atlanta (ATL)</option>
-                                    <option value="DFW">Dallas/Fort Worth (DFW)</option>
-                                    <option value="DEN">Denver (DEN)</option>
-                                    <option value="SEA">Seattle (SEA)</option>
-                                    <option value="LAS">Las Vegas (LAS)</option>
-                                    <option value="MIA">Miami (MIA)</option>
-                                    <option value="BOS">Boston (BOS)</option>
-                                    <option value="PHX">Phoenix (PHX)</option>
-                                    <option value="IAH">Houston (IAH)</option>
+                                    {origins.map((loc) => (
+                                        <option key={loc} value={loc}>{loc}</option>
+                                    ))}
                                 </select>
                             </div>
 
                             <div className="fields-container">
                                 <label htmlFor="to">To</label>
                                 <select id="to" name="to" value={toLocation} onChange={e => setToLocation(e.target.value)}>
-                                    <option value="NYC">New York City (NYC)</option>
-                                    <option value="LAX">Los Angeles (LAX)</option>
-                                    <option value="CHI">Chicago (CHI)</option>
-                                    <option value="ATL">Atlanta (ATL)</option>
-                                    <option value="DFW">Dallas/Fort Worth (DFW)</option>
-                                    <option value="DEN">Denver (DEN)</option>
-                                    <option value="SFO">San Francisco (SFO)</option>
-                                    <option value="SEA">Seattle (SEA)</option>
-                                    <option value="LAS">Las Vegas (LAS)</option>
-                                    <option value="MIA">Miami (MIA)</option>
-                                    <option value="BOS">Boston (BOS)</option>
-                                    <option value="PHX">Phoenix (PHX)</option>
-                                    <option value="IAH">Houston (IAH)</option>
+                                    {destinations.map((loc) => (
+                                        <option key={loc} value={loc}>{loc}</option>
+                                    ))}
                                 </select>
                             </div>
 
@@ -189,7 +187,12 @@ const FlightBookingForm: React.FC = () => {
                             </button>
                         </form>
                     </div>
-                    {searchResults && (
+                    {searchResults && searchResults.length === 0 && (
+                        <div className="mt-8 bg-white p-6 rounded-lg shadow-lg max-w-4xl mx-auto text-center text-gray-600">
+                            No flights found for this route. Try a different origin or destination.
+                        </div>
+                    )}
+                    {searchResults && searchResults.length > 0 && (
                         <div className="mt-8 bg-white p-6 rounded-lg shadow-lg max-w-4xl mx-auto">
                             <h2 className="text-2xl font-bold mb-4 text-gray-800">Available Flights</h2>
                             <div className="space-y-4">
