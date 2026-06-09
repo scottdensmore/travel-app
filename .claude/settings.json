@@ -1,0 +1,105 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'if ! command -v entire >/dev/null 2>&1; then exit 0; fi; exec entire hooks claude-code post-task'"
+          }
+        ]
+      },
+      {
+        "matcher": "TodoWrite",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'if ! command -v entire >/dev/null 2>&1; then exit 0; fi; exec entire hooks claude-code post-todo'"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'if ! command -v entire >/dev/null 2>&1; then exit 0; fi; exec entire hooks claude-code pre-task'"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "agent",
+            "if": "Bash(git push:*)",
+            "model": "claude-sonnet-4-6",
+            "timeout": 300,
+            "statusMessage": "Reviewing changes before push...",
+            "prompt": "You are a blocking pre-push code reviewer. The user is about to run this command (JSON): $ARGUMENTS\n\nReview the commits that are about to be pushed. Run git yourself to get the diff: use `git diff @{u}..HEAD` (the changes vs the tracked upstream). If the current branch has no upstream, fall back to `git diff origin/main..HEAD`. If that range is empty, PASS immediately.\n\nReview ONLY the changed lines for high-confidence, blocking problems: correctness bugs, security issues (hardcoded secrets/credentials, auth bypass, SQL or command injection), data loss, and broken or obviously-failing code. Do not modify any files.\n\nDecision: FAIL only if you find at least one high-confidence blocking problem, and list each as `file:line - issue` so the user can fix it. Style nits, naming, and low-confidence hunches are NOT blocking - PASS in that case. Be decisive and fast."
+          },
+          {
+            "type": "agent",
+            "if": "Bash(gh pr create:*)",
+            "model": "claude-sonnet-4-6",
+            "timeout": 300,
+            "statusMessage": "Reviewing changes before PR...",
+            "prompt": "You are a blocking pre-PR code reviewer. The user is about to run this command (JSON): $ARGUMENTS\n\nReview the full diff of the current branch against its base. Run git yourself: determine the base from any `--base`/`-B` value in the command, otherwise use `origin/main`. Get the diff with `git diff <base>...HEAD`. If that range is empty, PASS immediately.\n\nReview ONLY the changed lines for high-confidence, blocking problems: correctness bugs, security issues (hardcoded secrets/credentials, auth bypass, SQL or command injection), data loss, and broken or obviously-failing code. Do not modify any files.\n\nDecision: FAIL only if you find at least one high-confidence blocking problem, and list each as `file:line - issue` so the user can fix it. Style nits, naming, and low-confidence hunches are NOT blocking - PASS in that case. Be decisive and fast."
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'if ! command -v entire >/dev/null 2>&1; then exit 0; fi; exec entire hooks claude-code session-end'"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'if ! command -v entire >/dev/null 2>&1; then printf \"%s\\n\" \"{\\\"systemMessage\\\":\\\"\\\\n\\\\nEntire CLI is enabled but not installed or not on PATH.\\\\nInstallation guide: https://docs.entire.io/cli/installation#installation-methods\\\"}\"; exit 0; fi; exec entire hooks claude-code session-start'"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'if ! command -v entire >/dev/null 2>&1; then exit 0; fi; exec entire hooks claude-code stop'"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'if ! command -v entire >/dev/null 2>&1; then exit 0; fi; exec entire hooks claude-code user-prompt-submit'"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "deny": [
+      "Read(./.entire/metadata/**)"
+    ]
+  }
+}
