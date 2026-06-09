@@ -71,7 +71,7 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
                 <Suspense fallback={<div>Loading Map...</div>}>
                     <ComposableMap projection="geoEqualEarth" projectionConfig={{ scale: 600, center: [-70, 28] }} style={{ maxHeight: "1400" }} preserveAspectRatio="none" viewBox="0 0 800 500">
                         <Geographies geography="/map.json">
-                            {({ geographies }: { geographies: any[] }) => geographies.map((geo) => (
+                            {({ geographies }: { geographies: Array<{ rsmKey: string }> }) => geographies.map((geo) => (
                                 <Geography key={geo.rsmKey} geography={geo} fill="#444" stroke="#1F2328" />
                             ))}
                         </Geographies>

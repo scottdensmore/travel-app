@@ -13,7 +13,7 @@ const flightBookingService = new FlightBookingService();
 
 export async function saveCityGuideAction(cityGuide: CityGuide) {
     const session = await getServerSession(authOptions);
-    if ((session?.user as any)?.role !== 'ADMIN') throw new Error("Unauthorized");
+    if (session?.user?.role !== 'ADMIN') throw new Error("Unauthorized");
 
     const result = await travelGuideService.saveCityGuide(cityGuide);
     revalidatePath('/admin/travelguide');
@@ -23,7 +23,7 @@ export async function saveCityGuideAction(cityGuide: CityGuide) {
 
 export async function deleteCityGuideAction(cityGuideId: number) {
     const session = await getServerSession(authOptions);
-    if ((session?.user as any)?.role !== 'ADMIN') throw new Error("Unauthorized");
+    if (session?.user?.role !== 'ADMIN') throw new Error("Unauthorized");
 
     await prisma.cityGuide.delete({
         where: { id: cityGuideId }
@@ -39,7 +39,7 @@ export async function searchFlightsAction(from: string, to: string) {
 
 export async function bookFlightAction(bookingData: { flightId?: number }) {
     const session = await getServerSession(authOptions);
-    const userId = session?.user ? (session.user as any).id : undefined;
+    const userId = session?.user?.id;
 
     return await flightBookingService.bookFlight({
         flightId: bookingData.flightId,
@@ -49,7 +49,7 @@ export async function bookFlightAction(bookingData: { flightId?: number }) {
 
 export async function toggleFavoriteCityGuideAction(cityGuideId: number) {
     const session = await getServerSession(authOptions);
-    const userId = session?.user ? (session.user as any).id : undefined;
+    const userId = session?.user?.id;
     if (!userId) throw new Error("Unauthorized");
 
     const existing = await prisma.userFavorite.findUnique({
@@ -71,7 +71,7 @@ export async function toggleFavoriteCityGuideAction(cityGuideId: number) {
 
 export async function submitCityGuideReviewAction(cityGuideId: number, rating: number, content: string) {
     const session = await getServerSession(authOptions);
-    const userId = session?.user ? (session.user as any).id : undefined;
+    const userId = session?.user?.id;
     if (!userId) throw new Error("Unauthorized");
 
     return await prisma.review.create({

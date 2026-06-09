@@ -6,7 +6,7 @@ import { authOptions } from '@/lib/auth';
 
 export default async function TravelGuidePage() {
     const session = await getServerSession(authOptions);
-    const userId = session?.user ? (session.user as any).id : null;
+    const userId = session?.user?.id ?? null;
 
     const cities = await prisma.cityGuide.findMany({
         include: { reviews: { include: { user: true } } }
@@ -22,5 +22,5 @@ export default async function TravelGuidePage() {
         initialFavorites = favs.map((f: { cityGuideId: number }) => f.cityGuideId);
     }
 
-    return <TravelGuideClient cities={cities as any} initialFavorites={initialFavorites} />;
+    return <TravelGuideClient cities={cities} initialFavorites={initialFavorites} />;
 }

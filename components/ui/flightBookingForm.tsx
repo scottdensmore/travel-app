@@ -4,6 +4,7 @@ import * as React from 'react'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { bookFlightAction, searchFlightsAction } from '@/app/actions'
+import { Flight } from '@prisma/client'
 
 const FlightBookingForm: React.FC = () => {
     const [departureDate, setDepartureDate] = useState<string>('');
@@ -13,7 +14,7 @@ const FlightBookingForm: React.FC = () => {
     const [flightClass, setFlightClass] = useState('economy');
     const [isOneWay, setIsOneWay] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
-    const [searchResults, setSearchResults] = useState<any[] | null>(null);
+    const [searchResults, setSearchResults] = useState<Flight[] | null>(null);
     const [bookingState, setBookingState] = useState<{ status: 'idle' | 'booking' | 'success' | 'error', message?: string, flightId?: number }>({ status: 'idle' });
 
     const handleTripTypeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -39,7 +40,7 @@ const FlightBookingForm: React.FC = () => {
         }
     };
 
-    const handleBookFlight = async (flight: any) => {
+    const handleBookFlight = async (flight: Flight) => {
         setBookingState({ status: 'booking', flightId: flight.id });
         try {
             await bookFlightAction({ flightId: flight.id });
