@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.7.5",
+  "checkpoint_id": "205ceae3c14b",
+  "strategy": "manual-commit",
+  "branch": "feat/next-auth-type-augmentation",
+  "checkpoints_count": 0,
+  "files_touched": [
+    ".eslintrc.json",
+    "__tests__/lib/auth.test.ts",
+    "app/actions.ts",
+    "app/profile/page.tsx",
+    "app/travelguide/page.tsx",
+    "components/ui/TravelGuideClient.tsx",
+    "components/ui/charts/pointsHistoryChart.tsx",
+    "components/ui/flightBookingForm.tsx",
+    "components/ui/titlebar.tsx",
+    "lib/auth.ts",
+    "types/next-auth.d.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/20/5ceae3c14b/0/metadata.json",
+      "transcript": "/20/5ceae3c14b/0/full.jsonl",
+      "content_hash": "/20/5ceae3c14b/0/content_hash.txt",
+      "prompt": "/20/5ceae3c14b/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 8980,
+    "cache_creation_tokens": 89599,
+    "cache_read_tokens": 2006133,
+    "output_tokens": 19941,
+    "api_call_count": 32
+  }
+}

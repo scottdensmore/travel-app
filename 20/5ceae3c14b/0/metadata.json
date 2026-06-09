@@ -1,0 +1,87 @@
+{
+  "cli_version": "0.7.5",
+  "checkpoint_id": "205ceae3c14b",
+  "session_id": "3fc447f6-9127-4021-a991-95c38b13d35c",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-09T03:24:36.270683Z",
+  "branch": "feat/next-auth-type-augmentation",
+  "checkpoints_count": 0,
+  "files_touched": [
+    ".eslintrc.json",
+    "__tests__/lib/auth.test.ts",
+    "app/actions.ts",
+    "app/profile/page.tsx",
+    "app/travelguide/page.tsx",
+    "components/ui/TravelGuideClient.tsx",
+    "components/ui/charts/pointsHistoryChart.tsx",
+    "components/ui/flightBookingForm.tsx",
+    "components/ui/titlebar.tsx",
+    "lib/auth.ts",
+    "types/next-auth.d.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "8383299e2c1d",
+  "token_usage": {
+    "input_tokens": 8980,
+    "cache_creation_tokens": 89599,
+    "cache_read_tokens": 2006133,
+    "output_tokens": 19941,
+    "api_call_count": 32
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "claude-skill-toolu_01CSdtY8V9iDHM7oHvBRFaRL",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "code-review"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "8383299e2c1d",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 149,
+        "end": 150,
+        "entry_ids": [
+          "0a556d5f-fa53-43ed-bf85-784edfe146bd"
+        ],
+        "tool_use_id": "toolu_01CSdtY8V9iDHM7oHvBRFaRL"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01CSdtY8V9iDHM7oHvBRFaRL"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: code-review",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "initial_attribution": {
+    "calculated_at": "2026-06-09T03:24:36.245201Z",
+    "agent_lines": 73,
+    "agent_removed": 18,
+    "human_added": 0,
+    "human_modified": 1,
+    "human_removed": 0,
+    "total_committed": 74,
+    "total_lines_changed": 92,
+    "agent_percentage": 98.91304347826086,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
