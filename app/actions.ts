@@ -12,6 +12,9 @@ const travelGuideService = new TravelGuideService();
 const flightBookingService = new FlightBookingService();
 
 export async function saveCityGuideAction(cityGuide: CityGuide) {
+    const session = await getServerSession(authOptions);
+    if ((session?.user as any)?.role !== 'ADMIN') throw new Error("Unauthorized");
+
     const result = await travelGuideService.saveCityGuide(cityGuide);
     revalidatePath('/admin/travelguide');
     revalidatePath('/travelguide');
