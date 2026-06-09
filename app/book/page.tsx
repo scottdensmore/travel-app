@@ -1,5 +1,5 @@
 import FlightBookingForm from "@/components/ui/flightBookingForm";
-import React, { useEffect } from 'react';
+import React from 'react';
 
 export default function Home() {
   return (
