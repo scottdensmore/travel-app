@@ -89,4 +89,76 @@ describe('TravelGuideForm', () => {
             })
         );
     });
+
+    it('handles blur with missing fields, coordinate fetch failure, and save failure', async () => {
+        (global.fetch as jest.Mock).mockRejectedValue(new Error('Network Error'));
+        mockSave.mockRejectedValue(new Error('Save Error'));
+
+        render(<TravelGuideForm />);
+
+        // 1. Blur with missing country
+        fireEvent.change(screen.getByLabelText(/City/i), { target: { value: 'Paris' } });
+        fireEvent.blur(screen.getByLabelText(/City/i));
+        expect(global.fetch).not.toHaveBeenCalled();
+
+        // 2. Blur with both to trigger network failure
+        fireEvent.change(screen.getByLabelText(/Country/i), { target: { value: 'France' } });
+        fireEvent.blur(screen.getByLabelText(/Country/i));
+
+        await waitFor(() => {
+            expect(screen.getByText('Failed to fetch coordinates.')).toBeInTheDocument();
+        });
+
+        // 3. Submit failure check
+        fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+        await waitFor(() => {
+            expect(screen.getByText('Failed to save city guide')).toBeInTheDocument();
+        });
+    });
+
+    it('supports adding and editing highlights', async () => {
+        render(<TravelGuideForm />);
+
+        // Get the first highlight input
+        const highlightInput = screen.getByPlaceholderText('Add Highlight');
+        fireEvent.change(highlightInput, { target: { value: 'Eiffel Tower' } });
+        expect(highlightInput).toHaveValue('Eiffel Tower');
+
+        // Click '+' button to add new highlight input
+        const addButton = screen.getByRole('button', { name: '+' });
+        fireEvent.click(addButton);
+
+        // Verify that there are now 2 highlight inputs
+        const highlightInputs = screen.getAllByPlaceholderText('Add Highlight');
+        expect(highlightInputs).toHaveLength(2);
+        
+        fireEvent.change(highlightInputs[1], { target: { value: 'Louvre' } });
+        expect(highlightInputs[1]).toHaveValue('Louvre');
+    });
+
+    it('handles image upload via file input', async () => {
+        const dummyFileReader = {
+            readAsDataURL: jest.fn().mockImplementation(function(this: any) {
+                this.result = 'data:image/png;base64,mocked';
+                if (this.onloadend) this.onloadend();
+            }),
+            onloadend: null as any,
+            result: '',
+        };
+        const originalFileReader = global.FileReader;
+        global.FileReader = jest.fn().mockImplementation(() => dummyFileReader) as any;
+
+        render(<TravelGuideForm />);
+
+        const fileInput = screen.getByLabelText(/Cover Image:/i);
+        const file = new File(['foo'], 'foo.png', { type: 'image/png' });
+        
+        fireEvent.change(fileInput, { target: { files: [file] } });
+
+        expect(dummyFileReader.readAsDataURL).toHaveBeenCalledWith(file);
+        expect(await screen.findByAltText('Cover Preview')).toBeInTheDocument();
+
+        global.FileReader = originalFileReader;
+    });
 });
+

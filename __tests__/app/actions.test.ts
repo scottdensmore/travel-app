@@ -1,15 +1,26 @@
-import { saveCityGuideAction, searchFlightsAction, getFlightRoutesAction } from '@/app/actions';
+import { 
+    saveCityGuideAction, 
+    searchFlightsAction, 
+    getFlightRoutesAction,
+    deleteCityGuideAction,
+    bookFlightAction,
+    toggleFavoriteCityGuideAction,
+    submitCityGuideReviewAction
+} from '@/app/actions';
 import { getServerSession } from 'next-auth';
 import TravelGuideService from '@/lib/TravelGuideService';
+import FlightBookingService from '@/lib/FlightBookingService';
 import { prisma } from '@/lib/prisma';
 
 // Keep these heavy/server-only modules out of the unit test.
 jest.mock('next-auth', () => ({ getServerSession: jest.fn() }));
 jest.mock('next/cache', () => ({ revalidatePath: jest.fn() }));
 jest.mock('@/lib/auth', () => ({ authOptions: {} }));
-jest.mock('@/lib/FlightBookingService', () =>
-    jest.fn().mockImplementation(() => ({ bookFlight: jest.fn() }))
-);
+
+jest.mock('@/lib/FlightBookingService', () => {
+    const bookFlight = jest.fn();
+    return jest.fn().mockImplementation(() => ({ bookFlight }));
+});
 
 // The service mock shares a single saveCityGuide fn across all instances,
 // so the instance created inside app/actions.ts uses the same spy we assert on.
@@ -22,12 +33,20 @@ jest.mock('@/lib/prisma', () => ({
     prisma: {
         cityGuide: { create: jest.fn(), delete: jest.fn() },
         flight: { findMany: jest.fn() },
+        userFavorite: { findUnique: jest.fn(), delete: jest.fn(), create: jest.fn() },
+        review: { create: jest.fn() },
     },
 }));
 
 const mockedGetServerSession = getServerSession as unknown as jest.Mock;
 const mockSaveCityGuide = new (TravelGuideService as any)().saveCityGuide as jest.Mock;
+const mockBookFlight = new (FlightBookingService as any)().bookFlight as jest.Mock;
 const mockedFlightFindMany = (prisma as any).flight.findMany as jest.Mock;
+const mockedCityGuideDelete = (prisma as any).cityGuide.delete as jest.Mock;
+const mockedUserFavoriteFindUnique = (prisma as any).userFavorite.findUnique as jest.Mock;
+const mockedUserFavoriteDelete = (prisma as any).userFavorite.delete as jest.Mock;
+const mockedUserFavoriteCreate = (prisma as any).userFavorite.create as jest.Mock;
+const mockedReviewCreate = (prisma as any).review.create as jest.Mock;
 
 const sampleGuide: any = {
     city: 'Paris',
@@ -61,6 +80,33 @@ describe('saveCityGuideAction authorization', () => {
 
         expect(mockSaveCityGuide).toHaveBeenCalledWith(sampleGuide);
         expect(result).toHaveProperty('id', 1);
+    });
+});
+
+describe('deleteCityGuideAction authorization and execution', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it('rejects an unauthenticated user', async () => {
+        mockedGetServerSession.mockResolvedValue(null);
+        await expect(deleteCityGuideAction(1)).rejects.toThrow('Unauthorized');
+        expect(mockedCityGuideDelete).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-admin user', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { role: 'USER' } });
+        await expect(deleteCityGuideAction(1)).rejects.toThrow('Unauthorized');
+        expect(mockedCityGuideDelete).not.toHaveBeenCalled();
+    });
+
+    it('allows an admin user and deletes the guide', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+        mockedCityGuideDelete.mockResolvedValue({});
+
+        await deleteCityGuideAction(1);
+
+        expect(mockedCityGuideDelete).toHaveBeenCalledWith({
+            where: { id: 1 }
+        });
     });
 });
 
@@ -100,3 +146,83 @@ describe('getFlightRoutesAction', () => {
         );
     });
 });
+
+describe('bookFlightAction', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it('calls FlightBookingService with flightId and userId from session', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        mockBookFlight.mockResolvedValue({ id: 1, flightId: 42, userId: 'user-123' });
+
+        const result = await bookFlightAction({ flightId: 42 });
+
+        expect(mockBookFlight).toHaveBeenCalledWith({ flightId: 42, userId: 'user-123' });
+        expect(result).toEqual({ id: 1, flightId: 42, userId: 'user-123' });
+    });
+});
+
+describe('toggleFavoriteCityGuideAction', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it('throws unauthorized if not logged in', async () => {
+        mockedGetServerSession.mockResolvedValue(null);
+        await expect(toggleFavoriteCityGuideAction(5)).rejects.toThrow('Unauthorized');
+    });
+
+    it('removes favorite if it already exists', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        mockedUserFavoriteFindUnique.mockResolvedValue({ id: 10, userId: 'user-123', cityGuideId: 5 });
+
+        const result = await toggleFavoriteCityGuideAction(5);
+
+        expect(mockedUserFavoriteFindUnique).toHaveBeenCalledWith({
+            where: { userId_cityGuideId: { userId: 'user-123', cityGuideId: 5 } }
+        });
+        expect(mockedUserFavoriteDelete).toHaveBeenCalledWith({
+            where: { id: 10 }
+        });
+        expect(result).toEqual({ isFavorite: false });
+    });
+
+    it('creates favorite if it does not exist', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        mockedUserFavoriteFindUnique.mockResolvedValue(null);
+
+        const result = await toggleFavoriteCityGuideAction(5);
+
+        expect(mockedUserFavoriteFindUnique).toHaveBeenCalledWith({
+            where: { userId_cityGuideId: { userId: 'user-123', cityGuideId: 5 } }
+        });
+        expect(mockedUserFavoriteCreate).toHaveBeenCalledWith({
+            data: { userId: 'user-123', cityGuideId: 5 }
+        });
+        expect(result).toEqual({ isFavorite: true });
+    });
+});
+
+describe('submitCityGuideReviewAction', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it('throws unauthorized if not logged in', async () => {
+        mockedGetServerSession.mockResolvedValue(null);
+        await expect(submitCityGuideReviewAction(5, 5, 'Great!')).rejects.toThrow('Unauthorized');
+    });
+
+    it('creates a new review if logged in', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        mockedReviewCreate.mockResolvedValue({ id: 99, userId: 'user-123', cityGuideId: 5, rating: 5, content: 'Great!' });
+
+        const result = await submitCityGuideReviewAction(5, 5, 'Great!');
+
+        expect(mockedReviewCreate).toHaveBeenCalledWith({
+            data: {
+                userId: 'user-123',
+                cityGuideId: 5,
+                rating: 5,
+                content: 'Great!'
+            }
+        });
+        expect(result).toEqual({ id: 99, userId: 'user-123', cityGuideId: 5, rating: 5, content: 'Great!' });
+    });
+});
+

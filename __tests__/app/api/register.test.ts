@@ -60,4 +60,18 @@ describe('POST /api/auth/register', () => {
         expect(res.status).toBe(400);
         expect(mockedPrisma.user.create).not.toHaveBeenCalled();
     });
+
+    it('returns 500 when an internal database error occurs', async () => {
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+        mockedPrisma.user.findUnique.mockRejectedValue(new Error('DB failure'));
+
+        const res = await POST(makeReq({ name: 'Ada', email: 'ada@example.com', password: 'password123' }));
+        expect(res.status).toBe(500);
+        
+        const data = await res.json();
+        expect(data.message).toBe('Error registering user');
+        expect(consoleErrorSpy).toHaveBeenCalled();
+        consoleErrorSpy.mockRestore();
+    });
 });
+

@@ -35,4 +35,21 @@ describe('TitleBar', () => {
         // Standard links should not be present in admin view
         expect(screen.queryByText('Book Flight')).not.toBeInTheDocument();
     });
+
+    it('calls signOut when the Sign Out button is clicked', () => {
+        const mockSignOut = require('next-auth/react').signOut;
+        (usePathname as jest.Mock).mockReturnValue('/book');
+        (require('next-auth/react').useSession as jest.Mock).mockReturnValue({ data: { user: { role: 'USER', email: 'user@example.com' } } });
+
+        render(<TitleBar />);
+
+        const signOutButton = screen.getByRole('button', { name: 'Sign Out' });
+        expect(signOutButton).toBeInTheDocument();
+        
+        const { fireEvent } = require('@testing-library/react');
+        fireEvent.click(signOutButton);
+
+        expect(mockSignOut).toHaveBeenCalledTimes(1);
+    });
 });
+

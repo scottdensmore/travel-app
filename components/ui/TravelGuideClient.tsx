@@ -38,17 +38,23 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
 
     const toggleFavorite = (cityId: number) => {
         startTransition(async () => {
-            const nextFavs = new Set(favorites);
-            if (nextFavs.has(cityId)) nextFavs.delete(cityId);
-            else nextFavs.add(cityId);
-
-            setFavorites(nextFavs);
+            setFavorites((prev) => {
+                const next = new Set(prev);
+                if (next.has(cityId)) next.delete(cityId);
+                else next.add(cityId);
+                return next;
+            });
 
             try {
                 await toggleFavoriteCityGuideAction(cityId);
             } catch (error) {
-                // Revert if error
-                setFavorites(new Set(favorites));
+                // Revert state by toggling back
+                setFavorites((prev) => {
+                    const reverted = new Set(prev);
+                    if (reverted.has(cityId)) reverted.delete(cityId);
+                    else reverted.add(cityId);
+                    return reverted;
+                });
                 alert('Please sign in to save favorites.');
             }
         });
@@ -75,9 +81,9 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
                                 <Geography key={geo.rsmKey} geography={geo} fill="#444" stroke="#1F2328" />
                             ))}
                         </Geographies>
-                        {cities.map((city, index) => (
+                        {cities.map((city) => (
                             <Marker
-                                key={index}
+                                key={city.id}
                                 coordinates={[city.latlong[1], city.latlong[0]]}
                                 onClick={() => handleMarkerClick(city.city)}
                                 style={{ cursor: 'pointer' }}
@@ -85,6 +91,7 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
                                 <circle r={5} fill="#4EA0E9" style={{ cursor: 'pointer' }} />
                             </Marker>
                         ))}
+
                     </ComposableMap>
                 </Suspense>
             </div>
@@ -92,8 +99,8 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
             <div className="sticky-sidebar">
                 <div className="travel-guides">
                     <ul>
-                        {cities.map((city, index) => (
-                            <li key={index} id={city.city}>
+                        {cities.map((city) => (
+                            <li key={city.id} id={city.city}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <h3 onClick={() => handleMarkerClick(city.city)} style={{ cursor: 'pointer', margin: 0 }}>
                                         {city.city}, {city.country}
@@ -108,6 +115,7 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
                                 </div>
                             </li>
                         ))}
+
                     </ul>
                 </div>
 

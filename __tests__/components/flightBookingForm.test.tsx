@@ -101,4 +101,54 @@ describe('FlightBookingForm', () => {
             expect(screen.getByText(/Successfully booked flight CA101/)).toBeInTheDocument();
         });
     });
+
+    it('handles toggling trip type to one-way, input changes, and error handling', async () => {
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+        mockSearch.mockRejectedValue(new Error('Search failed'));
+        mockBook.mockRejectedValue(new Error('Booking failed'));
+
+        const { container } = renderForm();
+
+        // Test class selection change
+        const classSelect = container.querySelector('#class') as HTMLSelectElement;
+        fireEvent.change(classSelect, { target: { value: 'business' } });
+        expect(classSelect.value).toBe('business');
+
+        // Test departure date change
+        const departInput = container.querySelector('#depart') as HTMLInputElement;
+        fireEvent.change(departInput, { target: { value: '2026-06-20' } });
+        expect(departInput.value).toBe('2026-06-20');
+
+        // Test trip type toggling to one-way
+        const oneWayRadio = screen.getByLabelText('One Way');
+        fireEvent.click(oneWayRadio);
+        
+        const returnInput = container.querySelector('#returnDate') as HTMLInputElement;
+        expect(returnInput).toBeDisabled();
+
+        // Search error handler check
+        fireEvent.click(screen.getByText('Find your trip'));
+        await waitFor(() => {
+            expect(consoleErrorSpy).toHaveBeenCalled();
+        });
+
+        // Setup mock flights back to test booking error
+        mockSearch.mockResolvedValue(mockFlights);
+        fireEvent.click(screen.getByText('Find your trip'));
+        await waitFor(() => expect(screen.getByText('Available Flights')).toBeInTheDocument());
+
+        fireEvent.click(screen.getByText('Book Now'));
+        await waitFor(() => {
+            expect(screen.getByText('Failed to book flight. Please try again later.')).toBeInTheDocument();
+        });
+
+        // Test changing the destination option explicitly
+        const toSelect = container.querySelector('#to') as HTMLSelectElement;
+        fireEvent.change(toSelect, { target: { value: 'Tokyo, Japan' } });
+        expect(toSelect.value).toBe('Tokyo, Japan');
+
+        consoleErrorSpy.mockRestore();
+    });
+
 });
+
