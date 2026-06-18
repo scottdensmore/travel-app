@@ -64,7 +64,18 @@ describe('authOptions credential authorize', () => {
         expect(result).toMatchObject({ id: 'u1', email: 'a@b.com', role: 'USER' });
         expect(result.password).toBeUndefined();
     });
+
+    it('throws error when email or password is missing', async () => {
+        const err1 = await authorize(undefined).catch((e) => e);
+        const err2 = await authorize({ email: 'a@b.com' } as any).catch((e) => e);
+        const err3 = await authorize({ password: 'pw' } as any).catch((e) => e);
+
+        expect(err1.message).toBe('Invalid email or password');
+        expect(err2.message).toBe('Invalid email or password');
+        expect(err3.message).toBe('Invalid email or password');
+    });
 });
+
 
 describe('authOptions jwt/session callbacks', () => {
     const jwt = (authOptions.callbacks!.jwt as any);
