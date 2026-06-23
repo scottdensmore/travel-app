@@ -5,7 +5,9 @@ import {
     deleteCityGuideAction,
     bookFlightAction,
     toggleFavoriteCityGuideAction,
-    submitCityGuideReviewAction
+    submitCityGuideReviewAction,
+    cancelBookingAction,
+    deleteReviewAction
 } from '@/app/actions';
 import { getServerSession } from 'next-auth';
 import TravelGuideService from '@/lib/TravelGuideService';
@@ -34,7 +36,8 @@ jest.mock('@/lib/prisma', () => ({
         cityGuide: { create: jest.fn(), delete: jest.fn() },
         flight: { findMany: jest.fn() },
         userFavorite: { findUnique: jest.fn(), delete: jest.fn(), create: jest.fn() },
-        review: { create: jest.fn() },
+        review: { create: jest.fn(), findUnique: jest.fn(), delete: jest.fn() },
+        booking: { findUnique: jest.fn(), delete: jest.fn() },
     },
 }));
 
@@ -47,6 +50,10 @@ const mockedUserFavoriteFindUnique = (prisma as any).userFavorite.findUnique as 
 const mockedUserFavoriteDelete = (prisma as any).userFavorite.delete as jest.Mock;
 const mockedUserFavoriteCreate = (prisma as any).userFavorite.create as jest.Mock;
 const mockedReviewCreate = (prisma as any).review.create as jest.Mock;
+const mockedReviewFindUnique = (prisma as any).review.findUnique as jest.Mock;
+const mockedReviewDelete = (prisma as any).review.delete as jest.Mock;
+const mockedBookingFindUnique = (prisma as any).booking.findUnique as jest.Mock;
+const mockedBookingDelete = (prisma as any).booking.delete as jest.Mock;
 
 const sampleGuide: any = {
     city: 'Paris',
@@ -225,4 +232,85 @@ describe('submitCityGuideReviewAction', () => {
         expect(result).toEqual({ id: 99, userId: 'user-123', cityGuideId: 5, rating: 5, content: 'Great!' });
     });
 });
+
+describe('cancelBookingAction', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it('rejects an unauthenticated user', async () => {
+        mockedGetServerSession.mockResolvedValue(null);
+        await expect(cancelBookingAction(1)).rejects.toThrow('Unauthorized');
+    });
+
+    it('rejects a user trying to cancel another user\'s booking', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        mockedBookingFindUnique.mockResolvedValue({ id: 1, userId: 'other-user' });
+
+        await expect(cancelBookingAction(1)).rejects.toThrow('Unauthorized');
+        expect(mockedBookingDelete).not.toHaveBeenCalled();
+    });
+
+    it('allows a user to cancel their own booking', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        mockedBookingFindUnique.mockResolvedValue({ id: 1, userId: 'user-123' });
+        mockedBookingDelete.mockResolvedValue({ id: 1 });
+
+        const result = await cancelBookingAction(1);
+
+        expect(mockedBookingFindUnique).toHaveBeenCalledWith({ where: { id: 1 } });
+        expect(mockedBookingDelete).toHaveBeenCalledWith({ where: { id: 1 } });
+        expect(result).toEqual({ id: 1 });
+    });
+
+    it('allows an admin to cancel any booking', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'admin-123', role: 'ADMIN' } });
+        mockedBookingFindUnique.mockResolvedValue({ id: 1, userId: 'some-user' });
+        mockedBookingDelete.mockResolvedValue({ id: 1 });
+
+        const result = await cancelBookingAction(1);
+
+        expect(mockedBookingDelete).toHaveBeenCalledWith({ where: { id: 1 } });
+        expect(result).toEqual({ id: 1 });
+    });
+});
+
+describe('deleteReviewAction', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it('rejects an unauthenticated user', async () => {
+        mockedGetServerSession.mockResolvedValue(null);
+        await expect(deleteReviewAction('rev-123')).rejects.toThrow('Unauthorized');
+    });
+
+    it('rejects a user trying to delete another user\'s review', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        mockedReviewFindUnique.mockResolvedValue({ id: 'rev-123', userId: 'other-user' });
+
+        await expect(deleteReviewAction('rev-123')).rejects.toThrow('Unauthorized');
+        expect(mockedReviewDelete).not.toHaveBeenCalled();
+    });
+
+    it('allows a user to delete their own review', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        mockedReviewFindUnique.mockResolvedValue({ id: 'rev-123', userId: 'user-123' });
+        mockedReviewDelete.mockResolvedValue({ id: 'rev-123' });
+
+        const result = await deleteReviewAction('rev-123');
+
+        expect(mockedReviewFindUnique).toHaveBeenCalledWith({ where: { id: 'rev-123' } });
+        expect(mockedReviewDelete).toHaveBeenCalledWith({ where: { id: 'rev-123' } });
+        expect(result).toEqual({ id: 'rev-123' });
+    });
+
+    it('allows an admin to delete any review', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'admin-123', role: 'ADMIN' } });
+        mockedReviewFindUnique.mockResolvedValue({ id: 'rev-123', userId: 'some-user' });
+        mockedReviewDelete.mockResolvedValue({ id: 'rev-123' });
+
+        const result = await deleteReviewAction('rev-123');
+
+        expect(mockedReviewDelete).toHaveBeenCalledWith({ where: { id: 'rev-123' } });
+        expect(result).toEqual({ id: 'rev-123' });
+    });
+});
+
 

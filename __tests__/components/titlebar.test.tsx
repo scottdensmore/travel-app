@@ -25,6 +25,16 @@ describe('TitleBar', () => {
         expect(screen.getByAltText('Gemini Airways')).toBeInTheDocument();
     });
 
+    it('renders the correct title and nav link when pathname is /flights', () => {
+        (usePathname as jest.Mock).mockReturnValue('/flights');
+
+        render(<TitleBar />);
+
+        expect(screen.getByText('Flight Status', { selector: 'span' })).toBeInTheDocument();
+        expect(screen.getByText('Flight Status', { selector: 'a' })).toBeInTheDocument();
+    });
+
+
     it('renders the admin view when pathname is /admin/travelguide', () => {
         (usePathname as jest.Mock).mockReturnValue('/admin/travelguide');
         (require('next-auth/react').useSession as jest.Mock).mockReturnValue({ data: { user: { role: 'ADMIN' } } });

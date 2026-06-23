@@ -96,3 +96,49 @@ export async function submitCityGuideReviewAction(cityGuideId: number, rating: n
     });
 }
 
+export async function cancelBookingAction(bookingId: number) {
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.id;
+    if (!userId) throw new Error("Unauthorized");
+
+    const booking = await prisma.booking.findUnique({
+        where: { id: bookingId }
+    });
+    if (!booking) throw new Error("Booking not found");
+
+    if (session.user.role !== 'ADMIN' && booking.userId !== userId) {
+        throw new Error("Unauthorized");
+    }
+
+    const deleted = await prisma.booking.delete({
+        where: { id: bookingId }
+    });
+    revalidatePath('/profile');
+    revalidatePath('/admin');
+    return deleted;
+}
+
+export async function deleteReviewAction(reviewId: string) {
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.id;
+    if (!userId) throw new Error("Unauthorized");
+
+    const review = await prisma.review.findUnique({
+        where: { id: reviewId }
+    });
+    if (!review) throw new Error("Review not found");
+
+    if (session.user.role !== 'ADMIN' && review.userId !== userId) {
+        throw new Error("Unauthorized");
+    }
+
+    const deleted = await prisma.review.delete({
+        where: { id: reviewId }
+    });
+    revalidatePath('/travelguide');
+    revalidatePath('/profile');
+    return deleted;
+}
+
+
+
