@@ -99,6 +99,7 @@ model Flight {
   departureDate DateTime
   returnDate    DateTime?
   price         String
+  status        String    @default("ON_TIME")
 
   bookings Booking[]
 }

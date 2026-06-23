@@ -29,7 +29,11 @@ const columns = [
 ]
 
 const PointsActivityTable: React.FC<{ activityData: PointsActivityDisplayData[] }> = ({ activityData }) => {
-  const [data, _setData] = React.useState(() => [...activityData])
+  const [data, setData] = React.useState(() => [...activityData])
+
+  React.useEffect(() => {
+    setData([...activityData])
+  }, [activityData])
 
   const table = useReactTable({
     data,

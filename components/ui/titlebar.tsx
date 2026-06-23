@@ -13,6 +13,7 @@ const TitleBar: React.FC = () => {
         '/checkin': 'Check-In',
         '/travelguide': 'Travel Guide',
         '/profile': 'Profile',
+        '/flights': 'Flight Status',
         '/admin': 'Admin Dashboard',
         '/admin/travelguide': 'Manage City Guides',
     };
@@ -42,6 +43,9 @@ const TitleBar: React.FC = () => {
                             </li>
                             <li className={pathname === '/travelguide' ? 'selected' : ''}>
                                 <Link href="/travelguide">Travel Guide</Link>
+                            </li>
+                            <li className={pathname === '/flights' ? 'selected' : ''}>
+                                <Link href="/flights">Flight Status</Link>
                             </li>
                         </>
                     )}
