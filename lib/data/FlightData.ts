@@ -51,4 +51,57 @@ export const FlightData = [
     }
 ];
 
+export const FlightScheduleData = [
+    {
+        flightNumber: 'CA101',
+        airline: 'Gemini Airways',
+        from: 'Seattle, USA',
+        to: 'Detroit, USA',
+        departureTime: '08:00',
+        returnTime: '18:00',
+        daysOfWeek: [1, 3, 5], // Mon, Wed, Fri
+        price: '$350'
+    },
+    {
+        flightNumber: 'CA202',
+        airline: 'Gemini Airways',
+        from: 'New York, USA',
+        to: 'London, UK',
+        departureTime: '19:30',
+        returnTime: '10:00',
+        daysOfWeek: [2, 4, 6], // Tue, Thu, Sat
+        price: '$850'
+    },
+    {
+        flightNumber: 'CA303',
+        airline: 'Gemini Airways',
+        from: 'San Francisco, USA',
+        to: 'Tokyo, Japan',
+        departureTime: '11:00',
+        returnTime: '15:00',
+        daysOfWeek: [0, 2, 4], // Sun, Tue, Thu
+        price: '$1200'
+    },
+    {
+        flightNumber: 'CA404',
+        airline: 'Gemini Airways',
+        from: 'Chicago, USA',
+        to: 'Paris, France',
+        departureTime: '17:45',
+        returnTime: '09:30',
+        daysOfWeek: [1, 3, 5], // Mon, Wed, Fri
+        price: '$950'
+    },
+    {
+        flightNumber: 'CA505',
+        airline: 'Gemini Airways',
+        from: 'Miami, USA',
+        to: 'Rio de Janeiro, Brazil',
+        departureTime: '22:00',
+        returnTime: null,
+        daysOfWeek: [0, 3, 5], // Sun, Wed, Fri
+        price: '$500'
+    }
+];
+
 export default FlightData;

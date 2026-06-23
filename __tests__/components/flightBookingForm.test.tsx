@@ -69,7 +69,7 @@ describe('FlightBookingForm', () => {
             expect(screen.getByText('CA101')).toBeInTheDocument();
         });
         // Defaults to the first origin and its first reachable destination.
-        expect(mockSearch).toHaveBeenCalledWith('Seattle, USA', 'Detroit, USA');
+        expect(mockSearch).toHaveBeenCalledWith('Seattle, USA', 'Detroit, USA', expect.any(String));
     });
 
     it('shows a no-results message when no flights match the route', async () => {
