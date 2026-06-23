@@ -12,6 +12,7 @@ import {
 import { getServerSession } from 'next-auth';
 import TravelGuideService from '@/lib/TravelGuideService';
 import FlightBookingService from '@/lib/FlightBookingService';
+import FlightScheduleService from '@/lib/FlightScheduleService';
 import { prisma } from '@/lib/prisma';
 
 // Keep these heavy/server-only modules out of the unit test.
@@ -22,6 +23,11 @@ jest.mock('@/lib/auth', () => ({ authOptions: {} }));
 jest.mock('@/lib/FlightBookingService', () => {
     const bookFlight = jest.fn();
     return jest.fn().mockImplementation(() => ({ bookFlight }));
+});
+
+jest.mock('@/lib/FlightScheduleService', () => {
+    const generateFlightsForDate = jest.fn();
+    return jest.fn().mockImplementation(() => ({ generateFlightsForDate }));
 });
 
 // The service mock shares a single saveCityGuide fn across all instances,
@@ -35,6 +41,7 @@ jest.mock('@/lib/prisma', () => ({
     prisma: {
         cityGuide: { create: jest.fn(), delete: jest.fn() },
         flight: { findMany: jest.fn() },
+        flightSchedule: { findMany: jest.fn() },
         userFavorite: { findUnique: jest.fn(), delete: jest.fn(), create: jest.fn() },
         review: { create: jest.fn(), findUnique: jest.fn(), delete: jest.fn() },
         booking: { findUnique: jest.fn(), delete: jest.fn() },
@@ -44,7 +51,9 @@ jest.mock('@/lib/prisma', () => ({
 const mockedGetServerSession = getServerSession as unknown as jest.Mock;
 const mockSaveCityGuide = new (TravelGuideService as any)().saveCityGuide as jest.Mock;
 const mockBookFlight = new (FlightBookingService as any)().bookFlight as jest.Mock;
+const mockGenerateFlightsForDate = new (FlightScheduleService as any)().generateFlightsForDate as jest.Mock;
 const mockedFlightFindMany = (prisma as any).flight.findMany as jest.Mock;
+const mockedFlightScheduleFindMany = (prisma as any).flightSchedule.findMany as jest.Mock;
 const mockedCityGuideDelete = (prisma as any).cityGuide.delete as jest.Mock;
 const mockedUserFavoriteFindUnique = (prisma as any).userFavorite.findUnique as jest.Mock;
 const mockedUserFavoriteDelete = (prisma as any).userFavorite.delete as jest.Mock;
@@ -120,7 +129,7 @@ describe('deleteCityGuideAction authorization and execution', () => {
 describe('searchFlightsAction', () => {
     beforeEach(() => jest.clearAllMocks());
 
-    it('filters flights by the selected origin and destination', async () => {
+    it('filters flights by the selected origin and destination without date', async () => {
         const flights = [
             { id: 1, flightNumber: 'CA101', from: 'Seattle, USA', to: 'Detroit, USA' },
         ];
@@ -133,22 +142,46 @@ describe('searchFlightsAction', () => {
         );
         expect(result).toBe(flights);
     });
+
+    it('triggers lazy generation and queries by date when departureDateStr is provided', async () => {
+        const flights = [
+            { id: 1, flightNumber: 'CA101', from: 'Seattle, USA', to: 'Detroit, USA', departureDate: new Date('2026-06-25T08:00:00Z') },
+        ];
+        mockedFlightFindMany.mockResolvedValue(flights);
+        mockGenerateFlightsForDate.mockResolvedValue([]);
+
+        const result = await searchFlightsAction('Seattle, USA', 'Detroit, USA', '2026-06-25');
+
+        expect(mockGenerateFlightsForDate).toHaveBeenCalledWith(new Date('2026-06-25'));
+        expect(mockedFlightFindMany).toHaveBeenCalledWith({
+            where: {
+                from: 'Seattle, USA',
+                to: 'Detroit, USA',
+                departureDate: {
+                    gte: new Date('2026-06-25T00:00:00.000Z'),
+                    lte: new Date('2026-06-25T23:59:59.999Z')
+                }
+            },
+            orderBy: { departureDate: 'asc' }
+        });
+        expect(result).toBe(flights);
+    });
 });
 
 describe('getFlightRoutesAction', () => {
     beforeEach(() => jest.clearAllMocks());
 
-    it('returns the distinct origin/destination pairs that have flights', async () => {
+    it('returns the distinct origin/destination pairs from schedules', async () => {
         const routes = [
             { from: 'Chicago, USA', to: 'Paris, France' },
             { from: 'Seattle, USA', to: 'Detroit, USA' },
         ];
-        mockedFlightFindMany.mockResolvedValue(routes);
+        mockedFlightScheduleFindMany.mockResolvedValue(routes);
 
         const result = await getFlightRoutesAction();
 
         expect(result).toBe(routes);
-        expect(mockedFlightFindMany).toHaveBeenCalledWith(
+        expect(mockedFlightScheduleFindMany).toHaveBeenCalledWith(
             expect.objectContaining({ distinct: ['from', 'to'], select: { from: true, to: true } })
         );
     });

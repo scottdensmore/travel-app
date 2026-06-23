@@ -102,6 +102,8 @@ model Flight {
   status        String    @default("ON_TIME")
 
   bookings Booking[]
+
+  @@unique([flightNumber, departureDate])
 }
 
 model UserFavorite {
@@ -126,4 +128,17 @@ model Review {
 
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   cityGuide CityGuide @relation(fields: [cityGuideId], references: [id], onDelete: Cascade)
+}
+
+model FlightSchedule {
+  id            Int      @id @default(autoincrement())
+  flightNumber  String
+  airline       String
+  from          String
+  to            String
+  departureTime String
+  returnTime    String?
+  daysOfWeek    Int[]
+  price         String
+  isActive      Boolean  @default(true)
 }

@@ -42,7 +42,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({ routes = [] }) =>
         setBookingState({ status: 'idle' });
 
         try {
-            const results = await searchFlightsAction(fromLocation, toLocation);
+            const results = await searchFlightsAction(fromLocation, toLocation, departureDate);
             setSearchResults(results);
         } catch (error) {
             console.error(error);
@@ -188,38 +188,71 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({ routes = [] }) =>
                         </form>
                     </div>
                     {searchResults && searchResults.length === 0 && (
-                        <div className="mt-8 bg-white p-6 rounded-lg shadow-lg max-w-4xl mx-auto text-center text-gray-600">
+                        <div className="mt-8 max-w-4xl mx-auto text-center" style={{
+                            background: 'rgba(255, 255, 255, 0.03)',
+                            borderRadius: '16px',
+                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                            backdropFilter: 'blur(20px)',
+                            WebkitBackdropFilter: 'blur(20px)',
+                            padding: '24px',
+                            color: 'rgba(255, 255, 255, 0.6)'
+                        }}>
                             No flights found for this route. Try a different origin or destination.
                         </div>
                     )}
                     {searchResults && searchResults.length > 0 && (
-                        <div className="mt-8 bg-white p-6 rounded-lg shadow-lg max-w-4xl mx-auto">
-                            <h2 className="text-2xl font-bold mb-4 text-gray-800">Available Flights</h2>
-                            <div className="space-y-4">
+                        <div className="mt-8 max-w-4xl mx-auto" style={{
+                            background: 'rgba(255, 255, 255, 0.03)',
+                            borderRadius: '16px',
+                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                            backdropFilter: 'blur(20px)',
+                            WebkitBackdropFilter: 'blur(20px)',
+                            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)',
+                            padding: '24px'
+                        }}>
+                            <h2 className="text-2xl font-bold mb-4" style={{ color: '#c084fc' }}>Available Flights</h2>
+                            <div className="space-y-4" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                 {searchResults.map((flight) => (
-                                    <div key={flight.id} className="border border-gray-200 rounded-md p-4 flex justify-between items-center hover:bg-gray-50 transition-colors">
-                                        <div className="flex flex-col">
-                                            <span className="text-lg font-semibold text-blue-600">{flight.airline}</span>
-                                            <span className="text-sm text-gray-500">{flight.flightNumber}</span>
+                                    <div key={flight.id} className="hover:bg-white/5 transition-colors" style={{
+                                        border: '1px solid rgba(255, 255, 255, 0.06)',
+                                        backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                                        borderRadius: '12px',
+                                        padding: '16px',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center'
+                                    }}>
+                                        <div className="flex flex-col" style={{ display: 'flex', flexDirection: 'column' }}>
+                                            <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#c084fc' }}>{flight.airline}</span>
+                                            <span style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.flightNumber}</span>
                                         </div>
-                                        <div className="flex flex-col items-center">
-                                            <span className="text-xl font-bold text-gray-800">{new Date(flight.departureDate).toLocaleDateString()}</span>
-                                            <span className="text-xs text-gray-400">{flight.from}</span>
+                                        <div className="flex flex-col items-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#fff' }}>{new Date(flight.departureDate).toLocaleDateString()}</span>
+                                            <span style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.from}</span>
                                         </div>
-                                        <div className="flex flex-col items-center">
-                                            <span className="text-sm text-gray-500">------&gt;</span>
+                                        <div className="flex flex-col items-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.3)' }}>------&gt;</span>
                                         </div>
-                                        <div className="flex flex-col items-center">
-                                            <span className="text-xl font-bold text-gray-800">{flight.returnDate ? new Date(flight.returnDate).toLocaleDateString() : 'One Way'}</span>
-                                            <span className="text-xs text-gray-400">{flight.to}</span>
+                                        <div className="flex flex-col items-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#fff' }}>{flight.returnDate ? new Date(flight.returnDate).toLocaleDateString() : 'One Way'}</span>
+                                            <span style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.to}</span>
                                         </div>
-                                        <div className="flex flex-col items-end">
-                                            <span className="text-2xl font-bold text-green-600">{flight.price}</span>
+                                        <div className="flex flex-col items-end" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                                            <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>{flight.price}</span>
                                             <button
                                                 onClick={() => handleBookFlight(flight)}
                                                 disabled={bookingState.status === 'booking' && bookingState.flightId === flight.id}
                                                 className="mt-2 text-white px-4 py-1 rounded text-sm disabled:opacity-50"
-                                                style={{ backgroundColor: '#2171E5' }}>
+                                                style={{ 
+                                                    backgroundColor: '#8b5cf6', 
+                                                    color: 'white',
+                                                    padding: '6px 16px',
+                                                    borderRadius: '6px',
+                                                    fontSize: '0.875rem',
+                                                    border: 'none',
+                                                    cursor: 'pointer',
+                                                    fontWeight: '600'
+                                                }}>
                                                 {bookingState.status === 'booking' && bookingState.flightId === flight.id ? 'Booking...' : 'Book Now'}
                                             </button>
                                         </div>

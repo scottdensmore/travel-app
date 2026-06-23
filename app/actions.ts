@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import TravelGuideService from '@/lib/TravelGuideService';
 import FlightBookingService from '@/lib/FlightBookingService';
+import FlightScheduleService from '@/lib/FlightScheduleService';
 import CityGuide from '@/lib/types/CityGuide';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -32,17 +33,39 @@ export async function deleteCityGuideAction(cityGuideId: number) {
     revalidatePath('/travelguide');
 }
 
-export async function searchFlightsAction(from: string, to: string) {
+export async function searchFlightsAction(from: string, to: string, departureDateStr?: string) {
+    if (!departureDateStr) {
+        return await prisma.flight.findMany({
+            where: { from, to },
+            orderBy: { departureDate: 'asc' },
+        });
+    }
+
+    const searchDate = new Date(departureDateStr);
+    const scheduleService = new FlightScheduleService();
+    await scheduleService.generateFlightsForDate(searchDate);
+
+    const dateStr = searchDate.toISOString().split('T')[0];
+    const startOfDay = new Date(`${dateStr}T00:00:00.000Z`);
+    const endOfDay = new Date(`${dateStr}T23:59:59.999Z`);
+
     return await prisma.flight.findMany({
-        where: { from, to },
+        where: {
+            from,
+            to,
+            departureDate: {
+                gte: startOfDay,
+                lte: endOfDay
+            }
+        },
         orderBy: { departureDate: 'asc' },
     });
 }
 
 export async function getFlightRoutesAction() {
-    // Distinct origin/destination pairs that actually have flights, so the
+    // Distinct origin/destination pairs that actually have flight schedules, so the
     // booking form can offer only reachable routes.
-    return await prisma.flight.findMany({
+    return await prisma.flightSchedule.findMany({
         distinct: ['from', 'to'],
         select: { from: true, to: true },
         orderBy: [{ from: 'asc' }, { to: 'asc' }],
