@@ -44,3 +44,8 @@ mise.toml
 .idea/
 
 /lib/generated/prisma
+
+# antigravity
+.antigravitycli/
+.cm_project
+git_diff.txt
