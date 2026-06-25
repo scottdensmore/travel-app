@@ -49,3 +49,7 @@ mise.toml
 .antigravitycli/
 .cm_project
 git_diff.txt
+
+# playwright
+/playwright-report/
+/test-results/
