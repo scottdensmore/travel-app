@@ -60,6 +60,7 @@ test.describe('Admin Control Journey', () => {
 
     // Logout and login again to refresh the JWT session token role
     await page.click('button:has-text("Sign Out")');
+    await expect(page.locator('a:has-text("Sign In")')).toBeVisible();
     await page.goto('/login');
     await page.fill('#email', adminEmail);
     await page.fill('#password', password);

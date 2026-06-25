@@ -74,8 +74,8 @@ export async function getFlightRoutesAction() {
 
 export async function bookFlightAction(bookingData: { 
     flightId: number; 
-    totalPrice: string; 
-    passengers: PassengerInput[]; 
+    totalPrice?: string; 
+    passengers?: PassengerInput[]; 
     paymentIntentId?: string; 
 }) {
     const session = await getServerSession(authOptions);
