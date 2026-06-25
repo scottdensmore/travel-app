@@ -22,7 +22,7 @@ export default async function ProfilePage() {
   const userBookings = await prisma.booking.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },
-    include: { flight: true },
+    include: { flight: true, passengers: true },
   });
 
   const userFavorites = await prisma.userFavorite.findMany({

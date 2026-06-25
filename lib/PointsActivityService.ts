@@ -23,6 +23,7 @@ class PointsActivityService {
       return PointsActivityData.reduce((total, activity) => total + activity.points, this.startingPoints);
     }
     return this.bookings.reduce((total, booking) => {
+      if (booking.status === 'CANCELLED') return total;
       const priceStr = booking.totalPrice || booking.flight?.price;
       const price = this.parsePrice(priceStr);
       return total + price;
@@ -52,18 +53,35 @@ class PointsActivityService {
       return displayData;
     }
 
-    const displayData: PointsActivityDisplayData[] = this.bookings.map((booking) => {
+    const displayData: PointsActivityDisplayData[] = [];
+    this.bookings.forEach((booking) => {
       const flight = booking.flight;
       const priceStr = booking.totalPrice || flight?.price;
       const points = this.parsePrice(priceStr);
-      const desc = flight 
+      const baseDesc = flight 
         ? `✈️ ${flight.airline} ${flight.flightNumber} (${flight.from} → ${flight.to})`
         : '✈️ Flight Booking';
-      return {
-        description: desc,
-        date: new Date(booking.createdAt).toLocaleDateString(),
-        points
-      };
+      
+      if (booking.status === 'CANCELLED') {
+        // 1. Show original positive booking credit
+        displayData.push({
+          description: baseDesc,
+          date: new Date(booking.createdAt).toLocaleDateString(),
+          points: points
+        });
+        // 2. Show cancellation debit
+        displayData.push({
+          description: `❌ Cancelled: ${baseDesc.replace('✈️ ', '')}`,
+          date: new Date(booking.createdAt).toLocaleDateString(),
+          points: -points
+        });
+      } else {
+        displayData.push({
+          description: baseDesc,
+          date: new Date(booking.createdAt).toLocaleDateString(),
+          points: points
+        });
+      }
     });
 
     displayData.push({
@@ -111,7 +129,12 @@ class PointsActivityService {
       const monthYear = date.toLocaleString('default', { month: 'short', year: 'numeric' });
       const priceStr = booking.totalPrice || booking.flight?.price;
       const points = this.parsePrice(priceStr);
-      monthlyPointsMap[monthYear] = (monthlyPointsMap[monthYear] || 0) + points;
+      if (booking.status === 'CANCELLED') {
+        // Cancellation balances out to 0 net points for this month
+        monthlyPointsMap[monthYear] = (monthlyPointsMap[monthYear] || 0) + points - points;
+      } else {
+        monthlyPointsMap[monthYear] = (monthlyPointsMap[monthYear] || 0) + points;
+      }
     });
 
     const sortedMonths = Object.keys(monthlyPointsMap).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
