@@ -17,62 +17,105 @@ export default async function AdminDashboard() {
     });
 
     return (
-        <div className="page-container p-8" style={{ marginTop: '100px' }}>
-            <h1 className="text-3xl font-bold mb-6">Admin Dashboard</h1>
+        <div className="page-container admin p-8" style={{ marginTop: '100px', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+            <h1 className="text-3xl font-bold" style={{ color: '#fff', margin: 0 }}>Admin Control Center</h1>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem' }}>
-                <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
-                    <h2 className="text-gray-500 font-semibold mb-2">Total Users</h2>
-                    <p className="text-4xl font-bold text-blue-600">{userCount}</p>
+            {/* Quick Stats Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem' }}>
+                <div className="admin-card" style={{ marginBottom: 0, padding: '24px' }}>
+                    <h2 className="text-gray-400 font-semibold mb-2" style={{ borderBottom: 'none', paddingBottom: 0, fontSize: '1rem', color: '#a78bfa' }}>Total Users</h2>
+                    <p className="text-4xl font-bold" style={{ color: '#38bdf8', fontSize: '2.25rem', margin: '8px 0 0 0', fontWeight: 'bold' }}>{userCount}</p>
                 </div>
-                <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
-                    <h2 className="text-gray-500 font-semibold mb-2">Total Bookings</h2>
-                    <p className="text-4xl font-bold text-green-600">{bookingCount}</p>
+                <div className="admin-card" style={{ marginBottom: 0, padding: '24px' }}>
+                    <h2 className="text-gray-400 font-semibold mb-2" style={{ borderBottom: 'none', paddingBottom: 0, fontSize: '1rem', color: '#a78bfa' }}>Total Bookings</h2>
+                    <p className="text-4xl font-bold" style={{ color: '#34d399', fontSize: '2.25rem', margin: '8px 0 0 0', fontWeight: 'bold' }}>{bookingCount}</p>
                 </div>
-                <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
-                    <h2 className="text-gray-500 font-semibold mb-2">City Guides</h2>
-                    <p className="text-4xl font-bold text-purple-600">{cityGuideCount}</p>
+                <div className="admin-card" style={{ marginBottom: 0, padding: '24px' }}>
+                    <h2 className="text-gray-400 font-semibold mb-2" style={{ borderBottom: 'none', paddingBottom: 0, fontSize: '1rem', color: '#a78bfa' }}>City Guides</h2>
+                    <p className="text-4xl font-bold" style={{ color: '#c084fc', fontSize: '2.25rem', margin: '8px 0 0 0', fontWeight: 'bold' }}>{cityGuideCount}</p>
                 </div>
             </div>
 
-            <div className="mb-8 flex gap-4">
-                <Link href="/admin/travelguide" className="inline-block bg-blue-600 text-white px-6 py-2 rounded font-semibold hover:bg-blue-700" style={{ textDecoration: 'none', background: '#2563EB', padding: '0.5rem 1.5rem', borderRadius: '4px', color: 'white' }}>
-                    Manage City Guides
+            {/* Admin Management Sections */}
+            <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                <Link href="/admin/travelguide" className="admin-card hover:border-purple-500 transition-all" style={{
+                    textDecoration: 'none',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.5rem',
+                    flex: '1',
+                    minWidth: '250px',
+                    padding: '24px',
+                    marginBottom: 0,
+                    border: '1px solid rgba(255, 255, 255, 0.08)'
+                }}>
+                    <h3 style={{ color: '#c084fc', fontSize: '1.25rem', margin: 0, fontWeight: 'bold' }}>City Guides</h3>
+                    <p style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem', margin: 0 }}>
+                        Create, update, and manage travel guide locations, coordinates, and recommendations.
+                    </p>
+                </Link>
+                <Link href="/admin/flights" className="admin-card hover:border-purple-500 transition-all" style={{
+                    textDecoration: 'none',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.5rem',
+                    flex: '1',
+                    minWidth: '250px',
+                    padding: '24px',
+                    marginBottom: 0,
+                    border: '1px solid rgba(255, 255, 255, 0.08)'
+                }}>
+                    <h3 style={{ color: '#c084fc', fontSize: '1.25rem', margin: 0, fontWeight: 'bold' }}>Flight & Schedule Manager</h3>
+                    <p style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem', margin: 0 }}>
+                        Create recurring schedules, automatically generate daily occurrences, and monitor/update live statuses.
+                    </p>
                 </Link>
             </div>
 
-            <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
-                <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
-                    <h2 className="font-bold text-lg text-gray-800">Recent Bookings</h2>
-                </div>
-                <div className="p-0">
-                    {recentBookings.length > 0 ? (
-                        <table className="min-w-full divide-y divide-gray-200" style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-                            <thead className="bg-gray-50">
+            {/* Recent Bookings List */}
+            <div className="admin-card">
+                <h2 style={{ fontSize: '1.5rem', margin: '0 0 1rem 0', color: '#c084fc', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '8px' }}>
+                    Recent Bookings
+                </h2>
+                <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                        <thead>
+                            <tr style={{ borderBottom: '2px solid rgba(255, 255, 255, 0.08)' }}>
+                                <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>User</th>
+                                <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Flight</th>
+                                <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Route</th>
+                                <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {recentBookings.map((booking) => {
+                                const flight = booking.flight;
+                                return (
+                                    <tr key={booking.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
+                                        <td style={{ padding: '12px', fontSize: '0.9rem', color: '#fff' }}>
+                                            {booking.user?.name || booking.user?.email || 'Guest'}
+                                        </td>
+                                        <td style={{ padding: '12px', fontSize: '0.9rem', color: '#fff' }}>
+                                            {flight ? `${flight.airline} ${flight.flightNumber}` : '—'}
+                                        </td>
+                                        <td style={{ padding: '12px', fontSize: '0.9rem', color: '#fff' }}>
+                                            {flight ? `${flight.from} → ${flight.to}` : '—'}
+                                        </td>
+                                        <td style={{ padding: '12px', fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.6)' }}>
+                                            {new Date(booking.createdAt).toLocaleDateString()}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                            {recentBookings.length === 0 && (
                                 <tr>
-                                    <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b">User</th>
-                                    <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b">Flight</th>
-                                    <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b">Route</th>
-                                    <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b">Date</th>
+                                    <td colSpan={4} style={{ padding: '24px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.4)' }}>
+                                        No recent bookings.
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                                {recentBookings.map((booking) => {
-                                    const flight = booking.flight;
-                                    return (
-                                        <tr key={booking.id}>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-b">{booking.user?.name || booking.user?.email || 'Guest'}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-b">{flight ? `${flight.airline} ${flight.flightNumber}` : '—'}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 border-b">{flight ? `${flight.from} → ${flight.to}` : '—'}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 border-b">{new Date(booking.createdAt).toLocaleDateString()}</td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    ) : (
-                        <div className="p-6 text-gray-500">No recent bookings.</div>
-                    )}
+                            )}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
