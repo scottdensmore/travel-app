@@ -26,8 +26,8 @@ jobs:
 
       - name: Start PostgreSQL database
         run: |
-          docker-compose up -d db
-          until docker exec $(docker-compose ps -q db) pg_isready -U postgres -d travel_app; do
+          docker compose up -d db
+          until docker exec $(docker compose ps -q db) pg_isready -U postgres -d travel_app; do
             echo "Waiting for PostgreSQL to be ready..."
             sleep 2
           done
