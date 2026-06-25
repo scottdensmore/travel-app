@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
-import { bookFlightAction, searchFlightsAction } from '@/app/actions'
+import { searchFlightsAction } from '@/app/actions'
 import { Flight } from '@prisma/client'
 
 interface FlightBookingFormProps {
@@ -48,18 +48,6 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({ routes = [] }) =>
             console.error(error);
         } finally {
             setIsSearching(false);
-        }
-    };
-
-    const handleBookFlight = async (flight: Flight) => {
-        setBookingState({ status: 'booking', flightId: flight.id });
-        try {
-            await bookFlightAction({ flightId: flight.id });
-            setBookingState({ status: 'success', message: `Successfully booked flight ${flight.flightNumber}! Check your profile.` });
-            setSearchResults(null); // Clear search after booking
-        } catch (error) {
-            console.error(error);
-            setBookingState({ status: 'error', message: 'Failed to book flight. Please try again later.' });
         }
     };
 
@@ -239,10 +227,9 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({ routes = [] }) =>
                                         </div>
                                         <div className="flex flex-col items-end" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                                             <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>{flight.price}</span>
-                                            <button
-                                                onClick={() => handleBookFlight(flight)}
-                                                disabled={bookingState.status === 'booking' && bookingState.flightId === flight.id}
-                                                className="mt-2 text-white px-4 py-1 rounded text-sm disabled:opacity-50"
+                                            <Link
+                                                href={`/book/${flight.id}`}
+                                                className="mt-2 text-white px-4 py-1 rounded text-sm block text-center"
                                                 style={{ 
                                                     backgroundColor: '#8b5cf6', 
                                                     color: 'white',
@@ -251,10 +238,11 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({ routes = [] }) =>
                                                     fontSize: '0.875rem',
                                                     border: 'none',
                                                     cursor: 'pointer',
-                                                    fontWeight: '600'
+                                                    fontWeight: '600',
+                                                    textDecoration: 'none'
                                                 }}>
-                                                {bookingState.status === 'booking' && bookingState.flightId === flight.id ? 'Booking...' : 'Book Now'}
-                                            </button>
+                                                Book Now
+                                            </Link>
                                         </div>
                                     </div>
                                 ))}
