@@ -97,7 +97,8 @@ export async function getOccupiedSeatsAction(flightId: number) {
     const passengers = await prisma.passenger.findMany({
         where: {
             booking: {
-                flightId
+                flightId,
+                status: { not: "CANCELLED" }
             }
         },
         select: {
@@ -158,12 +159,95 @@ export async function cancelBookingAction(bookingId: number) {
         throw new Error("Unauthorized");
     }
 
-    const deleted = await prisma.booking.delete({
-        where: { id: bookingId }
+    const updated = await prisma.$transaction(async (tx) => {
+        const passengers = await tx.passenger.findMany({
+            where: { bookingId }
+        });
+        
+        for (const passenger of passengers) {
+            await tx.passenger.update({
+                where: { id: passenger.id },
+                data: { seatNumber: `CANCELLED-${passenger.id}` }
+            });
+        }
+
+        return await tx.booking.update({
+            where: { id: bookingId },
+            data: { status: "CANCELLED" }
+        });
     });
     revalidatePath('/profile');
     revalidatePath('/admin');
-    return deleted;
+    return updated;
+}
+
+export async function changeBookingSeatsAction(
+    bookingId: number,
+    seatChanges: { passengerId: string, seatNumber: string }[]
+) {
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.id;
+    if (!userId) throw new Error("Unauthorized");
+
+    const booking = await prisma.booking.findUnique({
+        where: { id: bookingId },
+        include: { passengers: true }
+    });
+    if (!booking) throw new Error("Booking not found");
+
+    if (session.user.role !== 'ADMIN' && booking.userId !== userId) {
+        throw new Error("Unauthorized");
+    }
+
+    const flightId = booking.flightId;
+    if (!flightId) throw new Error("Flight not found on booking");
+
+    // Execute inside transaction to prevent concurrent seat collisions
+    await prisma.$transaction(async (tx) => {
+        // Fetch all occupied seats on the flight (excluding the current booking's passengers)
+        const occupiedPassengers = await tx.passenger.findMany({
+            where: {
+                booking: {
+                    flightId,
+                    status: { not: "CANCELLED" }
+                },
+                bookingId: { not: bookingId }
+            },
+            select: { seatNumber: true }
+        });
+        const occupiedSeats = new Set(occupiedPassengers.map(p => p.seatNumber));
+
+        // Validate seat change conflicts
+        const newSeats = seatChanges.map(change => change.seatNumber);
+        
+        // Also check duplicates within the changes themselves
+        if (new Set(newSeats).size !== newSeats.length) {
+            throw new Error("Duplicate seats selected in request.");
+        }
+
+        for (const seat of newSeats) {
+            if (occupiedSeats.has(seat)) {
+                throw new Error(`Seat ${seat} is already occupied by another passenger.`);
+            }
+        }
+
+        // Apply changes
+        for (const change of seatChanges) {
+            // Verify passenger belongs to the booking
+            const belongs = booking.passengers.some(p => p.id === change.passengerId);
+            if (!belongs) {
+                throw new Error(`Passenger ${change.passengerId} does not belong to booking ${bookingId}`);
+            }
+
+            await tx.passenger.update({
+                where: { id: change.passengerId },
+                data: { seatNumber: change.seatNumber }
+            });
+        }
+    });
+
+    revalidatePath('/profile');
+    revalidatePath('/admin');
 }
 
 export async function deleteReviewAction(reviewId: string) {

@@ -31,7 +31,7 @@ export default class FlightBookingService {
                 const requestedSeats = passengers.map(p => p.seatNumber);
                 
                 const existingBookings = await tx.booking.findMany({
-                    where: { flightId },
+                    where: { flightId, status: { not: "CANCELLED" } },
                     include: { passengers: true }
                 });
 

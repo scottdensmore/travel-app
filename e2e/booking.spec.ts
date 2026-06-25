@@ -141,5 +141,38 @@ test.describe('Flight Booking Journey', () => {
     expect(pointsText).not.toBeNull();
     const pointsNum = parseInt(pointsText?.replace(/[^0-9]/g, '') || '0', 10);
     expect(pointsNum).toBeGreaterThan(0);
+
+    // --- CHANGE SEATS FLOW ---
+    await page.click('button:has-text("Change Seats")');
+    await expect(page.locator('h2:has-text("Change Seats")')).toBeVisible();
+
+    // Select seat 11B in the modal
+    const newSeatButton = page.locator('button[title="Select Seat 11B"]');
+    await expect(newSeatButton).toBeVisible();
+    await newSeatButton.click();
+
+    // Save
+    await page.click('button:has-text("Save New Seats")');
+    await expect(page.locator('h2:has-text("Change Seats")')).not.toBeVisible();
+    await expect(page.locator('text=Bob (11B)')).toBeVisible();
+
+    // --- CANCEL BOOKING FLOW ---
+    page.once('dialog', async dialog => {
+      expect(dialog.message()).toContain('Are you sure you want to cancel booking for flight');
+      await dialog.accept();
+    });
+    await page.click('button:has-text("Cancel")');
+
+    // Confirm cancel status badge and action buttons are gone
+    await expect(page.locator('text=Cancelled').first()).toBeVisible();
+    await expect(page.locator('button:has-text("Change Seats")')).not.toBeVisible();
+    
+    // Confirm points are deducted back to starting points (1300)
+    const pointsTextAfterCancel = await page.locator('p:has-text("Status Points")').textContent();
+    const pointsNumAfter = parseInt(pointsTextAfterCancel?.replace(/[^0-9]/g, '') || '0', 10);
+    expect(pointsNumAfter).toBe(1300);
+
+    // Confirm negative entry is visible in points activity log
+    await expect(page.locator('text=❌ Cancelled:').first()).toBeVisible();
   });
 });

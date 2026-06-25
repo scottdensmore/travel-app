@@ -97,4 +97,46 @@ describe('PointsActivityService dynamic calculations', () => {
         const activities = service.getPointsActivity();
         expect(activities[0].points).toBe(450);
     });
+
+    it('correctly handles CANCELLED bookings by not counting points and rendering negative log rows', () => {
+        const bookingsWithCancelled: any[] = [
+            {
+                id: 1,
+                createdAt: new Date('2026-01-15'),
+                status: 'CANCELLED',
+                totalPrice: '$350',
+                flight: {
+                    id: 10,
+                    airline: 'Gemini Airways',
+                    flightNumber: 'GA101',
+                    from: 'Seattle, USA',
+                    to: 'Detroit, USA',
+                    price: '$350',
+                }
+            }
+        ];
+        const service = new PointsActivityService(bookingsWithCancelled, 1000);
+
+        // Cancelled booking points should NOT be added to total points balance
+        expect(service.getCurrentPoints()).toBe(1000); 
+
+        // Activities log should render both booking credit and cancellation debit
+        const activities = service.getPointsActivity();
+        expect(activities).toHaveLength(3); // 1 booking positive + 1 booking negative + 1 starting points
+        expect(activities[0]).toEqual({
+            description: '✈️ Gemini Airways GA101 (Seattle, USA → Detroit, USA)',
+            date: new Date('2026-01-15').toLocaleDateString(),
+            points: 350,
+        });
+        expect(activities[1]).toEqual({
+            description: '❌ Cancelled: Gemini Airways GA101 (Seattle, USA → Detroit, USA)',
+            date: new Date('2026-01-15').toLocaleDateString(),
+            points: -350,
+        });
+        expect(activities[2].description).toBe('Starting Points');
+
+        // Monthly points chart should balance out to 0 net points for the cancelled booking
+        const monthly = service.getMonthlyPointsActivity();
+        expect(monthly[monthly.length - 1].points).toBe(1000); // 1000 starting + 350 (credit) - 350 (debit)
+    });
 });

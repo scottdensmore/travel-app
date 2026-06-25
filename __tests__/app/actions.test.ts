@@ -10,7 +10,8 @@ import {
     deleteReviewAction,
     saveFlightScheduleAction,
     deleteFlightScheduleAction,
-    updateFlightStatusAction
+    updateFlightStatusAction,
+    changeBookingSeatsAction
 } from '@/app/actions';
 import { getServerSession } from 'next-auth';
 import TravelGuideService from '@/lib/TravelGuideService';
@@ -40,6 +41,16 @@ jest.mock('@/lib/TravelGuideService', () => {
     return jest.fn().mockImplementation(() => ({ saveCityGuide }));
 });
 
+const mockTx = {
+    passenger: {
+        findMany: jest.fn(),
+        update: jest.fn(),
+    },
+    booking: {
+        update: jest.fn(),
+    }
+};
+
 jest.mock('@/lib/prisma', () => ({
     prisma: {
         cityGuide: { create: jest.fn(), delete: jest.fn() },
@@ -47,7 +58,8 @@ jest.mock('@/lib/prisma', () => ({
         flightSchedule: { findMany: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
         userFavorite: { findUnique: jest.fn(), delete: jest.fn(), create: jest.fn() },
         review: { create: jest.fn(), findUnique: jest.fn(), delete: jest.fn() },
-        booking: { findUnique: jest.fn(), delete: jest.fn() },
+        booking: { findUnique: jest.fn(), delete: jest.fn(), update: jest.fn() },
+        $transaction: jest.fn((callback) => callback(mockTx)),
     },
 }));
 
@@ -71,7 +83,7 @@ const mockedReviewCreate = (prisma as any).review.create as jest.Mock;
 const mockedReviewFindUnique = (prisma as any).review.findUnique as jest.Mock;
 const mockedReviewDelete = (prisma as any).review.delete as jest.Mock;
 const mockedBookingFindUnique = (prisma as any).booking.findUnique as jest.Mock;
-const mockedBookingDelete = (prisma as any).booking.delete as jest.Mock;
+const mockedBookingUpdate = (prisma as any).booking.update as jest.Mock;
 
 const sampleGuide: any = {
     city: 'Paris',
@@ -276,7 +288,11 @@ describe('submitCityGuideReviewAction', () => {
 });
 
 describe('cancelBookingAction', () => {
-    beforeEach(() => jest.clearAllMocks());
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockTx.passenger.findMany.mockResolvedValue([]);
+        mockTx.booking.update.mockReset();
+    });
 
     it('rejects an unauthenticated user', async () => {
         mockedGetServerSession.mockResolvedValue(null);
@@ -288,30 +304,99 @@ describe('cancelBookingAction', () => {
         mockedBookingFindUnique.mockResolvedValue({ id: 1, userId: 'other-user' });
 
         await expect(cancelBookingAction(1)).rejects.toThrow('Unauthorized');
-        expect(mockedBookingDelete).not.toHaveBeenCalled();
+        expect(mockTx.booking.update).not.toHaveBeenCalled();
     });
 
     it('allows a user to cancel their own booking', async () => {
         mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
         mockedBookingFindUnique.mockResolvedValue({ id: 1, userId: 'user-123' });
-        mockedBookingDelete.mockResolvedValue({ id: 1 });
+        mockTx.booking.update.mockResolvedValue({ id: 1 });
 
         const result = await cancelBookingAction(1);
 
         expect(mockedBookingFindUnique).toHaveBeenCalledWith({ where: { id: 1 } });
-        expect(mockedBookingDelete).toHaveBeenCalledWith({ where: { id: 1 } });
+        expect(mockTx.booking.update).toHaveBeenCalledWith({
+            where: { id: 1 },
+            data: { status: 'CANCELLED' }
+        });
         expect(result).toEqual({ id: 1 });
     });
 
     it('allows an admin to cancel any booking', async () => {
         mockedGetServerSession.mockResolvedValue({ user: { id: 'admin-123', role: 'ADMIN' } });
         mockedBookingFindUnique.mockResolvedValue({ id: 1, userId: 'some-user' });
-        mockedBookingDelete.mockResolvedValue({ id: 1 });
+        mockTx.booking.update.mockResolvedValue({ id: 1 });
 
         const result = await cancelBookingAction(1);
 
-        expect(mockedBookingDelete).toHaveBeenCalledWith({ where: { id: 1 } });
+        expect(mockTx.booking.update).toHaveBeenCalledWith({
+            where: { id: 1 },
+            data: { status: 'CANCELLED' }
+        });
         expect(result).toEqual({ id: 1 });
+    });
+});
+
+describe('changeBookingSeatsAction', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockTx.passenger.findMany.mockReset();
+        mockTx.passenger.update.mockReset();
+    });
+
+    it('rejects an unauthenticated user', async () => {
+        mockedGetServerSession.mockResolvedValue(null);
+        await expect(changeBookingSeatsAction(1, [])).rejects.toThrow('Unauthorized');
+    });
+
+    it('allows seat changes with valid inputs and transaction checks', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        mockedBookingFindUnique.mockResolvedValue({
+            id: 1,
+            userId: 'user-123',
+            flightId: 10,
+            passengers: [
+                { id: 'p-1', firstName: 'Jane', seatNumber: '12A' }
+            ]
+        });
+        
+        mockTx.passenger.findMany.mockResolvedValue([
+            { seatNumber: '11A' },
+            { seatNumber: '11B' }
+        ]);
+
+        await changeBookingSeatsAction(1, [
+            { passengerId: 'p-1', seatNumber: '12B' }
+        ]);
+
+        expect(mockTx.passenger.findMany).toHaveBeenCalled();
+        expect(mockTx.passenger.update).toHaveBeenCalledWith({
+            where: { id: 'p-1' },
+            data: { seatNumber: '12B' }
+        });
+    });
+
+    it('rejects if a seat is already occupied', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        mockedBookingFindUnique.mockResolvedValue({
+            id: 1,
+            userId: 'user-123',
+            flightId: 10,
+            passengers: [
+                { id: 'p-1', firstName: 'Jane', seatNumber: '12A' }
+            ]
+        });
+
+        // 12B is occupied
+        mockTx.passenger.findMany.mockResolvedValue([
+            { seatNumber: '12B' }
+        ]);
+
+        await expect(changeBookingSeatsAction(1, [
+            { passengerId: 'p-1', seatNumber: '12B' }
+        ])).rejects.toThrow('Seat 12B is already occupied by another passenger.');
+
+        expect(mockTx.passenger.update).not.toHaveBeenCalled();
     });
 });
 

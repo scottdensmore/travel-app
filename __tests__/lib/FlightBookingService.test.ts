@@ -92,7 +92,7 @@ describe('FlightBookingService', () => {
         });
 
         expect(mockTx.booking.findMany).toHaveBeenCalledWith({
-            where: { flightId: 7 },
+            where: { flightId: 7, status: { not: "CANCELLED" } },
             include: { passengers: true }
         });
 
