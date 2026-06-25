@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import TravelGuideService from '@/lib/TravelGuideService';
-import FlightBookingService from '@/lib/FlightBookingService';
+import FlightBookingService, { PassengerInput } from '@/lib/FlightBookingService';
 import FlightScheduleService from '@/lib/FlightScheduleService';
 import CityGuide from '@/lib/types/CityGuide';
 import { getServerSession } from 'next-auth';
@@ -72,14 +72,39 @@ export async function getFlightRoutesAction() {
     });
 }
 
-export async function bookFlightAction(bookingData: { flightId?: number }) {
+export async function bookFlightAction(bookingData: { 
+    flightId: number; 
+    totalPrice?: string; 
+    passengers?: PassengerInput[]; 
+    paymentIntentId?: string; 
+}) {
     const session = await getServerSession(authOptions);
     const userId = session?.user?.id;
+    if (!userId) throw new Error("Unauthorized");
 
-    return await flightBookingService.bookFlight({
+    const result = await flightBookingService.bookFlight({
         flightId: bookingData.flightId,
-        userId
+        userId,
+        totalPrice: bookingData.totalPrice,
+        passengers: bookingData.passengers,
+        paymentIntentId: bookingData.paymentIntentId
     });
+    revalidatePath('/profile');
+    return result;
+}
+
+export async function getOccupiedSeatsAction(flightId: number) {
+    const passengers = await prisma.passenger.findMany({
+        where: {
+            booking: {
+                flightId
+            }
+        },
+        select: {
+            seatNumber: true
+        }
+    });
+    return passengers.map(p => p.seatNumber);
 }
 
 export async function toggleFavoriteCityGuideAction(cityGuideId: number) {

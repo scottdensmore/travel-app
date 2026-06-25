@@ -23,7 +23,8 @@ class PointsActivityService {
       return PointsActivityData.reduce((total, activity) => total + activity.points, this.startingPoints);
     }
     return this.bookings.reduce((total, booking) => {
-      const price = this.parsePrice(booking.flight?.price);
+      const priceStr = booking.totalPrice || booking.flight?.price;
+      const price = this.parsePrice(priceStr);
       return total + price;
     }, this.startingPoints);
   }
@@ -53,7 +54,8 @@ class PointsActivityService {
 
     const displayData: PointsActivityDisplayData[] = this.bookings.map((booking) => {
       const flight = booking.flight;
-      const points = this.parsePrice(flight?.price);
+      const priceStr = booking.totalPrice || flight?.price;
+      const points = this.parsePrice(priceStr);
       const desc = flight 
         ? `✈️ ${flight.airline} ${flight.flightNumber} (${flight.from} → ${flight.to})`
         : '✈️ Flight Booking';
@@ -107,7 +109,8 @@ class PointsActivityService {
     this.bookings.forEach((booking) => {
       const date = new Date(booking.createdAt);
       const monthYear = date.toLocaleString('default', { month: 'short', year: 'numeric' });
-      const points = this.parsePrice(booking.flight?.price);
+      const priceStr = booking.totalPrice || booking.flight?.price;
+      const points = this.parsePrice(priceStr);
       monthlyPointsMap[monthYear] = (monthlyPointsMap[monthYear] || 0) + points;
     });
 

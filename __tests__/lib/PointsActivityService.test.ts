@@ -74,4 +74,27 @@ describe('PointsActivityService dynamic calculations', () => {
         // Last element should show final total points cumulative
         expect(monthly[monthly.length - 1].points).toBe(1600);
     });
+
+    it('uses totalPrice in preference to flight.price and parses correctly', () => {
+        const mockBookingsWithTotalPrice: any[] = [
+            {
+                id: 3,
+                createdAt: new Date('2026-03-10'),
+                totalPrice: '$450',
+                flight: {
+                    id: 12,
+                    airline: 'Gemini Airways',
+                    flightNumber: 'GA103',
+                    from: 'Detroit, USA',
+                    to: 'Seattle, USA',
+                    price: '$150',
+                }
+            }
+        ];
+        const service = new PointsActivityService(mockBookingsWithTotalPrice, 500);
+        expect(service.getCurrentPoints()).toBe(950); // 500 starting + 450 totalPrice
+
+        const activities = service.getPointsActivity();
+        expect(activities[0].points).toBe(450);
+    });
 });

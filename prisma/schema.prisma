@@ -78,17 +78,41 @@ model CityGuide {
   favorites UserFavorite[]
   reviews   Review[]
 }
-
 model Booking {
-  id        Int      @id @default(autoincrement())
-  createdAt DateTime @default(now())
+  id              Int         @id @default(autoincrement())
+  createdAt       DateTime    @default(now())
+  status          String      @default("CONFIRMED")
+  paymentIntentId String?
+  totalPrice      String      @default("")
 
   flightId Int?
   flight   Flight? @relation(fields: [flightId], references: [id])
 
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  passengers Passenger[]
 }
+
+model Passenger {
+  id             String   @id @default(cuid())
+  firstName      String
+  lastName       String
+  dateOfBirth    DateTime
+  passportNumber String
+  gender         String
+  seatNumber     String
+  cabinClass     String
+
+  bookingId Int
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  flightId  Int
+  flight    Flight  @relation(fields: [flightId], references: [id], onDelete: Cascade)
+
+  @@unique([flightId, seatNumber])
+}
+
 
 model Flight {
   id            Int       @id @default(autoincrement())
@@ -102,6 +126,7 @@ model Flight {
   status        String    @default("ON_TIME")
 
   bookings Booking[]
+  passengers Passenger[]
 
   @@unique([flightNumber, departureDate])
 }

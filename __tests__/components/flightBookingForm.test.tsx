@@ -84,22 +84,17 @@ describe('FlightBookingForm', () => {
         expect(screen.queryByText('Available Flights')).not.toBeInTheDocument();
     });
 
-    it('books a flight via bookFlightAction when "Book Now" is clicked', async () => {
+    it('redirects to the book page when "Book Now" is clicked', async () => {
         mockSearch.mockResolvedValue(mockFlights);
-        mockBook.mockResolvedValue({ id: 999 });
 
         renderForm();
         fireEvent.click(screen.getByText('Find your trip'));
 
         await waitFor(() => expect(screen.getByText('Available Flights')).toBeInTheDocument());
 
-        fireEvent.click(screen.getByText('Book Now'));
-
-        await waitFor(() => {
-            expect(mockBook).toHaveBeenCalledTimes(1);
-            expect(mockBook).toHaveBeenCalledWith({ flightId: 1 });
-            expect(screen.getByText(/Successfully booked flight CA101/)).toBeInTheDocument();
-        });
+        const bookLink = screen.getByRole('link', { name: 'Book Now' });
+        expect(bookLink).toBeInTheDocument();
+        expect(bookLink).toHaveAttribute('href', '/book/1');
     });
 
     it('handles toggling trip type to one-way, input changes, and error handling', async () => {
@@ -132,15 +127,13 @@ describe('FlightBookingForm', () => {
             expect(consoleErrorSpy).toHaveBeenCalled();
         });
 
-        // Setup mock flights back to test booking error
+        // Setup mock flights back to test link
         mockSearch.mockResolvedValue(mockFlights);
         fireEvent.click(screen.getByText('Find your trip'));
         await waitFor(() => expect(screen.getByText('Available Flights')).toBeInTheDocument());
 
-        fireEvent.click(screen.getByText('Book Now'));
-        await waitFor(() => {
-            expect(screen.getByText('Failed to book flight. Please try again later.')).toBeInTheDocument();
-        });
+        const bookLink = screen.getByRole('link', { name: 'Book Now' });
+        expect(bookLink).toHaveAttribute('href', '/book/1');
 
         // Test changing the destination option explicitly
         const toSelect = container.querySelector('#to') as HTMLSelectElement;
