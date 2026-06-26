@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import FlightScheduleForm from '@/components/ui/flightScheduleForm';
 import DeleteScheduleButton from './DeleteScheduleButton';
-import FlightStatusSelector from './FlightStatusSelector';
+import AdminFlightsTable from './AdminFlightsTable';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +22,13 @@ export default async function AdminFlightsPage() {
             departureDate: {
                 gte: utcToday,
                 lte: next7Days
+            }
+        },
+        include: {
+            bookings: {
+                include: {
+                    passengers: true
+                }
             }
         },
         orderBy: { departureDate: 'asc' }
@@ -94,56 +101,7 @@ export default async function AdminFlightsPage() {
                 </div>
             </div>
 
-            <div className="admin-card">
-                <h2 style={{ fontSize: '1.5rem', margin: '0 0 1rem 0', color: '#c084fc', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '8px' }}>
-                    Active occurrences (Next 7 Days)
-                </h2>
-                <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                        <thead>
-                            <tr style={{ borderBottom: '2px solid rgba(255, 255, 255, 0.08)' }}>
-                                <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Flight</th>
-                                <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Route</th>
-                                <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Departure Date</th>
-                                <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Price</th>
-                                <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Live Status Monitor</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {flights.map(flight => (
-                                <tr key={flight.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
-                                    <td style={{ padding: '12px', fontSize: '0.9rem' }}>
-                                        <div style={{ fontWeight: 'bold', color: '#fff' }}>{flight.airline}</div>
-                                        <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.flightNumber}</div>
-                                    </td>
-                                    <td style={{ padding: '12px', fontSize: '0.9rem', color: '#fff' }}>
-                                        {flight.from} → {flight.to}
-                                    </td>
-                                    <td style={{ padding: '12px', fontSize: '0.9rem', color: '#fff' }}>
-                                        <div>{new Date(flight.departureDate).toLocaleDateString()}</div>
-                                        <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)' }}>
-                                            {new Date(flight.departureDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </div>
-                                    </td>
-                                    <td style={{ padding: '12px', fontSize: '0.9rem', color: '#34d399', fontWeight: 'bold' }}>
-                                        {flight.price}
-                                    </td>
-                                    <td style={{ padding: '12px' }}>
-                                        <FlightStatusSelector id={flight.id} currentStatus={flight.status} />
-                                    </td>
-                                </tr>
-                            ))}
-                            {flights.length === 0 && (
-                                <tr>
-                                    <td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.4)' }}>
-                                        No active flight instances generated for the next 7 days.
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+            <AdminFlightsTable initialFlights={flights} />
         </div>
     );
 }
