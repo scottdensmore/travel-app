@@ -20,6 +20,7 @@ These rules govern all features, bug fixes, and development work in this reposit
 ## 4. Pre-Commit Code Review
 - **Sub-Agent Validation**: Before committing any code or creating a PR, invoke the `code_reviewer` sub-agent.
 - **Provide Context**: Pass the git diff and any newly written test files to the `code_reviewer`.
+- **Review Requirements**: The `code_reviewer` must verify logic correctness, compliance with target language idioms (e.g. idiomatic TypeScript, hooks, Next.js structures), and clean integration into the project's overall architecture.
 - **Address Feedback**: Do not commit until the `code_reviewer` gives an explicit **APPROVE** decision. If changes are requested, address them in a TDD fashion.
 
 ## 5. Pull Requests & Continuous Integration
