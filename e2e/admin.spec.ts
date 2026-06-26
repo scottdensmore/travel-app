@@ -99,10 +99,27 @@ test.describe('Admin Control Journey', () => {
 
     // Verify active occurrence generated
     const activeTable = page.locator('table').nth(1);
-    await expect(activeTable.locator('text=Playwright Air').first()).toBeVisible();
+    const flightRow = activeTable.locator('tr:has-text("Playwright Air")').first();
+    await expect(flightRow).toBeVisible();
+
+    // Verify stats & occupancy columns
+    await expect(flightRow.locator('text=0 Active')).toBeVisible();
+    await expect(flightRow.locator('text=0 / 180')).toBeVisible();
+    await expect(flightRow.locator('text=0.0% full')).toBeVisible();
+
+    // Click Manifest button
+    await flightRow.locator('button:has-text("Manifest")').click();
+
+    // Verify manifest modal opens
+    await expect(page.locator('h2:has-text("Passenger Manifest")')).toBeVisible();
+    await expect(page.locator('text=No passengers booked on this occurrence.')).toBeVisible();
+
+    // Close manifest modal
+    await page.locator('button:has-text("Close")').click();
+    await expect(page.locator('h2:has-text("Passenger Manifest")')).not.toBeVisible();
 
     // Select the newly generated flight's live status selector and change to "Delayed"
-    const statusSelect = activeTable.locator('select').first();
+    const statusSelect = flightRow.locator('select').first();
     await expect(statusSelect).toBeVisible();
     await statusSelect.selectOption('DELAYED');
 
