@@ -74,6 +74,14 @@ test.describe('Flight Booking Journey', () => {
     // Wait for flight results container to appear
     await expect(page.locator('h2:has-text("Available Flights")')).toBeVisible();
 
+    // Verify filters card and sort selection dropdown are visible
+    await expect(page.locator('h3:has-text("Filters")')).toBeVisible();
+    const sortSelect = page.locator('select#sortBy');
+    await expect(sortSelect).toBeVisible();
+
+    // Verify interactive sorting option select
+    await sortSelect.selectOption('price-desc');
+
     // Verify at least one flight instance is found and click 'Book Now' link
     const bookNowLink = page.locator('a:has-text("Book Now")').first();
     await expect(bookNowLink).toBeVisible();
