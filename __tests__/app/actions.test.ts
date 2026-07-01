@@ -11,7 +11,10 @@ import {
     saveFlightScheduleAction,
     deleteFlightScheduleAction,
     updateFlightStatusAction,
-    changeBookingSeatsAction
+    changeBookingSeatsAction,
+    getUserNotificationsAction,
+    markNotificationAsReadAction,
+    markAllNotificationsAsReadAction
 } from '@/app/actions';
 import { getServerSession } from 'next-auth';
 import TravelGuideService from '@/lib/TravelGuideService';
@@ -34,8 +37,6 @@ jest.mock('@/lib/FlightScheduleService', () => {
     return jest.fn().mockImplementation(() => ({ generateFlightsForDate }));
 });
 
-// The service mock shares a single saveCityGuide fn across all instances,
-// so the instance created inside app/actions.ts uses the same spy we assert on.
 jest.mock('@/lib/TravelGuideService', () => {
     const saveCityGuide = jest.fn();
     return jest.fn().mockImplementation(() => ({ saveCityGuide }));
@@ -54,11 +55,12 @@ const mockTx = {
 jest.mock('@/lib/prisma', () => ({
     prisma: {
         cityGuide: { create: jest.fn(), delete: jest.fn() },
-        flight: { findMany: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
+        flight: { findMany: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn(), findUnique: jest.fn() },
         flightSchedule: { findMany: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
         userFavorite: { findUnique: jest.fn(), delete: jest.fn(), create: jest.fn() },
         review: { create: jest.fn(), findUnique: jest.fn(), delete: jest.fn() },
-        booking: { findUnique: jest.fn(), delete: jest.fn(), update: jest.fn() },
+        booking: { findUnique: jest.fn(), delete: jest.fn(), update: jest.fn(), findMany: jest.fn() },
+        notification: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), createMany: jest.fn() },
         $transaction: jest.fn((callback) => callback(mockTx)),
     },
 }));
@@ -71,6 +73,7 @@ const mockedFlightFindMany = (prisma as any).flight.findMany as jest.Mock;
 const mockedFlightFindFirst = (prisma as any).flight.findFirst as jest.Mock;
 const mockedFlightCreate = (prisma as any).flight.create as jest.Mock;
 const mockedFlightUpdate = (prisma as any).flight.update as jest.Mock;
+const mockedFlightFindUnique = (prisma as any).flight.findUnique as jest.Mock;
 const mockedFlightScheduleFindMany = (prisma as any).flightSchedule.findMany as jest.Mock;
 const mockedFlightScheduleCreate = (prisma as any).flightSchedule.create as jest.Mock;
 const mockedFlightScheduleUpdate = (prisma as any).flightSchedule.update as jest.Mock;
@@ -84,6 +87,13 @@ const mockedReviewFindUnique = (prisma as any).review.findUnique as jest.Mock;
 const mockedReviewDelete = (prisma as any).review.delete as jest.Mock;
 const mockedBookingFindUnique = (prisma as any).booking.findUnique as jest.Mock;
 const mockedBookingUpdate = (prisma as any).booking.update as jest.Mock;
+const mockedBookingFindMany = (prisma as any).booking.findMany as jest.Mock;
+const mockedNotificationCreate = (prisma as any).notification.create as jest.Mock;
+const mockedNotificationFindMany = (prisma as any).notification.findMany as jest.Mock;
+const mockedNotificationUpdate = (prisma as any).notification.update as jest.Mock;
+const mockedNotificationUpdateMany = (prisma as any).notification.updateMany as jest.Mock;
+const mockedNotificationFindUnique = (prisma as any).notification.findUnique as jest.Mock;
+const mockedNotificationCreateMany = (prisma as any).notification.createMany as jest.Mock;
 
 const sampleGuide: any = {
     city: 'Paris',
@@ -211,14 +221,31 @@ describe('getFlightRoutesAction', () => {
 describe('bookFlightAction', () => {
     beforeEach(() => jest.clearAllMocks());
 
-    it('calls FlightBookingService with flightId and userId from session', async () => {
+    it('calls FlightBookingService with flightId and userId from session and creates a notification', async () => {
         mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
         mockBookFlight.mockResolvedValue({ id: 1, flightId: 42, userId: 'user-123' });
+        mockedFlightFindUnique.mockResolvedValue({
+            id: 42,
+            airline: 'Gemini Airways',
+            flightNumber: 'GA101',
+            price: '$200',
+            from: 'A',
+            to: 'B'
+        });
 
-        const result = await bookFlightAction({ flightId: 42 });
+        const result = await bookFlightAction({ flightId: 42, totalPrice: '$200' });
 
-        expect(mockBookFlight).toHaveBeenCalledWith({ flightId: 42, userId: 'user-123' });
+        expect(mockBookFlight).toHaveBeenCalledWith({ flightId: 42, userId: 'user-123', totalPrice: '$200' });
         expect(result).toEqual({ id: 1, flightId: 42, userId: 'user-123' });
+
+        expect(mockedNotificationCreate).toHaveBeenCalledWith({
+            data: {
+                userId: 'user-123',
+                title: 'Booking Confirmed: Gemini Airways GA101',
+                message: 'Successfully booked flight GA101 from A to B. Earned +200 status points.',
+                type: 'POINTS'
+            }
+        });
     });
 });
 
@@ -309,22 +336,44 @@ describe('cancelBookingAction', () => {
 
     it('allows a user to cancel their own booking', async () => {
         mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
-        mockedBookingFindUnique.mockResolvedValue({ id: 1, userId: 'user-123' });
+        mockedBookingFindUnique.mockResolvedValue({ 
+            id: 1, 
+            userId: 'user-123',
+            totalPrice: '$200',
+            flight: { flightNumber: 'GA101', airline: 'Gemini Airways', price: '$200' }
+        });
         mockTx.booking.update.mockResolvedValue({ id: 1 });
 
         const result = await cancelBookingAction(1);
 
-        expect(mockedBookingFindUnique).toHaveBeenCalledWith({ where: { id: 1 } });
+        expect(mockedBookingFindUnique).toHaveBeenCalledWith({ 
+            where: { id: 1 },
+            include: { flight: true }
+        });
         expect(mockTx.booking.update).toHaveBeenCalledWith({
             where: { id: 1 },
             data: { status: 'CANCELLED' }
         });
         expect(result).toEqual({ id: 1 });
+
+        expect(mockedNotificationCreate).toHaveBeenCalledWith({
+            data: {
+                userId: 'user-123',
+                title: 'Booking Cancelled: Gemini Airways GA101',
+                message: 'Booking for flight GA101 has been cancelled. Deducted -200 status points.',
+                type: 'POINTS'
+            }
+        });
     });
 
     it('allows an admin to cancel any booking', async () => {
         mockedGetServerSession.mockResolvedValue({ user: { id: 'admin-123', role: 'ADMIN' } });
-        mockedBookingFindUnique.mockResolvedValue({ id: 1, userId: 'some-user' });
+        mockedBookingFindUnique.mockResolvedValue({ 
+            id: 1, 
+            userId: 'some-user',
+            totalPrice: '$200',
+            flight: { flightNumber: 'GA101', airline: 'Gemini Airways', price: '$200' }
+        });
         mockTx.booking.update.mockResolvedValue({ id: 1 });
 
         const result = await cancelBookingAction(1);
@@ -334,6 +383,15 @@ describe('cancelBookingAction', () => {
             data: { status: 'CANCELLED' }
         });
         expect(result).toEqual({ id: 1 });
+
+        expect(mockedNotificationCreate).toHaveBeenCalledWith({
+            data: {
+                userId: 'some-user',
+                title: 'Booking Cancelled: Gemini Airways GA101',
+                message: 'Booking for flight GA101 has been cancelled. Deducted -200 status points.',
+                type: 'POINTS'
+            }
+        });
     });
 });
 
@@ -547,9 +605,22 @@ describe('admin flight schedule actions', () => {
             await expect(updateFlightStatusAction(99, 'DELAYED')).rejects.toThrow('Unauthorized');
         });
 
-        it('allows admin to update status', async () => {
+        it('allows admin to update status and creates flight update notifications for affected users', async () => {
             mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
-            mockedFlightUpdate.mockResolvedValue({ id: 99, status: 'DELAYED' });
+            mockedFlightUpdate.mockResolvedValue({ 
+                id: 99, 
+                airline: 'Gemini Airways', 
+                flightNumber: 'GA101', 
+                from: 'Seattle', 
+                to: 'Detroit', 
+                status: 'DELAYED' 
+            });
+            mockedBookingFindMany.mockResolvedValue([
+                { userId: 'user-1' },
+                { userId: 'user-2' },
+                { userId: null },
+                { userId: 'user-1' }
+            ]);
 
             const result = await updateFlightStatusAction(99, 'DELAYED');
 
@@ -557,7 +628,104 @@ describe('admin flight schedule actions', () => {
                 where: { id: 99 },
                 data: { status: 'DELAYED' }
             });
-            expect(result).toEqual({ id: 99, status: 'DELAYED' });
+            expect(result).toEqual(expect.objectContaining({ id: 99, status: 'DELAYED' }));
+
+            expect(mockedBookingFindMany).toHaveBeenCalledWith({
+                where: { flightId: 99, status: 'CONFIRMED' },
+                select: { userId: true }
+            });
+
+            expect(mockedNotificationCreateMany).toHaveBeenCalledWith({
+                data: [
+                    {
+                        userId: 'user-1',
+                        title: 'Flight Update: Gemini Airways GA101',
+                        message: 'Your upcoming flight GA101 from Seattle to Detroit is now DELAYED.',
+                        type: 'FLIGHT_STATUS'
+                    },
+                    {
+                        userId: 'user-2',
+                        title: 'Flight Update: Gemini Airways GA101',
+                        message: 'Your upcoming flight GA101 from Seattle to Detroit is now DELAYED.',
+                        type: 'FLIGHT_STATUS'
+                    }
+                ]
+            });
+        });
+    });
+
+    describe('user notifications actions', () => {
+        beforeEach(() => jest.clearAllMocks());
+
+        describe('getUserNotificationsAction', () => {
+            it('returns empty array if unauthenticated', async () => {
+                mockedGetServerSession.mockResolvedValue(null);
+                const result = await getUserNotificationsAction();
+                expect(result).toEqual([]);
+            });
+
+            it('returns notifications for logged in user', async () => {
+                mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+                const mockNotifications = [{ id: 'notif-1', title: 'Test Notif' }];
+                mockedNotificationFindMany.mockResolvedValue(mockNotifications);
+
+                const result = await getUserNotificationsAction();
+
+                expect(mockedNotificationFindMany).toHaveBeenCalledWith({
+                    where: { userId: 'user-123' },
+                    orderBy: { createdAt: 'desc' },
+                    take: 50
+                });
+                expect(result).toEqual(mockNotifications);
+            });
+        });
+
+        describe('markNotificationAsReadAction', () => {
+            it('rejects if unauthenticated', async () => {
+                mockedGetServerSession.mockResolvedValue(null);
+                await expect(markNotificationAsReadAction('notif-1')).rejects.toThrow('Unauthorized');
+            });
+
+            it('rejects if user does not own the notification', async () => {
+                mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+                mockedNotificationFindUnique.mockResolvedValue({ id: 'notif-1', userId: 'other-user' });
+
+                await expect(markNotificationAsReadAction('notif-1')).rejects.toThrow('Unauthorized');
+            });
+
+            it('updates notification isRead to true if owned', async () => {
+                mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+                mockedNotificationFindUnique.mockResolvedValue({ id: 'notif-1', userId: 'user-123' });
+                mockedNotificationUpdate.mockResolvedValue({ id: 'notif-1', isRead: true });
+
+                const result = await markNotificationAsReadAction('notif-1');
+
+                expect(mockedNotificationUpdate).toHaveBeenCalledWith({
+                    where: { id: 'notif-1' },
+                    data: { isRead: true }
+                });
+                expect(result).toEqual({ id: 'notif-1', isRead: true });
+            });
+        });
+
+        describe('markAllNotificationsAsReadAction', () => {
+            it('rejects if unauthenticated', async () => {
+                mockedGetServerSession.mockResolvedValue(null);
+                await expect(markAllNotificationsAsReadAction()).rejects.toThrow('Unauthorized');
+            });
+
+            it('marks all unread notifications as read for logged in user', async () => {
+                mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+                mockedNotificationUpdateMany.mockResolvedValue({ count: 5 });
+
+                const result = await markAllNotificationsAsReadAction();
+
+                expect(mockedNotificationUpdateMany).toHaveBeenCalledWith({
+                    where: { userId: 'user-123', isRead: false },
+                    data: { isRead: true }
+                });
+                expect(result).toEqual({ count: 5 });
+            });
         });
     });
 });

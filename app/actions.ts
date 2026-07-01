@@ -89,6 +89,25 @@ export async function bookFlightAction(bookingData: {
         passengers: bookingData.passengers,
         paymentIntentId: bookingData.paymentIntentId
     });
+
+    try {
+        const flight = await prisma.flight.findUnique({ where: { id: bookingData.flightId } });
+        if (flight) {
+            const rawPrice = bookingData.totalPrice || flight.price;
+            const points = parseInt(rawPrice.replace(/[^0-9]/g, ""), 10) || 0;
+            await prisma.notification.create({
+                data: {
+                    userId,
+                    title: `Booking Confirmed: ${flight.airline} ${flight.flightNumber}`,
+                    message: `Successfully booked flight ${flight.flightNumber} from ${flight.from} to ${flight.to}. Earned +${points} status points.`,
+                    type: "POINTS"
+                }
+            });
+        }
+    } catch (err) {
+        console.error("Failed to generate points notification:", err);
+    }
+
     revalidatePath('/profile');
     return result;
 }
@@ -151,7 +170,8 @@ export async function cancelBookingAction(bookingId: number) {
     if (!userId) throw new Error("Unauthorized");
 
     const booking = await prisma.booking.findUnique({
-        where: { id: bookingId }
+        where: { id: bookingId },
+        include: { flight: true }
     });
     if (!booking) throw new Error("Booking not found");
 
@@ -176,6 +196,25 @@ export async function cancelBookingAction(bookingId: number) {
             data: { status: "CANCELLED" }
         });
     });
+
+    try {
+        const flight = booking.flight;
+        if (flight && booking.userId) {
+            const rawPrice = booking.totalPrice || flight.price;
+            const points = parseInt(rawPrice.replace(/[^0-9]/g, ""), 10) || 0;
+            await prisma.notification.create({
+                data: {
+                    userId: booking.userId,
+                    title: `Booking Cancelled: ${flight.airline} ${flight.flightNumber}`,
+                    message: `Booking for flight ${flight.flightNumber} has been cancelled. Deducted -${points} status points.`,
+                    type: "POINTS"
+                }
+            });
+        }
+    } catch (err) {
+        console.error("Failed to generate cancellation notification:", err);
+    }
+
     revalidatePath('/profile');
     revalidatePath('/admin');
     return updated;
@@ -414,11 +453,80 @@ export async function updateFlightStatusAction(flightId: number, status: 'ON_TIM
         data: { status }
     });
 
+    try {
+        const bookings = await prisma.booking.findMany({
+            where: { flightId, status: "CONFIRMED" },
+            select: { userId: true }
+        });
+
+        const uniqueUserIds = Array.from(new Set(bookings.map(b => b.userId).filter(Boolean))) as string[];
+
+        if (uniqueUserIds.length > 0) {
+            await prisma.notification.createMany({
+                data: uniqueUserIds.map(targetUserId => ({
+                    userId: targetUserId,
+                    title: `Flight Update: ${updated.airline} ${updated.flightNumber}`,
+                    message: `Your upcoming flight ${updated.flightNumber} from ${updated.from} to ${updated.to} is now ${status.replace('_', ' ')}.`,
+                    type: "FLIGHT_STATUS"
+                }))
+            });
+        }
+    } catch (err) {
+        console.error("Failed to generate flight status notifications:", err);
+    }
+
     revalidatePath('/flights');
     revalidatePath('/admin/flights');
     revalidatePath('/profile');
     revalidatePath('/admin');
 
+    return updated;
+}
+
+export async function getUserNotificationsAction() {
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.id;
+    if (!userId) return [];
+
+    return await prisma.notification.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: 50
+    });
+}
+
+export async function markNotificationAsReadAction(id: string) {
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.id;
+    if (!userId) throw new Error("Unauthorized");
+
+    const notif = await prisma.notification.findUnique({
+        where: { id }
+    });
+    if (!notif || notif.userId !== userId) {
+        throw new Error("Unauthorized");
+    }
+
+    const updated = await prisma.notification.update({
+        where: { id },
+        data: { isRead: true }
+    });
+
+    revalidatePath('/profile');
+    return updated;
+}
+
+export async function markAllNotificationsAsReadAction() {
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.id;
+    if (!userId) throw new Error("Unauthorized");
+
+    const updated = await prisma.notification.updateMany({
+        where: { userId, isRead: false },
+        data: { isRead: true }
+    });
+
+    revalidatePath('/profile');
     return updated;
 }
 

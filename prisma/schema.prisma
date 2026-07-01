@@ -56,6 +56,7 @@ model User {
   bookings      Booking[]
   favorites     UserFavorite[]
   reviews       Review[]
+  notifications Notification[]
 }
 
 model VerificationToken {
@@ -166,4 +167,17 @@ model FlightSchedule {
   daysOfWeek    Int[]
   price         String
   isActive      Boolean  @default(true)
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   // "FLIGHT_STATUS" | "POINTS" | "SYSTEM"
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
 }
