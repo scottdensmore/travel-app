@@ -17,6 +17,11 @@ interface Flight {
     departureDate: Date | string;
     returnDate: Date | string | null;
     price: string;
+    firstClassRows?: number | null;
+    businessRows?: number | null;
+    premiumEconomyRows?: number | null;
+    economyRows?: number | null;
+    seatPattern?: string | null;
 }
 
 interface Passenger {
@@ -184,14 +189,33 @@ export default function ProfileClient({
     };
 
     const getRowsForClass = (cabinClass: string) => {
-        switch (cabinClass) {
-            case 'FIRST': return [1, 2, 3];
-            case 'BUSINESS': return [4, 5, 6];
-            case 'PREMIUM_ECONOMY': return [7, 8, 9, 10];
-            case 'ECONOMY':
-            default:
-                return Array.from({ length: 20 }, (_, i) => i + 11);
+        const flight = selectedBooking?.flight;
+        const firstClassCount = flight?.firstClassRows !== undefined && flight?.firstClassRows !== null ? Number(flight.firstClassRows) : 2;
+        const businessCount = flight?.businessRows !== undefined && flight?.businessRows !== null ? Number(flight.businessRows) : 4;
+        const premiumEconomyCount = flight?.premiumEconomyRows !== undefined && flight?.premiumEconomyRows !== null ? Number(flight.premiumEconomyRows) : 4;
+        const economyCount = flight?.economyRows !== undefined && flight?.economyRows !== null ? Number(flight.economyRows) : 20;
+
+        let currentOffset = 1;
+
+        if (cabinClass === 'FIRST') {
+            return Array.from({ length: firstClassCount }, (_, i) => currentOffset + i);
         }
+        currentOffset += firstClassCount;
+
+        if (cabinClass === 'BUSINESS') {
+            return Array.from({ length: businessCount }, (_, i) => currentOffset + i);
+        }
+        currentOffset += businessCount;
+
+        if (cabinClass === 'PREMIUM_ECONOMY') {
+            return Array.from({ length: premiumEconomyCount }, (_, i) => currentOffset + i);
+        }
+        currentOffset += premiumEconomyCount;
+
+        if (cabinClass === 'ECONOMY') {
+            return Array.from({ length: economyCount }, (_, i) => currentOffset + i);
+        }
+        return Array.from({ length: economyCount }, (_, i) => currentOffset + i);
     };
 
     const isSeatOccupied = (seat: string) => {
@@ -479,112 +503,121 @@ export default function ProfileClient({
                             </div>
 
                             {/* Right panel: Seat selector map */}
-                            <div style={{ flex: '2 1 300px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                <h3 style={{ fontSize: '0.95rem', color: '#a78bfa', marginBottom: '0.75rem' }}>
-                                    Select Seat for {selectedBooking.passengers[activePassengerIdx]?.firstName}
-                                </h3>
-                                <div style={{
-                                    border: '1px solid rgba(255,255,255,0.1)',
-                                    borderRadius: '40px 40px 12px 12px',
-                                    padding: '2rem 1rem 1rem',
-                                    width: '280px',
-                                    background: 'rgba(0,0,0,0.2)',
-                                    maxHeight: '300px',
-                                    overflowY: 'auto',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    alignItems: 'center'
-                                }}>
-                                    {/* Column Labels */}
-                                    <div style={{ display: 'flex', gap: '6px', width: '200px', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', fontWeight: 'bold' }}>
-                                        <span>A</span>
-                                        <span>B</span>
-                                        <span>C</span>
-                                        <span style={{ width: '10px' }} />
-                                        <span>D</span>
-                                        <span>E</span>
-                                        <span>F</span>
-                                    </div>
-
-                                    {/* Rows */}
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                        {getRowsForClass(selectedBooking.passengers[activePassengerIdx]?.cabinClass || 'ECONOMY').map((row) => (
-                                            <div key={row} style={{ display: 'flex', gap: '6px', alignItems: 'center', width: '220px', justifyContent: 'space-between' }}>
-                                                <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)', width: '12px', textAlign: 'right' }}>{row}</span>
-                                                
-                                                {['A', 'B', 'C'].map((letter) => {
-                                                    const seatId = `${row}${letter}`;
-                                                    const occupied = isSeatOccupied(seatId);
-                                                    const selected = passengerSeats[selectedBooking.passengers[activePassengerIdx]?.id] === seatId;
+                            {(() => {
+                                const parsedPattern = selectedBooking.flight?.seatPattern || "ABC-DEF";
+                                return (
+                                    <div style={{ flex: '2 1 300px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                        <h3 style={{ fontSize: '0.95rem', color: '#a78bfa', marginBottom: '0.75rem' }}>
+                                            Select Seat for {selectedBooking.passengers[activePassengerIdx]?.firstName}
+                                        </h3>
+                                        <div style={{
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            borderRadius: '40px 40px 12px 12px',
+                                            padding: '2rem 1rem 1rem',
+                                            width: '280px',
+                                            background: 'rgba(0,0,0,0.2)',
+                                            maxHeight: '300px',
+                                            overflowY: 'auto',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            alignItems: 'center'
+                                        }}>
+                                            {/* Column Labels */}
+                                            <div style={{ 
+                                                display: 'flex', 
+                                                gap: '6px', 
+                                                alignItems: 'center', 
+                                                justifyContent: 'center', 
+                                                width: '100%',
+                                                paddingLeft: '18px', 
+                                                marginBottom: '8px', 
+                                                fontSize: '0.7rem', 
+                                                color: 'rgba(255,255,255,0.4)', 
+                                                fontWeight: 'bold' 
+                                            }}>
+                                                {parsedPattern.split("").map((char, charIdx) => {
+                                                    if (char === '-') {
+                                                        return (
+                                                            <span 
+                                                                key={`aisle-header-${charIdx}`} 
+                                                                style={{ width: '10px' }} 
+                                                            />
+                                                        );
+                                                    }
                                                     return (
-                                                        <button
-                                                            key={letter}
-                                                            type="button"
-                                                            disabled={occupied}
-                                                            onClick={() => {
-                                                                const pid = selectedBooking.passengers[activePassengerIdx].id;
-                                                                setPassengerSeats({ ...passengerSeats, [pid]: seatId });
-                                                                setModalError(null);
-                                                            }}
-                                                            style={{
-                                                                width: '22px',
-                                                                height: '22px',
-                                                                borderRadius: '4px',
-                                                                border: selected ? '1px solid #8b5cf6' : '1px solid rgba(255,255,255,0.15)',
-                                                                background: selected ? '#8b5cf6' : occupied ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                                                                cursor: occupied ? 'not-allowed' : 'pointer',
-                                                                fontSize: '0.6rem',
-                                                                fontWeight: 'bold',
-                                                                color: selected ? '#fff' : occupied ? '#ef4444' : '#fff',
-                                                                padding: 0
-                                                            }}
-                                                            title={occupied ? `Seat ${seatId} Occupied` : `Select Seat ${seatId}`}
+                                                        <span 
+                                                            key={`seat-header-${charIdx}`} 
+                                                            style={{ width: '22px', textAlign: 'center' }}
                                                         >
-                                                            {letter}
-                                                        </button>
-                                                    );
-                                                })}
-
-                                                {/* Aisle */}
-                                                <span style={{ width: '10px', fontSize: '0.55rem', color: 'rgba(255,255,255,0.1)' }}>|</span>
-
-                                                {['D', 'E', 'F'].map((letter) => {
-                                                    const seatId = `${row}${letter}`;
-                                                    const occupied = isSeatOccupied(seatId);
-                                                    const selected = passengerSeats[selectedBooking.passengers[activePassengerIdx]?.id] === seatId;
-                                                    return (
-                                                        <button
-                                                            key={letter}
-                                                            type="button"
-                                                            disabled={occupied}
-                                                            onClick={() => {
-                                                                const pid = selectedBooking.passengers[activePassengerIdx].id;
-                                                                setPassengerSeats({ ...passengerSeats, [pid]: seatId });
-                                                                setModalError(null);
-                                                            }}
-                                                            style={{
-                                                                width: '22px',
-                                                                height: '22px',
-                                                                borderRadius: '4px',
-                                                                border: selected ? '1px solid #8b5cf6' : '1px solid rgba(255,255,255,0.15)',
-                                                                background: selected ? '#8b5cf6' : occupied ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                                                                cursor: occupied ? 'not-allowed' : 'pointer',
-                                                                fontSize: '0.6rem',
-                                                                fontWeight: 'bold',
-                                                                color: selected ? '#fff' : occupied ? '#ef4444' : '#fff',
-                                                                padding: 0
-                                                            }}
-                                                            title={occupied ? `Seat ${seatId} Occupied` : `Select Seat ${seatId}`}
-                                                        >
-                                                            {letter}
-                                                        </button>
+                                                            {char}
+                                                        </span>
                                                     );
                                                 })}
                                             </div>
-                                        ))}
+
+                                            {/* Rows */}
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' }}>
+                                                {getRowsForClass(selectedBooking.passengers[activePassengerIdx]?.cabinClass || 'ECONOMY').map((row) => (
+                                                    <div key={row} style={{ display: 'flex', gap: '6px', alignItems: 'center', justifyContent: 'center' }}>
+                                                        <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)', width: '12px', textAlign: 'right', marginRight: '2px' }}>{row}</span>
+                                                        
+                                                        {parsedPattern.split("").map((char, charIdx) => {
+                                                            if (char === '-') {
+                                                                return (
+                                                                    <span 
+                                                                        key={`aisle-${charIdx}`} 
+                                                                        style={{ 
+                                                                            width: '10px', 
+                                                                            textAlign: 'center', 
+                                                                            fontSize: '0.55rem', 
+                                                                            color: 'rgba(255,255,255,0.1)',
+                                                                            userSelect: 'none'
+                                                                        }}
+                                                                    >
+                                                                        |
+                                                                    </span>
+                                                                );
+                                                            }
+
+                                                            const letter = char;
+                                                            const seatId = `${row}${letter}`;
+                                                            const occupied = isSeatOccupied(seatId);
+                                                            const selected = passengerSeats[selectedBooking.passengers[activePassengerIdx]?.id] === seatId;
+                                                            return (
+                                                                <button
+                                                                    key={letter}
+                                                                    type="button"
+                                                                    disabled={occupied}
+                                                                    onClick={() => {
+                                                                        const pid = selectedBooking.passengers[activePassengerIdx].id;
+                                                                        setPassengerSeats({ ...passengerSeats, [pid]: seatId });
+                                                                        setModalError(null);
+                                                                    }}
+                                                                    style={{
+                                                                        width: '22px',
+                                                                        height: '22px',
+                                                                        borderRadius: '4px',
+                                                                        border: selected ? '1px solid #8b5cf6' : '1px solid rgba(255,255,255,0.15)',
+                                                                        background: selected ? '#8b5cf6' : occupied ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                                                                        cursor: occupied ? 'not-allowed' : 'pointer',
+                                                                        fontSize: '0.6rem',
+                                                                        fontWeight: 'bold',
+                                                                        color: selected ? '#fff' : occupied ? '#ef4444' : '#fff',
+                                                                        padding: 0
+                                                                    }}
+                                                                    title={occupied ? `Seat ${seatId} Occupied` : `Select Seat ${seatId}`}
+                                                                >
+                                                                    {letter}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                            </div>
+                                );
+                            })()}
                         </div>
 
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1.5rem' }}>

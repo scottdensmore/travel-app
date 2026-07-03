@@ -311,6 +311,40 @@ export async function deleteReviewAction(reviewId: string) {
     return deleted;
 }
 
+function validateSeatingLayout(
+    firstClassRows: number,
+    businessRows: number,
+    premiumEconomyRows: number,
+    economyRows: number,
+    seatPattern: string
+) {
+    if (isNaN(firstClassRows) || firstClassRows < 0 ||
+        isNaN(businessRows) || businessRows < 0 ||
+        isNaN(premiumEconomyRows) || premiumEconomyRows < 0 ||
+        isNaN(economyRows) || economyRows < 0) {
+        throw new Error("Row configurations must be non-negative integers.");
+    }
+
+    const trimmedPattern = seatPattern.trim().toUpperCase();
+    if (!trimmedPattern) {
+        throw new Error("Seat pattern is required.");
+    }
+
+    if (!/^[A-Z-]+$/.test(trimmedPattern)) {
+        throw new Error("Seat pattern must only contain uppercase letters and hyphens.");
+    }
+
+    const letters = trimmedPattern.replace(/[^A-Z]/g, "");
+    if (letters.length === 0) {
+        throw new Error("Seat pattern must contain at least one seat letter.");
+    }
+
+    const lettersSet = new Set(letters);
+    if (lettersSet.size !== letters.length) {
+        throw new Error("Seat pattern letters must be unique.");
+    }
+}
+
 export async function saveFlightScheduleAction(data: {
     id?: number;
     flightNumber: string;
@@ -321,6 +355,11 @@ export async function saveFlightScheduleAction(data: {
     returnTime: string | null;
     daysOfWeek: number[];
     price: string;
+    firstClassRows?: number | null;
+    businessRows?: number | null;
+    premiumEconomyRows?: number | null;
+    economyRows?: number | null;
+    seatPattern?: string | null;
 }) {
     const session = await getServerSession(authOptions);
     if (session?.user?.role !== 'ADMIN') throw new Error("Unauthorized");
@@ -343,6 +382,14 @@ export async function saveFlightScheduleAction(data: {
         throw new Error("Please select at least one day of the week.");
     }
 
+    const firstClassRows = data.firstClassRows !== undefined && data.firstClassRows !== null ? Number(data.firstClassRows) : 2;
+    const businessRows = data.businessRows !== undefined && data.businessRows !== null ? Number(data.businessRows) : 4;
+    const premiumEconomyRows = data.premiumEconomyRows !== undefined && data.premiumEconomyRows !== null ? Number(data.premiumEconomyRows) : 4;
+    const economyRows = data.economyRows !== undefined && data.economyRows !== null ? Number(data.economyRows) : 20;
+    const seatPattern = data.seatPattern || "ABC-DEF";
+
+    validateSeatingLayout(firstClassRows, businessRows, premiumEconomyRows, economyRows, seatPattern);
+
     let savedSchedule;
     if (data.id) {
         savedSchedule = await prisma.flightSchedule.update({
@@ -355,7 +402,12 @@ export async function saveFlightScheduleAction(data: {
                 departureTime: data.departureTime,
                 returnTime: data.returnTime,
                 daysOfWeek: data.daysOfWeek,
-                price: data.price
+                price: data.price,
+                firstClassRows,
+                businessRows,
+                premiumEconomyRows,
+                economyRows,
+                seatPattern
             }
         });
     } else {
@@ -368,7 +420,12 @@ export async function saveFlightScheduleAction(data: {
                 departureTime: data.departureTime,
                 returnTime: data.returnTime,
                 daysOfWeek: data.daysOfWeek,
-                price: data.price
+                price: data.price,
+                firstClassRows,
+                businessRows,
+                premiumEconomyRows,
+                economyRows,
+                seatPattern
             }
         });
     }
@@ -412,7 +469,12 @@ export async function saveFlightScheduleAction(data: {
                             departureDate,
                             returnDate,
                             price: savedSchedule.price,
-                            status: 'ON_TIME'
+                            status: 'ON_TIME',
+                            firstClassRows,
+                            businessRows,
+                            premiumEconomyRows,
+                            economyRows,
+                            seatPattern
                         }
                     });
                 } catch (error) {
@@ -429,6 +491,116 @@ export async function saveFlightScheduleAction(data: {
     revalidatePath('/admin/flights');
 
     return savedSchedule;
+}
+
+export async function generateFlightOccurrencesAction(
+    scheduleId: number,
+    startDateStr: string,
+    endDateStr: string,
+    seatingConfig?: {
+        firstClassRows?: number | null;
+        businessRows?: number | null;
+        premiumEconomyRows?: number | null;
+        economyRows?: number | null;
+        seatPattern?: string | null;
+    }
+) {
+    const session = await getServerSession(authOptions);
+    if (session?.user?.role !== 'ADMIN') throw new Error("Unauthorized");
+
+    const schedule = await prisma.flightSchedule.findUnique({
+        where: { id: scheduleId }
+    });
+    if (!schedule) throw new Error("Flight schedule not found.");
+
+    const start = new Date(startDateStr);
+    const end = new Date(endDateStr);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        throw new Error("Invalid start or end date.");
+    }
+    if (end < start) {
+        throw new Error("End date must be on or after start date.");
+    }
+
+    const firstClassRows = seatingConfig?.firstClassRows !== undefined && seatingConfig?.firstClassRows !== null ? Number(seatingConfig.firstClassRows) : (schedule.firstClassRows ?? 2);
+    const businessRows = seatingConfig?.businessRows !== undefined && seatingConfig?.businessRows !== null ? Number(seatingConfig.businessRows) : (schedule.businessRows ?? 4);
+    const premiumEconomyRows = seatingConfig?.premiumEconomyRows !== undefined && seatingConfig?.premiumEconomyRows !== null ? Number(seatingConfig.premiumEconomyRows) : (schedule.premiumEconomyRows ?? 4);
+    const economyRows = seatingConfig?.economyRows !== undefined && seatingConfig?.economyRows !== null ? Number(seatingConfig.economyRows) : (schedule.economyRows ?? 20);
+    const seatPattern = seatingConfig?.seatPattern || schedule.seatPattern || "ABC-DEF";
+
+    validateSeatingLayout(firstClassRows, businessRows, premiumEconomyRows, economyRows, seatPattern);
+
+    const current = new Date(start);
+    let occurrencesCreated = 0;
+
+    while (current <= end) {
+        const dayOfWeek = current.getUTCDay();
+        if (schedule.daysOfWeek.includes(dayOfWeek)) {
+            const dateStr = current.toISOString().split('T')[0];
+            const departureDate = new Date(`${dateStr}T${schedule.departureTime}:00Z`);
+
+            let returnDate = null;
+            if (schedule.returnTime) {
+                const retDate = new Date(current);
+                retDate.setUTCDate(current.getUTCDate() + 7);
+                const retDateStr = retDate.toISOString().split('T')[0];
+                returnDate = new Date(`${retDateStr}T${schedule.returnTime}:00Z`);
+            }
+
+            const existingInstance = await prisma.flight.findFirst({
+                where: {
+                    flightNumber: schedule.flightNumber,
+                    departureDate: departureDate
+                }
+            });
+
+            if (!existingInstance) {
+                try {
+                    await prisma.flight.create({
+                        data: {
+                            flightNumber: schedule.flightNumber,
+                            airline: schedule.airline,
+                            from: schedule.from,
+                            to: schedule.to,
+                            departureDate,
+                            returnDate,
+                            price: schedule.price,
+                            status: 'ON_TIME',
+                            firstClassRows,
+                            businessRows,
+                            premiumEconomyRows,
+                            economyRows,
+                            seatPattern
+                        }
+                    });
+                    occurrencesCreated++;
+                } catch (error) {
+                    if (!(error && typeof error === 'object' && 'code' in error && error.code === 'P2002')) {
+                        throw error;
+                    }
+                }
+            } else {
+                // Update the seating config of the existing instance to match what the admin specified
+                await prisma.flight.update({
+                    where: { id: existingInstance.id },
+                    data: {
+                        firstClassRows,
+                        businessRows,
+                        premiumEconomyRows,
+                        economyRows,
+                        seatPattern
+                    }
+                });
+            }
+        }
+        current.setUTCDate(current.getUTCDate() + 1);
+    }
+
+    revalidatePath('/');
+    revalidatePath('/flights');
+    revalidatePath('/admin/flights');
+
+    return { success: true, count: occurrencesCreated };
 }
 
 export async function deleteFlightScheduleAction(scheduleId: number) {

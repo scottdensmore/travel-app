@@ -14,7 +14,8 @@ import {
     changeBookingSeatsAction,
     getUserNotificationsAction,
     markNotificationAsReadAction,
-    markAllNotificationsAsReadAction
+    markAllNotificationsAsReadAction,
+    generateFlightOccurrencesAction
 } from '@/app/actions';
 import { getServerSession } from 'next-auth';
 import TravelGuideService from '@/lib/TravelGuideService';
@@ -56,7 +57,7 @@ jest.mock('@/lib/prisma', () => ({
     prisma: {
         cityGuide: { create: jest.fn(), delete: jest.fn() },
         flight: { findMany: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn(), findUnique: jest.fn() },
-        flightSchedule: { findMany: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
+        flightSchedule: { findMany: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn(), findUnique: jest.fn() },
         userFavorite: { findUnique: jest.fn(), delete: jest.fn(), create: jest.fn() },
         review: { create: jest.fn(), findUnique: jest.fn(), delete: jest.fn() },
         booking: { findUnique: jest.fn(), delete: jest.fn(), update: jest.fn(), findMany: jest.fn() },
@@ -78,6 +79,7 @@ const mockedFlightScheduleFindMany = (prisma as any).flightSchedule.findMany as 
 const mockedFlightScheduleCreate = (prisma as any).flightSchedule.create as jest.Mock;
 const mockedFlightScheduleUpdate = (prisma as any).flightSchedule.update as jest.Mock;
 const mockedFlightScheduleDelete = (prisma as any).flightSchedule.delete as jest.Mock;
+const mockedFlightScheduleFindUnique = (prisma as any).flightSchedule.findUnique as jest.Mock;
 const mockedCityGuideDelete = (prisma as any).cityGuide.delete as jest.Mock;
 const mockedUserFavoriteFindUnique = (prisma as any).userFavorite.findUnique as jest.Mock;
 const mockedUserFavoriteDelete = (prisma as any).userFavorite.delete as jest.Mock;
@@ -543,7 +545,14 @@ describe('admin flight schedule actions', () => {
             const result = await saveFlightScheduleAction(sampleScheduleInput);
 
             expect(mockedFlightScheduleCreate).toHaveBeenCalledWith({
-                data: sampleScheduleInput,
+                data: {
+                    ...sampleScheduleInput,
+                    firstClassRows: 2,
+                    businessRows: 4,
+                    premiumEconomyRows: 4,
+                    economyRows: 20,
+                    seatPattern: 'ABC-DEF',
+                },
             });
 
             // For next 30 days starting June 23 (Tuesday), Mondays are on June 29, July 6, 13, 20.
@@ -559,6 +568,11 @@ describe('admin flight schedule actions', () => {
                     returnDate: null,
                     price: '$850',
                     status: 'ON_TIME',
+                    firstClassRows: 2,
+                    businessRows: 4,
+                    premiumEconomyRows: 4,
+                    economyRows: 20,
+                    seatPattern: 'ABC-DEF',
                 }
             });
             expect(result).toHaveProperty('id', 1);
@@ -574,7 +588,14 @@ describe('admin flight schedule actions', () => {
 
             expect(mockedFlightScheduleUpdate).toHaveBeenCalledWith({
                 where: { id: 5 },
-                data: sampleScheduleInput,
+                data: {
+                    ...sampleScheduleInput,
+                    firstClassRows: 2,
+                    businessRows: 4,
+                    premiumEconomyRows: 4,
+                    economyRows: 20,
+                    seatPattern: 'ABC-DEF',
+                },
             });
             expect(mockedFlightCreate).not.toHaveBeenCalled();
             expect(result).toHaveProperty('id', 5);
@@ -725,6 +746,94 @@ describe('admin flight schedule actions', () => {
                     data: { isRead: true }
                 });
                 expect(result).toEqual({ count: 5 });
+            });
+        });
+
+        describe('generateFlightOccurrencesAction', () => {
+            it('rejects if unauthenticated', async () => {
+                mockedGetServerSession.mockResolvedValue(null);
+                await expect(generateFlightOccurrencesAction(1, '2026-07-10', '2026-07-20')).rejects.toThrow('Unauthorized');
+            });
+
+            it('rejects if non-admin', async () => {
+                mockedGetServerSession.mockResolvedValue({ user: { role: 'USER' } });
+                await expect(generateFlightOccurrencesAction(1, '2026-07-10', '2026-07-20')).rejects.toThrow('Unauthorized');
+            });
+
+            it('generates flight instances and updates existing ones', async () => {
+                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+                
+                mockedFlightScheduleFindUnique.mockResolvedValue({
+                    id: 1,
+                    flightNumber: 'AA101',
+                    airline: 'American Airlines',
+                    from: 'JFK',
+                    to: 'LAX',
+                    departureTime: '08:00',
+                    daysOfWeek: [1], // Mondays
+                    price: '$500',
+                });
+
+                mockedFlightFindFirst.mockResolvedValue(null);
+                mockedFlightCreate.mockResolvedValue({});
+
+                // July 6, 2026 is Monday
+                const result = await generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10', {
+                    firstClassRows: 3,
+                    businessRows: 6,
+                    premiumEconomyRows: 6,
+                    economyRows: 24,
+                    seatPattern: 'AC-DF'
+                });
+
+                expect(mockedFlightCreate).toHaveBeenCalledTimes(1);
+                expect(mockedFlightCreate).toHaveBeenCalledWith({
+                    data: {
+                        flightNumber: 'AA101',
+                        airline: 'American Airlines',
+                        from: 'JFK',
+                        to: 'LAX',
+                        departureDate: new Date('2026-07-06T08:00:00Z'),
+                        returnDate: null,
+                        price: '$500',
+                        status: 'ON_TIME',
+                        firstClassRows: 3,
+                        businessRows: 6,
+                        premiumEconomyRows: 6,
+                        economyRows: 24,
+                        seatPattern: 'AC-DF',
+                    }
+                });
+                expect(result).toEqual({ success: true, count: 1 });
+            });
+
+            it('rejects invalid seating configuration inputs', async () => {
+                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+
+                mockedFlightScheduleFindUnique.mockResolvedValue({
+                    id: 1,
+                    daysOfWeek: [1],
+                });
+
+                // Negative row count
+                await expect(generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10', {
+                    firstClassRows: -1
+                })).rejects.toThrow('Row configurations must be non-negative integers.');
+
+                // Duplicate seat letters
+                await expect(generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10', {
+                    seatPattern: 'ABC-ABC'
+                })).rejects.toThrow('Seat pattern letters must be unique.');
+
+                // No seat letters (only hyphens)
+                await expect(generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10', {
+                    seatPattern: '---'
+                })).rejects.toThrow('Seat pattern must contain at least one seat letter.');
+
+                // Invalid characters
+                await expect(generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10', {
+                    seatPattern: 'ABC_DEF'
+                })).rejects.toThrow('Seat pattern must only contain uppercase letters and hyphens.');
             });
         });
     });

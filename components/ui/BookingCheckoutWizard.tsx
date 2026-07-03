@@ -13,6 +13,11 @@ interface Flight {
     to: string;
     departureDate: Date | string;
     price: string;
+    firstClassRows?: number | null;
+    businessRows?: number | null;
+    premiumEconomyRows?: number | null;
+    economyRows?: number | null;
+    seatPattern?: string | null;
 }
 
 interface BookingCheckoutWizardProps {
@@ -168,15 +173,36 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
 
     // Seat Map Definitions
     const getRowsForClass = (cabinClass: 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST') => {
-        switch (cabinClass) {
-            case 'FIRST': return [1, 2, 3];
-            case 'BUSINESS': return [4, 5, 6];
-            case 'PREMIUM_ECONOMY': return [7, 8, 9, 10];
-            case 'ECONOMY': return Array.from({ length: 20 }, (_, i) => i + 11);
+        const firstClassCount = flight.firstClassRows !== undefined && flight.firstClassRows !== null ? Number(flight.firstClassRows) : 2;
+        const businessCount = flight.businessRows !== undefined && flight.businessRows !== null ? Number(flight.businessRows) : 4;
+        const premiumEconomyCount = flight.premiumEconomyRows !== undefined && flight.premiumEconomyRows !== null ? Number(flight.premiumEconomyRows) : 4;
+        const economyCount = flight.economyRows !== undefined && flight.economyRows !== null ? Number(flight.economyRows) : 20;
+
+        let currentOffset = 1;
+
+        if (cabinClass === 'FIRST') {
+            return Array.from({ length: firstClassCount }, (_, i) => currentOffset + i);
         }
+        currentOffset += firstClassCount;
+
+        if (cabinClass === 'BUSINESS') {
+            return Array.from({ length: businessCount }, (_, i) => currentOffset + i);
+        }
+        currentOffset += businessCount;
+
+        if (cabinClass === 'PREMIUM_ECONOMY') {
+            return Array.from({ length: premiumEconomyCount }, (_, i) => currentOffset + i);
+        }
+        currentOffset += premiumEconomyCount;
+
+        if (cabinClass === 'ECONOMY') {
+            return Array.from({ length: economyCount }, (_, i) => currentOffset + i);
+        }
+        return [];
     };
 
-    const seatLetters = ['A', 'B', 'C', 'D', 'E', 'F'];
+    const parsedPattern = flight.seatPattern || "ABC-DEF";
+    const seatLetters = parsedPattern.replace(/[^A-Z]/g, "").split("");
     const activeRows = getRowsForClass(passengers[activePassengerIndex]?.cabinClass || 'ECONOMY');
 
     const isSeatOccupied = (seat: string) => {
@@ -198,13 +224,14 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
         const currentOccupied = new Set(initialOccupiedSeats);
         const suggested: string[] = [startSeatId];
         
-        // Find adjacent seats in the same row
         const startIdx = seatLetters.indexOf(letter);
         if (startIdx === -1) return suggested;
         
-        // Determine starting side of aisle
-        const isLeft = startIdx < 3;
-        const sideLetters = isLeft ? seatLetters.slice(0, 3) : seatLetters.slice(3, 6);
+        const blocks = parsedPattern.split("-");
+        const block = blocks.find(b => b.includes(letter));
+        if (!block) return suggested;
+
+        const sideLetters = block.split("");
         const sideIdx = sideLetters.indexOf(letter);
         
         // Fill seats on the same side of the aisle first
@@ -224,7 +251,8 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
         }
 
         // If we still need seats, look at other side of the aisle in the same row
-        const otherSideLetters = isLeft ? seatLetters.slice(3, 6) : seatLetters.slice(0, 3);
+        const otherBlocks = blocks.filter(b => b !== block);
+        const otherSideLetters = otherBlocks.flatMap(b => b.split(""));
         for (const testLetter of otherSideLetters) {
             const testSeat = `${row}${testLetter}`;
             if (!currentOccupied.has(testSeat) && !suggested.includes(testSeat)) {
@@ -708,25 +736,64 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                     alignItems: 'center'
                                 }}>
                                     <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.2)', marginBottom: '1rem', borderRadius: '2px' }} />
-                                    
-                                    {/* Column Labels */}
-                                    <div style={{ display: 'flex', gap: '8px', width: '220px', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', fontWeight: 'bold' }}>
-                                        <span>A</span>
-                                        <span>B</span>
-                                        <span>C</span>
-                                        <span style={{ width: '12px' }} />
-                                        <span>D</span>
-                                        <span>E</span>
-                                        <span>F</span>
+                                                             {/* Column Labels */}
+                                    <div style={{ 
+                                        display: 'flex', 
+                                        gap: '8px', 
+                                        alignItems: 'center', 
+                                        justifyContent: 'center', 
+                                        width: '100%',
+                                        paddingLeft: '24px', 
+                                        marginBottom: '8px', 
+                                        fontSize: '0.7rem', 
+                                        color: 'rgba(255,255,255,0.4)', 
+                                        fontWeight: 'bold' 
+                                    }}>
+                                        {parsedPattern.split("").map((char, charIdx) => {
+                                            if (char === '-') {
+                                                return (
+                                                    <span 
+                                                        key={`aisle-header-${charIdx}`} 
+                                                        style={{ width: '12px' }} 
+                                                    />
+                                                );
+                                            }
+                                            return (
+                                                <span 
+                                                    key={`seat-header-${charIdx}`} 
+                                                    style={{ width: '26px', textAlign: 'center' }}
+                                                >
+                                                    {char}
+                                                </span>
+                                            );
+                                        })}
                                     </div>
 
                                     {/* Rows */}
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}>
                                         {activeRows.map((row) => (
-                                            <div key={row} style={{ display: 'flex', gap: '8px', alignItems: 'center', width: '250px', justifyContent: 'space-between' }}>
-                                                <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)', width: '16px', textAlign: 'right' }}>{row}</span>
+                                            <div key={row} style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center' }}>
+                                                <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)', width: '16px', textAlign: 'right', marginRight: '4px' }}>{row}</span>
                                                 
-                                                {seatLetters.slice(0, 3).map((letter) => {
+                                                {parsedPattern.split("").map((char, charIdx) => {
+                                                    if (char === '-') {
+                                                        return (
+                                                            <span 
+                                                                key={`aisle-${charIdx}`} 
+                                                                style={{ 
+                                                                    width: '12px', 
+                                                                    textAlign: 'center', 
+                                                                    fontSize: '0.6rem', 
+                                                                    color: 'rgba(255,255,255,0.1)',
+                                                                    userSelect: 'none'
+                                                                }}
+                                                            >
+                                                                |
+                                                            </span>
+                                                        );
+                                                    }
+
+                                                    const letter = char;
                                                     const seatId = `${row}${letter}`;
                                                     const occupied = isSeatOccupied(seatId);
                                                     const selected = passengers[activePassengerIndex]?.seatNumber === seatId;
@@ -801,90 +868,11 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                                         </button>
                                                     );
                                                 })}
-
-                                                {/* Aisle */}
-                                                <span style={{ width: '12px', fontSize: '0.6rem', color: 'rgba(255,255,255,0.1)' }}>|</span>
-
-                                                {seatLetters.slice(3, 6).map((letter) => {
-                                                    const seatId = `${row}${letter}`;
-                                                    const occupied = isSeatOccupied(seatId);
-                                                    const selected = passengers[activePassengerIndex]?.seatNumber === seatId;
-                                                    const groupPassengerIdx = getGroupPassengerForSeat(seatId);
-                                                    const selectedByGroupMember = groupPassengerIdx >= 0 && groupPassengerIdx !== activePassengerIndex;
-                                                    const isSuggested = hoveredSuggestedSeats.includes(seatId);
-
-                                                    let bg = 'rgba(255, 255, 255, 0.05)';
-                                                    let border = '1px solid rgba(255, 255, 255, 0.15)';
-                                                    let color = '#fff';
-                                                    let cursor = 'pointer';
-                                                    let isDisabled = false;
-
-                                                    if (occupied) {
-                                                        bg = 'rgba(239, 68, 68, 0.2)';
-                                                        border = '1px solid rgba(239, 68, 68, 0.3)';
-                                                        color = '#ef4444';
-                                                        cursor = 'not-allowed';
-                                                        isDisabled = true;
-                                                    } else if (selected) {
-                                                         bg = '#8b5cf6';
-                                                         border = '1px solid #c084fc';
-                                                         color = '#fff';
-                                                     } else if (selectedByGroupMember) {
-                                                         bg = 'rgba(139, 92, 246, 0.35)';
-                                                         border = '1px dashed #c084fc';
-                                                         color = '#fff';
-                                                     } else if (isSuggested) {
-                                                         bg = 'rgba(16, 185, 129, 0.25)';
-                                                         border = '1px dashed #10b981';
-                                                         color = '#34d399';
-                                                     }
-
-                                                     let displayChar = letter;
-                                                     if (selectedByGroupMember) {
-                                                         displayChar = `#${groupPassengerIdx + 1}`;
-                                                     }
-
-                                                     return (
-                                                         <button
-                                                             key={letter}
-                                                             type="button"
-                                                             disabled={isDisabled}
-                                                             onClick={() => handleSeatClick(seatId)}
-                                                             onMouseEnter={() => handleSeatMouseEnter(seatId)}
-                                                             onMouseLeave={handleSeatMouseLeave}
-                                                             onFocus={() => handleSeatMouseEnter(seatId)}
-                                                             onBlur={handleSeatMouseLeave}
-                                                             style={{
-                                                                 width: '26px',
-                                                                 height: '26px',
-                                                                 borderRadius: '4px',
-                                                                 border,
-                                                                 background: bg,
-                                                                 cursor,
-                                                                 fontSize: '0.65rem',
-                                                                 fontWeight: 'bold',
-                                                                 color,
-                                                                 padding: 0
-                                                             }}
-                                                             title={
-                                                                 occupied 
-                                                                     ? `Seat ${seatId} Occupied` 
-                                                                     : selected 
-                                                                     ? `Seat ${seatId} Selected` 
-                                                                     : selectedByGroupMember 
-                                                                     ? `Seat ${seatId} chosen by Passenger #${groupPassengerIdx + 1}` 
-                                                                     : `Select Seat ${seatId}`
-                                                             }
-                                                         >
-                                                             {displayChar}
-                                                         </button>
-                                                     );
-                                                 })}
-                                             </div>
-                                         ))}
-                                     </div>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
-                                
+
                                 {/* Legend */}
                                 <div style={{
                                     display: 'flex',
