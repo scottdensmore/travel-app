@@ -226,4 +226,138 @@ describe('BookingCheckoutWizard', () => {
             expect(screen.getByText(/Seats already taken!/i)).toBeInTheDocument();
         });
     });
+
+    describe('Multi-Passenger Coordinated Adjacent Seat Maps', () => {
+        const twoPassengersFlight = {
+            ...sampleFlight,
+            price: '$100'
+        };
+
+        const setupStep2WithTwoPassengers = (occupied: string[] = []) => {
+            const { container } = render(<BookingCheckoutWizard flight={twoPassengersFlight} occupiedSeats={occupied} />);
+            
+            // Passenger 1 details
+            fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Alice' } });
+            fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Smith' } });
+            fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1995-05-15' } });
+            fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US1234567' } });
+
+            // Add Passenger 2
+            fireEvent.click(screen.getByText('+ Add Traveler'));
+            const inputs = screen.getAllByPlaceholderText('John');
+            const linputs = screen.getAllByPlaceholderText('Doe');
+            const dates = container.querySelectorAll('input[type="date"]');
+            const passports = screen.getAllByPlaceholderText('A00000000');
+
+            fireEvent.change(inputs[1], { target: { value: 'Bob' } });
+            fireEvent.change(linputs[1], { target: { value: 'Jones' } });
+            fireEvent.change(dates[1], { target: { value: '1990-10-10' } });
+            fireEvent.change(passports[1], { target: { value: 'US7654321' } });
+
+            fireEvent.click(screen.getByText('Select Seats →'));
+            return { container };
+        };
+
+        it('renders the auto-allocation options and manual auto-assign button when there are multiple travelers', () => {
+            setupStep2WithTwoPassengers();
+
+            expect(screen.getByLabelText(/Auto-allocate adjacent seats on map click/i)).toBeInTheDocument();
+            expect(screen.getByText(/Auto-Assign Adjacent Seats/i)).toBeInTheDocument();
+        });
+
+        it('does not render auto-allocation controls when there is only one traveler', () => {
+            render(<BookingCheckoutWizard flight={twoPassengersFlight} occupiedSeats={[]} />);
+            // Fill single passenger details
+            fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Alice' } });
+            fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Smith' } });
+            const dates = document.querySelectorAll('input[type="date"]');
+            fireEvent.change(dates[0], { target: { value: '1995-05-15' } });
+            fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US1234567' } });
+            fireEvent.click(screen.getByText('Select Seats →'));
+
+            expect(screen.queryByLabelText(/Auto-allocate adjacent seats on map click/i)).not.toBeInTheDocument();
+            expect(screen.queryByText(/Auto-Assign Adjacent Seats/i)).not.toBeInTheDocument();
+        });
+
+        it('auto-assigns contiguous adjacent seats for the group using the manual button', () => {
+            setupStep2WithTwoPassengers();
+
+            // Click manual auto-assign button
+            fireEvent.click(screen.getByText(/Auto-Assign Adjacent Seats/i));
+
+            // Verify both travelers are assigned adjacent seats (11A and 11B by default)
+            const passengerCards = screen.getAllByText(/Class:/);
+            expect(passengerCards[0].textContent).toContain('Seat: 11A');
+            expect(passengerCards[1].textContent).toContain('Seat: 11B');
+        });
+
+        it('auto-allocates adjacent seats on map click when checked', () => {
+            setupStep2WithTwoPassengers();
+
+            // Select seat 11D
+            const seat11D = screen.getByTitle('Select Seat 11D');
+            fireEvent.click(seat11D);
+
+            // Active traveler gets 11D, the next traveler gets adjacent 11E
+            const passengerCards = screen.getAllByText(/Class:/);
+            expect(passengerCards[0].textContent).toContain('Seat: 11D');
+            expect(passengerCards[1].textContent).toContain('Seat: 11E');
+        });
+
+        it('does not auto-allocate adjacent seats on map click when unchecked', () => {
+            setupStep2WithTwoPassengers();
+
+            // Uncheck auto-allocate toggle
+            const checkbox = screen.getByLabelText(/Auto-allocate adjacent seats on map click/i);
+            fireEvent.click(checkbox);
+
+            // Select seat 11D
+            const seat11D = screen.getByTitle('Select Seat 11D');
+            fireEvent.click(seat11D);
+
+            // Only active traveler gets seat, next traveler has no seat
+            const passengerCards = screen.getAllByText(/Class:/);
+            expect(passengerCards[0].textContent).toContain('Seat: 11D');
+            expect(passengerCards[1].textContent).toContain('Seat: Not Chosen');
+        });
+
+        it('allows swapping seats when clicking on a seat already occupied by a group member', () => {
+            setupStep2WithTwoPassengers();
+
+            // Uncheck auto-allocate toggle to manually assign seats
+            const checkbox = screen.getByLabelText(/Auto-allocate adjacent seats on map click/i);
+            fireEvent.click(checkbox);
+
+            // Select seat 11A for active Passenger 1 manually
+            const seat11A = screen.getByTitle('Select Seat 11A');
+            fireEvent.click(seat11A);
+
+            // Switch active passenger to Passenger 2
+            const passengerListItems = screen.getAllByText(/Class:/);
+            // Click the card for Passenger 2
+            const p2Card = passengerListItems[1].closest('div');
+            fireEvent.click(p2Card!);
+
+            // Select seat 11C for Passenger 2
+            const seat11C = screen.getByTitle('Select Seat 11C');
+            fireEvent.click(seat11C);
+
+            // Verify Alice has 11A and Bob has 11C
+            let cards = screen.getAllByText(/Class:/);
+            expect(cards[0].textContent).toContain('Seat: 11A');
+            expect(cards[1].textContent).toContain('Seat: 11C');
+
+            // Switch back to Passenger 1
+            const p1Card = passengerListItems[0].closest('div');
+            fireEvent.click(p1Card!);
+
+            // Click Bob's seat (11C) to swap
+            fireEvent.click(screen.getByTitle(/Seat 11C/));
+
+            // Verify Alice now has 11C and Bob has 11A
+            cards = screen.getAllByText(/Class:/);
+            expect(cards[0].textContent).toContain('Seat: 11C');
+            expect(cards[1].textContent).toContain('Seat: 11A');
+        });
+    });
 });
