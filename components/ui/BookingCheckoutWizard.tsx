@@ -64,6 +64,8 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [bookingResult, setBookingResult] = useState<{ id: number; paymentIntentId: string } | null>(null);
+    const [autoAllocateGroup, setAutoAllocateGroup] = useState<boolean>(true);
+    const [hoveredSuggestedSeats, setHoveredSuggestedSeats] = useState<string[]>([]);
 
     // Calculate total price
     const calculatePassengerPrice = (cabin: 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST') => {
@@ -178,17 +180,239 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
     const activeRows = getRowsForClass(passengers[activePassengerIndex]?.cabinClass || 'ECONOMY');
 
     const isSeatOccupied = (seat: string) => {
-        // Also consider seats selected by other passengers in this transaction as occupied
-        const selectedByOthers = passengers
-            .filter((_, i) => i !== activePassengerIndex)
-            .map(p => p.seatNumber);
+        return initialOccupiedSeats.includes(seat);
+    };
+
+    const getGroupPassengerForSeat = (seat: string) => {
+        return passengers.findIndex(p => p.seatNumber === seat);
+    };
+
+    const getAdjacentSuggestedSeats = (startSeatId: string, count: number): string[] => {
+        if (count <= 1) return [startSeatId];
         
-        return initialOccupiedSeats.includes(seat) || selectedByOthers.includes(seat);
+        const row = parseInt(startSeatId.slice(0, -1), 10);
+        const letter = startSeatId.slice(-1);
+        const cabinClass = passengers[activePassengerIndex]?.cabinClass || 'ECONOMY';
+        const rows = getRowsForClass(cabinClass);
+        
+        const currentOccupied = new Set(initialOccupiedSeats);
+        const suggested: string[] = [startSeatId];
+        
+        // Find adjacent seats in the same row
+        const startIdx = seatLetters.indexOf(letter);
+        if (startIdx === -1) return suggested;
+        
+        // Determine starting side of aisle
+        const isLeft = startIdx < 3;
+        const sideLetters = isLeft ? seatLetters.slice(0, 3) : seatLetters.slice(3, 6);
+        const sideIdx = sideLetters.indexOf(letter);
+        
+        // Fill seats on the same side of the aisle first
+        for (let i = sideIdx + 1; i < sideLetters.length; i++) {
+            const testSeat = `${row}${sideLetters[i]}`;
+            if (!currentOccupied.has(testSeat) && !suggested.includes(testSeat)) {
+                suggested.push(testSeat);
+                if (suggested.length === count) return suggested;
+            }
+        }
+        for (let i = sideIdx - 1; i >= 0; i--) {
+            const testSeat = `${row}${sideLetters[i]}`;
+            if (!currentOccupied.has(testSeat) && !suggested.includes(testSeat)) {
+                suggested.push(testSeat);
+                if (suggested.length === count) return suggested;
+            }
+        }
+
+        // If we still need seats, look at other side of the aisle in the same row
+        const otherSideLetters = isLeft ? seatLetters.slice(3, 6) : seatLetters.slice(0, 3);
+        for (const testLetter of otherSideLetters) {
+            const testSeat = `${row}${testLetter}`;
+            if (!currentOccupied.has(testSeat) && !suggested.includes(testSeat)) {
+                suggested.push(testSeat);
+                if (suggested.length === count) return suggested;
+            }
+        }
+        
+        // If we still need seats, look at consecutive rows (row + 1, row - 1, etc.)
+        for (const nextRow of rows) {
+            if (nextRow === row) continue;
+            // Prefer the same side of aisle in the next row
+            for (const testLetter of sideLetters) {
+                const testSeat = `${nextRow}${testLetter}`;
+                if (!currentOccupied.has(testSeat) && !suggested.includes(testSeat)) {
+                    suggested.push(testSeat);
+                    if (suggested.length === count) return suggested;
+                }
+            }
+            // Then other side of aisle in next row
+            for (const testLetter of otherSideLetters) {
+                const testSeat = `${nextRow}${testLetter}`;
+                if (!currentOccupied.has(testSeat) && !suggested.includes(testSeat)) {
+                    suggested.push(testSeat);
+                    if (suggested.length === count) return suggested;
+                }
+            }
+        }
+        
+        return suggested;
+    };
+
+    const autoAssignAdjacentSeats = () => {
+        const updatedPassengers = [...passengers];
+        const currentOccupied = new Set(initialOccupiedSeats);
+        const classes: PassengerFormState['cabinClass'][] = ['FIRST', 'BUSINESS', 'PREMIUM_ECONOMY', 'ECONOMY'];
+        
+        for (const cabinClass of classes) {
+            const classPassengers = updatedPassengers.map((p, idx) => ({ p, idx })).filter(item => item.p.cabinClass === cabinClass);
+            if (classPassengers.length === 0) continue;
+            
+            const rows = getRowsForClass(cabinClass);
+            const passengerIndicesToAssign = classPassengers.map(cp => cp.idx);
+            const count = passengerIndicesToAssign.length;
+            
+            let bestAssignment: string[] | null = null;
+            
+            if (count <= 3) {
+                for (const row of rows) {
+                    const leftSide = ['A', 'B', 'C'].map(l => `${row}${l}`);
+                    const rightSide = ['D', 'E', 'F'].map(l => `${row}${l}`);
+                    
+                    for (let start = 0; start <= 3 - count; start++) {
+                        const block = leftSide.slice(start, start + count);
+                        if (block.every(seat => !currentOccupied.has(seat))) {
+                            bestAssignment = block;
+                            break;
+                        }
+                    }
+                    if (bestAssignment) break;
+                    
+                    for (let start = 0; start <= 3 - count; start++) {
+                        const block = rightSide.slice(start, start + count);
+                        if (block.every(seat => !currentOccupied.has(seat))) {
+                            bestAssignment = block;
+                            break;
+                        }
+                    }
+                    if (bestAssignment) break;
+                }
+            }
+            
+            if (!bestAssignment) {
+                for (const row of rows) {
+                    const seats = ['A', 'B', 'C', 'D', 'E', 'F'].map(l => `${row}${l}`);
+                    const freeInRow = seats.filter(seat => !currentOccupied.has(seat));
+                    if (freeInRow.length >= count) {
+                        bestAssignment = freeInRow.slice(0, count);
+                        break;
+                    }
+                }
+            }
+            
+            if (!bestAssignment) {
+                const freeSeats: string[] = [];
+                for (const row of rows) {
+                    const seats = ['A', 'B', 'C', 'D', 'E', 'F'].map(l => `${row}${l}`);
+                    for (const seat of seats) {
+                        if (!currentOccupied.has(seat)) {
+                            freeSeats.push(seat);
+                            if (freeSeats.length === count) {
+                                bestAssignment = freeSeats;
+                                break;
+                            }
+                        }
+                    }
+                    if (bestAssignment) break;
+                }
+            }
+            
+            if (bestAssignment && bestAssignment.length === count) {
+                for (let i = 0; i < count; i++) {
+                    const pIdx = passengerIndicesToAssign[i];
+                    updatedPassengers[pIdx].seatNumber = bestAssignment[i];
+                    currentOccupied.add(bestAssignment[i]);
+                }
+            } else {
+                let seatIdx = 0;
+                const allFree: string[] = [];
+                for (const row of rows) {
+                    const seats = ['A', 'B', 'C', 'D', 'E', 'F'].map(l => `${row}${l}`);
+                    for (const seat of seats) {
+                        if (!currentOccupied.has(seat)) {
+                            allFree.push(seat);
+                        }
+                    }
+                }
+                for (let i = 0; i < count; i++) {
+                    const pIdx = passengerIndicesToAssign[i];
+                    if (seatIdx < allFree.length) {
+                        updatedPassengers[pIdx].seatNumber = allFree[seatIdx];
+                        currentOccupied.add(allFree[seatIdx]);
+                        seatIdx++;
+                    }
+                }
+            }
+        }
+        
+        setPassengers(updatedPassengers);
+        setErrorMessage(null);
     };
 
     const handleSeatClick = (seat: string) => {
-        handlePassengerChange(activePassengerIndex, 'seatNumber', seat);
-        setErrorMessage(null);
+        const cabinClass = passengers[activePassengerIndex]?.cabinClass || 'ECONOMY';
+        
+        if (autoAllocateGroup && passengers.length > 1) {
+            const sameClassPassengerIndices = passengers
+                .map((p, i) => ({ p, i }))
+                .filter(item => item.p.cabinClass === cabinClass)
+                .map(item => item.i);
+            const count = sameClassPassengerIndices.length;
+            const suggestions = getAdjacentSuggestedSeats(seat, count);
+            
+            const updated = [...passengers];
+            let suggestionIdx = 0;
+            
+            updated[activePassengerIndex].seatNumber = suggestions[0] || seat;
+            suggestionIdx++;
+            
+            for (const pIdx of sameClassPassengerIndices) {
+                if (pIdx === activePassengerIndex) continue;
+                if (suggestionIdx < suggestions.length) {
+                    updated[pIdx].seatNumber = suggestions[suggestionIdx];
+                    suggestionIdx++;
+                }
+            }
+            
+            setPassengers(updated);
+            setErrorMessage(null);
+        } else {
+            const passengerIndexAtSeat = passengers.findIndex(p => p.seatNumber === seat);
+            const updated = [...passengers];
+            
+            if (passengerIndexAtSeat >= 0 && passengerIndexAtSeat !== activePassengerIndex) {
+                const prevActiveSeat = updated[activePassengerIndex].seatNumber;
+                updated[activePassengerIndex].seatNumber = seat;
+                updated[passengerIndexAtSeat].seatNumber = prevActiveSeat;
+            } else {
+                updated[activePassengerIndex].seatNumber = seat;
+            }
+            setPassengers(updated);
+            setErrorMessage(null);
+        }
+    };
+
+    const handleSeatMouseEnter = (seatId: string) => {
+        if (!autoAllocateGroup || passengers.length <= 1) return;
+        const sameClassPassengerIndices = passengers
+            .map((p, i) => ({ p, i }))
+            .filter(item => item.p.cabinClass === passengers[activePassengerIndex]?.cabinClass)
+            .map(item => item.i);
+        const count = sameClassPassengerIndices.length;
+        const suggestions = getAdjacentSuggestedSeats(seatId, count);
+        setHoveredSuggestedSeats(suggestions);
+    };
+
+    const handleSeatMouseLeave = () => {
+        setHoveredSuggestedSeats([]);
     };
 
     const handleSubmitBooking = async () => {
@@ -395,6 +619,54 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                         <h2 style={{ fontSize: '1.8rem', color: '#c084fc', marginBottom: '0.5rem', fontWeight: 'bold' }}>Select Your Seats</h2>
                         <p style={{ color: 'rgba(255,255,255,0.5)', marginBottom: '2rem' }}>Choose seats for each traveler. Highlighted rows correspond to each passenger&apos;s cabin class.</p>
 
+                        {passengers.length > 1 && (
+                            <div style={{
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                gap: '1rem',
+                                background: 'rgba(255, 255, 255, 0.03)',
+                                padding: '1rem 1.5rem',
+                                borderRadius: '12px',
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                marginBottom: '1.5rem',
+                                backdropFilter: 'blur(10px)'
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <input 
+                                        type="checkbox" 
+                                        id="autoAllocateGroup" 
+                                        checked={autoAllocateGroup} 
+                                        onChange={(e) => setAutoAllocateGroup(e.target.checked)} 
+                                        style={{ width: '18px', height: '18px', accentColor: '#8b5cf6', cursor: 'pointer' }}
+                                    />
+                                    <label htmlFor="autoAllocateGroup" style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.9)', cursor: 'pointer', userSelect: 'none' }}>
+                                        Auto-allocate adjacent seats on map click
+                                    </label>
+                                </div>
+                                
+                                <button 
+                                    type="button" 
+                                    onClick={autoAssignAdjacentSeats}
+                                    style={{
+                                        background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+                                        color: '#fff',
+                                        border: 'none',
+                                        padding: '10px 20px',
+                                        borderRadius: '8px',
+                                        cursor: 'pointer',
+                                        fontWeight: 'bold',
+                                        fontSize: '0.85rem',
+                                        boxShadow: '0 4px 12px rgba(109, 40, 217, 0.3)',
+                                        transition: 'all 0.2s'
+                                    }}
+                                >
+                                    ✨ Auto-Assign Adjacent Seats
+                                </button>
+                            </div>
+                        )}
+
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2.5rem' }}>
                             {/* Left panel: Passenger selector */}
                             <div style={{ flex: '1 1 250px' }}>
@@ -458,27 +730,74 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                                     const seatId = `${row}${letter}`;
                                                     const occupied = isSeatOccupied(seatId);
                                                     const selected = passengers[activePassengerIndex]?.seatNumber === seatId;
+                                                    const groupPassengerIdx = getGroupPassengerForSeat(seatId);
+                                                    const selectedByGroupMember = groupPassengerIdx >= 0 && groupPassengerIdx !== activePassengerIndex;
+                                                    const isSuggested = hoveredSuggestedSeats.includes(seatId);
+
+                                                    let bg = 'rgba(255, 255, 255, 0.05)';
+                                                    let border = '1px solid rgba(255, 255, 255, 0.15)';
+                                                    let color = '#fff';
+                                                    let cursor = 'pointer';
+                                                    let isDisabled = false;
+
+                                                    if (occupied) {
+                                                        bg = 'rgba(239, 68, 68, 0.2)';
+                                                        border = '1px solid rgba(239, 68, 68, 0.3)';
+                                                        color = '#ef4444';
+                                                        cursor = 'not-allowed';
+                                                        isDisabled = true;
+                                                    } else if (selected) {
+                                                        bg = '#8b5cf6';
+                                                        border = '1px solid #c084fc';
+                                                        color = '#fff';
+                                                    } else if (selectedByGroupMember) {
+                                                        bg = 'rgba(139, 92, 246, 0.35)';
+                                                        border = '1px dashed #c084fc';
+                                                        color = '#fff';
+                                                    } else if (isSuggested) {
+                                                        bg = 'rgba(16, 185, 129, 0.25)';
+                                                        border = '1px dashed #10b981';
+                                                        color = '#34d399';
+                                                    }
+
+                                                    let displayChar = letter;
+                                                    if (selectedByGroupMember) {
+                                                        displayChar = `#${groupPassengerIdx + 1}`;
+                                                    }
+
                                                     return (
                                                         <button
                                                             key={letter}
                                                             type="button"
-                                                            disabled={occupied}
+                                                            disabled={isDisabled}
                                                             onClick={() => handleSeatClick(seatId)}
+                                                            onMouseEnter={() => handleSeatMouseEnter(seatId)}
+                                                            onMouseLeave={handleSeatMouseLeave}
+                                                            onFocus={() => handleSeatMouseEnter(seatId)}
+                                                            onBlur={handleSeatMouseLeave}
                                                             style={{
                                                                 width: '26px',
                                                                 height: '26px',
                                                                 borderRadius: '4px',
-                                                                border: selected ? '1px solid #8b5cf6' : '1px solid rgba(255,255,255,0.15)',
-                                                                background: selected ? '#8b5cf6' : occupied ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                                                                cursor: occupied ? 'not-allowed' : 'pointer',
+                                                                border,
+                                                                background: bg,
+                                                                cursor,
                                                                 fontSize: '0.65rem',
                                                                 fontWeight: 'bold',
-                                                                color: selected ? '#fff' : occupied ? '#ef4444' : '#fff',
+                                                                color,
                                                                 padding: 0
                                                             }}
-                                                            title={occupied ? `Seat ${seatId} Occupied` : `Select Seat ${seatId}`}
+                                                            title={
+                                                                occupied 
+                                                                    ? `Seat ${seatId} Occupied` 
+                                                                    : selected 
+                                                                    ? `Seat ${seatId} Selected` 
+                                                                    : selectedByGroupMember 
+                                                                    ? `Seat ${seatId} chosen by Passenger #${groupPassengerIdx + 1}` 
+                                                                    : `Select Seat ${seatId}`
+                                                            }
                                                         >
-                                                            {letter}
+                                                            {displayChar}
                                                         </button>
                                                     );
                                                 })}
@@ -490,32 +809,115 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                                     const seatId = `${row}${letter}`;
                                                     const occupied = isSeatOccupied(seatId);
                                                     const selected = passengers[activePassengerIndex]?.seatNumber === seatId;
-                                                    return (
-                                                        <button
-                                                            key={letter}
-                                                            type="button"
-                                                            disabled={occupied}
-                                                            onClick={() => handleSeatClick(seatId)}
-                                                            style={{
-                                                                width: '26px',
-                                                                height: '26px',
-                                                                borderRadius: '4px',
-                                                                border: selected ? '1px solid #8b5cf6' : '1px solid rgba(255,255,255,0.15)',
-                                                                background: selected ? '#8b5cf6' : occupied ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                                                                cursor: occupied ? 'not-allowed' : 'pointer',
-                                                                fontSize: '0.65rem',
-                                                                fontWeight: 'bold',
-                                                                color: selected ? '#fff' : occupied ? '#ef4444' : '#fff',
-                                                                padding: 0
-                                                            }}
-                                                            title={occupied ? `Seat ${seatId} Occupied` : `Select Seat ${seatId}`}
-                                                        >
-                                                            {letter}
-                                                        </button>
-                                                    );
-                                                })}
+                                                    const groupPassengerIdx = getGroupPassengerForSeat(seatId);
+                                                    const selectedByGroupMember = groupPassengerIdx >= 0 && groupPassengerIdx !== activePassengerIndex;
+                                                    const isSuggested = hoveredSuggestedSeats.includes(seatId);
+
+                                                    let bg = 'rgba(255, 255, 255, 0.05)';
+                                                    let border = '1px solid rgba(255, 255, 255, 0.15)';
+                                                    let color = '#fff';
+                                                    let cursor = 'pointer';
+                                                    let isDisabled = false;
+
+                                                    if (occupied) {
+                                                        bg = 'rgba(239, 68, 68, 0.2)';
+                                                        border = '1px solid rgba(239, 68, 68, 0.3)';
+                                                        color = '#ef4444';
+                                                        cursor = 'not-allowed';
+                                                        isDisabled = true;
+                                                    } else if (selected) {
+                                                         bg = '#8b5cf6';
+                                                         border = '1px solid #c084fc';
+                                                         color = '#fff';
+                                                     } else if (selectedByGroupMember) {
+                                                         bg = 'rgba(139, 92, 246, 0.35)';
+                                                         border = '1px dashed #c084fc';
+                                                         color = '#fff';
+                                                     } else if (isSuggested) {
+                                                         bg = 'rgba(16, 185, 129, 0.25)';
+                                                         border = '1px dashed #10b981';
+                                                         color = '#34d399';
+                                                     }
+
+                                                     let displayChar = letter;
+                                                     if (selectedByGroupMember) {
+                                                         displayChar = `#${groupPassengerIdx + 1}`;
+                                                     }
+
+                                                     return (
+                                                         <button
+                                                             key={letter}
+                                                             type="button"
+                                                             disabled={isDisabled}
+                                                             onClick={() => handleSeatClick(seatId)}
+                                                             onMouseEnter={() => handleSeatMouseEnter(seatId)}
+                                                             onMouseLeave={handleSeatMouseLeave}
+                                                             onFocus={() => handleSeatMouseEnter(seatId)}
+                                                             onBlur={handleSeatMouseLeave}
+                                                             style={{
+                                                                 width: '26px',
+                                                                 height: '26px',
+                                                                 borderRadius: '4px',
+                                                                 border,
+                                                                 background: bg,
+                                                                 cursor,
+                                                                 fontSize: '0.65rem',
+                                                                 fontWeight: 'bold',
+                                                                 color,
+                                                                 padding: 0
+                                                             }}
+                                                             title={
+                                                                 occupied 
+                                                                     ? `Seat ${seatId} Occupied` 
+                                                                     : selected 
+                                                                     ? `Seat ${seatId} Selected` 
+                                                                     : selectedByGroupMember 
+                                                                     ? `Seat ${seatId} chosen by Passenger #${groupPassengerIdx + 1}` 
+                                                                     : `Select Seat ${seatId}`
+                                                             }
+                                                         >
+                                                             {displayChar}
+                                                         </button>
+                                                     );
+                                                 })}
+                                             </div>
+                                         ))}
+                                     </div>
+                                </div>
+                                
+                                {/* Legend */}
+                                <div style={{
+                                    display: 'flex',
+                                    flexWrap: 'wrap',
+                                    justifyContent: 'center',
+                                    gap: '12px',
+                                    marginTop: '1.5rem',
+                                    fontSize: '0.75rem',
+                                    color: 'rgba(255,255,255,0.6)'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)' }} />
+                                        <span>Available</span>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#8b5cf6' }} />
+                                        <span>Me</span>
+                                    </div>
+                                    {passengers.length > 1 && (
+                                        <>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: 'rgba(139, 92, 246, 0.35)', border: '1px dashed #c084fc' }} />
+                                                <span>Group Member</span>
                                             </div>
-                                        ))}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: 'rgba(16, 185, 129, 0.25)', border: '1px dashed #10b981' }} />
+                                                <span>Suggested</span>
+                                            </div>
+                                        </>
+                                    )}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.3)' }} />
+                                        <span>Occupied</span>
                                     </div>
                                 </div>
                             </div>
