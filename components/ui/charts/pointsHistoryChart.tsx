@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
-
 import {
     Card,
     CardContent,
@@ -16,7 +15,6 @@ import {
     ChartTooltip,
     ChartTooltipContent,
 } from "@/components/ui/chart"
-import PointsActivityService from "@/lib/PointsActivityService"
 import { PointsActivityDisplayData } from "@/lib/types/PointsActivity"
 
 const chartConfig = {
@@ -26,15 +24,7 @@ const chartConfig = {
     },
 } satisfies ChartConfig
 
-export default function PointsHistoryChart() {
-    const [chartData, setChartData] = React.useState<PointsActivityDisplayData[]>([])
-
-    React.useEffect(() => {
-        const service = new PointsActivityService()
-        const data = service.getMonthlyPointsActivity()
-        setChartData(data)
-    }, [])
-
+export default function PointsHistoryChart({ chartData = [] }: { chartData?: PointsActivityDisplayData[] }) {
     return (
         <Card>
             <CardHeader>
