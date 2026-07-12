@@ -51,12 +51,12 @@ authoritative before expanding the product.
 
 ### P0.1 Protect build and runtime secrets
 
-- [ ] Exclude `.env` and `.env*` from the Docker build context.
-- [ ] Ensure `.next/standalone` and the final image contain no environment
+- [x] Exclude `.env` and `.env*` from the Docker build context.
+- [x] Ensure `.next/standalone` and the final image contain no environment
   files or secret values.
-- [ ] Inject runtime configuration through the deployment environment.
-- [ ] Validate required environment variables during application startup.
-- [ ] Document secret rotation for any image that may have been published.
+- [x] Inject runtime configuration through the deployment environment.
+- [x] Validate required environment variables during application startup.
+- [x] Document secret rotation for any image that may have been published.
 
 Acceptance criteria:
 
@@ -497,6 +497,7 @@ Add one row when work starts, becomes blocked, or completes.
 | Date | Item | Status | PR | Notes |
 | --- | --- | --- | --- | --- |
 | 2026-07-11 | Roadmap baseline | Complete | — | Browser, source, Jest, Playwright, build, lint, and dependency audit reviewed. |
+| 2026-07-11 | P0.1 | Complete | #34 | Excluded local secrets, added fail-closed runtime validation, sanitized standalone builds, scanned final image content and layers, and documented rotation. |
 
 ## Recommended first delivery sequence
 

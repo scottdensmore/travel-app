@@ -5,3 +5,10 @@ npm-debug.log
 README.md
 .next
 .git
+.env
+.env.*
+.agents
+.claude
+.codex
+.cursor
+.github
