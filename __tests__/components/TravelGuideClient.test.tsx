@@ -1,9 +1,15 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { TextEncoder } from 'util';
 import '@testing-library/jest-dom';
 import TravelGuideClient from '@/components/ui/TravelGuideClient';
 import { toggleFavoriteCityGuideAction, submitCityGuideReviewAction } from '@/app/actions';
 import { useRouter } from 'next/navigation';
+
+Object.defineProperty(global, 'TextEncoder', { value: TextEncoder });
+const { renderToString } = jest.requireActual<typeof import('react-dom/server')>(
+    'react-dom/server'
+);
 
 jest.mock('next/navigation', () => ({
     useRouter: jest.fn().mockReturnValue({
@@ -60,6 +66,15 @@ describe('TravelGuideClient', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         global.alert = jest.fn();
+    });
+
+    it('defers the D3 map until after client hydration', () => {
+        const serverHtml = renderToString(
+            <TravelGuideClient cities={sampleCities} initialFavorites={[]} />
+        );
+
+        expect(serverHtml).toContain('Loading Map...');
+        expect(serverHtml).not.toContain('data-testid="map"');
     });
 
     it('renders the map, city lists, and default city sidebar details', () => {
@@ -191,5 +206,3 @@ describe('TravelGuideClient', () => {
         expect(mockSubmitReview).not.toHaveBeenCalled();
     });
 });
-
-

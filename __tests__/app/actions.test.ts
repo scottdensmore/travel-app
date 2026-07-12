@@ -5,11 +5,21 @@ import {
     deleteCityGuideAction,
     bookFlightAction,
     toggleFavoriteCityGuideAction,
-    submitCityGuideReviewAction
+    submitCityGuideReviewAction,
+    cancelBookingAction,
+    deleteReviewAction,
+    saveFlightScheduleAction,
+    deleteFlightScheduleAction,
+    updateFlightStatusAction,
+    changeBookingSeatsAction,
+    getUserNotificationsAction,
+    markNotificationAsReadAction,
+    markAllNotificationsAsReadAction
 } from '@/app/actions';
 import { getServerSession } from 'next-auth';
 import TravelGuideService from '@/lib/TravelGuideService';
 import FlightBookingService from '@/lib/FlightBookingService';
+import FlightScheduleService from '@/lib/FlightScheduleService';
 import { prisma } from '@/lib/prisma';
 
 // Keep these heavy/server-only modules out of the unit test.
@@ -22,31 +32,68 @@ jest.mock('@/lib/FlightBookingService', () => {
     return jest.fn().mockImplementation(() => ({ bookFlight }));
 });
 
-// The service mock shares a single saveCityGuide fn across all instances,
-// so the instance created inside app/actions.ts uses the same spy we assert on.
+jest.mock('@/lib/FlightScheduleService', () => {
+    const generateFlightsForDate = jest.fn();
+    return jest.fn().mockImplementation(() => ({ generateFlightsForDate }));
+});
+
 jest.mock('@/lib/TravelGuideService', () => {
     const saveCityGuide = jest.fn();
     return jest.fn().mockImplementation(() => ({ saveCityGuide }));
 });
 
+const mockTx = {
+    passenger: {
+        findMany: jest.fn(),
+        update: jest.fn(),
+    },
+    booking: {
+        update: jest.fn(),
+    }
+};
+
 jest.mock('@/lib/prisma', () => ({
     prisma: {
         cityGuide: { create: jest.fn(), delete: jest.fn() },
-        flight: { findMany: jest.fn() },
+        flight: { findMany: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn(), findUnique: jest.fn() },
+        flightSchedule: { findMany: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
         userFavorite: { findUnique: jest.fn(), delete: jest.fn(), create: jest.fn() },
-        review: { create: jest.fn() },
+        review: { create: jest.fn(), findUnique: jest.fn(), delete: jest.fn() },
+        booking: { findUnique: jest.fn(), delete: jest.fn(), update: jest.fn(), findMany: jest.fn() },
+        notification: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), createMany: jest.fn() },
+        $transaction: jest.fn((callback) => callback(mockTx)),
     },
 }));
 
 const mockedGetServerSession = getServerSession as unknown as jest.Mock;
 const mockSaveCityGuide = new (TravelGuideService as any)().saveCityGuide as jest.Mock;
 const mockBookFlight = new (FlightBookingService as any)().bookFlight as jest.Mock;
+const mockGenerateFlightsForDate = new (FlightScheduleService as any)().generateFlightsForDate as jest.Mock;
 const mockedFlightFindMany = (prisma as any).flight.findMany as jest.Mock;
+const mockedFlightFindFirst = (prisma as any).flight.findFirst as jest.Mock;
+const mockedFlightCreate = (prisma as any).flight.create as jest.Mock;
+const mockedFlightUpdate = (prisma as any).flight.update as jest.Mock;
+const mockedFlightFindUnique = (prisma as any).flight.findUnique as jest.Mock;
+const mockedFlightScheduleFindMany = (prisma as any).flightSchedule.findMany as jest.Mock;
+const mockedFlightScheduleCreate = (prisma as any).flightSchedule.create as jest.Mock;
+const mockedFlightScheduleUpdate = (prisma as any).flightSchedule.update as jest.Mock;
+const mockedFlightScheduleDelete = (prisma as any).flightSchedule.delete as jest.Mock;
 const mockedCityGuideDelete = (prisma as any).cityGuide.delete as jest.Mock;
 const mockedUserFavoriteFindUnique = (prisma as any).userFavorite.findUnique as jest.Mock;
 const mockedUserFavoriteDelete = (prisma as any).userFavorite.delete as jest.Mock;
 const mockedUserFavoriteCreate = (prisma as any).userFavorite.create as jest.Mock;
 const mockedReviewCreate = (prisma as any).review.create as jest.Mock;
+const mockedReviewFindUnique = (prisma as any).review.findUnique as jest.Mock;
+const mockedReviewDelete = (prisma as any).review.delete as jest.Mock;
+const mockedBookingFindUnique = (prisma as any).booking.findUnique as jest.Mock;
+const mockedBookingUpdate = (prisma as any).booking.update as jest.Mock;
+const mockedBookingFindMany = (prisma as any).booking.findMany as jest.Mock;
+const mockedNotificationCreate = (prisma as any).notification.create as jest.Mock;
+const mockedNotificationFindMany = (prisma as any).notification.findMany as jest.Mock;
+const mockedNotificationUpdate = (prisma as any).notification.update as jest.Mock;
+const mockedNotificationUpdateMany = (prisma as any).notification.updateMany as jest.Mock;
+const mockedNotificationFindUnique = (prisma as any).notification.findUnique as jest.Mock;
+const mockedNotificationCreateMany = (prisma as any).notification.createMany as jest.Mock;
 
 const sampleGuide: any = {
     city: 'Paris',
@@ -113,7 +160,7 @@ describe('deleteCityGuideAction authorization and execution', () => {
 describe('searchFlightsAction', () => {
     beforeEach(() => jest.clearAllMocks());
 
-    it('filters flights by the selected origin and destination', async () => {
+    it('filters flights by the selected origin and destination without date', async () => {
         const flights = [
             { id: 1, flightNumber: 'CA101', from: 'Seattle, USA', to: 'Detroit, USA' },
         ];
@@ -126,22 +173,46 @@ describe('searchFlightsAction', () => {
         );
         expect(result).toBe(flights);
     });
+
+    it('triggers lazy generation and queries by date when departureDateStr is provided', async () => {
+        const flights = [
+            { id: 1, flightNumber: 'CA101', from: 'Seattle, USA', to: 'Detroit, USA', departureDate: new Date('2026-06-25T08:00:00Z') },
+        ];
+        mockedFlightFindMany.mockResolvedValue(flights);
+        mockGenerateFlightsForDate.mockResolvedValue([]);
+
+        const result = await searchFlightsAction('Seattle, USA', 'Detroit, USA', '2026-06-25');
+
+        expect(mockGenerateFlightsForDate).toHaveBeenCalledWith(new Date('2026-06-25'));
+        expect(mockedFlightFindMany).toHaveBeenCalledWith({
+            where: {
+                from: 'Seattle, USA',
+                to: 'Detroit, USA',
+                departureDate: {
+                    gte: new Date('2026-06-25T00:00:00.000Z'),
+                    lte: new Date('2026-06-25T23:59:59.999Z')
+                }
+            },
+            orderBy: { departureDate: 'asc' }
+        });
+        expect(result).toBe(flights);
+    });
 });
 
 describe('getFlightRoutesAction', () => {
     beforeEach(() => jest.clearAllMocks());
 
-    it('returns the distinct origin/destination pairs that have flights', async () => {
+    it('returns the distinct origin/destination pairs from schedules', async () => {
         const routes = [
             { from: 'Chicago, USA', to: 'Paris, France' },
             { from: 'Seattle, USA', to: 'Detroit, USA' },
         ];
-        mockedFlightFindMany.mockResolvedValue(routes);
+        mockedFlightScheduleFindMany.mockResolvedValue(routes);
 
         const result = await getFlightRoutesAction();
 
         expect(result).toBe(routes);
-        expect(mockedFlightFindMany).toHaveBeenCalledWith(
+        expect(mockedFlightScheduleFindMany).toHaveBeenCalledWith(
             expect.objectContaining({ distinct: ['from', 'to'], select: { from: true, to: true } })
         );
     });
@@ -150,14 +221,31 @@ describe('getFlightRoutesAction', () => {
 describe('bookFlightAction', () => {
     beforeEach(() => jest.clearAllMocks());
 
-    it('calls FlightBookingService with flightId and userId from session', async () => {
+    it('calls FlightBookingService with flightId and userId from session and creates a notification', async () => {
         mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
         mockBookFlight.mockResolvedValue({ id: 1, flightId: 42, userId: 'user-123' });
+        mockedFlightFindUnique.mockResolvedValue({
+            id: 42,
+            airline: 'Gemini Airways',
+            flightNumber: 'GA101',
+            price: '$200',
+            from: 'A',
+            to: 'B'
+        });
 
-        const result = await bookFlightAction({ flightId: 42 });
+        const result = await bookFlightAction({ flightId: 42, totalPrice: '$200' });
 
-        expect(mockBookFlight).toHaveBeenCalledWith({ flightId: 42, userId: 'user-123' });
+        expect(mockBookFlight).toHaveBeenCalledWith({ flightId: 42, userId: 'user-123', totalPrice: '$200' });
         expect(result).toEqual({ id: 1, flightId: 42, userId: 'user-123' });
+
+        expect(mockedNotificationCreate).toHaveBeenCalledWith({
+            data: {
+                userId: 'user-123',
+                title: 'Booking Confirmed: Gemini Airways GA101',
+                message: 'Successfully booked flight GA101 from A to B. Earned +200 status points.',
+                type: 'POINTS'
+            }
+        });
     });
 });
 
@@ -225,4 +313,421 @@ describe('submitCityGuideReviewAction', () => {
         expect(result).toEqual({ id: 99, userId: 'user-123', cityGuideId: 5, rating: 5, content: 'Great!' });
     });
 });
+
+describe('cancelBookingAction', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockTx.passenger.findMany.mockResolvedValue([]);
+        mockTx.booking.update.mockReset();
+    });
+
+    it('rejects an unauthenticated user', async () => {
+        mockedGetServerSession.mockResolvedValue(null);
+        await expect(cancelBookingAction(1)).rejects.toThrow('Unauthorized');
+    });
+
+    it('rejects a user trying to cancel another user\'s booking', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        mockedBookingFindUnique.mockResolvedValue({ id: 1, userId: 'other-user' });
+
+        await expect(cancelBookingAction(1)).rejects.toThrow('Unauthorized');
+        expect(mockTx.booking.update).not.toHaveBeenCalled();
+    });
+
+    it('allows a user to cancel their own booking', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        mockedBookingFindUnique.mockResolvedValue({ 
+            id: 1, 
+            userId: 'user-123',
+            totalPrice: '$200',
+            flight: { flightNumber: 'GA101', airline: 'Gemini Airways', price: '$200' }
+        });
+        mockTx.booking.update.mockResolvedValue({ id: 1 });
+
+        const result = await cancelBookingAction(1);
+
+        expect(mockedBookingFindUnique).toHaveBeenCalledWith({ 
+            where: { id: 1 },
+            include: { flight: true }
+        });
+        expect(mockTx.booking.update).toHaveBeenCalledWith({
+            where: { id: 1 },
+            data: { status: 'CANCELLED' }
+        });
+        expect(result).toEqual({ id: 1 });
+
+        expect(mockedNotificationCreate).toHaveBeenCalledWith({
+            data: {
+                userId: 'user-123',
+                title: 'Booking Cancelled: Gemini Airways GA101',
+                message: 'Booking for flight GA101 has been cancelled. Deducted -200 status points.',
+                type: 'POINTS'
+            }
+        });
+    });
+
+    it('allows an admin to cancel any booking', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'admin-123', role: 'ADMIN' } });
+        mockedBookingFindUnique.mockResolvedValue({ 
+            id: 1, 
+            userId: 'some-user',
+            totalPrice: '$200',
+            flight: { flightNumber: 'GA101', airline: 'Gemini Airways', price: '$200' }
+        });
+        mockTx.booking.update.mockResolvedValue({ id: 1 });
+
+        const result = await cancelBookingAction(1);
+
+        expect(mockTx.booking.update).toHaveBeenCalledWith({
+            where: { id: 1 },
+            data: { status: 'CANCELLED' }
+        });
+        expect(result).toEqual({ id: 1 });
+
+        expect(mockedNotificationCreate).toHaveBeenCalledWith({
+            data: {
+                userId: 'some-user',
+                title: 'Booking Cancelled: Gemini Airways GA101',
+                message: 'Booking for flight GA101 has been cancelled. Deducted -200 status points.',
+                type: 'POINTS'
+            }
+        });
+    });
+});
+
+describe('changeBookingSeatsAction', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockTx.passenger.findMany.mockReset();
+        mockTx.passenger.update.mockReset();
+    });
+
+    it('rejects an unauthenticated user', async () => {
+        mockedGetServerSession.mockResolvedValue(null);
+        await expect(changeBookingSeatsAction(1, [])).rejects.toThrow('Unauthorized');
+    });
+
+    it('allows seat changes with valid inputs and transaction checks', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        mockedBookingFindUnique.mockResolvedValue({
+            id: 1,
+            userId: 'user-123',
+            flightId: 10,
+            passengers: [
+                { id: 'p-1', firstName: 'Jane', seatNumber: '12A' }
+            ]
+        });
+        
+        mockTx.passenger.findMany.mockResolvedValue([
+            { seatNumber: '11A' },
+            { seatNumber: '11B' }
+        ]);
+
+        await changeBookingSeatsAction(1, [
+            { passengerId: 'p-1', seatNumber: '12B' }
+        ]);
+
+        expect(mockTx.passenger.findMany).toHaveBeenCalled();
+        expect(mockTx.passenger.update).toHaveBeenCalledWith({
+            where: { id: 'p-1' },
+            data: { seatNumber: '12B' }
+        });
+    });
+
+    it('rejects if a seat is already occupied', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        mockedBookingFindUnique.mockResolvedValue({
+            id: 1,
+            userId: 'user-123',
+            flightId: 10,
+            passengers: [
+                { id: 'p-1', firstName: 'Jane', seatNumber: '12A' }
+            ]
+        });
+
+        // 12B is occupied
+        mockTx.passenger.findMany.mockResolvedValue([
+            { seatNumber: '12B' }
+        ]);
+
+        await expect(changeBookingSeatsAction(1, [
+            { passengerId: 'p-1', seatNumber: '12B' }
+        ])).rejects.toThrow('Seat 12B is already occupied by another passenger.');
+
+        expect(mockTx.passenger.update).not.toHaveBeenCalled();
+    });
+});
+
+describe('deleteReviewAction', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it('rejects an unauthenticated user', async () => {
+        mockedGetServerSession.mockResolvedValue(null);
+        await expect(deleteReviewAction('rev-123')).rejects.toThrow('Unauthorized');
+    });
+
+    it('rejects a user trying to delete another user\'s review', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        mockedReviewFindUnique.mockResolvedValue({ id: 'rev-123', userId: 'other-user' });
+
+        await expect(deleteReviewAction('rev-123')).rejects.toThrow('Unauthorized');
+        expect(mockedReviewDelete).not.toHaveBeenCalled();
+    });
+
+    it('allows a user to delete their own review', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        mockedReviewFindUnique.mockResolvedValue({ id: 'rev-123', userId: 'user-123' });
+        mockedReviewDelete.mockResolvedValue({ id: 'rev-123' });
+
+        const result = await deleteReviewAction('rev-123');
+
+        expect(mockedReviewFindUnique).toHaveBeenCalledWith({ where: { id: 'rev-123' } });
+        expect(mockedReviewDelete).toHaveBeenCalledWith({ where: { id: 'rev-123' } });
+        expect(result).toEqual({ id: 'rev-123' });
+    });
+
+    it('allows an admin to delete any review', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'admin-123', role: 'ADMIN' } });
+        mockedReviewFindUnique.mockResolvedValue({ id: 'rev-123', userId: 'some-user' });
+        mockedReviewDelete.mockResolvedValue({ id: 'rev-123' });
+
+        const result = await deleteReviewAction('rev-123');
+
+        expect(mockedReviewDelete).toHaveBeenCalledWith({ where: { id: 'rev-123' } });
+        expect(result).toEqual({ id: 'rev-123' });
+    });
+});
+
+describe('admin flight schedule actions', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        jest.useFakeTimers();
+        jest.setSystemTime(new Date('2026-06-23T12:00:00Z'));
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
+    describe('saveFlightScheduleAction', () => {
+        const sampleScheduleInput = {
+            flightNumber: 'AA101',
+            airline: 'American Airlines',
+            from: 'New York',
+            to: 'London',
+            departureTime: '08:00',
+            returnTime: null,
+            daysOfWeek: [1], // Mondays
+            price: '$850',
+        };
+
+        it('rejects unauthenticated user', async () => {
+            mockedGetServerSession.mockResolvedValue(null);
+            await expect(saveFlightScheduleAction(sampleScheduleInput)).rejects.toThrow('Unauthorized');
+        });
+
+        it('rejects non-admin user', async () => {
+            mockedGetServerSession.mockResolvedValue({ user: { role: 'USER' } });
+            await expect(saveFlightScheduleAction(sampleScheduleInput)).rejects.toThrow('Unauthorized');
+        });
+
+        it('allows admin to create a new flight schedule and generates flights', async () => {
+            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+            mockedFlightScheduleCreate.mockResolvedValue({
+                id: 1,
+                ...sampleScheduleInput,
+            });
+            mockedFlightFindFirst.mockResolvedValue(null); // No existing flight instance
+            mockedFlightCreate.mockResolvedValue({});
+
+            const result = await saveFlightScheduleAction(sampleScheduleInput);
+
+            expect(mockedFlightScheduleCreate).toHaveBeenCalledWith({
+                data: sampleScheduleInput,
+            });
+
+            // For next 30 days starting June 23 (Tuesday), Mondays are on June 29, July 6, 13, 20.
+            // 4 instances should be created.
+            expect(mockedFlightCreate).toHaveBeenCalledTimes(4);
+            expect(mockedFlightCreate).toHaveBeenNthCalledWith(1, {
+                data: {
+                    flightNumber: 'AA101',
+                    airline: 'American Airlines',
+                    from: 'New York',
+                    to: 'London',
+                    departureDate: new Date('2026-06-29T08:00:00Z'),
+                    returnDate: null,
+                    price: '$850',
+                    status: 'ON_TIME',
+                }
+            });
+            expect(result).toHaveProperty('id', 1);
+        });
+
+        it('allows admin to update an existing flight schedule', async () => {
+            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+            const scheduleWithId = { id: 5, ...sampleScheduleInput };
+            mockedFlightScheduleUpdate.mockResolvedValue(scheduleWithId);
+            mockedFlightFindFirst.mockResolvedValue({}); // existing instances, skips creating new ones
+
+            const result = await saveFlightScheduleAction(scheduleWithId);
+
+            expect(mockedFlightScheduleUpdate).toHaveBeenCalledWith({
+                where: { id: 5 },
+                data: sampleScheduleInput,
+            });
+            expect(mockedFlightCreate).not.toHaveBeenCalled();
+            expect(result).toHaveProperty('id', 5);
+        });
+    });
+
+    describe('deleteFlightScheduleAction', () => {
+        it('rejects unauthenticated user', async () => {
+            mockedGetServerSession.mockResolvedValue(null);
+            await expect(deleteFlightScheduleAction(12)).rejects.toThrow('Unauthorized');
+        });
+
+        it('allows admin to delete schedule', async () => {
+            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+            mockedFlightScheduleDelete.mockResolvedValue({});
+
+            await deleteFlightScheduleAction(12);
+
+            expect(mockedFlightScheduleDelete).toHaveBeenCalledWith({
+                where: { id: 12 }
+            });
+        });
+    });
+
+    describe('updateFlightStatusAction', () => {
+        it('rejects unauthenticated user', async () => {
+            mockedGetServerSession.mockResolvedValue(null);
+            await expect(updateFlightStatusAction(99, 'DELAYED')).rejects.toThrow('Unauthorized');
+        });
+
+        it('allows admin to update status and creates flight update notifications for affected users', async () => {
+            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+            mockedFlightUpdate.mockResolvedValue({ 
+                id: 99, 
+                airline: 'Gemini Airways', 
+                flightNumber: 'GA101', 
+                from: 'Seattle', 
+                to: 'Detroit', 
+                status: 'DELAYED' 
+            });
+            mockedBookingFindMany.mockResolvedValue([
+                { userId: 'user-1' },
+                { userId: 'user-2' },
+                { userId: null },
+                { userId: 'user-1' }
+            ]);
+
+            const result = await updateFlightStatusAction(99, 'DELAYED');
+
+            expect(mockedFlightUpdate).toHaveBeenCalledWith({
+                where: { id: 99 },
+                data: { status: 'DELAYED' }
+            });
+            expect(result).toEqual(expect.objectContaining({ id: 99, status: 'DELAYED' }));
+
+            expect(mockedBookingFindMany).toHaveBeenCalledWith({
+                where: { flightId: 99, status: 'CONFIRMED' },
+                select: { userId: true }
+            });
+
+            expect(mockedNotificationCreateMany).toHaveBeenCalledWith({
+                data: [
+                    {
+                        userId: 'user-1',
+                        title: 'Flight Update: Gemini Airways GA101',
+                        message: 'Your upcoming flight GA101 from Seattle to Detroit is now DELAYED.',
+                        type: 'FLIGHT_STATUS'
+                    },
+                    {
+                        userId: 'user-2',
+                        title: 'Flight Update: Gemini Airways GA101',
+                        message: 'Your upcoming flight GA101 from Seattle to Detroit is now DELAYED.',
+                        type: 'FLIGHT_STATUS'
+                    }
+                ]
+            });
+        });
+    });
+
+    describe('user notifications actions', () => {
+        beforeEach(() => jest.clearAllMocks());
+
+        describe('getUserNotificationsAction', () => {
+            it('returns empty array if unauthenticated', async () => {
+                mockedGetServerSession.mockResolvedValue(null);
+                const result = await getUserNotificationsAction();
+                expect(result).toEqual([]);
+            });
+
+            it('returns notifications for logged in user', async () => {
+                mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+                const mockNotifications = [{ id: 'notif-1', title: 'Test Notif' }];
+                mockedNotificationFindMany.mockResolvedValue(mockNotifications);
+
+                const result = await getUserNotificationsAction();
+
+                expect(mockedNotificationFindMany).toHaveBeenCalledWith({
+                    where: { userId: 'user-123' },
+                    orderBy: { createdAt: 'desc' },
+                    take: 50
+                });
+                expect(result).toEqual(mockNotifications);
+            });
+        });
+
+        describe('markNotificationAsReadAction', () => {
+            it('rejects if unauthenticated', async () => {
+                mockedGetServerSession.mockResolvedValue(null);
+                await expect(markNotificationAsReadAction('notif-1')).rejects.toThrow('Unauthorized');
+            });
+
+            it('rejects if user does not own the notification', async () => {
+                mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+                mockedNotificationFindUnique.mockResolvedValue({ id: 'notif-1', userId: 'other-user' });
+
+                await expect(markNotificationAsReadAction('notif-1')).rejects.toThrow('Unauthorized');
+            });
+
+            it('updates notification isRead to true if owned', async () => {
+                mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+                mockedNotificationFindUnique.mockResolvedValue({ id: 'notif-1', userId: 'user-123' });
+                mockedNotificationUpdate.mockResolvedValue({ id: 'notif-1', isRead: true });
+
+                const result = await markNotificationAsReadAction('notif-1');
+
+                expect(mockedNotificationUpdate).toHaveBeenCalledWith({
+                    where: { id: 'notif-1' },
+                    data: { isRead: true }
+                });
+                expect(result).toEqual({ id: 'notif-1', isRead: true });
+            });
+        });
+
+        describe('markAllNotificationsAsReadAction', () => {
+            it('rejects if unauthenticated', async () => {
+                mockedGetServerSession.mockResolvedValue(null);
+                await expect(markAllNotificationsAsReadAction()).rejects.toThrow('Unauthorized');
+            });
+
+            it('marks all unread notifications as read for logged in user', async () => {
+                mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+                mockedNotificationUpdateMany.mockResolvedValue({ count: 5 });
+
+                const result = await markAllNotificationsAsReadAction();
+
+                expect(mockedNotificationUpdateMany).toHaveBeenCalledWith({
+                    where: { userId: 'user-123', isRead: false },
+                    data: { isRead: true }
+                });
+                expect(result).toEqual({ count: 5 });
+            });
+        });
+    });
+});
+
 

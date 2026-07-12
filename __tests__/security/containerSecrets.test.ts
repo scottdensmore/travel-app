@@ -1,0 +1,73 @@
+import fs from 'fs';
+import path from 'path';
+
+const repositoryRoot = path.resolve(__dirname, '../..');
+
+function readRepositoryFile(filePath: string): string {
+    return fs.readFileSync(path.join(repositoryRoot, filePath), 'utf8');
+}
+
+describe('container secret protection', () => {
+    it('excludes local environment files from the Docker build context', () => {
+        const ignoredEntries = readRepositoryFile('.dockerignore')
+            .split(/\r?\n/)
+            .map((entry) => entry.trim());
+
+        expect(ignoredEntries).toEqual(expect.arrayContaining([
+            '.env',
+            '.env.*',
+            '.agents',
+            '.claude',
+            '.codex',
+            '.cursor',
+            '.github',
+        ]));
+    });
+
+    it('fails the image build if standalone output contains an environment file', () => {
+        const dockerfile = readRepositoryFile('Dockerfile');
+        const packageJson = readRepositoryFile('package.json');
+
+        expect(dockerfile).toContain(
+            `RUN test -z "$(find .next/standalone -type f -name '.env*' -print -quit)"`
+        );
+        expect(dockerfile).toContain('ENTRYPOINT ["/app/scripts/container-entrypoint.sh"]');
+        expect(packageJson).toContain('next build && node scripts/sanitize-standalone.mjs');
+    });
+
+    it('injects authentication configuration into the app container at runtime', () => {
+        const composeFile = readRepositoryFile('docker-compose.yml');
+
+        expect(composeFile).toContain('NEXTAUTH_URL: ${NEXTAUTH_URL:?NEXTAUTH_URL is required}');
+        expect(composeFile).toContain('NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required}');
+    });
+
+    it('checks the final container image in CI', () => {
+        const workflow = readRepositoryFile('.github/workflows/ci.yml');
+        const verificationScript = readRepositoryFile('scripts/verify-container-secrets.sh');
+
+        expect(workflow).toContain('.env.secret-scan');
+        expect(workflow).toContain('SECRET_SCAN_SENTINEL="$sentinel"');
+        expect(workflow).toContain('docker build --tag travel-app:ci .');
+        expect(workflow).toContain('travel-app:secret-probe');
+        expect(workflow).toContain('travel-app:env-layer-probe');
+        expect(workflow).toContain('./scripts/verify-container-secrets.sh travel-app:ci');
+        expect(verificationScript).toContain('image inspect');
+        expect(verificationScript).toContain('export --output');
+        expect(verificationScript).toContain('save --output');
+        expect(verificationScript).toContain('scan-image-layers.sh');
+        expect(verificationScript).toContain('SECRET_SCAN_SENTINEL');
+    });
+
+    it('provides safe configuration and secret-rotation guidance', () => {
+        const exampleEnvironment = readRepositoryFile('.env.example');
+        const securityGuide = readRepositoryFile('SECURITY.md');
+
+        expect(exampleEnvironment).toContain('DATABASE_URL=');
+        expect(exampleEnvironment).toContain('NEXTAUTH_URL=');
+        expect(exampleEnvironment).toContain('NEXTAUTH_SECRET=');
+        expect(exampleEnvironment.match(/^NEXTAUTH_SECRET=(.*)$/m)?.[1]).toBe('');
+        expect(securityGuide).toContain('Rotate exposed secrets');
+        expect(securityGuide).toContain('Rebuild and redeploy');
+    });
+});

@@ -2,10 +2,7 @@
 
 import * as React from "react"
 import { Label, Pie, PieChart } from "recharts"
-
-import {
-  CardContent,
-} from "@/components/ui/card"
+import { CardContent } from "@/components/ui/card"
 import {
   ChartConfig,
   ChartContainer,
@@ -15,41 +12,65 @@ import {
 
 export const description = "Status Progress"
 
-const chartData = [
-  { status: "Bronze", points: 300, fill: "var(--color-bronze)" },
-  { status: "Silver", points: 500, fill: "var(--color-silver)" },
-  { status: "Gold", points: 300, fill: "var(--color-gold)" },
-  { status: "Remaining Gold", points: 700, fill: "var(--color-notgold)" },
-  { status: "Remaining Platinum", points: 1000, fill: "var(--color-notplatinum)" },
-]
-
 const chartConfig = {
     bronze: {
         label: "Bronze",
         color: "hsl(38, 43%, 54%)"
     },
     silver: {
-        label: "Silver", // silver color
+        label: "Silver",
         color: "hsl(60, 0%, 50%)"
     },
     gold: {
         label: "Gold",
         color: "hsl(57, 81%, 42%)"
     },
-    notgold: {
-        label: "Remaining Gold",
-        color: "hsl(57, 15%, 85%)"
+    platinum: {
+        label: "Platinum",
+        color: "hsl(197, 37%, 24%)"
     },
-    notplatinum: {
-        label: "Remaining Platinum",
+    remaining: {
+        label: "Remaining",
         color: "hsl(0, 0%, 90%)"
     }
 } satisfies ChartConfig
 
-export default function NextStatusChart() {
-  const totalpoints = React.useMemo(() => {
-    return chartData.reduce((acc, curr) => acc + curr.points, 0)
-  }, [])
+export default function NextStatusChart({ points = 1300 }: { points?: number }) {
+  const { chartData, nextTier, remainingPoints } = React.useMemo(() => {
+    const bronze = Math.min(points, 1000);
+    const silver = Math.min(Math.max(points - 1000, 0), 2000);
+    const gold = Math.min(Math.max(points - 3000, 0), 3000);
+    const platinum = Math.min(Math.max(points - 6000, 0), 4000);
+
+    let nextTier = "Silver";
+    let remainingPoints = 1000 - points;
+    if (points >= 6000) {
+      nextTier = "Platinum";
+      remainingPoints = Math.max(10000 - points, 0);
+    } else if (points >= 3000) {
+      nextTier = "Platinum";
+      remainingPoints = 6000 - points;
+    } else if (points >= 1000) {
+      nextTier = "Gold";
+      remainingPoints = 3000 - points;
+    } else {
+      nextTier = "Silver";
+      remainingPoints = 1000 - points;
+    }
+
+    const data = [
+      { status: "Bronze", points: bronze, fill: "hsl(38, 43%, 54%)" },
+      { status: "Silver", points: silver, fill: "hsl(60, 0%, 50%)" },
+      { status: "Gold", points: gold, fill: "hsl(57, 81%, 42%)" },
+      { status: "Platinum", points: platinum, fill: "hsl(197, 37%, 24%)" },
+    ];
+
+    if (remainingPoints > 0) {
+      data.push({ status: `Remaining to ${nextTier}`, points: remainingPoints, fill: "hsl(0, 0%, 90%)" });
+    }
+
+    return { chartData: data, nextTier, remainingPoints };
+  }, [points]);
 
   return (
    <>
@@ -85,7 +106,7 @@ export default function NextStatusChart() {
                           y={viewBox.cy}
                           className="fill-foreground text-3xl font-bold"
                         >
-                          {totalpoints.toLocaleString()}
+                          {points.toLocaleString()}
                         </tspan>
                         <tspan
                           x={viewBox.cx}
@@ -103,10 +124,11 @@ export default function NextStatusChart() {
           </PieChart>
         </ChartContainer>
       </CardContent>
-        <div>
-          1,700 points until Platinum
+        <div className="text-center font-semibold text-sm text-gray-700 mt-2">
+          {remainingPoints > 0 
+            ? `${remainingPoints.toLocaleString()} points until ${nextTier}`
+            : `Platinum Status Reached!`}
         </div>
- 
       </>
   )
 }
