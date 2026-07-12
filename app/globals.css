@@ -429,6 +429,38 @@ button:active, button[type="submit"]:active {
   color: #fff;
 }
 
+.admin-flights-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.8fr);
+  gap: 2rem;
+}
+
+.admin-form-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.admin-form-grid--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-form-grid--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 900px) {
+  .admin-flights-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .admin-form-grid--two,
+  .admin-form-grid--three {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .admin-card label {
   color: #a78bfa;
   font-weight: 600;

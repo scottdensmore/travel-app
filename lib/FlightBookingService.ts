@@ -1,4 +1,6 @@
 import { prisma } from '@/lib/prisma';
+import { assertSeatAvailableForCabin } from '@/lib/seatLayout';
+import { lockFlightForUpdate } from '@/lib/flightLock';
 
 export interface PassengerInput {
   firstName: string;
@@ -27,8 +29,23 @@ export default class FlightBookingService {
         const savedBooking = await prisma.$transaction(async (tx) => {
             // If passengers list is provided, validate seat numbers
             if (passengers && passengers.length > 0) {
+                await lockFlightForUpdate(tx, flightId);
+                const flight = await tx.flight.findUnique({ where: { id: flightId } });
+                if (!flight) throw new Error("Flight not found");
+
                 // Check if any seat is already booked on this flight
                 const requestedSeats = passengers.map(p => p.seatNumber);
+                if (new Set(requestedSeats).size !== requestedSeats.length) {
+                    throw new Error("Duplicate seats selected in request.");
+                }
+
+                for (const passenger of passengers) {
+                    assertSeatAvailableForCabin(
+                        passenger.seatNumber,
+                        passenger.cabinClass,
+                        flight
+                    );
+                }
                 
                 const existingBookings = await tx.booking.findMany({
                     where: { flightId, status: { not: "CANCELLED" } },

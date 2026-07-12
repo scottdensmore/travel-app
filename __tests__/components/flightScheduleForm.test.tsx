@@ -154,6 +154,7 @@ describe('FlightScheduleForm', () => {
 
         await waitFor(() => {
             expect(mockSaveFlightScheduleAction).toHaveBeenCalledWith({
+                id: undefined,
                 flightNumber: 'AA123',
                 airline: 'American Airlines',
                 from: 'New York',
@@ -162,6 +163,11 @@ describe('FlightScheduleForm', () => {
                 returnTime: null,
                 daysOfWeek: [1, 3],
                 price: '$850', // automatically formats with $ if missing
+                firstClassRows: 3,
+                businessRows: 3,
+                premiumEconomyRows: 4,
+                economyRows: 20,
+                seatPattern: 'ABC-DEF',
             });
             expect(screen.getByText(/New schedule created successfully!/i)).toBeInTheDocument();
             expect(mockRefresh).toHaveBeenCalled();
@@ -212,6 +218,11 @@ describe('FlightScheduleForm', () => {
                 returnTime: '23:15',
                 daysOfWeek: [6],
                 price: '$850',
+                firstClassRows: 3,
+                businessRows: 3,
+                premiumEconomyRows: 4,
+                economyRows: 20,
+                seatPattern: 'ABC-DEF',
             });
             expect(screen.getByText(/Schedule updated successfully!/i)).toBeInTheDocument();
             expect(mockRefresh).toHaveBeenCalled();
@@ -239,5 +250,77 @@ describe('FlightScheduleForm', () => {
         await waitFor(() => {
             expect(screen.getByText(/Server database connection failed/i)).toBeInTheDocument();
         });
+    });
+
+    it('allows toggling custom seating configuration panel and submits default layout parameters when checked', async () => {
+        mockSaveFlightScheduleAction.mockResolvedValue({ id: 100 });
+
+        render(<FlightScheduleForm />);
+
+        fireEvent.change(screen.getByLabelText(/Flight Number \*/i), { target: { value: 'AA123' } });
+        fireEvent.change(screen.getByLabelText(/Airline Name \*/i), { target: { value: 'American Airlines' } });
+        fireEvent.change(screen.getByLabelText(/From \(Origin\) \*/i), { target: { value: 'New York' } });
+        fireEvent.change(screen.getByLabelText(/To \(Destination\) \*/i), { target: { value: 'London' } });
+        fireEvent.change(screen.getByLabelText(/Departure \(HH:MM\) \*/i), { target: { value: '08:00' } });
+        fireEvent.change(screen.getByLabelText(/Price \(\$\) \*/i), { target: { value: '850' } });
+        fireEvent.click(screen.getByLabelText('Mon'));
+
+        // Toggle custom seating panel
+        const toggleButton = screen.getByRole('button', { name: /Customize Seating Configuration/i });
+        fireEvent.click(toggleButton);
+
+        // Check if layout inputs are now visible
+        expect(screen.getByLabelText(/First Class Rows/i)).toHaveValue(3);
+        expect(screen.getByLabelText(/Economy Class Rows/i)).toHaveValue(20);
+        expect(screen.getByLabelText(/Seat Pattern/i)).toHaveValue('ABC-DEF');
+
+        // Modify a seating configuration field
+        fireEvent.change(screen.getByLabelText(/First Class Rows/i), { target: { value: '3' } });
+        fireEvent.change(screen.getByLabelText(/Seat Pattern/i), { target: { value: 'AC-DF' } });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create Schedule' }));
+
+        await waitFor(() => {
+            expect(mockSaveFlightScheduleAction).toHaveBeenCalledWith({
+                id: undefined,
+                flightNumber: 'AA123',
+                airline: 'American Airlines',
+                from: 'New York',
+                to: 'London',
+                departureTime: '08:00',
+                returnTime: null,
+                daysOfWeek: [1],
+                price: '$850',
+                firstClassRows: 3,
+                businessRows: 3,
+                premiumEconomyRows: 4,
+                economyRows: 20,
+                seatPattern: 'AC-DF'
+            });
+        });
+    });
+
+    it('shows validation error if seat pattern format is invalid', async () => {
+        render(<FlightScheduleForm />);
+
+        fireEvent.change(screen.getByLabelText(/Flight Number \*/i), { target: { value: 'AA123' } });
+        fireEvent.change(screen.getByLabelText(/Airline Name \*/i), { target: { value: 'American Airlines' } });
+        fireEvent.change(screen.getByLabelText(/From \(Origin\) \*/i), { target: { value: 'New York' } });
+        fireEvent.change(screen.getByLabelText(/To \(Destination\) \*/i), { target: { value: 'London' } });
+        fireEvent.change(screen.getByLabelText(/Departure \(HH:MM\) \*/i), { target: { value: '08:00' } });
+        fireEvent.change(screen.getByLabelText(/Price \(\$\) \*/i), { target: { value: '850' } });
+        fireEvent.click(screen.getByLabelText('Mon'));
+
+        // Toggle and enter invalid pattern
+        const toggleButton = screen.getByRole('button', { name: /Customize Seating Configuration/i });
+        fireEvent.click(toggleButton);
+        fireEvent.change(screen.getByLabelText(/Seat Pattern/i), { target: { value: '123-ABC' } });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create Schedule' }));
+
+        await waitFor(() => {
+            expect(screen.getByText(/Seat pattern must only contain uppercase letters and/i)).toBeInTheDocument();
+        });
+        expect(mockSaveFlightScheduleAction).not.toHaveBeenCalled();
     });
 });

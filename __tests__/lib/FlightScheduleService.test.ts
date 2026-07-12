@@ -45,7 +45,12 @@ describe('FlightScheduleService dynamic generator', () => {
                 departureTime: '19:30',
                 returnTime: null, // one-way
                 daysOfWeek: [2, 4, 6],
-                price: '$850'
+                price: '$850',
+                firstClassRows: 1,
+                businessRows: 2,
+                premiumEconomyRows: 3,
+                economyRows: 18,
+                seatPattern: 'AC-DF'
             }
         ];
 
@@ -83,6 +88,11 @@ describe('FlightScheduleService dynamic generator', () => {
                 departureDate: new Date('2026-06-25T19:30:00Z'),
                 returnDate: null,
                 price: '$850',
+                firstClassRows: 1,
+                businessRows: 2,
+                premiumEconomyRows: 3,
+                economyRows: 18,
+                seatPattern: 'AC-DF',
                 status: 'ON_TIME'
             }
         });
@@ -160,8 +170,13 @@ describe('FlightScheduleService dynamic generator', () => {
             to: 'London, UK',
             departureDate: new Date('2026-06-25T19:30:00Z'),
             returnDate: null,
-            price: '$850',
-            status: 'ON_TIME'
+                price: '$850',
+                status: 'ON_TIME',
+                firstClassRows: 1,
+                businessRows: 2,
+                premiumEconomyRows: 3,
+                economyRows: 18,
+                seatPattern: 'AC-DF'
         };
         mockedFlightFindFirst.mockResolvedValueOnce(concurrentFlight);
 

@@ -3,6 +3,7 @@
 import React, { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { saveFlightScheduleAction } from '@/app/actions';
+import { validateSeatingLayout } from '@/lib/seatLayout';
 
 interface FlightSchedule {
     id?: number;
@@ -14,6 +15,11 @@ interface FlightSchedule {
     returnTime: string | null;
     daysOfWeek: number[];
     price: string;
+    firstClassRows?: number | null;
+    businessRows?: number | null;
+    premiumEconomyRows?: number | null;
+    economyRows?: number | null;
+    seatPattern?: string | null;
 }
 
 export default function FlightScheduleForm({ initialSchedule }: { initialSchedule?: FlightSchedule }) {
@@ -28,6 +34,13 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
     const [returnTime, setReturnTime] = useState(initialSchedule?.returnTime ?? '');
     const [price, setPrice] = useState(initialSchedule?.price ?? '');
     const [daysOfWeek, setDaysOfWeek] = useState<number[]>(initialSchedule?.daysOfWeek ?? []);
+
+    const [firstClassRows, setFirstClassRows] = useState(initialSchedule?.firstClassRows?.toString() ?? '3');
+    const [businessRows, setBusinessRows] = useState(initialSchedule?.businessRows?.toString() ?? '3');
+    const [premiumEconomyRows, setPremiumEconomyRows] = useState(initialSchedule?.premiumEconomyRows?.toString() ?? '4');
+    const [economyRows, setEconomyRows] = useState(initialSchedule?.economyRows?.toString() ?? '20');
+    const [seatPattern, setSeatPattern] = useState(initialSchedule?.seatPattern ?? 'ABC-DEF');
+    const [showSeatingConfig, setShowSeatingConfig] = useState(false);
     
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
@@ -77,6 +90,18 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
             return;
         }
 
+        const fRows = firstClassRows === '' ? 3 : Number(firstClassRows);
+        const bRows = businessRows === '' ? 3 : Number(businessRows);
+        const peRows = premiumEconomyRows === '' ? 4 : Number(premiumEconomyRows);
+        const eRows = economyRows === '' ? 20 : Number(economyRows);
+        let normalizedSeatPattern: string;
+        try {
+            normalizedSeatPattern = validateSeatingLayout(fRows, bRows, peRows, eRows, seatPattern);
+        } catch (validationError) {
+            setError(validationError instanceof Error ? validationError.message : 'Invalid seating layout.');
+            return;
+        }
+
         let formattedPrice = price;
         if (!price.startsWith('$')) {
             formattedPrice = `$${price}`;
@@ -93,7 +118,12 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                     departureTime,
                     returnTime: returnTime || null,
                     daysOfWeek,
-                    price: formattedPrice
+                    price: formattedPrice,
+                    firstClassRows: fRows,
+                    businessRows: bRows,
+                    premiumEconomyRows: peRows,
+                    economyRows: eRows,
+                    seatPattern: normalizedSeatPattern
                 });
 
                 setSuccess(initialSchedule ? 'Schedule updated successfully!' : 'New schedule created successfully!');
@@ -106,6 +136,12 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                     setReturnTime('');
                     setPrice('');
                     setDaysOfWeek([]);
+                    setFirstClassRows('3');
+                    setBusinessRows('3');
+                    setPremiumEconomyRows('4');
+                    setEconomyRows('20');
+                    setSeatPattern('ABC-DEF');
+                    setShowSeatingConfig(false);
                 }
                 router.refresh();
             } catch (err) {
@@ -116,24 +152,24 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
     };
 
     return (
-        <form onSubmit={handleSubmit} noValidate className="admin-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <form onSubmit={handleSubmit} noValidate className="admin-card" aria-describedby={error ? 'schedule-feedback' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <h2 style={{ fontSize: '1.5rem', margin: 0, color: '#c084fc', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '8px' }}>
                 {initialSchedule ? 'Edit Flight Schedule' : 'Create Flight Schedule'}
             </h2>
 
             {error && (
-                <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#f87171', padding: '12px', borderRadius: '8px', fontSize: '0.9rem' }}>
+                <div id="schedule-feedback" role="alert" style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#f87171', padding: '12px', borderRadius: '8px', fontSize: '0.9rem' }}>
                     ⚠️ {error}
                 </div>
             )}
 
             {success && (
-                <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#34d399', padding: '12px', borderRadius: '8px', fontSize: '0.9rem' }}>
+                <div role="status" style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#34d399', padding: '12px', borderRadius: '8px', fontSize: '0.9rem' }}>
                     ✅ {success}
                 </div>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div className="admin-form-grid admin-form-grid--two">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <label htmlFor="flightNumber" style={{ fontSize: '0.85rem', color: '#a78bfa', fontWeight: 'bold' }}>Flight Number *</label>
                     <input 
@@ -160,7 +196,7 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                 </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div className="admin-form-grid admin-form-grid--two">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <label htmlFor="from" style={{ fontSize: '0.85rem', color: '#a78bfa', fontWeight: 'bold' }}>From (Origin) *</label>
                     <input 
@@ -187,7 +223,7 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                 </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+            <div className="admin-form-grid admin-form-grid--three">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <label htmlFor="departureTime" style={{ fontSize: '0.85rem', color: '#a78bfa', fontWeight: 'bold' }}>Departure (HH:MM) *</label>
                     <input 
@@ -244,6 +280,104 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                         );
                     })}
                 </div>
+            </div>
+
+            <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '12px' }}>
+                <button
+                    type="button"
+                    onClick={() => setShowSeatingConfig(!showSeatingConfig)}
+                    aria-expanded={showSeatingConfig}
+                    aria-controls="schedule-seating-config"
+                    style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#c084fc',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: 0,
+                        fontSize: '0.9rem',
+                        fontWeight: '600'
+                    }}
+                >
+                    {showSeatingConfig ? '▼ Hide Seating Configuration' : '▶ Customize Seating Configuration (Optional)'}
+                </button>
+
+                {showSeatingConfig && (
+                    <div id="schedule-seating-config" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem', padding: '12px', borderRadius: '8px', backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <div className="admin-form-grid admin-form-grid--two">
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <label htmlFor="firstClassRows" style={{ fontSize: '0.8rem', color: '#a78bfa' }}>First Class Rows</label>
+                                <input
+                                    id="firstClassRows"
+                                    type="number"
+                                    min="0"
+                                    value={firstClassRows}
+                                    onChange={e => setFirstClassRows(e.target.value)}
+                                    placeholder="e.g. 2"
+                                    disabled={isPending}
+                                    style={{ padding: '6px 10px', fontSize: '0.85rem' }}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <label htmlFor="businessRows" style={{ fontSize: '0.8rem', color: '#a78bfa' }}>Business Class Rows</label>
+                                <input
+                                    id="businessRows"
+                                    type="number"
+                                    min="0"
+                                    value={businessRows}
+                                    onChange={e => setBusinessRows(e.target.value)}
+                                    placeholder="e.g. 4"
+                                    disabled={isPending}
+                                    style={{ padding: '6px 10px', fontSize: '0.85rem' }}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="admin-form-grid admin-form-grid--two">
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <label htmlFor="premiumEconomyRows" style={{ fontSize: '0.8rem', color: '#a78bfa' }}>Premium Economy Rows</label>
+                                <input
+                                    id="premiumEconomyRows"
+                                    type="number"
+                                    min="0"
+                                    value={premiumEconomyRows}
+                                    onChange={e => setPremiumEconomyRows(e.target.value)}
+                                    placeholder="e.g. 4"
+                                    disabled={isPending}
+                                    style={{ padding: '6px 10px', fontSize: '0.85rem' }}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <label htmlFor="economyRows" style={{ fontSize: '0.8rem', color: '#a78bfa' }}>Economy Class Rows</label>
+                                <input
+                                    id="economyRows"
+                                    type="number"
+                                    min="0"
+                                    value={economyRows}
+                                    onChange={e => setEconomyRows(e.target.value)}
+                                    placeholder="e.g. 20"
+                                    disabled={isPending}
+                                    style={{ padding: '6px 10px', fontSize: '0.85rem' }}
+                                />
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <label htmlFor="seatPattern" style={{ fontSize: '0.8rem', color: '#a78bfa' }}>Seat Pattern (use &apos;-&apos; for aisle)</label>
+                            <input
+                                id="seatPattern"
+                                type="text"
+                                value={seatPattern}
+                                onChange={e => setSeatPattern(e.target.value.toUpperCase())}
+                                placeholder="e.g. ABC-DEF"
+                                disabled={isPending}
+                                style={{ padding: '6px 10px', fontSize: '0.85rem' }}
+                            />
+                        </div>
+                    </div>
+                )}
             </div>
 
             <button 

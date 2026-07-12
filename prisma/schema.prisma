@@ -126,6 +126,12 @@ model Flight {
   price         String
   status        String    @default("ON_TIME")
 
+  firstClassRows     Int?
+  businessRows       Int?
+  premiumEconomyRows Int?
+  economyRows        Int?
+  seatPattern        String?
+
   bookings Booking[]
   passengers Passenger[]
 
@@ -167,6 +173,12 @@ model FlightSchedule {
   daysOfWeek    Int[]
   price         String
   isActive      Boolean  @default(true)
+
+  firstClassRows     Int?
+  businessRows       Int?
+  premiumEconomyRows Int?
+  economyRows        Int?
+  seatPattern        String?
 }
 
 model Notification {
