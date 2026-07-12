@@ -5,6 +5,9 @@ const repositoryRoot = path.resolve(__dirname, '../..');
 const packageJson = JSON.parse(
     fs.readFileSync(path.join(repositoryRoot, 'package.json'), 'utf8')
 );
+const packageLock = JSON.parse(
+    fs.readFileSync(path.join(repositoryRoot, 'package-lock.json'), 'utf8')
+);
 
 function dependencyMajor(name: string): number {
     const version = packageJson.dependencies[name] ?? packageJson.devDependencies[name];
@@ -15,6 +18,22 @@ function dependencyMajor(name: string): number {
     }
 
     return major;
+}
+
+function versionAtLeast(version: string, minimum: string): boolean {
+    const stableVersion = /^\d+\.\d+\.\d+$/;
+    if (!stableVersion.test(version) || !stableVersion.test(minimum)) return false;
+
+    const actualParts = version.split('.').map(Number);
+    const minimumParts = minimum.split('.').map(Number);
+
+    for (let index = 0; index < Math.max(actualParts.length, minimumParts.length); index++) {
+        const actual = actualParts[index] ?? 0;
+        const required = minimumParts[index] ?? 0;
+        if (actual !== required) return actual > required;
+    }
+
+    return true;
 }
 
 describe('production dependency policy', () => {
@@ -58,6 +77,22 @@ describe('production dependency policy', () => {
             expect(packageJson.dependencies).not.toHaveProperty(dependency);
             expect(packageJson.devDependencies).toHaveProperty(dependency);
         }
+    });
+
+    it('locks a patched form-data release used by test tooling', () => {
+        const version = packageLock.packages?.['node_modules/form-data']?.version;
+
+        expect(typeof version).toBe('string');
+        expect(versionAtLeast(version, '4.0.6')).toBe(true);
+    });
+
+    it('fails closed when comparing malformed or prerelease versions', () => {
+        expect(versionAtLeast('5.invalid', '4.0.6')).toBe(false);
+        expect(versionAtLeast('4.1.bad', '4.0.6')).toBe(false);
+        expect(versionAtLeast('4.0.7-beta.1', '4.0.6')).toBe(false);
+        expect(versionAtLeast('4.0.5', '4.0.6')).toBe(false);
+        expect(versionAtLeast('4.0.6', '4.0.6')).toBe(true);
+        expect(versionAtLeast('4.0.7', '4.0.6')).toBe(true);
     });
 
     it('requires a high-severity production audit in CI', () => {
