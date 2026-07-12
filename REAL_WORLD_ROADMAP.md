@@ -497,7 +497,7 @@ Add one row when work starts, becomes blocked, or completes.
 | Date | Item | Status | PR | Notes |
 | --- | --- | --- | --- | --- |
 | 2026-07-11 | Roadmap baseline | Complete | — | Browser, source, Jest, Playwright, build, lint, and dependency audit reviewed. |
-| 2026-07-11 | P0.1 | Complete | TBD | Excluded local secrets, added fail-closed runtime validation, sanitized standalone builds, scanned final image content and layers, and documented rotation. |
+| 2026-07-11 | P0.1 | Complete | #34 | Excluded local secrets, added fail-closed runtime validation, sanitized standalone builds, scanned final image content and layers, and documented rotation. |
 
 ## Recommended first delivery sequence
 
