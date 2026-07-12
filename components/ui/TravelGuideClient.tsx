@@ -1,10 +1,13 @@
 "use client"
-import React, { useState, Suspense, useTransition } from 'react';
+import React, { useState, Suspense, useTransition, useSyncExternalStore } from 'react';
 import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
 import { toggleFavoriteCityGuideAction, submitCityGuideReviewAction } from '@/app/actions';
 import { useRouter } from 'next/navigation';
 
 const DEFAULT_CITY_NAME = 'Detroit';
+const subscribeToHydration = () => () => undefined;
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
 
 interface Review {
     id: string;
@@ -30,6 +33,11 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
     const [isPending, startTransition] = useTransition();
     const [reviewContent, setReviewContent] = useState('');
     const [reviewRating, setReviewRating] = useState(5);
+    const isHydrated = useSyncExternalStore(
+        subscribeToHydration,
+        getClientSnapshot,
+        getServerSnapshot
+    );
     const router = useRouter();
 
     const handleMarkerClick = (cityName: string) => {
@@ -74,26 +82,31 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
     return (
         <div className="guide page-container">
             <div className="map">
-                <Suspense fallback={<div>Loading Map...</div>}>
-                    <ComposableMap projection="geoEqualEarth" projectionConfig={{ scale: 600, center: [-70, 28] }} style={{ maxHeight: "1400" }} preserveAspectRatio="none" viewBox="0 0 800 500">
-                        <Geographies geography="/map.json">
-                            {({ geographies }: { geographies: Array<{ rsmKey: string }> }) => geographies.map((geo) => (
-                                <Geography key={geo.rsmKey} geography={geo} fill="#444" stroke="#1F2328" />
+                {isHydrated ? (
+                    <Suspense fallback={<div>Loading Map...</div>}>
+                        <ComposableMap projection="geoEqualEarth" projectionConfig={{ scale: 600, center: [-70, 28] }} style={{ maxHeight: "1400" }} preserveAspectRatio="none" viewBox="0 0 800 500">
+                            <Geographies geography="/map.json">
+                                {({ geographies }: { geographies: Array<{ rsmKey: string }> }) => geographies.map((geo) => (
+                                    <Geography key={geo.rsmKey} geography={geo} fill="#444" stroke="#1F2328" />
+                                ))}
+                            </Geographies>
+                            {cities.map((city) => (
+                                <Marker
+                                    key={city.id}
+                                    data-city={city.city}
+                                    coordinates={[city.latlong[1], city.latlong[0]]}
+                                    onClick={() => handleMarkerClick(city.city)}
+                                    style={{ cursor: 'pointer' }}
+                                >
+                                    <circle r={5} fill="#4EA0E9" style={{ cursor: 'pointer' }} />
+                                </Marker>
                             ))}
-                        </Geographies>
-                        {cities.map((city) => (
-                            <Marker
-                                key={city.id}
-                                coordinates={[city.latlong[1], city.latlong[0]]}
-                                onClick={() => handleMarkerClick(city.city)}
-                                style={{ cursor: 'pointer' }}
-                            >
-                                <circle r={5} fill="#4EA0E9" style={{ cursor: 'pointer' }} />
-                            </Marker>
-                        ))}
 
-                    </ComposableMap>
-                </Suspense>
+                        </ComposableMap>
+                    </Suspense>
+                ) : (
+                    <div>Loading Map...</div>
+                )}
             </div>
 
             <div className="sticky-sidebar">

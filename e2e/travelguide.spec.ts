@@ -16,8 +16,20 @@ test.describe('Travel Guide Journey', () => {
   });
 
   test('User can select a city, write a review, and toggle favorite', async ({ page }) => {
+    const renderingErrors: string[] = [];
+    page.on('console', message => {
+      if (message.type() === 'error') renderingErrors.push(message.text());
+    });
+    page.on('pageerror', error => renderingErrors.push(error.message));
+
     // Go to travel guide page
     await page.goto('/travelguide');
+
+    // Exercise the real SVG map produced by react-simple-maps and D3.
+    const newYorkMarker = page.locator('.rsm-marker[data-city="New York"]');
+    await expect(newYorkMarker).toBeVisible();
+    await newYorkMarker.click();
+    await expect(page.locator('.guide-extra.highlight h3')).toContainText('New York');
 
     // Click on "Detroit, USA" in the sidebar list to make it active
     const cityListItem = page.locator('li h3:has-text("Detroit")').first();
@@ -46,5 +58,7 @@ test.describe('Travel Guide Journey', () => {
     // Verify button text changes to Unfavorite
     const unfavoriteBtn = activeSidebar.locator('button:has-text("Unfavorite")');
     await expect(unfavoriteBtn).toBeVisible();
+
+    expect(renderingErrors).toEqual([]);
   });
 });

@@ -27,7 +27,7 @@ Baseline recorded on 2026-07-11:
 - [x] Production build and lint complete successfully.
 - [ ] Remove seven `next/image` lint warnings.
 - [ ] Remove React `act(...)` warnings and debug output from the Jest run.
-- [ ] Resolve the production dependency audit: 13 findings, including 8 high
+- [x] Resolve the production dependency audit: 13 findings, including 8 high
   severity findings.
 
 Observed product gaps:
@@ -68,13 +68,13 @@ Acceptance criteria:
 
 ### P0.2 Remediate vulnerable dependencies
 
-- [ ] Upgrade Next.js and its React dependencies using the official migration
+- [x] Upgrade Next.js and its React dependencies using the official migration
   path.
-- [ ] Upgrade or replace the vulnerable NextAuth/Auth dependency chain.
-- [ ] Upgrade or replace the vulnerable `react-simple-maps`/D3 chain.
-- [ ] Resolve remaining production audit findings without using an unreviewed
+- [x] Upgrade or replace the vulnerable NextAuth/Auth dependency chain.
+- [x] Upgrade or replace the vulnerable `react-simple-maps`/D3 chain.
+- [x] Resolve remaining production audit findings without using an unreviewed
   forced downgrade or breaking change.
-- [ ] Add dependency auditing to CI.
+- [x] Add dependency auditing to CI.
 
 Acceptance criteria:
 
@@ -498,6 +498,7 @@ Add one row when work starts, becomes blocked, or completes.
 | --- | --- | --- | --- | --- |
 | 2026-07-11 | Roadmap baseline | Complete | — | Browser, source, Jest, Playwright, build, lint, and dependency audit reviewed. |
 | 2026-07-11 | P0.1 | Complete | #34 | Excluded local secrets, added fail-closed runtime validation, sanitized standalone builds, scanned final image content and layers, and documented rotation. |
+| 2026-07-12 | P0.2 | Complete | #35 | Upgraded Next.js, Auth, D3, Node, and ESLint; cleared the production audit; and added CI enforcement. |
 
 ## Recommended first delivery sequence
 
