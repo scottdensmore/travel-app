@@ -86,6 +86,18 @@ describe('production dependency policy', () => {
         expect(versionAtLeast(version, '4.0.6')).toBe(true);
     });
 
+    it('declares and locks a patched Babel core release', () => {
+        const declaredVersion = packageJson.devDependencies?.['@babel/core']?.match(
+            /\d+\.\d+\.\d+/
+        )?.[0];
+        const lockedVersion = packageLock.packages?.['node_modules/@babel/core']?.version;
+
+        expect(typeof declaredVersion).toBe('string');
+        expect(typeof lockedVersion).toBe('string');
+        expect(versionAtLeast(declaredVersion, '7.29.6')).toBe(true);
+        expect(versionAtLeast(lockedVersion, '7.29.6')).toBe(true);
+    });
+
     it('fails closed when comparing malformed or prerelease versions', () => {
         expect(versionAtLeast('5.invalid', '4.0.6')).toBe(false);
         expect(versionAtLeast('4.1.bad', '4.0.6')).toBe(false);
