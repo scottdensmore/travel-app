@@ -498,7 +498,7 @@ Add one row when work starts, becomes blocked, or completes.
 | --- | --- | --- | --- | --- |
 | 2026-07-11 | Roadmap baseline | Complete | — | Browser, source, Jest, Playwright, build, lint, and dependency audit reviewed. |
 | 2026-07-11 | P0.1 | Complete | #34 | Excluded local secrets, added fail-closed runtime validation, sanitized standalone builds, scanned final image content and layers, and documented rotation. |
-| 2026-07-12 | P0.2 | Complete | TBD | Upgraded Next.js, Auth, D3, Node, and ESLint; cleared the production audit; and added CI enforcement. |
+| 2026-07-12 | P0.2 | Complete | #35 | Upgraded Next.js, Auth, D3, Node, and ESLint; cleared the production audit; and added CI enforcement. |
 
 ## Recommended first delivery sequence
 
