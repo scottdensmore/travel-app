@@ -154,6 +154,7 @@ describe('FlightScheduleForm', () => {
 
         await waitFor(() => {
             expect(mockSaveFlightScheduleAction).toHaveBeenCalledWith({
+                id: undefined,
                 flightNumber: 'AA123',
                 airline: 'American Airlines',
                 from: 'New York',
@@ -162,8 +163,8 @@ describe('FlightScheduleForm', () => {
                 returnTime: null,
                 daysOfWeek: [1, 3],
                 price: '$850', // automatically formats with $ if missing
-                firstClassRows: 2,
-                businessRows: 4,
+                firstClassRows: 3,
+                businessRows: 3,
                 premiumEconomyRows: 4,
                 economyRows: 20,
                 seatPattern: 'ABC-DEF',
@@ -217,8 +218,8 @@ describe('FlightScheduleForm', () => {
                 returnTime: '23:15',
                 daysOfWeek: [6],
                 price: '$850',
-                firstClassRows: 2,
-                businessRows: 4,
+                firstClassRows: 3,
+                businessRows: 3,
                 premiumEconomyRows: 4,
                 economyRows: 20,
                 seatPattern: 'ABC-DEF',
@@ -269,7 +270,7 @@ describe('FlightScheduleForm', () => {
         fireEvent.click(toggleButton);
 
         // Check if layout inputs are now visible
-        expect(screen.getByLabelText(/First Class Rows/i)).toHaveValue(2);
+        expect(screen.getByLabelText(/First Class Rows/i)).toHaveValue(3);
         expect(screen.getByLabelText(/Economy Class Rows/i)).toHaveValue(20);
         expect(screen.getByLabelText(/Seat Pattern/i)).toHaveValue('ABC-DEF');
 
@@ -281,6 +282,7 @@ describe('FlightScheduleForm', () => {
 
         await waitFor(() => {
             expect(mockSaveFlightScheduleAction).toHaveBeenCalledWith({
+                id: undefined,
                 flightNumber: 'AA123',
                 airline: 'American Airlines',
                 from: 'New York',
@@ -290,7 +292,7 @@ describe('FlightScheduleForm', () => {
                 daysOfWeek: [1],
                 price: '$850',
                 firstClassRows: 3,
-                businessRows: 4,
+                businessRows: 3,
                 premiumEconomyRows: 4,
                 economyRows: 20,
                 seatPattern: 'AC-DF'

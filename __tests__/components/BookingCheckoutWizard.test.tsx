@@ -76,6 +76,18 @@ describe('BookingCheckoutWizard', () => {
         expect(screen.getByText(/Please fill out all details for Passenger 1/i)).toBeInTheDocument();
     });
 
+    it('defaults to an available cabin and hides cabins with zero rows', () => {
+        render(<BookingCheckoutWizard flight={{
+            ...sampleFlight,
+            economyRows: 0,
+            premiumEconomyRows: 2
+        }} occupiedSeats={[]} />);
+
+        const cabinSelect = screen.getAllByRole('combobox')[1];
+        expect(cabinSelect).toHaveValue('PREMIUM_ECONOMY');
+        expect(screen.queryByRole('option', { name: 'Economy' })).not.toBeInTheDocument();
+    });
+
     it('transitions to Step 2 (Seats) and lets passengers select seats, respecting occupied seats', async () => {
         const { container } = render(<BookingCheckoutWizard flight={sampleFlight} occupiedSeats={['4B']} />);
 
@@ -233,8 +245,11 @@ describe('BookingCheckoutWizard', () => {
             price: '$100'
         };
 
-        const setupStep2WithTwoPassengers = (occupied: string[] = []) => {
-            const { container } = render(<BookingCheckoutWizard flight={twoPassengersFlight} occupiedSeats={occupied} />);
+        const setupStep2WithTwoPassengers = (
+            occupied: string[] = [],
+            flight: React.ComponentProps<typeof BookingCheckoutWizard>['flight'] = twoPassengersFlight
+        ) => {
+            const { container } = render(<BookingCheckoutWizard flight={flight} occupiedSeats={occupied} />);
             
             // Passenger 1 details
             fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Alice' } });
@@ -289,6 +304,19 @@ describe('BookingCheckoutWizard', () => {
             const passengerCards = screen.getAllByText(/Class:/);
             expect(passengerCards[0].textContent).toContain('Seat: 11A');
             expect(passengerCards[1].textContent).toContain('Seat: 11B');
+        });
+
+        it('auto-assigns only seats present in a custom layout', () => {
+            setupStep2WithTwoPassengers([], {
+                ...twoPassengersFlight,
+                seatPattern: 'AC-DF'
+            });
+
+            fireEvent.click(screen.getByText(/Auto-Assign Adjacent Seats/i));
+
+            const passengerCards = screen.getAllByText(/Class:/);
+            expect(passengerCards[0].textContent).toContain('Seat: 11A');
+            expect(passengerCards[1].textContent).toContain('Seat: 11C');
         });
 
         it('auto-allocates adjacent seats on map click when checked', () => {

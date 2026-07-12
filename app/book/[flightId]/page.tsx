@@ -9,9 +9,9 @@ import BookingCheckoutWizard from '@/components/ui/BookingCheckoutWizard';
 export const dynamic = 'force-dynamic';
 
 interface PageProps {
-    params: {
+    params: Promise<{
         flightId: string;
-    };
+    }>;
 }
 
 export default async function BookingCheckoutPage({ params }: PageProps) {
@@ -20,7 +20,8 @@ export default async function BookingCheckoutPage({ params }: PageProps) {
         redirect('/login');
     }
 
-    const flightId = parseInt(params.flightId, 10);
+    const { flightId: flightIdParam } = await params;
+    const flightId = parseInt(flightIdParam, 10);
     if (isNaN(flightId)) {
         notFound();
     }

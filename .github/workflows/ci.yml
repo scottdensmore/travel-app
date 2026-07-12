@@ -11,18 +11,21 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/travel_app
-      NEXTAUTH_SECRET: supersecretjwtpassphrase12345
+      NEXTAUTH_SECRET: ci-only-nextauth-secret-at-least-32-characters
       NEXTAUTH_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Start PostgreSQL database
         run: |
@@ -54,6 +57,48 @@ jobs:
 
       - name: Run Playwright E2E tests
         run: npx playwright test
+
+      - name: Build and inspect production container
+        run: |
+          sentinel="travel-app-secret-scan-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          printf 'NEXTAUTH_SECRET=%s\n' "$sentinel" > .env.secret-scan
+          docker build --tag travel-app:ci .
+          SECRET_SCAN_SENTINEL="$sentinel" ./scripts/verify-container-secrets.sh travel-app:ci
+
+          printf '%s\n' "$sentinel" > layer-sentinel.txt
+          printf '%s\n' \
+            'FROM travel-app:ci' \
+            'USER root' \
+            'COPY layer-sentinel.txt /tmp/layer-sentinel.txt' \
+            'RUN rm /tmp/layer-sentinel.txt' \
+            'USER nextjs' > Dockerfile.secret-probe
+          docker build --file Dockerfile.secret-probe --tag travel-app:secret-probe .
+
+          if SECRET_SCAN_SENTINEL="$sentinel" \
+            ./scripts/verify-container-secrets.sh travel-app:secret-probe; then
+            echo "Expected layer secret probe to be rejected." >&2
+            exit 1
+          fi
+
+          docker image rm travel-app:secret-probe
+          rm -f Dockerfile.secret-probe layer-sentinel.txt
+
+          printf '%s\n' \
+            'FROM travel-app:ci' \
+            'USER root' \
+            'RUN printf "probe\\n" > /tmp/.env.secret' \
+            'RUN rm /tmp/.env.secret' \
+            'USER nextjs' > Dockerfile.env-layer-probe
+          docker build --file Dockerfile.env-layer-probe --tag travel-app:env-layer-probe .
+
+          if ./scripts/verify-container-secrets.sh travel-app:env-layer-probe; then
+            echo "Expected environment-file layer probe to be rejected." >&2
+            exit 1
+          fi
+
+          docker image rm travel-app:env-layer-probe
+          rm -f Dockerfile.env-layer-probe
+          rm -f .env.secret-scan
 
       - name: Upload Playwright report on failure
         if: failure()

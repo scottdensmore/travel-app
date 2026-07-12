@@ -8,6 +8,9 @@ import CityGuide from '@/lib/types/CityGuide';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { assertSeatAvailableForCabin, validateSeatingLayout } from '@/lib/seatLayout';
+import { lockFlightForUpdate } from '@/lib/flightLock';
+import { updateFlightSeatingLayout } from '@/lib/FlightSeatLayoutService';
 
 const travelGuideService = new TravelGuideService();
 const flightBookingService = new FlightBookingService();
@@ -180,6 +183,14 @@ export async function cancelBookingAction(bookingId: number) {
     }
 
     const updated = await prisma.$transaction(async (tx) => {
+        if (booking.flightId) await lockFlightForUpdate(tx, booking.flightId);
+        const lockedBooking = await tx.booking.findUnique({
+            where: { id: bookingId },
+            select: { status: true }
+        });
+        if (!lockedBooking) throw new Error("Booking not found");
+        if (lockedBooking.status === "CANCELLED") throw new Error("Booking is already cancelled");
+
         const passengers = await tx.passenger.findMany({
             where: { bookingId }
         });
@@ -230,7 +241,7 @@ export async function changeBookingSeatsAction(
 
     const booking = await prisma.booking.findUnique({
         where: { id: bookingId },
-        include: { passengers: true }
+        include: { passengers: true, flight: true }
     });
     if (!booking) throw new Error("Booking not found");
 
@@ -243,6 +254,26 @@ export async function changeBookingSeatsAction(
 
     // Execute inside transaction to prevent concurrent seat collisions
     await prisma.$transaction(async (tx) => {
+        await lockFlightForUpdate(tx, flightId);
+        const lockedBooking = await tx.booking.findUnique({
+            where: { id: bookingId },
+            include: { passengers: true }
+        });
+        if (!lockedBooking) throw new Error("Booking not found");
+        if (lockedBooking.status === "CANCELLED") {
+            throw new Error("Seats cannot be changed on a cancelled booking");
+        }
+        const lockedFlight = await tx.flight.findUnique({ where: { id: flightId } });
+        if (!lockedFlight) throw new Error("Flight not found");
+
+        for (const change of seatChanges) {
+            const passenger = lockedBooking.passengers.find(p => p.id === change.passengerId);
+            if (!passenger) {
+                throw new Error(`Passenger ${change.passengerId} does not belong to booking ${bookingId}`);
+            }
+            assertSeatAvailableForCabin(change.seatNumber, passenger.cabinClass, lockedFlight);
+        }
+
         // Fetch all occupied seats on the flight (excluding the current booking's passengers)
         const occupiedPassengers = await tx.passenger.findMany({
             where: {
@@ -272,12 +303,6 @@ export async function changeBookingSeatsAction(
 
         // Apply changes
         for (const change of seatChanges) {
-            // Verify passenger belongs to the booking
-            const belongs = booking.passengers.some(p => p.id === change.passengerId);
-            if (!belongs) {
-                throw new Error(`Passenger ${change.passengerId} does not belong to booking ${bookingId}`);
-            }
-
             await tx.passenger.update({
                 where: { id: change.passengerId },
                 data: { seatNumber: change.seatNumber }
@@ -311,39 +336,7 @@ export async function deleteReviewAction(reviewId: string) {
     return deleted;
 }
 
-function validateSeatingLayout(
-    firstClassRows: number,
-    businessRows: number,
-    premiumEconomyRows: number,
-    economyRows: number,
-    seatPattern: string
-) {
-    if (isNaN(firstClassRows) || firstClassRows < 0 ||
-        isNaN(businessRows) || businessRows < 0 ||
-        isNaN(premiumEconomyRows) || premiumEconomyRows < 0 ||
-        isNaN(economyRows) || economyRows < 0) {
-        throw new Error("Row configurations must be non-negative integers.");
-    }
-
-    const trimmedPattern = seatPattern.trim().toUpperCase();
-    if (!trimmedPattern) {
-        throw new Error("Seat pattern is required.");
-    }
-
-    if (!/^[A-Z-]+$/.test(trimmedPattern)) {
-        throw new Error("Seat pattern must only contain uppercase letters and hyphens.");
-    }
-
-    const letters = trimmedPattern.replace(/[^A-Z]/g, "");
-    if (letters.length === 0) {
-        throw new Error("Seat pattern must contain at least one seat letter.");
-    }
-
-    const lettersSet = new Set(letters);
-    if (lettersSet.size !== letters.length) {
-        throw new Error("Seat pattern letters must be unique.");
-    }
-}
+const MAX_OCCURRENCE_RANGE_DAYS = 366;
 
 export async function saveFlightScheduleAction(data: {
     id?: number;
@@ -382,13 +375,19 @@ export async function saveFlightScheduleAction(data: {
         throw new Error("Please select at least one day of the week.");
     }
 
-    const firstClassRows = data.firstClassRows !== undefined && data.firstClassRows !== null ? Number(data.firstClassRows) : 2;
-    const businessRows = data.businessRows !== undefined && data.businessRows !== null ? Number(data.businessRows) : 4;
+    const firstClassRows = data.firstClassRows !== undefined && data.firstClassRows !== null ? Number(data.firstClassRows) : 3;
+    const businessRows = data.businessRows !== undefined && data.businessRows !== null ? Number(data.businessRows) : 3;
     const premiumEconomyRows = data.premiumEconomyRows !== undefined && data.premiumEconomyRows !== null ? Number(data.premiumEconomyRows) : 4;
     const economyRows = data.economyRows !== undefined && data.economyRows !== null ? Number(data.economyRows) : 20;
-    const seatPattern = data.seatPattern || "ABC-DEF";
+    const seatPattern = data.seatPattern ?? "ABC-DEF";
 
-    validateSeatingLayout(firstClassRows, businessRows, premiumEconomyRows, economyRows, seatPattern);
+    const normalizedSeatPattern = validateSeatingLayout(
+        firstClassRows,
+        businessRows,
+        premiumEconomyRows,
+        economyRows,
+        seatPattern
+    );
 
     let savedSchedule;
     if (data.id) {
@@ -407,7 +406,7 @@ export async function saveFlightScheduleAction(data: {
                 businessRows,
                 premiumEconomyRows,
                 economyRows,
-                seatPattern
+                seatPattern: normalizedSeatPattern
             }
         });
     } else {
@@ -425,7 +424,7 @@ export async function saveFlightScheduleAction(data: {
                 businessRows,
                 premiumEconomyRows,
                 economyRows,
-                seatPattern
+                seatPattern: normalizedSeatPattern
             }
         });
     }
@@ -474,7 +473,7 @@ export async function saveFlightScheduleAction(data: {
                             businessRows,
                             premiumEconomyRows,
                             economyRows,
-                            seatPattern
+                            seatPattern: normalizedSeatPattern
                         }
                     });
                 } catch (error) {
@@ -513,25 +512,47 @@ export async function generateFlightOccurrencesAction(
     });
     if (!schedule) throw new Error("Flight schedule not found.");
 
-    const start = new Date(startDateStr);
-    const end = new Date(endDateStr);
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDateStr) || !/^\d{4}-\d{2}-\d{2}$/.test(endDateStr)) {
+        throw new Error("Dates must use YYYY-MM-DD format.");
+    }
+
+    const start = new Date(`${startDateStr}T00:00:00Z`);
+    const end = new Date(`${endDateStr}T00:00:00Z`);
+    if (
+        isNaN(start.getTime()) ||
+        isNaN(end.getTime()) ||
+        start.toISOString().slice(0, 10) !== startDateStr ||
+        end.toISOString().slice(0, 10) !== endDateStr
+    ) {
         throw new Error("Invalid start or end date.");
     }
     if (end < start) {
         throw new Error("End date must be on or after start date.");
     }
+    const rangeDays = Math.floor((end.getTime() - start.getTime()) / 86_400_000);
+    if (rangeDays > MAX_OCCURRENCE_RANGE_DAYS) {
+        throw new Error(`Date range cannot exceed ${MAX_OCCURRENCE_RANGE_DAYS} days.`);
+    }
 
-    const firstClassRows = seatingConfig?.firstClassRows !== undefined && seatingConfig?.firstClassRows !== null ? Number(seatingConfig.firstClassRows) : (schedule.firstClassRows ?? 2);
-    const businessRows = seatingConfig?.businessRows !== undefined && seatingConfig?.businessRows !== null ? Number(seatingConfig.businessRows) : (schedule.businessRows ?? 4);
+    const firstClassRows = seatingConfig?.firstClassRows !== undefined && seatingConfig?.firstClassRows !== null ? Number(seatingConfig.firstClassRows) : (schedule.firstClassRows ?? 3);
+    const businessRows = seatingConfig?.businessRows !== undefined && seatingConfig?.businessRows !== null ? Number(seatingConfig.businessRows) : (schedule.businessRows ?? 3);
     const premiumEconomyRows = seatingConfig?.premiumEconomyRows !== undefined && seatingConfig?.premiumEconomyRows !== null ? Number(seatingConfig.premiumEconomyRows) : (schedule.premiumEconomyRows ?? 4);
     const economyRows = seatingConfig?.economyRows !== undefined && seatingConfig?.economyRows !== null ? Number(seatingConfig.economyRows) : (schedule.economyRows ?? 20);
-    const seatPattern = seatingConfig?.seatPattern || schedule.seatPattern || "ABC-DEF";
+    const seatPattern = seatingConfig?.seatPattern !== undefined && seatingConfig.seatPattern !== null
+        ? seatingConfig.seatPattern
+        : (schedule.seatPattern ?? "ABC-DEF");
 
-    validateSeatingLayout(firstClassRows, businessRows, premiumEconomyRows, economyRows, seatPattern);
+    const normalizedSeatPattern = validateSeatingLayout(
+        firstClassRows,
+        businessRows,
+        premiumEconomyRows,
+        economyRows,
+        seatPattern
+    );
 
     const current = new Date(start);
     let occurrencesCreated = 0;
+    let occurrencesUpdated = 0;
 
     while (current <= end) {
         const dayOfWeek = current.getUTCDay();
@@ -551,6 +572,11 @@ export async function generateFlightOccurrencesAction(
                 where: {
                     flightNumber: schedule.flightNumber,
                     departureDate: departureDate
+                },
+                include: {
+                    passengers: {
+                        select: { seatNumber: true }
+                    }
                 }
             });
 
@@ -570,7 +596,7 @@ export async function generateFlightOccurrencesAction(
                             businessRows,
                             premiumEconomyRows,
                             economyRows,
-                            seatPattern
+                            seatPattern: normalizedSeatPattern
                         }
                     });
                     occurrencesCreated++;
@@ -578,19 +604,33 @@ export async function generateFlightOccurrencesAction(
                     if (!(error && typeof error === 'object' && 'code' in error && error.code === 'P2002')) {
                         throw error;
                     }
-                }
-            } else {
-                // Update the seating config of the existing instance to match what the admin specified
-                await prisma.flight.update({
-                    where: { id: existingInstance.id },
-                    data: {
+                    const concurrentInstance = await prisma.flight.findFirst({
+                        where: {
+                            flightNumber: schedule.flightNumber,
+                            departureDate
+                        }
+                    });
+                    if (!concurrentInstance) {
+                        throw new Error('Concurrent occurrence creation could not be resolved.');
+                    }
+                    await updateFlightSeatingLayout(concurrentInstance.id, {
                         firstClassRows,
                         businessRows,
                         premiumEconomyRows,
                         economyRows,
-                        seatPattern
-                    }
+                        seatPattern: normalizedSeatPattern
+                    });
+                    occurrencesUpdated++;
+                }
+            } else {
+                await updateFlightSeatingLayout(existingInstance.id, {
+                    firstClassRows,
+                    businessRows,
+                    premiumEconomyRows,
+                    economyRows,
+                    seatPattern: normalizedSeatPattern
                 });
+                occurrencesUpdated++;
             }
         }
         current.setUTCDate(current.getUTCDate() + 1);
@@ -600,7 +640,12 @@ export async function generateFlightOccurrencesAction(
     revalidatePath('/flights');
     revalidatePath('/admin/flights');
 
-    return { success: true, count: occurrencesCreated };
+    return {
+        success: true,
+        count: occurrencesCreated + occurrencesUpdated,
+        created: occurrencesCreated,
+        updated: occurrencesUpdated
+    };
 }
 
 export async function deleteFlightScheduleAction(scheduleId: number) {
@@ -701,6 +746,3 @@ export async function markAllNotificationsAsReadAction() {
     revalidatePath('/profile');
     return updated;
 }
-
-
-

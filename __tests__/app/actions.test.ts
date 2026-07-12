@@ -1,6 +1,6 @@
-import { 
-    saveCityGuideAction, 
-    searchFlightsAction, 
+import {
+    saveCityGuideAction,
+    searchFlightsAction,
     getFlightRoutesAction,
     deleteCityGuideAction,
     bookFlightAction,
@@ -44,11 +44,17 @@ jest.mock('@/lib/TravelGuideService', () => {
 });
 
 const mockTx = {
+    $queryRaw: jest.fn(),
     passenger: {
         findMany: jest.fn(),
         update: jest.fn(),
     },
     booking: {
+        findUnique: jest.fn(),
+        update: jest.fn(),
+    },
+    flight: {
+        findUnique: jest.fn(),
         update: jest.fn(),
     }
 };
@@ -320,6 +326,7 @@ describe('cancelBookingAction', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         mockTx.passenger.findMany.mockResolvedValue([]);
+        mockTx.booking.findUnique.mockResolvedValue({ status: 'CONFIRMED' });
         mockTx.booking.update.mockReset();
     });
 
@@ -338,17 +345,18 @@ describe('cancelBookingAction', () => {
 
     it('allows a user to cancel their own booking', async () => {
         mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
-        mockedBookingFindUnique.mockResolvedValue({ 
-            id: 1, 
+        mockedBookingFindUnique.mockResolvedValue({
+            id: 1,
             userId: 'user-123',
             totalPrice: '$200',
+            flightId: 10,
             flight: { flightNumber: 'GA101', airline: 'Gemini Airways', price: '$200' }
         });
         mockTx.booking.update.mockResolvedValue({ id: 1 });
 
         const result = await cancelBookingAction(1);
 
-        expect(mockedBookingFindUnique).toHaveBeenCalledWith({ 
+        expect(mockedBookingFindUnique).toHaveBeenCalledWith({
             where: { id: 1 },
             include: { flight: true }
         });
@@ -357,6 +365,7 @@ describe('cancelBookingAction', () => {
             data: { status: 'CANCELLED' }
         });
         expect(result).toEqual({ id: 1 });
+        expect(mockTx.$queryRaw).toHaveBeenCalled();
 
         expect(mockedNotificationCreate).toHaveBeenCalledWith({
             data: {
@@ -370,10 +379,11 @@ describe('cancelBookingAction', () => {
 
     it('allows an admin to cancel any booking', async () => {
         mockedGetServerSession.mockResolvedValue({ user: { id: 'admin-123', role: 'ADMIN' } });
-        mockedBookingFindUnique.mockResolvedValue({ 
-            id: 1, 
+        mockedBookingFindUnique.mockResolvedValue({
+            id: 1,
             userId: 'some-user',
             totalPrice: '$200',
+            flightId: 10,
             flight: { flightNumber: 'GA101', airline: 'Gemini Airways', price: '$200' }
         });
         mockTx.booking.update.mockResolvedValue({ id: 1 });
@@ -402,6 +412,13 @@ describe('changeBookingSeatsAction', () => {
         jest.clearAllMocks();
         mockTx.passenger.findMany.mockReset();
         mockTx.passenger.update.mockReset();
+        mockTx.flight.findUnique.mockResolvedValue({ id: 10 });
+        mockTx.booking.findUnique.mockResolvedValue({
+            status: 'CONFIRMED',
+            passengers: [
+                { id: 'p-1', firstName: 'Jane', seatNumber: '12A', cabinClass: 'ECONOMY' }
+            ]
+        });
     });
 
     it('rejects an unauthenticated user', async () => {
@@ -416,10 +433,10 @@ describe('changeBookingSeatsAction', () => {
             userId: 'user-123',
             flightId: 10,
             passengers: [
-                { id: 'p-1', firstName: 'Jane', seatNumber: '12A' }
+                { id: 'p-1', firstName: 'Jane', seatNumber: '12A', cabinClass: 'ECONOMY' }
             ]
         });
-        
+
         mockTx.passenger.findMany.mockResolvedValue([
             { seatNumber: '11A' },
             { seatNumber: '11B' }
@@ -443,7 +460,7 @@ describe('changeBookingSeatsAction', () => {
             userId: 'user-123',
             flightId: 10,
             passengers: [
-                { id: 'p-1', firstName: 'Jane', seatNumber: '12A' }
+                { id: 'p-1', firstName: 'Jane', seatNumber: '12A', cabinClass: 'ECONOMY' }
             ]
         });
 
@@ -456,6 +473,47 @@ describe('changeBookingSeatsAction', () => {
             { passengerId: 'p-1', seatNumber: '12B' }
         ])).rejects.toThrow('Seat 12B is already occupied by another passenger.');
 
+        expect(mockTx.passenger.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a seat outside the passenger cabin layout', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        mockedBookingFindUnique.mockResolvedValue({
+            id: 1,
+            userId: 'user-123',
+            flightId: 10,
+            flight: {
+                firstClassRows: 1,
+                businessRows: 1,
+                premiumEconomyRows: 1,
+                economyRows: 5,
+                seatPattern: 'AB-CD'
+            },
+            passengers: [
+                { id: 'p-1', firstName: 'Jane', seatNumber: '4A', cabinClass: 'ECONOMY' }
+            ]
+        });
+
+        await expect(changeBookingSeatsAction(1, [
+            { passengerId: 'p-1', seatNumber: '1A' }
+        ])).rejects.toThrow('Seat 1A is not available for ECONOMY on this flight.');
+
+        expect(mockTx.passenger.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects seat changes after a booking is cancelled', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        mockedBookingFindUnique.mockResolvedValue({
+            id: 1,
+            userId: 'user-123',
+            flightId: 10,
+            passengers: []
+        });
+        mockTx.booking.findUnique.mockResolvedValue({ status: 'CANCELLED', passengers: [] });
+
+        await expect(changeBookingSeatsAction(1, [])).rejects.toThrow(
+            'Seats cannot be changed on a cancelled booking'
+        );
         expect(mockTx.passenger.update).not.toHaveBeenCalled();
     });
 });
@@ -533,6 +591,17 @@ describe('admin flight schedule actions', () => {
             await expect(saveFlightScheduleAction(sampleScheduleInput)).rejects.toThrow('Unauthorized');
         });
 
+        it('rejects an explicitly empty seat pattern', async () => {
+            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+
+            await expect(saveFlightScheduleAction({
+                ...sampleScheduleInput,
+                seatPattern: ''
+            })).rejects.toThrow('Seat pattern is required.');
+
+            expect(mockedFlightScheduleCreate).not.toHaveBeenCalled();
+        });
+
         it('allows admin to create a new flight schedule and generates flights', async () => {
             mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
             mockedFlightScheduleCreate.mockResolvedValue({
@@ -547,8 +616,8 @@ describe('admin flight schedule actions', () => {
             expect(mockedFlightScheduleCreate).toHaveBeenCalledWith({
                 data: {
                     ...sampleScheduleInput,
-                    firstClassRows: 2,
-                    businessRows: 4,
+                    firstClassRows: 3,
+                    businessRows: 3,
                     premiumEconomyRows: 4,
                     economyRows: 20,
                     seatPattern: 'ABC-DEF',
@@ -568,8 +637,8 @@ describe('admin flight schedule actions', () => {
                     returnDate: null,
                     price: '$850',
                     status: 'ON_TIME',
-                    firstClassRows: 2,
-                    businessRows: 4,
+                    firstClassRows: 3,
+                    businessRows: 3,
                     premiumEconomyRows: 4,
                     economyRows: 20,
                     seatPattern: 'ABC-DEF',
@@ -590,8 +659,8 @@ describe('admin flight schedule actions', () => {
                 where: { id: 5 },
                 data: {
                     ...sampleScheduleInput,
-                    firstClassRows: 2,
-                    businessRows: 4,
+                    firstClassRows: 3,
+                    businessRows: 3,
                     premiumEconomyRows: 4,
                     economyRows: 20,
                     seatPattern: 'ABC-DEF',
@@ -628,13 +697,13 @@ describe('admin flight schedule actions', () => {
 
         it('allows admin to update status and creates flight update notifications for affected users', async () => {
             mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
-            mockedFlightUpdate.mockResolvedValue({ 
-                id: 99, 
-                airline: 'Gemini Airways', 
-                flightNumber: 'GA101', 
-                from: 'Seattle', 
-                to: 'Detroit', 
-                status: 'DELAYED' 
+            mockedFlightUpdate.mockResolvedValue({
+                id: 99,
+                airline: 'Gemini Airways',
+                flightNumber: 'GA101',
+                from: 'Seattle',
+                to: 'Detroit',
+                status: 'DELAYED'
             });
             mockedBookingFindMany.mockResolvedValue([
                 { userId: 'user-1' },
@@ -762,7 +831,7 @@ describe('admin flight schedule actions', () => {
 
             it('generates flight instances and updates existing ones', async () => {
                 mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
-                
+
                 mockedFlightScheduleFindUnique.mockResolvedValue({
                     id: 1,
                     flightNumber: 'AA101',
@@ -804,7 +873,7 @@ describe('admin flight schedule actions', () => {
                         seatPattern: 'AC-DF',
                     }
                 });
-                expect(result).toEqual({ success: true, count: 1 });
+                expect(result).toEqual({ success: true, count: 1, created: 1, updated: 0 });
             });
 
             it('rejects invalid seating configuration inputs', async () => {
@@ -820,6 +889,17 @@ describe('admin flight schedule actions', () => {
                     firstClassRows: -1
                 })).rejects.toThrow('Row configurations must be non-negative integers.');
 
+                // Fractional and empty layouts
+                await expect(generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10', {
+                    firstClassRows: 1.5
+                })).rejects.toThrow('Row configurations must be non-negative integers.');
+                await expect(generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10', {
+                    firstClassRows: 0,
+                    businessRows: 0,
+                    premiumEconomyRows: 0,
+                    economyRows: 0
+                })).rejects.toThrow('At least one seating row is required.');
+
                 // Duplicate seat letters
                 await expect(generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10', {
                     seatPattern: 'ABC-ABC'
@@ -834,9 +914,204 @@ describe('admin flight schedule actions', () => {
                 await expect(generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10', {
                     seatPattern: 'ABC_DEF'
                 })).rejects.toThrow('Seat pattern must only contain uppercase letters and hyphens.');
+
+                await expect(generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10', {
+                    seatPattern: 'ABC--DEF'
+                })).rejects.toThrow('Seat pattern must contain seat-letter groups separated by single hyphens.');
+                await expect(generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10', {
+                    seatPattern: ''
+                })).rejects.toThrow('Seat pattern is required.');
+
+                await expect(generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10', {
+                    economyRows: 101
+                })).rejects.toThrow('Seating layouts cannot exceed 100 total rows.');
+                await expect(generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10', {
+                    seatPattern: 'ABCDEFGHIJKLM'
+                })).rejects.toThrow('Seat patterns cannot exceed 12 seats per row.');
+            });
+
+            it('normalizes seat patterns before persisting occurrences', async () => {
+                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+                mockedFlightScheduleFindUnique.mockResolvedValue({
+                    id: 1,
+                    flightNumber: 'AA101',
+                    airline: 'American Airlines',
+                    from: 'JFK',
+                    to: 'LAX',
+                    departureTime: '08:00',
+                    returnTime: null,
+                    daysOfWeek: [1],
+                    price: '$500',
+                });
+                mockedFlightFindFirst.mockResolvedValue(null);
+
+                await generateFlightOccurrencesAction(1, '2026-07-06', '2026-07-06', {
+                    seatPattern: ' ac-df '
+                });
+
+                expect(mockedFlightCreate).toHaveBeenCalledWith({
+                    data: expect.objectContaining({ seatPattern: 'AC-DF' })
+                });
+            });
+
+            it('reports existing occurrences as updated', async () => {
+                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+                mockedFlightScheduleFindUnique.mockResolvedValue({
+                    id: 1,
+                    flightNumber: 'AA101',
+                    airline: 'American Airlines',
+                    from: 'JFK',
+                    to: 'LAX',
+                    departureTime: '08:00',
+                    returnTime: null,
+                    daysOfWeek: [1],
+                    price: '$500',
+                });
+                mockedFlightFindFirst.mockResolvedValue({ id: 42 });
+                mockTx.flight.findUnique.mockResolvedValue({ id: 42, passengers: [] });
+                mockTx.flight.update.mockResolvedValue({ id: 42 });
+
+                const result = await generateFlightOccurrencesAction(
+                    1,
+                    '2026-07-06',
+                    '2026-07-06'
+                );
+
+                expect(result).toEqual({
+                    success: true,
+                    count: 1,
+                    created: 0,
+                    updated: 1
+                });
+            });
+
+            it('applies the requested layout after a concurrent occurrence create', async () => {
+                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+                mockedFlightScheduleFindUnique.mockResolvedValue({
+                    id: 1,
+                    flightNumber: 'AA101',
+                    airline: 'American Airlines',
+                    from: 'JFK',
+                    to: 'LAX',
+                    departureTime: '08:00',
+                    returnTime: null,
+                    daysOfWeek: [1],
+                    price: '$500',
+                });
+                mockedFlightFindFirst
+                    .mockResolvedValueOnce(null)
+                    .mockResolvedValueOnce({ id: 99 });
+                const duplicateError = Object.assign(new Error('duplicate'), { code: 'P2002' });
+                mockedFlightCreate.mockRejectedValueOnce(duplicateError);
+                mockTx.flight.findUnique.mockResolvedValue({ id: 99, passengers: [] });
+                mockTx.flight.update.mockResolvedValue({ id: 99 });
+
+                const result = await generateFlightOccurrencesAction(1, '2026-07-06', '2026-07-06', {
+                    firstClassRows: 1,
+                    businessRows: 2,
+                    premiumEconomyRows: 3,
+                    economyRows: 18,
+                    seatPattern: 'AC-DF'
+                });
+
+                expect(mockTx.flight.update).toHaveBeenCalledWith({
+                    where: { id: 99 },
+                    data: {
+                        firstClassRows: 1,
+                        businessRows: 2,
+                        premiumEconomyRows: 3,
+                        economyRows: 18,
+                        seatPattern: 'AC-DF'
+                    }
+                });
+                expect(result).toEqual({ success: true, count: 1, created: 0, updated: 1 });
+            });
+
+            it('rejects malformed or excessive occurrence date ranges', async () => {
+                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+                mockedFlightScheduleFindUnique.mockResolvedValue({ id: 1, daysOfWeek: [] });
+
+                await expect(
+                    generateFlightOccurrencesAction(1, '07/05/2026', '2026-07-10')
+                ).rejects.toThrow('Dates must use YYYY-MM-DD format.');
+                await expect(
+                    generateFlightOccurrencesAction(1, '2026-01-01', '2027-01-03')
+                ).rejects.toThrow('Date range cannot exceed 366 days.');
+            });
+
+            it('does not invalidate seats already assigned to passengers', async () => {
+                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+                mockedFlightScheduleFindUnique.mockResolvedValue({
+                    id: 1,
+                    flightNumber: 'AA101',
+                    airline: 'American Airlines',
+                    from: 'JFK',
+                    to: 'LAX',
+                    departureTime: '08:00',
+                    returnTime: null,
+                    daysOfWeek: [1],
+                    price: '$500',
+                });
+                mockedFlightFindFirst.mockResolvedValue({
+                    id: 42,
+                    passengers: [{ seatNumber: '30F', cabinClass: 'ECONOMY' }]
+                });
+                mockTx.flight.findUnique.mockResolvedValue({
+                    id: 42,
+                    passengers: [{ seatNumber: '30F', cabinClass: 'ECONOMY' }]
+                });
+
+                await expect(generateFlightOccurrencesAction(1, '2026-07-06', '2026-07-06', {
+                    firstClassRows: 1,
+                    businessRows: 1,
+                    premiumEconomyRows: 1,
+                    economyRows: 5,
+                    seatPattern: 'ABC-DEF'
+                })).rejects.toThrow('Occupied seat 30F is not available for ECONOMY in the requested layout.');
+
+                expect(mockTx.flight.update).not.toHaveBeenCalled();
+                expect(mockTx.flight.findUnique).toHaveBeenCalledWith({
+                    where: { id: 42 },
+                    include: {
+                        passengers: {
+                            where: { booking: { status: { not: 'CANCELLED' } } },
+                            select: { seatNumber: true, cabinClass: true }
+                        }
+                    }
+                });
+            });
+
+            it('does not move an occupied seat across cabin boundaries', async () => {
+                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+                mockedFlightScheduleFindUnique.mockResolvedValue({
+                    id: 1,
+                    flightNumber: 'AA101',
+                    airline: 'American Airlines',
+                    from: 'JFK',
+                    to: 'LAX',
+                    departureTime: '08:00',
+                    returnTime: null,
+                    daysOfWeek: [1],
+                    price: '$500',
+                });
+                mockedFlightFindFirst.mockResolvedValue({ id: 42 });
+                mockTx.flight.findUnique.mockResolvedValue({
+                    id: 42,
+                    passengers: [{ seatNumber: '11A', cabinClass: 'ECONOMY' }]
+                });
+
+                await expect(generateFlightOccurrencesAction(1, '2026-07-06', '2026-07-06', {
+                    firstClassRows: 4,
+                    businessRows: 3,
+                    premiumEconomyRows: 4,
+                    economyRows: 19,
+                    seatPattern: 'ABC-DEF'
+                })).rejects.toThrow(
+                    'Occupied seat 11A is not available for ECONOMY in the requested layout.'
+                );
+
+                expect(mockTx.flight.update).not.toHaveBeenCalled();
             });
         });
     });
 });
-
-

@@ -1,38 +1,114 @@
 # travel-app Workspace Agent Rules
 
-These rules govern all features, bug fixes, and development work in this repository. All agents and sub-agents MUST strictly adhere to these rules.
+These rules govern all feature, fix, refactor, documentation, and maintenance
+work in this repository. All agents and sub-agents must follow them.
 
-## 1. Branching Strategy
-- **No Direct Commits**: Never commit directly to the `main` branch.
-- **Feature/Fix Branches**: All work must be completed in a dedicated feature, bugfix, or chore branch (e.g., `feature/user-auth`, `bugfix/fix-trip-map`).
-- **Branch Creation**: Create branches from the latest `main` branch state.
+## Development Workflow
 
-## 2. Test-Driven Development (TDD)
-- **Test-First Principle**: For all additions or modifications, write failing tests first that capture the intended behavior or regression.
-- **Implement Minimal Code**: Implement the minimal necessary code to make the tests pass.
-- **Refactor Safely**: Refactor with confidence, ensuring the test suite remains green.
-- **Preserve Existing Tests**: Run the full test suite to ensure no regressions occur.
+1. **Inspect before changing anything.** Inspect the repository, current Git
+   state, and all applicable instruction files before making changes. Preserve
+   unrelated staged, unstaged, and untracked work.
 
-## 3. User Journey & Functional Testing
-- **End-to-End/Functional Coverage**: Beyond simple unit tests, write comprehensive functional tests that mock external boundaries and exercise full user journeys (e.g., user registration flow, trip booking flow).
-- **Framework**: Use Jest with `@testing-library/react` and/or `jest-environment-jsdom` as configured in the project.
+2. **Create a branch first.** Create a dedicated feature, fix, refactor, chore,
+   test, or documentation branch before making code changes. Never commit
+   directly to `main`, and create the branch from the latest appropriate
+   `main` state.
 
-## 4. Pre-Commit Verification & Review
-- **Sub-Agent Verification**: Before sending changes for review or committing code, invoke the `verify` sub-agent.
-- **Verification Mandate**: The `verify` sub-agent will run Next.js builds, ESLint linting, TypeScript compiler type-checking, Jest tests, and Playwright E2E integration tests.
-- **Verification Failure**: If any checks fail, the main agent must resolve the failures and run verification again.
-- **Code Review Hand-off**: Once all verification checks pass successfully, invoke the `code_reviewer` sub-agent. Pass the git diff and any new test files to the `code_reviewer`.
-- **Review Requirements**: The `code_reviewer` must verify logic correctness, compliance with target language idioms (e.g. idiomatic TypeScript, React hooks, Next.js structures), and clean integration into the project's overall architecture.
-- **Address Findings**: If the `code_reviewer` requests changes or highlights findings, fix the issues in a TDD fashion, run the `verify` sub-agent checks again, and re-submit to `code_reviewer`. Do not commit until the `code_reviewer` gives an explicit **APPROVE** decision.
+3. **Use test-driven development when behavior or structure is testable.**
+   - Add or update a focused test before implementation.
+   - Run it and confirm it fails for the expected reason.
+   - Implement the smallest appropriate change.
+   - Run focused tests while iterating.
+   - Refactor only while the relevant tests remain green.
 
-## 5. Pull Requests & Continuous Integration
-- **Create PR**: Once code is approved by the `code_reviewer`, push the branch and create a Pull Request.
-- **Wait for Checks**: Wait for all CI checks and tests to pass.
-- **No Force-Merging**: Never bypass failing checks. Resolve all test and lint failures on the branch.
+4. **Inspect the complete diff.** Review the branch diff plus all staged,
+   unstaged, and untracked files. Remove accidental or unrelated changes while
+   preserving work that belongs to the user.
 
-## 6. Squash and Merge Strategy
-- **Clean History**: All approved and passing PRs must be merged using the **Squash and Merge** strategy to maintain a clean, linear git history.
+5. **Run `ui-review` before verification.** After the main agent completes an
+   implementation pass, invoke the `ui-review` sub-agent. The `ui-review`
+   sub-agent must act as an expert in website design, usability,
+   responsiveness, and accessibility. Address every actionable finding before
+   running the `verifier`. For UI-affecting changes, exercise the changed
+   journey in the rendered application at representative phone, tablet, and
+   desktop viewports; inspect interaction, loading, empty, error, focus,
+   keyboard, contrast, and responsive states as applicable; and capture
+   screenshots or equivalent visual evidence. For changes with no UI impact,
+   explicitly record that rendered UI review is not applicable. If a finding
+   is not applicable, record the concrete reason rather than silently ignoring
+   it.
 
-## 7. Containerization / Docker Fallback
-- **Podman / Podman-compose Fallback**: On this machine, Podman is installed instead of Docker. If `docker` or `docker-compose` commands are not present or fail, always fall back to `podman` and `podman-compose` respectively.
+6. **Run `verifier` before code review.** Invoke the `verifier` sub-agent to run
+   the builds, static checks, tests, and journey coverage appropriate for the
+   change. The verifier must report failures, flakes, missing coverage, and
+   environment issues. Fix or explicitly resolve every actionable finding
+   before starting code review. If a verifier finding requires a code change,
+   rerun the verifier after addressing it.
 
+7. **Run `code-review` before every commit.** Invoke the `code-review`
+   sub-agent against the current branch diff and every staged, unstaged, and
+   untracked file. The reviewer must act as an expert in the languages and
+   frameworks used by this application, including TypeScript, React, Next.js,
+   Prisma, PostgreSQL, Jest, and Playwright. Address every actionable finding
+   before committing. If review findings cause changes, rerun the appropriate
+   tests and the `verifier`, then obtain a fresh `code-review` approval for the
+   changed state.
+
+8. **Commit after approval.** Commit only after verification and code review
+   are complete. Use Conventional Commits:
+
+   ```text
+   <type>(<scope>): <imperative summary>
+   ```
+
+   Keep the subject at 72 characters or fewer, describe why in the body when
+   useful, and do not combine unrelated work.
+
+9. **Create pull requests from the reviewed state.**
+   - Confirm that local verification remains valid.
+   - Rerun `code-review` only if the reviewed state changed after the pre-commit
+     review.
+   - A changed state includes code, tests, documentation, generated files,
+     conflict resolution, or any other staged, unstaged, or untracked content.
+   - Do not repeat code review when the already-reviewed diff and worktree
+     remain unchanged.
+   - Push and create the pull request only after local verification and any
+     required code review are complete.
+
+10. **Merge only clean, passing pull requests.** Merge only after GitHub
+    reports a clean merge state and every configured check passes. Never bypass
+    a failing or pending required check. Self-merges are allowed when these
+    conditions are met. Use squash merge for short-lived development branches
+    to keep `main` linear, then delete the merged branch.
+
+## Testing Expectations
+
+- Preserve all existing tests and add coverage for new behavior and
+  regressions.
+- Add functional coverage for complete user journeys when a change crosses
+  component, server, database, or authentication boundaries.
+- Use Jest and Testing Library for focused unit/component/integration tests and
+  Playwright for browser journeys.
+- Mock true external boundaries in focused tests; use realistic local services
+  for end-to-end verification where appropriate.
+- Treat warnings, flakes, skipped checks, and environment failures as findings
+  that require an explicit resolution.
+
+## Roadmap Tracking
+
+- Use `REAL_WORLD_ROADMAP.md` as the source of truth for real-world hardening
+  work.
+- Reference the applicable roadmap item ID in implementation plans and pull
+  requests.
+- Check off an item only after its acceptance criteria are met and verification
+  passes.
+- Add the completion date, PR number, and a short note to the roadmap progress
+  log.
+- Include roadmap updates in the same reviewed state as the implementation
+  that completes them.
+
+## Containerization Fallback
+
+- Docker and Docker Compose are preferred when available.
+- If Docker or Docker Compose is unavailable or fails because this machine uses
+  Podman, fall back to `podman` and `podman-compose` respectively.

@@ -110,7 +110,7 @@ export default function ProfileClient({
                 .catch(() => {
                     setModalOccupiedSeats([]);
                 });
-            
+
             const initial: { [key: string]: string } = {};
             selectedBooking.passengers.forEach(p => {
                 initial[p.id] = p.seatNumber;
@@ -160,7 +160,7 @@ export default function ProfileClient({
 
     const handleSaveSeats = async () => {
         if (!selectedBooking) return;
-        
+
         for (const p of selectedBooking.passengers) {
             if (!passengerSeats[p.id]) {
                 setModalError(`Please select a seat for ${p.firstName} ${p.lastName}`);
@@ -190,8 +190,8 @@ export default function ProfileClient({
 
     const getRowsForClass = (cabinClass: string) => {
         const flight = selectedBooking?.flight;
-        const firstClassCount = flight?.firstClassRows !== undefined && flight?.firstClassRows !== null ? Number(flight.firstClassRows) : 2;
-        const businessCount = flight?.businessRows !== undefined && flight?.businessRows !== null ? Number(flight.businessRows) : 4;
+        const firstClassCount = flight?.firstClassRows !== undefined && flight?.firstClassRows !== null ? Number(flight.firstClassRows) : 3;
+        const businessCount = flight?.businessRows !== undefined && flight?.businessRows !== null ? Number(flight.businessRows) : 3;
         const premiumEconomyCount = flight?.premiumEconomyRows !== undefined && flight?.premiumEconomyRows !== null ? Number(flight.premiumEconomyRows) : 4;
         const economyCount = flight?.economyRows !== undefined && flight?.economyRows !== null ? Number(flight.economyRows) : 20;
 
@@ -221,17 +221,17 @@ export default function ProfileClient({
     const isSeatOccupied = (seat: string) => {
         if (!selectedBooking) return false;
         const activePassenger = selectedBooking.passengers[activePassengerIdx];
-        
+
         // Find seats currently selected by OTHER passengers in this booking in the modal
         const selectedByOthers = Object.keys(passengerSeats)
             .filter(pid => pid !== activePassenger?.id)
             .map(pid => passengerSeats[pid]);
-            
+
         // Exclude current booking's passengers' original seats from the general occupied list
         const occupiedByOthersOnFlight = modalOccupiedSeats.filter(
             s => !selectedBooking.passengers.some(p => p.seatNumber === s)
         );
-        
+
         return occupiedByOthersOnFlight.includes(seat) || selectedByOthers.includes(seat);
     };
 
@@ -288,8 +288,8 @@ export default function ProfileClient({
                                                 <td className="py-2">{flight ? new Date(flight.departureDate).toLocaleDateString() : '—'}</td>
                                                 <td className="py-2">{booking.totalPrice || flight?.price || '—'}</td>
                                                 <td className="py-2">
-                                                    <span style={{ 
-                                                        color: isCancelled ? '#ef4444' : '#10b981', 
+                                                    <span style={{
+                                                        color: isCancelled ? '#ef4444' : '#10b981',
                                                         fontWeight: 'bold',
                                                         fontSize: '0.85rem'
                                                     }}>
@@ -302,13 +302,13 @@ export default function ProfileClient({
                                                             <button
                                                                 onClick={() => setSelectedBooking(booking)}
                                                                 disabled={isPending}
-                                                                style={{ 
-                                                                    backgroundColor: '#8b5cf6', 
-                                                                    color: 'white', 
-                                                                    padding: '4px 8px', 
-                                                                    borderRadius: '4px', 
-                                                                    fontSize: '12px', 
-                                                                    height: 'auto', 
+                                                                style={{
+                                                                    backgroundColor: '#8b5cf6',
+                                                                    color: 'white',
+                                                                    padding: '4px 8px',
+                                                                    borderRadius: '4px',
+                                                                    fontSize: '12px',
+                                                                    height: 'auto',
                                                                     width: 'auto',
                                                                     cursor: 'pointer'
                                                                 }}
@@ -318,13 +318,13 @@ export default function ProfileClient({
                                                             <button
                                                                 onClick={() => handleCancelBooking(booking.id, flight?.flightNumber || '')}
                                                                 disabled={isPending}
-                                                                style={{ 
-                                                                    backgroundColor: '#ef4444', 
-                                                                    color: 'white', 
-                                                                    padding: '4px 8px', 
-                                                                    borderRadius: '4px', 
-                                                                    fontSize: '12px', 
-                                                                    height: 'auto', 
+                                                                style={{
+                                                                    backgroundColor: '#ef4444',
+                                                                    color: 'white',
+                                                                    padding: '4px 8px',
+                                                                    borderRadius: '4px',
+                                                                    fontSize: '12px',
+                                                                    height: 'auto',
                                                                     width: 'auto',
                                                                     cursor: 'pointer'
                                                                 }}
@@ -363,14 +363,14 @@ export default function ProfileClient({
                                         onClick={() => handleUnfavorite(fav.cityGuideId, fav.cityGuide.city)}
                                         disabled={isPending}
                                         aria-label={`Unfavorite ${fav.cityGuide.city}`}
-                                        style={{ 
-                                            background: 'none', 
-                                            border: '1px solid rgba(255, 255, 255, 0.2)', 
-                                            color: '#e5e7eb', 
-                                            padding: '4px 8px', 
-                                            borderRadius: '4px', 
-                                            fontSize: '12px', 
-                                            height: 'auto', 
+                                        style={{
+                                            background: 'none',
+                                            border: '1px solid rgba(255, 255, 255, 0.2)',
+                                            color: '#e5e7eb',
+                                            padding: '4px 8px',
+                                            borderRadius: '4px',
+                                            fontSize: '12px',
+                                            height: 'auto',
                                             width: '100%',
                                             cursor: 'pointer'
                                         }}
@@ -404,13 +404,13 @@ export default function ProfileClient({
                                         onClick={() => handleDeleteReview(rev.id)}
                                         disabled={isPending}
                                         aria-label="Delete review"
-                                        style={{ 
-                                            backgroundColor: 'transparent', 
-                                            border: 'none', 
-                                            color: '#ef4444', 
-                                            padding: '4px', 
-                                            fontSize: '14px', 
-                                            height: 'auto', 
+                                        style={{
+                                            backgroundColor: 'transparent',
+                                            border: 'none',
+                                            color: '#ef4444',
+                                            padding: '4px',
+                                            fontSize: '14px',
+                                            height: 'auto',
                                             width: 'auto',
                                             cursor: 'pointer',
                                             fontWeight: 'bold'
@@ -462,7 +462,7 @@ export default function ProfileClient({
                     }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                             <h2 style={{ fontSize: '1.5rem', color: '#c084fc', margin: 0, fontWeight: 'bold' }}>Change Seats</h2>
-                            <button 
+                            <button
                                 onClick={() => setSelectedBooking(null)}
                                 style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: '1.5rem', cursor: 'pointer' }}
                             >
@@ -482,7 +482,7 @@ export default function ProfileClient({
                                 <h3 style={{ fontSize: '0.95rem', color: '#a78bfa', marginBottom: '0.75rem' }}>Passengers</h3>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                     {selectedBooking.passengers.map((p, idx) => (
-                                        <div 
+                                        <div
                                             key={p.id}
                                             onClick={() => setActivePassengerIdx(idx)}
                                             style={{
@@ -505,48 +505,56 @@ export default function ProfileClient({
                             {/* Right panel: Seat selector map */}
                             {(() => {
                                 const parsedPattern = selectedBooking.flight?.seatPattern || "ABC-DEF";
+                                const activeCabinRows = getRowsForClass(
+                                    selectedBooking.passengers[activePassengerIdx]?.cabinClass || 'ECONOMY'
+                                );
                                 return (
                                     <div style={{ flex: '2 1 300px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                         <h3 style={{ fontSize: '0.95rem', color: '#a78bfa', marginBottom: '0.75rem' }}>
                                             Select Seat for {selectedBooking.passengers[activePassengerIdx]?.firstName}
                                         </h3>
-                                        <div style={{
+                                        {activeCabinRows.length === 0 ? (
+                                            <p role="alert" style={{ color: '#f87171', textAlign: 'center' }}>
+                                                This cabin has no seats in the current flight layout. Contact support to change this booking.
+                                            </p>
+                                        ) : <div style={{
                                             border: '1px solid rgba(255,255,255,0.1)',
                                             borderRadius: '40px 40px 12px 12px',
                                             padding: '2rem 1rem 1rem',
-                                            width: '280px',
+                                            width: 'min(100%, 280px)',
                                             background: 'rgba(0,0,0,0.2)',
                                             maxHeight: '300px',
-                                            overflowY: 'auto',
+                                            overflow: 'auto',
                                             display: 'flex',
                                             flexDirection: 'column',
                                             alignItems: 'center'
                                         }}>
                                             {/* Column Labels */}
-                                            <div style={{ 
-                                                display: 'flex', 
-                                                gap: '6px', 
-                                                alignItems: 'center', 
-                                                justifyContent: 'center', 
-                                                width: '100%',
-                                                paddingLeft: '18px', 
-                                                marginBottom: '8px', 
-                                                fontSize: '0.7rem', 
-                                                color: 'rgba(255,255,255,0.4)', 
-                                                fontWeight: 'bold' 
+                                            <div style={{
+                                                display: 'flex',
+                                                gap: '6px',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                width: `${Math.max(240, parsedPattern.length * 36)}px`,
+                                                flexShrink: 0,
+                                                paddingLeft: '18px',
+                                                marginBottom: '8px',
+                                                fontSize: '0.7rem',
+                                                color: 'rgba(255,255,255,0.4)',
+                                                fontWeight: 'bold'
                                             }}>
                                                 {parsedPattern.split("").map((char, charIdx) => {
                                                     if (char === '-') {
                                                         return (
-                                                            <span 
-                                                                key={`aisle-header-${charIdx}`} 
-                                                                style={{ width: '10px' }} 
+                                                            <span
+                                                                key={`aisle-header-${charIdx}`}
+                                                                style={{ width: '10px' }}
                                                             />
                                                         );
                                                     }
                                                     return (
-                                                        <span 
-                                                            key={`seat-header-${charIdx}`} 
+                                                        <span
+                                                            key={`seat-header-${charIdx}`}
                                                             style={{ width: '22px', textAlign: 'center' }}
                                                         >
                                                             {char}
@@ -556,20 +564,20 @@ export default function ProfileClient({
                                             </div>
 
                                             {/* Rows */}
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' }}>
-                                                {getRowsForClass(selectedBooking.passengers[activePassengerIdx]?.cabinClass || 'ECONOMY').map((row) => (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: `${Math.max(240, parsedPattern.length * 36)}px`, flexShrink: 0 }}>
+                                                {activeCabinRows.map((row) => (
                                                     <div key={row} style={{ display: 'flex', gap: '6px', alignItems: 'center', justifyContent: 'center' }}>
                                                         <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)', width: '12px', textAlign: 'right', marginRight: '2px' }}>{row}</span>
-                                                        
+
                                                         {parsedPattern.split("").map((char, charIdx) => {
                                                             if (char === '-') {
                                                                 return (
-                                                                    <span 
-                                                                        key={`aisle-${charIdx}`} 
-                                                                        style={{ 
-                                                                            width: '10px', 
-                                                                            textAlign: 'center', 
-                                                                            fontSize: '0.55rem', 
+                                                                    <span
+                                                                        key={`aisle-${charIdx}`}
+                                                                        style={{
+                                                                            width: '10px',
+                                                                            textAlign: 'center',
+                                                                            fontSize: '0.55rem',
                                                                             color: 'rgba(255,255,255,0.1)',
                                                                             userSelect: 'none'
                                                                         }}
@@ -614,7 +622,7 @@ export default function ProfileClient({
                                                     </div>
                                                 ))}
                                             </div>
-                                        </div>
+                                        </div>}
                                     </div>
                                 );
                             })()}

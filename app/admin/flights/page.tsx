@@ -47,7 +47,7 @@ export default async function AdminFlightsPage() {
                 <Link href="/admin" style={{ color: '#c084fc', textDecoration: 'none', fontWeight: '600' }} className="hover:underline">← Back to Dashboard</Link>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr', gap: '2rem' }}>
+            <div className="admin-flights-layout">
                 <div>
                     <FlightScheduleForm />
                     <ManualOccurrenceBuilder schedules={schedules} />

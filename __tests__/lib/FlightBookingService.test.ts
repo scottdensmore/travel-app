@@ -3,6 +3,7 @@ import FlightBookingService, { PassengerInput } from '@/lib/FlightBookingService
 import { prisma } from '@/lib/prisma';
 
 const mockTx = {
+    $queryRaw: jest.fn(),
     booking: {
         findMany: jest.fn(),
         create: jest.fn(),
@@ -24,6 +25,7 @@ describe('FlightBookingService', () => {
         mockTx.booking.findMany.mockReset();
         mockTx.booking.create.mockReset();
         mockTx.flight.findUnique.mockReset();
+        mockTx.$queryRaw.mockReset();
     });
 
     it('creates a simple booking when no passengers list is provided (backwards compatibility)', async () => {
@@ -46,6 +48,14 @@ describe('FlightBookingService', () => {
     });
 
     it('creates a detailed booking with passengers and validates seat selections', async () => {
+        mockTx.flight.findUnique.mockResolvedValue({
+            id: 7,
+            firstClassRows: 2,
+            businessRows: 4,
+            premiumEconomyRows: 4,
+            economyRows: 20,
+            seatPattern: 'ABC-DEF'
+        });
         mockTx.booking.findMany.mockResolvedValue([
             {
                 id: 10,
@@ -66,7 +76,7 @@ describe('FlightBookingService', () => {
                     firstName: 'Alice',
                     lastName: 'Smith',
                     seatNumber: '12C',
-                    cabinClass: 'PREMIUM_ECONOMY'
+                    cabinClass: 'ECONOMY'
                 }
             ]
         });
@@ -79,7 +89,7 @@ describe('FlightBookingService', () => {
                 passportNumber: 'US123456',
                 gender: 'Female',
                 seatNumber: '12C',
-                cabinClass: 'PREMIUM_ECONOMY'
+                cabinClass: 'ECONOMY'
             }
         ];
 
@@ -111,7 +121,7 @@ describe('FlightBookingService', () => {
                             passportNumber: 'US123456',
                             gender: 'Female',
                             seatNumber: '12C',
-                            cabinClass: 'PREMIUM_ECONOMY',
+                            cabinClass: 'ECONOMY',
                             flightId: 7
                         }
                     ]
@@ -123,7 +133,65 @@ describe('FlightBookingService', () => {
         expect(result).toMatchObject({ id: 2, totalPrice: '$525' });
     });
 
+    it('rejects seats outside the configured cabin layout', async () => {
+        mockTx.flight.findUnique.mockResolvedValue({
+            id: 7,
+            firstClassRows: 1,
+            businessRows: 1,
+            premiumEconomyRows: 1,
+            economyRows: 5,
+            seatPattern: 'AB-CD'
+        });
+        mockTx.booking.findMany.mockResolvedValue([]);
+
+        const passenger: PassengerInput = {
+            firstName: 'Alice',
+            lastName: 'Smith',
+            dateOfBirth: '1995-05-15',
+            passportNumber: 'US123456',
+            gender: 'Female',
+            seatNumber: '1A',
+            cabinClass: 'ECONOMY'
+        };
+
+        await expect(new FlightBookingService().bookFlight({
+            flightId: 7,
+            userId: 'u1',
+            passengers: [passenger]
+        })).rejects.toThrow('Seat 1A is not available for ECONOMY on this flight.');
+
+        passenger.seatNumber = '8F';
+        await expect(new FlightBookingService().bookFlight({
+            flightId: 7,
+            userId: 'u1',
+            passengers: [passenger]
+        })).rejects.toThrow('Seat 8F is not available for ECONOMY on this flight.');
+        expect(mockTx.booking.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects duplicate seats within one booking request', async () => {
+        mockTx.flight.findUnique.mockResolvedValue({ id: 7 });
+        mockTx.booking.findMany.mockResolvedValue([]);
+        const passenger = {
+            firstName: 'Alice',
+            lastName: 'Smith',
+            dateOfBirth: '1995-05-15',
+            passportNumber: 'US123456',
+            gender: 'Female',
+            seatNumber: '11A',
+            cabinClass: 'ECONOMY'
+        };
+
+        await expect(new FlightBookingService().bookFlight({
+            flightId: 7,
+            userId: 'u1',
+            passengers: [passenger, { ...passenger, firstName: 'Bob' }]
+        })).rejects.toThrow('Duplicate seats selected in request.');
+        expect(mockTx.booking.create).not.toHaveBeenCalled();
+    });
+
     it('throws an error if a requested seat is already occupied', async () => {
+        mockTx.flight.findUnique.mockResolvedValue({ id: 7 });
         mockTx.booking.findMany.mockResolvedValue([
             {
                 id: 10,

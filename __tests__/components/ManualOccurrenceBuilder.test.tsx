@@ -85,15 +85,15 @@ describe('ManualOccurrenceBuilder', () => {
         fireEvent.change(screen.getByLabelText(/Flight Template \*/i), { target: { value: '20' } });
 
         // Should fall back to default values
-        expect(screen.getByLabelText(/First Class Rows/i)).toHaveValue(2);
-        expect(screen.getByLabelText(/Business Class Rows/i)).toHaveValue(4);
+        expect(screen.getByLabelText(/First Class Rows/i)).toHaveValue(3);
+        expect(screen.getByLabelText(/Business Class Rows/i)).toHaveValue(3);
         expect(screen.getByLabelText(/Premium Economy Rows/i)).toHaveValue(4);
         expect(screen.getByLabelText(/Economy Class Rows/i)).toHaveValue(20);
         expect(screen.getByLabelText(/Seat Pattern/i)).toHaveValue('ABC-DEF');
     });
 
     it('submits parameters correctly to generateFlightOccurrencesAction', async () => {
-        mockGenerateAction.mockResolvedValue({ success: true, count: 5 });
+        mockGenerateAction.mockResolvedValue({ success: true, count: 5, created: 3, updated: 2 });
 
         render(<ManualOccurrenceBuilder schedules={sampleSchedules} />);
 
@@ -121,7 +121,7 @@ describe('ManualOccurrenceBuilder', () => {
                     seatPattern: 'AB-CD-EF'
                 }
             );
-            expect(screen.getByText(/Successfully generated 5 flight occurrence\(s\)/i)).toBeInTheDocument();
+            expect(screen.getByText(/Successfully affected 5 flight occurrence\(s\): 3 created, 2 updated/i)).toBeInTheDocument();
             expect(mockRefresh).toHaveBeenCalled();
         });
     });

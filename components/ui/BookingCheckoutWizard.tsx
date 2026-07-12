@@ -51,6 +51,15 @@ const CABIN_LABELS = {
 
 export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOccupiedSeats }: BookingCheckoutWizardProps) {
     const basePriceNum = parseInt(flight.price.replace(/[^0-9]/g, ""), 10) || 0;
+    const cabinRowCounts: Record<PassengerFormState['cabinClass'], number> = {
+        ECONOMY: flight.economyRows ?? 20,
+        PREMIUM_ECONOMY: flight.premiumEconomyRows ?? 4,
+        BUSINESS: flight.businessRows ?? 3,
+        FIRST: flight.firstClassRows ?? 3
+    };
+    const availableCabins = (Object.keys(CABIN_MULTIPLIERS) as PassengerFormState['cabinClass'][])
+        .filter(cabin => cabinRowCounts[cabin] > 0);
+    const defaultCabin = availableCabins[0];
 
     const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
     const [passengers, setPassengers] = useState<PassengerFormState[]>([
@@ -60,7 +69,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
             dateOfBirth: '',
             passportNumber: '',
             gender: 'Male',
-            cabinClass: 'ECONOMY',
+            cabinClass: defaultCabin,
             seatNumber: ''
         }
     ]);
@@ -88,7 +97,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                 dateOfBirth: '',
                 passportNumber: '',
                 gender: 'Male',
-                cabinClass: 'ECONOMY',
+                cabinClass: defaultCabin,
                 seatNumber: ''
             }
         ]);
@@ -108,7 +117,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
     ) => {
         const updated = [...passengers];
         updated[index] = { ...updated[index], [field]: value };
-        
+
         // Reset seat if cabin class changes, to ensure correct row selection
         if (field === 'cabinClass') {
             updated[index].seatNumber = '';
@@ -173,8 +182,8 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
 
     // Seat Map Definitions
     const getRowsForClass = (cabinClass: 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST') => {
-        const firstClassCount = flight.firstClassRows !== undefined && flight.firstClassRows !== null ? Number(flight.firstClassRows) : 2;
-        const businessCount = flight.businessRows !== undefined && flight.businessRows !== null ? Number(flight.businessRows) : 4;
+        const firstClassCount = flight.firstClassRows !== undefined && flight.firstClassRows !== null ? Number(flight.firstClassRows) : 3;
+        const businessCount = flight.businessRows !== undefined && flight.businessRows !== null ? Number(flight.businessRows) : 3;
         const premiumEconomyCount = flight.premiumEconomyRows !== undefined && flight.premiumEconomyRows !== null ? Number(flight.premiumEconomyRows) : 4;
         const economyCount = flight.economyRows !== undefined && flight.economyRows !== null ? Number(flight.economyRows) : 20;
 
@@ -215,25 +224,25 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
 
     const getAdjacentSuggestedSeats = (startSeatId: string, count: number): string[] => {
         if (count <= 1) return [startSeatId];
-        
+
         const row = parseInt(startSeatId.slice(0, -1), 10);
         const letter = startSeatId.slice(-1);
         const cabinClass = passengers[activePassengerIndex]?.cabinClass || 'ECONOMY';
         const rows = getRowsForClass(cabinClass);
-        
+
         const currentOccupied = new Set(initialOccupiedSeats);
         const suggested: string[] = [startSeatId];
-        
+
         const startIdx = seatLetters.indexOf(letter);
         if (startIdx === -1) return suggested;
-        
+
         const blocks = parsedPattern.split("-");
         const block = blocks.find(b => b.includes(letter));
         if (!block) return suggested;
 
         const sideLetters = block.split("");
         const sideIdx = sideLetters.indexOf(letter);
-        
+
         // Fill seats on the same side of the aisle first
         for (let i = sideIdx + 1; i < sideLetters.length; i++) {
             const testSeat = `${row}${sideLetters[i]}`;
@@ -260,7 +269,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                 if (suggested.length === count) return suggested;
             }
         }
-        
+
         // If we still need seats, look at consecutive rows (row + 1, row - 1, etc.)
         for (const nextRow of rows) {
             if (nextRow === row) continue;
@@ -281,7 +290,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                 }
             }
         }
-        
+
         return suggested;
     };
 
@@ -289,45 +298,43 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
         const updatedPassengers = [...passengers];
         const currentOccupied = new Set(initialOccupiedSeats);
         const classes: PassengerFormState['cabinClass'][] = ['FIRST', 'BUSINESS', 'PREMIUM_ECONOMY', 'ECONOMY'];
-        
+
         for (const cabinClass of classes) {
             const classPassengers = updatedPassengers.map((p, idx) => ({ p, idx })).filter(item => item.p.cabinClass === cabinClass);
             if (classPassengers.length === 0) continue;
-            
+
             const rows = getRowsForClass(cabinClass);
             const passengerIndicesToAssign = classPassengers.map(cp => cp.idx);
             const count = passengerIndicesToAssign.length;
-            
+
             let bestAssignment: string[] | null = null;
-            
-            if (count <= 3) {
+
+            const seatBlocks = parsedPattern
+                .split('-')
+                .map(block => block.replace(/[^A-Z]/g, '').split(''))
+                .filter(block => block.length > 0);
+
+            if (seatBlocks.some(block => count <= block.length)) {
                 for (const row of rows) {
-                    const leftSide = ['A', 'B', 'C'].map(l => `${row}${l}`);
-                    const rightSide = ['D', 'E', 'F'].map(l => `${row}${l}`);
-                    
-                    for (let start = 0; start <= 3 - count; start++) {
-                        const block = leftSide.slice(start, start + count);
-                        if (block.every(seat => !currentOccupied.has(seat))) {
-                            bestAssignment = block;
-                            break;
+                    for (const seatBlock of seatBlocks) {
+                        for (let start = 0; start <= seatBlock.length - count; start++) {
+                            const block = seatBlock
+                                .slice(start, start + count)
+                                .map(letter => `${row}${letter}`);
+                            if (block.every(seat => !currentOccupied.has(seat))) {
+                                bestAssignment = block;
+                                break;
+                            }
                         }
-                    }
-                    if (bestAssignment) break;
-                    
-                    for (let start = 0; start <= 3 - count; start++) {
-                        const block = rightSide.slice(start, start + count);
-                        if (block.every(seat => !currentOccupied.has(seat))) {
-                            bestAssignment = block;
-                            break;
-                        }
+                        if (bestAssignment) break;
                     }
                     if (bestAssignment) break;
                 }
             }
-            
+
             if (!bestAssignment) {
                 for (const row of rows) {
-                    const seats = ['A', 'B', 'C', 'D', 'E', 'F'].map(l => `${row}${l}`);
+                    const seats = seatLetters.map(letter => `${row}${letter}`);
                     const freeInRow = seats.filter(seat => !currentOccupied.has(seat));
                     if (freeInRow.length >= count) {
                         bestAssignment = freeInRow.slice(0, count);
@@ -335,11 +342,11 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                     }
                 }
             }
-            
+
             if (!bestAssignment) {
                 const freeSeats: string[] = [];
                 for (const row of rows) {
-                    const seats = ['A', 'B', 'C', 'D', 'E', 'F'].map(l => `${row}${l}`);
+                    const seats = seatLetters.map(letter => `${row}${letter}`);
                     for (const seat of seats) {
                         if (!currentOccupied.has(seat)) {
                             freeSeats.push(seat);
@@ -352,7 +359,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                     if (bestAssignment) break;
                 }
             }
-            
+
             if (bestAssignment && bestAssignment.length === count) {
                 for (let i = 0; i < count; i++) {
                     const pIdx = passengerIndicesToAssign[i];
@@ -363,7 +370,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                 let seatIdx = 0;
                 const allFree: string[] = [];
                 for (const row of rows) {
-                    const seats = ['A', 'B', 'C', 'D', 'E', 'F'].map(l => `${row}${l}`);
+                    const seats = seatLetters.map(letter => `${row}${letter}`);
                     for (const seat of seats) {
                         if (!currentOccupied.has(seat)) {
                             allFree.push(seat);
@@ -380,14 +387,14 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                 }
             }
         }
-        
+
         setPassengers(updatedPassengers);
         setErrorMessage(null);
     };
 
     const handleSeatClick = (seat: string) => {
         const cabinClass = passengers[activePassengerIndex]?.cabinClass || 'ECONOMY';
-        
+
         if (autoAllocateGroup && passengers.length > 1) {
             const sameClassPassengerIndices = passengers
                 .map((p, i) => ({ p, i }))
@@ -395,13 +402,13 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                 .map(item => item.i);
             const count = sameClassPassengerIndices.length;
             const suggestions = getAdjacentSuggestedSeats(seat, count);
-            
+
             const updated = [...passengers];
             let suggestionIdx = 0;
-            
+
             updated[activePassengerIndex].seatNumber = suggestions[0] || seat;
             suggestionIdx++;
-            
+
             for (const pIdx of sameClassPassengerIndices) {
                 if (pIdx === activePassengerIndex) continue;
                 if (suggestionIdx < suggestions.length) {
@@ -409,13 +416,13 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                     suggestionIdx++;
                 }
             }
-            
+
             setPassengers(updated);
             setErrorMessage(null);
         } else {
             const passengerIndexAtSeat = passengers.findIndex(p => p.seatNumber === seat);
             const updated = [...passengers];
-            
+
             if (passengerIndexAtSeat >= 0 && passengerIndexAtSeat !== activePassengerIndex) {
                 const prevActiveSeat = updated[activePassengerIndex].seatNumber;
                 updated[activePassengerIndex].seatNumber = seat;
@@ -527,20 +534,20 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                 backdropFilter: 'blur(20px)',
                 boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4)'
             }}>
-                
+
                 {/* STEP 1: PASSENGERS FORM */}
                 {step === 1 && (
                     <div>
                         <h2 style={{ fontSize: '1.8rem', color: '#c084fc', marginBottom: '0.5rem', fontWeight: 'bold' }}>Traveler Information</h2>
                         <p style={{ color: 'rgba(255,255,255,0.5)', marginBottom: '2rem' }}>Please enter details exactly as they appear on passenger passports.</p>
-                        
+
                         {passengers.map((passenger, index) => (
                             <div key={index} style={{ border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '1.5rem', marginBottom: '1.5rem', background: 'rgba(255,255,255,0.01)', position: 'relative' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
                                     <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#a78bfa' }}>Passenger #{index + 1}</h3>
                                     {passengers.length > 1 && (
-                                        <button 
-                                            type="button" 
+                                        <button
+                                            type="button"
                                             onClick={() => handleRemovePassenger(index)}
                                             style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem' }}>
                                             ✕ Remove
@@ -551,22 +558,22 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
                                     <div>
                                         <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}>First Name</label>
-                                        <input 
-                                            type="text" 
-                                            value={passenger.firstName} 
+                                        <input
+                                            type="text"
+                                            value={passenger.firstName}
                                             onChange={(e) => handlePassengerChange(index, 'firstName', e.target.value)}
                                             placeholder="John"
-                                            style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }} 
+                                            style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
                                         />
                                     </div>
                                     <div>
                                         <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}>Last Name</label>
-                                        <input 
-                                            type="text" 
-                                            value={passenger.lastName} 
+                                        <input
+                                            type="text"
+                                            value={passenger.lastName}
                                             onChange={(e) => handlePassengerChange(index, 'lastName', e.target.value)}
                                             placeholder="Doe"
-                                            style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }} 
+                                            style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
                                         />
                                     </div>
                                 </div>
@@ -574,21 +581,21 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
                                     <div>
                                         <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}>Date of Birth</label>
-                                        <input 
-                                            type="date" 
-                                            value={passenger.dateOfBirth} 
+                                        <input
+                                            type="date"
+                                            value={passenger.dateOfBirth}
                                             onChange={(e) => handlePassengerChange(index, 'dateOfBirth', e.target.value)}
-                                            style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }} 
+                                            style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
                                         />
                                     </div>
                                     <div>
                                         <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}>Passport Number</label>
-                                        <input 
-                                            type="text" 
-                                            value={passenger.passportNumber} 
+                                        <input
+                                            type="text"
+                                            value={passenger.passportNumber}
                                             onChange={(e) => handlePassengerChange(index, 'passportNumber', e.target.value)}
                                             placeholder="A00000000"
-                                            style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }} 
+                                            style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
                                         />
                                     </div>
                                 </div>
@@ -596,8 +603,8 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
                                     <div>
                                         <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}>Gender</label>
-                                        <select 
-                                            value={passenger.gender} 
+                                        <select
+                                            value={passenger.gender}
                                             onChange={(e) => handlePassengerChange(index, 'gender', e.target.value)}
                                             style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', background: '#181720', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}>
                                             <option>Male</option>
@@ -607,12 +614,12 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                     </div>
                                     <div>
                                         <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}>Travel Class</label>
-                                        <select 
-                                            value={passenger.cabinClass} 
+                                        <select
+                                            value={passenger.cabinClass}
                                             onChange={(e) => handlePassengerChange(index, 'cabinClass', e.target.value as PassengerFormState['cabinClass'])}
                                             style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', background: '#181720', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}>
-                                            {Object.keys(CABIN_MULTIPLIERS).map((k) => (
-                                                <option key={k} value={k}>{CABIN_LABELS[k as keyof typeof CABIN_LABELS]}</option>
+                                            {availableCabins.map((cabin) => (
+                                                <option key={cabin} value={cabin}>{CABIN_LABELS[cabin]}</option>
                                             ))}
                                         </select>
                                     </div>
@@ -621,17 +628,17 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                         ))}
 
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2rem' }}>
-                            <button 
-                                type="button" 
+                            <button
+                                type="button"
                                 onClick={handleAddPassenger}
                                 style={{ background: 'none', border: '1px dashed #8b5cf6', color: '#c084fc', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
                                 + Add Traveler
                             </button>
-                            
+
                             <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                                 <span style={{ fontSize: '1.1rem', color: '#34d399', fontWeight: 'bold' }}>Total: ${totalPrice.toLocaleString()}</span>
-                                <button 
-                                    type="button" 
+                                <button
+                                    type="button"
                                     onClick={handleNextStep}
                                     style={{ backgroundColor: '#8b5cf6', color: '#fff', border: 'none', padding: '10px 28px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
                                     Select Seats →
@@ -662,20 +669,20 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                 backdropFilter: 'blur(10px)'
                             }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    <input 
-                                        type="checkbox" 
-                                        id="autoAllocateGroup" 
-                                        checked={autoAllocateGroup} 
-                                        onChange={(e) => setAutoAllocateGroup(e.target.checked)} 
+                                    <input
+                                        type="checkbox"
+                                        id="autoAllocateGroup"
+                                        checked={autoAllocateGroup}
+                                        onChange={(e) => setAutoAllocateGroup(e.target.checked)}
                                         style={{ width: '18px', height: '18px', accentColor: '#8b5cf6', cursor: 'pointer' }}
                                     />
                                     <label htmlFor="autoAllocateGroup" style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.9)', cursor: 'pointer', userSelect: 'none' }}>
                                         Auto-allocate adjacent seats on map click
                                     </label>
                                 </div>
-                                
-                                <button 
-                                    type="button" 
+
+                                <button
+                                    type="button"
                                     onClick={autoAssignAdjacentSeats}
                                     style={{
                                         background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
@@ -701,8 +708,8 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                 <h3 style={{ fontSize: '1rem', color: '#a78bfa', marginBottom: '1rem' }}>Passengers</h3>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                                     {passengers.map((p, idx) => (
-                                        <div 
-                                            key={idx} 
+                                        <div
+                                            key={idx}
                                             onClick={() => setActivePassengerIndex(idx)}
                                             style={{
                                                 padding: '12px',
@@ -727,40 +734,41 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                     border: '2px solid rgba(255,255,255,0.1)',
                                     borderRadius: '100px 100px 24px 24px',
                                     padding: '3rem 2rem 2rem',
-                                    width: '320px',
+                                    width: 'min(100%, 320px)',
                                     background: 'rgba(0,0,0,0.3)',
                                     maxHeight: '400px',
-                                    overflowY: 'auto',
+                                    overflow: 'auto',
                                     display: 'flex',
                                     flexDirection: 'column',
                                     alignItems: 'center'
                                 }}>
                                     <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.2)', marginBottom: '1rem', borderRadius: '2px' }} />
                                                              {/* Column Labels */}
-                                    <div style={{ 
-                                        display: 'flex', 
-                                        gap: '8px', 
-                                        alignItems: 'center', 
-                                        justifyContent: 'center', 
-                                        width: '100%',
-                                        paddingLeft: '24px', 
-                                        marginBottom: '8px', 
-                                        fontSize: '0.7rem', 
-                                        color: 'rgba(255,255,255,0.4)', 
-                                        fontWeight: 'bold' 
+                                    <div style={{
+                                        display: 'flex',
+                                        gap: '8px',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        width: `${Math.max(260, parsedPattern.length * 42)}px`,
+                                        flexShrink: 0,
+                                        paddingLeft: '24px',
+                                        marginBottom: '8px',
+                                        fontSize: '0.7rem',
+                                        color: 'rgba(255,255,255,0.4)',
+                                        fontWeight: 'bold'
                                     }}>
                                         {parsedPattern.split("").map((char, charIdx) => {
                                             if (char === '-') {
                                                 return (
-                                                    <span 
-                                                        key={`aisle-header-${charIdx}`} 
-                                                        style={{ width: '12px' }} 
+                                                    <span
+                                                        key={`aisle-header-${charIdx}`}
+                                                        style={{ width: '12px' }}
                                                     />
                                                 );
                                             }
                                             return (
-                                                <span 
-                                                    key={`seat-header-${charIdx}`} 
+                                                <span
+                                                    key={`seat-header-${charIdx}`}
                                                     style={{ width: '26px', textAlign: 'center' }}
                                                 >
                                                     {char}
@@ -770,20 +778,20 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                     </div>
 
                                     {/* Rows */}
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: `${Math.max(260, parsedPattern.length * 42)}px`, flexShrink: 0 }}>
                                         {activeRows.map((row) => (
                                             <div key={row} style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center' }}>
                                                 <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)', width: '16px', textAlign: 'right', marginRight: '4px' }}>{row}</span>
-                                                
+
                                                 {parsedPattern.split("").map((char, charIdx) => {
                                                     if (char === '-') {
                                                         return (
-                                                            <span 
-                                                                key={`aisle-${charIdx}`} 
-                                                                style={{ 
-                                                                    width: '12px', 
-                                                                    textAlign: 'center', 
-                                                                    fontSize: '0.6rem', 
+                                                            <span
+                                                                key={`aisle-${charIdx}`}
+                                                                style={{
+                                                                    width: '12px',
+                                                                    textAlign: 'center',
+                                                                    fontSize: '0.6rem',
                                                                     color: 'rgba(255,255,255,0.1)',
                                                                     userSelect: 'none'
                                                                 }}
@@ -855,12 +863,12 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                                                 padding: 0
                                                             }}
                                                             title={
-                                                                occupied 
-                                                                    ? `Seat ${seatId} Occupied` 
-                                                                    : selected 
-                                                                    ? `Seat ${seatId} Selected` 
-                                                                    : selectedByGroupMember 
-                                                                    ? `Seat ${seatId} chosen by Passenger #${groupPassengerIdx + 1}` 
+                                                                occupied
+                                                                    ? `Seat ${seatId} Occupied`
+                                                                    : selected
+                                                                    ? `Seat ${seatId} Selected`
+                                                                    : selectedByGroupMember
+                                                                    ? `Seat ${seatId} chosen by Passenger #${groupPassengerIdx + 1}`
                                                                     : `Select Seat ${seatId}`
                                                             }
                                                         >
@@ -912,14 +920,14 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                         </div>
 
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2.5rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1.5rem' }}>
-                            <button 
-                                type="button" 
+                            <button
+                                type="button"
                                 onClick={handlePrevStep}
                                 style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
                                 ← Back
                             </button>
-                            <button 
-                                type="button" 
+                            <button
+                                type="button"
                                 onClick={handleNextStep}
                                 style={{ backgroundColor: '#8b5cf6', color: '#fff', border: 'none', padding: '10px 28px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
                                 Billing & Summary →
@@ -972,46 +980,46 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                     <div>
                                         <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}>Card Number</label>
-                                        <input 
-                                            type="text" 
-                                            value={paymentCard.number} 
+                                        <input
+                                            type="text"
+                                            value={paymentCard.number}
                                             onChange={(e) => setPaymentCard({ ...paymentCard, number: e.target.value.replace(/[^0-9]/g, '').replace(/(\d{4})(?=\d)/g, '$1 ') })}
                                             placeholder="4111 2222 3333 4444"
                                             maxLength={19}
-                                            style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }} 
+                                            style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
                                         />
                                     </div>
                                     <div>
                                         <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}>Cardholder Name</label>
-                                        <input 
-                                            type="text" 
-                                            value={paymentCard.name} 
+                                        <input
+                                            type="text"
+                                            value={paymentCard.name}
                                             onChange={(e) => setPaymentCard({ ...paymentCard, name: e.target.value })}
                                             placeholder="JOHN DOE"
-                                            style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }} 
+                                            style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
                                         />
                                     </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                         <div>
                                             <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}>Expiry Date</label>
-                                            <input 
-                                                type="text" 
-                                                value={paymentCard.expiry} 
+                                            <input
+                                                type="text"
+                                                value={paymentCard.expiry}
                                                 onChange={(e) => setPaymentCard({ ...paymentCard, expiry: e.target.value })}
                                                 placeholder="MM/YY"
                                                 maxLength={5}
-                                                style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }} 
+                                                style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
                                             />
                                         </div>
                                         <div>
                                             <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}>CVV</label>
-                                            <input 
-                                                type="password" 
-                                                value={paymentCard.cvv} 
+                                            <input
+                                                type="password"
+                                                value={paymentCard.cvv}
                                                 onChange={(e) => setPaymentCard({ ...paymentCard, cvv: e.target.value.replace(/[^0-9]/g, '') })}
                                                 placeholder="123"
                                                 maxLength={4}
-                                                style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }} 
+                                                style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
                                             />
                                         </div>
                                     </div>
@@ -1020,15 +1028,15 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                         </div>
 
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2.5rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1.5rem' }}>
-                            <button 
-                                type="button" 
+                            <button
+                                type="button"
                                 onClick={handlePrevStep}
                                 disabled={isSubmitting}
                                 style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
                                 ← Back
                             </button>
-                            <button 
-                                type="button" 
+                            <button
+                                type="button"
                                 onClick={handleSubmitBooking}
                                 disabled={isSubmitting}
                                 style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '12px 32px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1084,7 +1092,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                             {p.cabinClass}
                                         </span>
                                     </div>
-                                    
+
                                     {/* Ticket content */}
                                     <div style={{ padding: '1.5rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '1rem' }}>
                                         <div>
@@ -1114,13 +1122,13 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                         {/* Fake barcode block */}
                                         <div style={{ display: 'flex', gap: '2px', background: '#fff', padding: '4px', borderRadius: '2px', height: '24px' }}>
                                             {Array.from({ length: 28 }).map((_, i) => (
-                                                <div 
-                                                    key={i} 
-                                                    style={{ 
-                                                        width: i % 3 === 0 ? '1px' : i % 5 === 0 ? '3px' : '2px', 
-                                                        height: '100%', 
-                                                        background: '#000' 
-                                                    }} 
+                                                <div
+                                                    key={i}
+                                                    style={{
+                                                        width: i % 3 === 0 ? '1px' : i % 5 === 0 ? '3px' : '2px',
+                                                        height: '100%',
+                                                        background: '#000'
+                                                    }}
                                                 />
                                             ))}
                                         </div>

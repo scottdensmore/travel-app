@@ -49,7 +49,12 @@ export default class FlightScheduleService {
                             departureDate,
                             returnDate,
                             price: schedule.price,
-                            status: 'ON_TIME'
+                            status: 'ON_TIME',
+                            firstClassRows: schedule.firstClassRows ?? 3,
+                            businessRows: schedule.businessRows ?? 3,
+                            premiumEconomyRows: schedule.premiumEconomyRows ?? 4,
+                            economyRows: schedule.economyRows ?? 20,
+                            seatPattern: schedule.seatPattern ?? 'ABC-DEF'
                         }
                     });
                 } catch (error) {

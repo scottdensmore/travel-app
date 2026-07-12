@@ -3,6 +3,7 @@
 import React, { useState, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { generateFlightOccurrencesAction } from '@/app/actions';
+import { validateSeatingLayout } from '@/lib/seatLayout';
 
 interface ScheduleItem {
     id: number;
@@ -29,22 +30,23 @@ export default function ManualOccurrenceBuilder({ schedules }: { schedules: Sche
     const [endDate, setEndDate] = useState<string>('');
 
     // Seating configuration overrides
-    const [firstClassRows, setFirstClassRows] = useState<string>('2');
-    const [businessRows, setBusinessRows] = useState<string>('4');
+    const [firstClassRows, setFirstClassRows] = useState<string>('3');
+    const [businessRows, setBusinessRows] = useState<string>('3');
     const [premiumEconomyRows, setPremiumEconomyRows] = useState<string>('4');
     const [economyRows, setEconomyRows] = useState<string>('20');
     const [seatPattern, setSeatPattern] = useState<string>('ABC-DEF');
 
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
+    const hasSchedules = schedules.length > 0;
 
     // Auto-fill seating values when schedule selection changes
     useEffect(() => {
         if (!selectedScheduleId) return;
         const selected = schedules.find(s => s.id.toString() === selectedScheduleId);
         if (selected) {
-            setFirstClassRows(selected.firstClassRows?.toString() ?? '2');
-            setBusinessRows(selected.businessRows?.toString() ?? '4');
+            setFirstClassRows(selected.firstClassRows?.toString() ?? '3');
+            setBusinessRows(selected.businessRows?.toString() ?? '3');
             setPremiumEconomyRows(selected.premiumEconomyRows?.toString() ?? '4');
             setEconomyRows(selected.economyRows?.toString() ?? '20');
             setSeatPattern(selected.seatPattern ?? 'ABC-DEF');
@@ -78,23 +80,15 @@ export default function ManualOccurrenceBuilder({ schedules }: { schedules: Sche
             return;
         }
 
-        const fRows = firstClassRows ? parseInt(firstClassRows, 10) : 2;
-        const bRows = businessRows ? parseInt(businessRows, 10) : 4;
-        const peRows = premiumEconomyRows ? parseInt(premiumEconomyRows, 10) : 4;
-        const eRows = economyRows ? parseInt(economyRows, 10) : 20;
-
-        if (isNaN(fRows) || fRows < 0 || isNaN(bRows) || bRows < 0 || isNaN(peRows) || peRows < 0 || isNaN(eRows) || eRows < 0) {
-            setError('Row configurations must be non-negative integers.');
-            return;
-        }
-
-        if (!seatPattern.trim()) {
-            setError('Seat pattern is required.');
-            return;
-        }
-
-        if (!/^[A-Z-]+$/.test(seatPattern.trim().toUpperCase())) {
-            setError('Seat pattern must only contain uppercase letters and hyphens.');
+        const fRows = firstClassRows === '' ? 3 : Number(firstClassRows);
+        const bRows = businessRows === '' ? 3 : Number(businessRows);
+        const peRows = premiumEconomyRows === '' ? 4 : Number(premiumEconomyRows);
+        const eRows = economyRows === '' ? 20 : Number(economyRows);
+        let normalizedSeatPattern: string;
+        try {
+            normalizedSeatPattern = validateSeatingLayout(fRows, bRows, peRows, eRows, seatPattern);
+        } catch (validationError) {
+            setError(validationError instanceof Error ? validationError.message : 'Invalid seating layout.');
             return;
         }
 
@@ -109,12 +103,15 @@ export default function ManualOccurrenceBuilder({ schedules }: { schedules: Sche
                         businessRows: bRows,
                         premiumEconomyRows: peRows,
                         economyRows: eRows,
-                        seatPattern: seatPattern.trim()
+                        seatPattern: normalizedSeatPattern
                     }
                 );
 
                 if (result.success) {
-                    setSuccess(`Successfully generated ${result.count} flight occurrence(s) within the date range!`);
+                    setSuccess(
+                        `Successfully affected ${result.count} flight occurrence(s): ` +
+                        `${result.created} created, ${result.updated} updated.`
+                    );
                     setSelectedScheduleId('');
                     setStartDate('');
                     setEndDate('');
@@ -128,7 +125,7 @@ export default function ManualOccurrenceBuilder({ schedules }: { schedules: Sche
     };
 
     return (
-        <form onSubmit={handleSubmit} noValidate className="admin-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '1.5rem' }}>
+        <form onSubmit={handleSubmit} noValidate className="admin-card" aria-describedby={error ? 'occurrence-feedback' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '1.5rem' }}>
             <h2 style={{ fontSize: '1.5rem', margin: 0, color: '#c084fc', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '8px' }}>
                 Manual Occurrence Generator
             </h2>
@@ -137,13 +134,13 @@ export default function ManualOccurrenceBuilder({ schedules }: { schedules: Sche
             </p>
 
             {error && (
-                <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#f87171', padding: '12px', borderRadius: '8px', fontSize: '0.9rem' }}>
+                <div id="occurrence-feedback" role="alert" style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#f87171', padding: '12px', borderRadius: '8px', fontSize: '0.9rem' }}>
                     ⚠️ {error}
                 </div>
             )}
 
             {success && (
-                <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#34d399', padding: '12px', borderRadius: '8px', fontSize: '0.9rem' }}>
+                <div role="status" style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#34d399', padding: '12px', borderRadius: '8px', fontSize: '0.9rem' }}>
                     ✅ {success}
                 </div>
             )}
@@ -154,7 +151,7 @@ export default function ManualOccurrenceBuilder({ schedules }: { schedules: Sche
                     id="selectSchedule"
                     value={selectedScheduleId}
                     onChange={e => setSelectedScheduleId(e.target.value)}
-                    disabled={isPending}
+                    disabled={isPending || !hasSchedules}
                     style={{
                         padding: '10px',
                         borderRadius: '8px',
@@ -172,9 +169,14 @@ export default function ManualOccurrenceBuilder({ schedules }: { schedules: Sche
                         </option>
                     ))}
                 </select>
+                {!hasSchedules && (
+                    <p role="status" style={{ margin: '4px 0 0', color: '#fbbf24', fontSize: '0.85rem' }}>
+                        Create a repeating flight template above before generating occurrences.
+                    </p>
+                )}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div className="admin-form-grid admin-form-grid--two">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <label htmlFor="startDate" style={{ fontSize: '0.85rem', color: '#a78bfa', fontWeight: 'bold' }}>Start Date *</label>
                     <input
@@ -204,8 +206,8 @@ export default function ManualOccurrenceBuilder({ schedules }: { schedules: Sche
             {selectedScheduleId && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '12px', borderRadius: '8px', backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
                     <h3 style={{ fontSize: '0.9rem', color: '#c084fc', margin: 0 }}>Configure Seating Layout for these Occurrences</h3>
-                    
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+
+                    <div className="admin-form-grid admin-form-grid--two">
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                             <label htmlFor="manualFirstClassRows" style={{ fontSize: '0.8rem', color: '#a78bfa' }}>First Class Rows</label>
                             <input
@@ -232,7 +234,7 @@ export default function ManualOccurrenceBuilder({ schedules }: { schedules: Sche
                         </div>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div className="admin-form-grid admin-form-grid--two">
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                             <label htmlFor="manualPremiumEconomyRows" style={{ fontSize: '0.8rem', color: '#a78bfa' }}>Premium Economy Rows</label>
                             <input
@@ -275,7 +277,7 @@ export default function ManualOccurrenceBuilder({ schedules }: { schedules: Sche
 
             <button
                 type="submit"
-                disabled={isPending}
+                disabled={isPending || !hasSchedules}
                 style={{
                     backgroundColor: '#10b981',
                     color: '#fff',

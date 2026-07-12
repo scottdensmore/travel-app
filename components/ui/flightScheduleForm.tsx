@@ -3,6 +3,7 @@
 import React, { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { saveFlightScheduleAction } from '@/app/actions';
+import { validateSeatingLayout } from '@/lib/seatLayout';
 
 interface FlightSchedule {
     id?: number;
@@ -34,8 +35,8 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
     const [price, setPrice] = useState(initialSchedule?.price ?? '');
     const [daysOfWeek, setDaysOfWeek] = useState<number[]>(initialSchedule?.daysOfWeek ?? []);
 
-    const [firstClassRows, setFirstClassRows] = useState(initialSchedule?.firstClassRows?.toString() ?? '2');
-    const [businessRows, setBusinessRows] = useState(initialSchedule?.businessRows?.toString() ?? '4');
+    const [firstClassRows, setFirstClassRows] = useState(initialSchedule?.firstClassRows?.toString() ?? '3');
+    const [businessRows, setBusinessRows] = useState(initialSchedule?.businessRows?.toString() ?? '3');
     const [premiumEconomyRows, setPremiumEconomyRows] = useState(initialSchedule?.premiumEconomyRows?.toString() ?? '4');
     const [economyRows, setEconomyRows] = useState(initialSchedule?.economyRows?.toString() ?? '20');
     const [seatPattern, setSeatPattern] = useState(initialSchedule?.seatPattern ?? 'ABC-DEF');
@@ -89,23 +90,15 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
             return;
         }
 
-        const fRows = firstClassRows ? parseInt(firstClassRows, 10) : 2;
-        const bRows = businessRows ? parseInt(businessRows, 10) : 4;
-        const peRows = premiumEconomyRows ? parseInt(premiumEconomyRows, 10) : 4;
-        const eRows = economyRows ? parseInt(economyRows, 10) : 20;
-
-        if (isNaN(fRows) || fRows < 0 || isNaN(bRows) || bRows < 0 || isNaN(peRows) || peRows < 0 || isNaN(eRows) || eRows < 0) {
-            setError('Row configurations must be non-negative integers.');
-            return;
-        }
-
-        if (!seatPattern.trim()) {
-            setError('Seat pattern is required.');
-            return;
-        }
-
-        if (!/^[A-Z-]+$/.test(seatPattern.trim().toUpperCase())) {
-            setError('Seat pattern must only contain uppercase letters and hyphens.');
+        const fRows = firstClassRows === '' ? 3 : Number(firstClassRows);
+        const bRows = businessRows === '' ? 3 : Number(businessRows);
+        const peRows = premiumEconomyRows === '' ? 4 : Number(premiumEconomyRows);
+        const eRows = economyRows === '' ? 20 : Number(economyRows);
+        let normalizedSeatPattern: string;
+        try {
+            normalizedSeatPattern = validateSeatingLayout(fRows, bRows, peRows, eRows, seatPattern);
+        } catch (validationError) {
+            setError(validationError instanceof Error ? validationError.message : 'Invalid seating layout.');
             return;
         }
 
@@ -130,7 +123,7 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                     businessRows: bRows,
                     premiumEconomyRows: peRows,
                     economyRows: eRows,
-                    seatPattern: seatPattern.trim()
+                    seatPattern: normalizedSeatPattern
                 });
 
                 setSuccess(initialSchedule ? 'Schedule updated successfully!' : 'New schedule created successfully!');
@@ -143,8 +136,8 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                     setReturnTime('');
                     setPrice('');
                     setDaysOfWeek([]);
-                    setFirstClassRows('2');
-                    setBusinessRows('4');
+                    setFirstClassRows('3');
+                    setBusinessRows('3');
                     setPremiumEconomyRows('4');
                     setEconomyRows('20');
                     setSeatPattern('ABC-DEF');
@@ -159,24 +152,24 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
     };
 
     return (
-        <form onSubmit={handleSubmit} noValidate className="admin-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <form onSubmit={handleSubmit} noValidate className="admin-card" aria-describedby={error ? 'schedule-feedback' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <h2 style={{ fontSize: '1.5rem', margin: 0, color: '#c084fc', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '8px' }}>
                 {initialSchedule ? 'Edit Flight Schedule' : 'Create Flight Schedule'}
             </h2>
 
             {error && (
-                <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#f87171', padding: '12px', borderRadius: '8px', fontSize: '0.9rem' }}>
+                <div id="schedule-feedback" role="alert" style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#f87171', padding: '12px', borderRadius: '8px', fontSize: '0.9rem' }}>
                     ⚠️ {error}
                 </div>
             )}
 
             {success && (
-                <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#34d399', padding: '12px', borderRadius: '8px', fontSize: '0.9rem' }}>
+                <div role="status" style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#34d399', padding: '12px', borderRadius: '8px', fontSize: '0.9rem' }}>
                     ✅ {success}
                 </div>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div className="admin-form-grid admin-form-grid--two">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <label htmlFor="flightNumber" style={{ fontSize: '0.85rem', color: '#a78bfa', fontWeight: 'bold' }}>Flight Number *</label>
                     <input 
@@ -203,7 +196,7 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                 </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div className="admin-form-grid admin-form-grid--two">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <label htmlFor="from" style={{ fontSize: '0.85rem', color: '#a78bfa', fontWeight: 'bold' }}>From (Origin) *</label>
                     <input 
@@ -230,7 +223,7 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                 </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+            <div className="admin-form-grid admin-form-grid--three">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <label htmlFor="departureTime" style={{ fontSize: '0.85rem', color: '#a78bfa', fontWeight: 'bold' }}>Departure (HH:MM) *</label>
                     <input 
@@ -293,6 +286,8 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                 <button
                     type="button"
                     onClick={() => setShowSeatingConfig(!showSeatingConfig)}
+                    aria-expanded={showSeatingConfig}
+                    aria-controls="schedule-seating-config"
                     style={{
                         background: 'none',
                         border: 'none',
@@ -310,8 +305,8 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                 </button>
 
                 {showSeatingConfig && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem', padding: '12px', borderRadius: '8px', backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div id="schedule-seating-config" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem', padding: '12px', borderRadius: '8px', backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <div className="admin-form-grid admin-form-grid--two">
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                 <label htmlFor="firstClassRows" style={{ fontSize: '0.8rem', color: '#a78bfa' }}>First Class Rows</label>
                                 <input
@@ -340,7 +335,7 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                             </div>
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                        <div className="admin-form-grid admin-form-grid--two">
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                 <label htmlFor="premiumEconomyRows" style={{ fontSize: '0.8rem', color: '#a78bfa' }}>Premium Economy Rows</label>
                                 <input
