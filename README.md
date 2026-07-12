@@ -2,6 +2,17 @@ This is the website for Mona Airways. Fly with the Octocat!
 
 ## Getting Started
 
+Copy the safe environment template before starting the application:
+
+```bash
+cp .env.example .env
+```
+
+Replace `NEXTAUTH_SECRET` with a securely generated value of at least 32
+characters. Deployed environments must inject all configuration at runtime;
+never bake `.env` into an image. See [SECURITY.md](SECURITY.md) for rotation and
+incident guidance.
+
 ### Using Docker (Recommended)
 
 To quickly get the application running with a database and demo data, use Docker:
