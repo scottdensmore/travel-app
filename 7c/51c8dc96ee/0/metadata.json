@@ -1,0 +1,40 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "7c51c8dc96ee",
+  "session_id": "019f5487-17b7-7910-b9a8-76ba05aa53c9",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-13T02:29:52.4387Z",
+  "branch": "scottdensmore/feat/authoritative-booking",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "REAL_WORLD_ROADMAP.md"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.6-sol",
+  "turn_id": "3cfdee53f92b",
+  "checkpoint_transcript_start": 6930,
+  "transcript_lines_at_start": 6930,
+  "compact_transcript_start": 1398,
+  "token_usage": {
+    "input_tokens": 9004,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 1550592,
+    "output_tokens": 1364,
+    "api_call_count": 11
+  },
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-13T02:29:52.042144Z",
+    "agent_lines": 1,
+    "agent_removed": 1,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1,
+    "total_lines_changed": 2,
+    "agent_percentage": 100,
+    "metric_version": 2
+  }
+}
