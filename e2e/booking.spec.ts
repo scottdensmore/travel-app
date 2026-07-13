@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { prisma } from '../lib/prisma';
+import { calculateBookingTotal } from '../lib/bookingPricing';
 import { registerAndSignIn } from './helpers/auth';
 
 test.describe('Flight Booking Journey', () => {
@@ -143,7 +144,8 @@ test.describe('Flight Booking Journey', () => {
       where: { user: { email: uniqueEmail } },
       orderBy: { createdAt: 'desc' }
     });
-    expect(persistedBooking.totalPrice).toBe(targetFlight.price);
+    const expectedTotal = calculateBookingTotal(targetFlight.price, [{ cabinClass: 'ECONOMY' }]);
+    expect(persistedBooking.totalPrice).toBe(expectedTotal.formatted);
     expect(persistedBooking.paymentIntentId).toBeNull();
     expect(persistedBooking.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/i);
     

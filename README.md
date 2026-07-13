@@ -2,6 +2,27 @@ This is the website for Mona Airways. Fly with the Octocat!
 
 ## Getting Started
 
+This project uses Node.js 22 across local development, CI, and container
+builds. [mise](https://mise.jdx.dev/) is the recommended version manager. With
+`mise` activated in your shell, entering this repository automatically selects
+the latest installed Node 22 release declared in `mise.toml`. Install it after
+a fresh checkout with:
+
+```bash
+mise install
+node --version
+```
+
+If you use `nvm` instead, the matching `.nvmrc` supports the equivalent setup:
+
+```bash
+nvm install
+nvm use
+```
+
+npm is configured to reject dependency installation under other Node.js major
+versions so local verification stays aligned with CI.
+
 Copy the safe environment template before starting the application:
 
 ```bash
@@ -37,10 +58,10 @@ HTTPS email endpoint, and inject `AUTH_EMAIL_API_TOKEN` from a secret manager.
 
 ### Manual Setup
 
-If you prefer to run the application manually, first install dependencies from npm:
+If you prefer to run the application manually, install the locked dependencies:
 
 ```bash
-npm install
+npm ci
 ```
 
 Then run the development server:

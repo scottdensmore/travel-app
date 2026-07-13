@@ -39,12 +39,24 @@ function versionAtLeast(version: string, minimum: string): boolean {
 describe('production dependency policy', () => {
     it('uses a supported Next.js and Node.js baseline', () => {
         const dockerfile = fs.readFileSync(path.join(repositoryRoot, 'Dockerfile'), 'utf8');
+        const workflow = fs.readFileSync(
+            path.join(repositoryRoot, '.github/workflows/ci.yml'),
+            'utf8'
+        );
+        const miseConfig = fs.readFileSync(path.join(repositoryRoot, 'mise.toml'), 'utf8');
+        const nvmVersion = fs.readFileSync(path.join(repositoryRoot, '.nvmrc'), 'utf8').trim();
+        const npmConfig = fs.readFileSync(path.join(repositoryRoot, '.npmrc'), 'utf8');
 
         expect(dependencyMajor('next')).toBeGreaterThanOrEqual(16);
         expect(dependencyMajor('eslint-config-next')).toBeGreaterThanOrEqual(16);
         expect(dependencyMajor('eslint')).toBeGreaterThanOrEqual(9);
-        expect(packageJson.engines?.node).toBe('>=20.9.0');
+        expect(packageJson.engines?.node).toBe('>=22 <23');
+        expect(packageLock.packages?.['']?.engines?.node).toBe('>=22 <23');
         expect(packageJson.scripts?.lint).toBe('eslint app components lib');
+        expect(miseConfig).toMatch(/^node = "22"$/m);
+        expect(nvmVersion).toBe('22');
+        expect(npmConfig).toMatch(/^engine-strict=true$/m);
+        expect(workflow).toMatch(/^\s+node-version: 22$/m);
         expect(dockerfile).toContain('FROM node:22');
     });
 
