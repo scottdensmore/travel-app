@@ -129,6 +129,23 @@ describe('FlightBookingForm', () => {
         expect(screen.queryByText('Available Flights')).not.toBeInTheDocument();
     });
 
+    it('announces structured server search validation errors', async () => {
+        mockSearch.mockResolvedValue({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'Departure date is invalid.',
+                fields: { departureDate: ['Departure date is invalid.'] }
+            }
+        });
+
+        renderForm();
+        fireEvent.click(screen.getByText('Find your trip'));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Departure date is invalid.');
+        expect(screen.queryByText('Available Flights')).not.toBeInTheDocument();
+    });
+
     it('redirects to the book page when "Book Now" is clicked', async () => {
         mockSearch.mockResolvedValue(mockFlights);
 
@@ -143,7 +160,6 @@ describe('FlightBookingForm', () => {
     });
 
     it('handles toggling trip type to one-way, input changes, and error handling', async () => {
-        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
         mockSearch.mockRejectedValue(new Error('Search failed'));
         mockBook.mockRejectedValue(new Error('Booking failed'));
 
@@ -164,11 +180,7 @@ describe('FlightBookingForm', () => {
         expect(returnInput).toBeDisabled();
 
         fireEvent.click(screen.getByText('Find your trip'));
-        await waitFor(() => {
-            expect(consoleErrorSpy).toHaveBeenCalled();
-        });
-
-        consoleErrorSpy.mockRestore();
+        expect(await screen.findByRole('alert')).toHaveTextContent('Unable to search for flights right now.');
     });
 
     it('filters out cancelled flights and exposes interactive price, airline and sorting controls', async () => {

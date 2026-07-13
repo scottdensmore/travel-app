@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { saveCityGuideAction } from '@/app/actions';
 import CityGuide from '../../lib/types/CityGuide';
+import { isActionValidationFailure } from '@/lib/actionResult';
 
 const TravelGuideForm: React.FC = () => {
   const [city, setCity] = useState('');
@@ -11,7 +12,7 @@ const TravelGuideForm: React.FC = () => {
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [error, setError] = useState<string>('');
-  const [saveresult, setSaveResult] = useState<string>('');
+  const [saveFeedback, setSaveFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [showAddButtons, setShowAddButtons] = useState<boolean[]>([true]);
   const [coverImage, setCoverImage] = useState<string | null>(null);
 
@@ -51,18 +52,15 @@ const TravelGuideForm: React.FC = () => {
         setLatitude(parseFloat(data[0].lat));
         setLongitude(parseFloat(data[0].lon));
         setError('');
-        console.log({ latitude, longitude });
       } else {
         setLatitude(null);
         setLongitude(null);
         setError('Location not found.');
-        console.log('Location not found.');
       }
     } catch {
       setLatitude(null);
       setLongitude(null);
       setError('Failed to fetch coordinates.');
-      console.log('Failed to fetch coordinates.');
     }
   };
 
@@ -78,7 +76,7 @@ const TravelGuideForm: React.FC = () => {
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    console.log({ city, country, description, highlights, latitude, longitude, coverImage });
+    setSaveFeedback(null);
     const cityGuide: CityGuide = {
       id: 1,
       city: city,
@@ -89,8 +87,12 @@ const TravelGuideForm: React.FC = () => {
       coverImage: coverImage || undefined
     };
     saveCityGuideAction(cityGuide)
-      .then(() => setSaveResult('City guide saved successfully'))
-      .catch(() => setSaveResult('Failed to save city guide'));
+      .then((result) => setSaveFeedback(
+        isActionValidationFailure(result)
+          ? { type: 'error', message: result.error.message }
+          : { type: 'success', message: 'City guide saved successfully' }
+      ))
+      .catch(() => setSaveFeedback({ type: 'error', message: 'Failed to save city guide' }));
   };
 
 
@@ -176,7 +178,14 @@ const TravelGuideForm: React.FC = () => {
         <button type="submit">
           Submit
         </button>
-        {saveresult && <div className="text-green-500 mb-4">{saveresult}</div>}
+        {saveFeedback && (
+          <div
+            role={saveFeedback.type === 'error' ? 'alert' : 'status'}
+            className={`${saveFeedback.type === 'error' ? 'text-red-500' : 'text-green-500'} mb-4`}
+          >
+            {saveFeedback.message}
+          </div>
+        )}
       </form>
     </div>
   );

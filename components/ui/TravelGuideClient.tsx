@@ -2,6 +2,7 @@
 import React, { useState, Suspense, useTransition, useSyncExternalStore } from 'react';
 import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
 import { toggleFavoriteCityGuideAction, submitCityGuideReviewAction } from '@/app/actions';
+import { isActionValidationFailure } from '@/lib/actionResult';
 import { useRouter } from 'next/navigation';
 
 const DEFAULT_CITY_NAME = 'Detroit';
@@ -54,7 +55,17 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
             });
 
             try {
-                await toggleFavoriteCityGuideAction(cityId);
+                const result = await toggleFavoriteCityGuideAction(cityId);
+                if (isActionValidationFailure(result)) {
+                    setFavorites((prev) => {
+                        const reverted = new Set(prev);
+                        if (reverted.has(cityId)) reverted.delete(cityId);
+                        else reverted.add(cityId);
+                        return reverted;
+                    });
+                    alert(result.error.message);
+                    return;
+                }
             } catch (error) {
                 // Revert state by toggling back
                 setFavorites((prev) => {
@@ -71,7 +82,11 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
     const handleReviewSubmit = async (cityId: number) => {
         if (!reviewContent.trim()) return;
         try {
-            await submitCityGuideReviewAction(cityId, reviewRating, reviewContent);
+            const result = await submitCityGuideReviewAction(cityId, reviewRating, reviewContent);
+            if (isActionValidationFailure(result)) {
+                alert(result.error.message);
+                return;
+            }
             setReviewContent('');
             router.refresh(); // Refresh page to show the new review
         } catch (error) {

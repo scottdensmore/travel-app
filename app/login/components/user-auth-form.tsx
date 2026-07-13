@@ -10,17 +10,20 @@ interface UserAuthFormProps extends React.HTMLAttributes<HTMLDivElement> {
 
 export default function UserAuthForm({ className, type, ...props }: UserAuthFormProps) {
     const [isLoading, setIsLoading] = React.useState<boolean>(false);
+    const [formError, setFormError] = React.useState<{
+        message: string;
+        fields: Record<string, string[]>;
+    } | null>(null);
     const router = useRouter();
 
-    async function onSubmit(event: React.SyntheticEvent) {
+    async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
         setIsLoading(true);
-
-        const target = event.target as typeof event.target & {
-            email: { value: string };
-            password: { value: string };
-            name?: { value: string };
-        };
+        setFormError(null);
+        const formData = new FormData(event.currentTarget);
+        const email = String(formData.get('email') ?? '');
+        const password = String(formData.get('password') ?? '');
+        const name = String(formData.get('name') ?? '');
 
         if (type === "signup") {
             try {
@@ -30,21 +33,26 @@ export default function UserAuthForm({ className, type, ...props }: UserAuthForm
                         "Content-Type": "application/json",
                     },
                     body: JSON.stringify({
-                        name: target.name?.value,
-                        email: target.email.value,
-                        password: target.password.value,
+                        name,
+                        email,
+                        password,
                     }),
                 });
 
                 if (!response.ok) {
-                    throw new Error("Registration failed");
+                    const payload = await response.json().catch(() => null);
+                    setFormError({
+                        message: payload?.error?.message ?? 'Unable to create your account.',
+                        fields: payload?.error?.fields ?? {}
+                    });
+                    return;
                 }
 
                 // Auto sign-in after registration
                 const result = await signIn("credentials", {
                     redirect: false,
-                    email: target.email.value,
-                    password: target.password.value,
+                    email,
+                    password,
                 });
 
                 if (result?.error) {
@@ -56,6 +64,7 @@ export default function UserAuthForm({ className, type, ...props }: UserAuthForm
 
             } catch (error) {
                 console.error(error);
+                setFormError({ message: 'Unable to create your account.', fields: {} });
             } finally {
                 setIsLoading(false);
             }
@@ -63,8 +72,8 @@ export default function UserAuthForm({ className, type, ...props }: UserAuthForm
             // Handle login
             const result = await signIn("credentials", {
                 redirect: false,
-                email: target.email.value,
-                password: target.password.value,
+                email,
+                password,
             });
 
             if (result?.error) {
@@ -88,12 +97,15 @@ export default function UserAuthForm({ className, type, ...props }: UserAuthForm
                             </label>
                             <input
                                 id="name"
+                                name="name"
                                 placeholder="John Doe"
                                 type="text"
                                 autoCapitalize="words"
                                 autoComplete="name"
                                 autoCorrect="off"
                                 disabled={isLoading}
+                                aria-invalid={Boolean(formError?.fields.name)}
+                                aria-describedby={formError?.fields.name ? 'registration-name-error' : undefined}
                                 required
                                 style={{
                                     display: "flex",
@@ -108,6 +120,11 @@ export default function UserAuthForm({ className, type, ...props }: UserAuthForm
                                     transition: "color .15s ease-in-out,background-color .15s ease-in-out,border-color .15s ease-in-out,box-shadow .15s ease-in-out",
                                 }}
                             />
+                            {formError?.fields.name && (
+                                <p id="registration-name-error" style={{ color: '#f87171', fontSize: '0.8rem', margin: 0 }}>
+                                    {formError.fields.name[0]}
+                                </p>
+                            )}
                         </div>
                     )}
                     <div className="grid gap-1">
@@ -116,12 +133,15 @@ export default function UserAuthForm({ className, type, ...props }: UserAuthForm
                         </label>
                         <input
                             id="email"
+                            name="email"
                             placeholder="name@example.com"
                             type="email"
                             autoCapitalize="none"
                             autoComplete="email"
                             autoCorrect="off"
                             disabled={isLoading}
+                            aria-invalid={Boolean(formError?.fields.email)}
+                            aria-describedby={formError?.fields.email ? 'registration-email-error' : undefined}
                             required
                             style={{
                                 display: "flex",
@@ -136,6 +156,11 @@ export default function UserAuthForm({ className, type, ...props }: UserAuthForm
                                 transition: "color .15s ease-in-out,background-color .15s ease-in-out,border-color .15s ease-in-out,box-shadow .15s ease-in-out",
                             }}
                         />
+                        {formError?.fields.email && (
+                            <p id="registration-email-error" style={{ color: '#f87171', fontSize: '0.8rem', margin: 0 }}>
+                                {formError.fields.email[0]}
+                            </p>
+                        )}
                     </div>
                     <div className="grid gap-1">
                         <label className="sr-only" htmlFor="password">
@@ -143,12 +168,15 @@ export default function UserAuthForm({ className, type, ...props }: UserAuthForm
                         </label>
                         <input
                             id="password"
+                            name="password"
                             placeholder="Password"
                             type="password"
                             autoCapitalize="none"
                             autoComplete="current-password"
                             autoCorrect="off"
                             disabled={isLoading}
+                            aria-invalid={Boolean(formError?.fields.password)}
+                            aria-describedby={formError?.fields.password ? 'registration-password-error' : undefined}
                             required
                             style={{
                                 display: "flex",
@@ -163,7 +191,17 @@ export default function UserAuthForm({ className, type, ...props }: UserAuthForm
                                 transition: "color .15s ease-in-out,background-color .15s ease-in-out,border-color .15s ease-in-out,box-shadow .15s ease-in-out",
                             }}
                         />
+                        {formError?.fields.password && (
+                            <p id="registration-password-error" style={{ color: '#f87171', fontSize: '0.8rem', margin: 0 }}>
+                                {formError.fields.password[0]}
+                            </p>
+                        )}
                     </div>
+                    {formError && (
+                        <div role="alert" style={{ color: '#f87171', fontSize: '0.875rem' }}>
+                            {formError.message}
+                        </div>
+                    )}
                     <button disabled={isLoading} style={{
                         display: "inline-flex",
                         alignItems: "center",

@@ -84,12 +84,12 @@ Acceptance criteria:
 
 ### P0.3 Add authoritative server validation
 
-- [ ] Introduce shared schemas for registration, reviews, favorites, city
+- [x] Introduce shared schemas for registration, reviews, favorites, city
   guides, schedules, passengers, seat changes, and booking requests.
-- [ ] Normalize and validate identifiers, email addresses, dates, enum values,
+- [x] Normalize and validate identifiers, email addresses, dates, enum values,
   text lengths, and array limits.
-- [ ] Return structured, customer-safe validation errors.
-- [ ] Add request and mutation size limits.
+- [x] Return structured, customer-safe validation errors.
+- [x] Add request and mutation size limits.
 
 Acceptance criteria:
 
@@ -500,6 +500,7 @@ Add one row when work starts, becomes blocked, or completes.
 | 2026-07-11 | P0.1 | Complete | #34 | Excluded local secrets, added fail-closed runtime validation, sanitized standalone builds, scanned final image content and layers, and documented rotation. |
 | 2026-07-12 | P0.2 | Complete | #35 | Upgraded Next.js, Auth, D3, Node, and ESLint; cleared the production audit; and added CI enforcement. |
 | 2026-07-12 | P1.4 | In progress | #32 | Added a concurrency-safe manual occurrence generator with custom seating; scheduled background generation and horizon monitoring remain. |
+| 2026-07-12 | P0.3 | Complete | #37 | Added shared Zod schemas, normalized mutation inputs, structured safe errors, and request/mutation limits. |
 
 ## Recommended first delivery sequence
 
