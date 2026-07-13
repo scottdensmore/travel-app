@@ -501,7 +501,7 @@ Add one row when work starts, becomes blocked, or completes.
 | 2026-07-12 | P0.2 | Complete | #35 | Upgraded Next.js, Auth, D3, Node, and ESLint; cleared the production audit; and added CI enforcement. |
 | 2026-07-12 | P1.4 | In progress | #32 | Added a concurrency-safe manual occurrence generator with custom seating; scheduled background generation and horizon monitoring remain. |
 | 2026-07-12 | P0.3 | Complete | #37 | Added shared Zod schemas, normalized mutation inputs, structured safe errors, and request/mutation limits. |
-| 2026-07-12 | P0.4 | Complete | Pending | Made server fares and inventory authoritative, removed fake payment identifiers, and added idempotent, concurrency-tested booking persistence. |
+| 2026-07-12 | P0.4 | Complete | #38 | Made server fares and inventory authoritative, removed fake payment identifiers, and added idempotent, concurrency-tested booking persistence. |
 
 ## Recommended first delivery sequence
 
