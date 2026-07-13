@@ -60,7 +60,7 @@ export const authOptions: NextAuthOptions = {
                 const passwordHash = user?.password ?? DUMMY_PASSWORD_HASH;
                 const isPasswordValid = await bcrypt.compare(credentials.password, passwordHash);
 
-                if (!user || !user.password || !isPasswordValid) {
+                if (!user || !user.password || !user.emailVerified || !isPasswordValid) {
                     throw new Error(INVALID);
                 }
 
@@ -73,6 +73,7 @@ export const authOptions: NextAuthOptions = {
                     name: user.name,
                     image: user.image,
                     role: user.role,
+                    authVersion: user.authVersion,
                 };
             },
         }),
@@ -89,10 +90,24 @@ export const authOptions: NextAuthOptions = {
             if (user) {
                 token.id = user.id;
                 token.role = user.role;
+                token.authVersion = user.authVersion;
+                token.invalidated = false;
+            } else if (token.id) {
+                const currentUser = await prisma.user.findUnique({
+                    where: { id: token.id },
+                    select: { role: true, authVersion: true, emailVerified: true },
+                });
+                token.invalidated = !currentUser
+                    || !currentUser.emailVerified
+                    || currentUser.authVersion !== token.authVersion;
+                if (currentUser && !token.invalidated) {
+                    token.role = currentUser.role;
+                }
             }
             return token;
         },
         async session({ session, token }) {
+            if (token.invalidated) return null as unknown as typeof session;
             if (session.user) {
                 session.user.id = token.id;
                 session.user.role = token.role;

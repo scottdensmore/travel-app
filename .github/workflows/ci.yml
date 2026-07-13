@@ -14,6 +14,9 @@ jobs:
       NEXTAUTH_SECRET: ci-only-nextauth-secret-at-least-32-characters
       NEXTAUTH_URL: http://localhost:3000
       AUTH_TRUSTED_PROXY_HOPS: 1
+      AUTH_EMAIL_FROM: Mona Airways <no-reply@localhost>
+      AUTH_EMAIL_PROVIDER: mailpit
+      AUTH_EMAIL_API_URL: http://localhost:8025/api/v1/send
     steps:
       - uses: actions/checkout@v4
 
@@ -30,7 +33,7 @@ jobs:
 
       - name: Start PostgreSQL database
         run: |
-          docker compose up -d db
+          docker compose up -d db mailpit
           until docker exec $(docker compose ps -q db) pg_isready -U postgres -d travel_app; do
             echo "Waiting for PostgreSQL to be ready..."
             sleep 2

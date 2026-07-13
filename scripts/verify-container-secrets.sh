@@ -32,13 +32,13 @@ image_labels="$($container_runtime image inspect \
   --format '{{json .Config.Labels}}' "$image")"
 
 if printf '%s\n' "$image_environment" | \
-  grep -Eq '^(DATABASE_URL|NEXTAUTH_URL|NEXTAUTH_SECRET)='; then
+  grep -Eq '^(DATABASE_URL|NEXTAUTH_URL|NEXTAUTH_SECRET|AUTH_EMAIL_API_TOKEN)='; then
   echo "Sensitive runtime configuration key found in image environment." >&2
   exit 1
 fi
 
 if printf '%s\n' "$image_labels" | \
-  grep -Eq '"(DATABASE_URL|NEXTAUTH_URL|NEXTAUTH_SECRET)"[[:space:]]*:'; then
+  grep -Eq '"(DATABASE_URL|NEXTAUTH_URL|NEXTAUTH_SECRET|AUTH_EMAIL_API_TOKEN)"[[:space:]]*:'; then
   echo "Sensitive runtime configuration key found in image labels." >&2
   exit 1
 fi

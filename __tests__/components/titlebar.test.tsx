@@ -42,7 +42,7 @@ describe('TitleBar', () => {
         render(<TitleBar />);
 
         expect(screen.getByText('Book Flight', { selector: 'span' })).toBeInTheDocument();
-        expect(screen.getByAltText('Gemini Airways')).toBeInTheDocument();
+        expect(screen.getByAltText('Mona Airways')).toBeInTheDocument();
     });
 
     it('renders the correct title and nav link when pathname is /flights', () => {

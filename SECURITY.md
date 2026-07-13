@@ -22,6 +22,16 @@
   reachable around those ingresses.
 - Store deployment secrets in the hosting platform's secret manager and limit
   access to the people and workloads that require them.
+- Set `AUTH_EMAIL_PROVIDER=postmark`, configure `AUTH_EMAIL_FROM` and
+  `AUTH_EMAIL_API_URL=https://api.postmarkapp.com/email`, and inject
+  `AUTH_EMAIL_API_TOKEN` through the secret manager for deployed transactional
+  delivery. Use an `https://` `NEXTAUTH_URL` for the public application origin.
+  Startup and delivery reject plaintext app origins and plaintext or
+  non-Postmark endpoints.
+  The adapter does not add an SMTP client dependency.
+- The Compose Mailpit inbox is a local testing aid. Its web/API port binds only
+  to loopback and its SMTP port is not published; do not deploy Mailpit as a
+  public or production mailbox.
 
 The application validates required server settings during Node.js startup. A
 missing or malformed setting prevents startup instead of allowing a partially
@@ -30,6 +40,16 @@ configured deployment.
 Authentication throttles store only keyed digests of email/IP identifiers.
 Every throttle operation deletes a bounded batch of expired rows so attacker-
 controlled identifiers are not retained indefinitely.
+
+Email verification and password reset tokens are random, single-use, scoped
+to one purpose, and stored only as SHA-256 digests. Verification tokens expire
+after 24 hours; reset tokens expire after 1 hour. Expired rows are pruned in
+indexed, bounded batches at startup, hourly, and during token issuance.
+Delivered links place the bearer
+token in a URL fragment, which is never sent in an HTTP request; the client
+reads and immediately removes the fragment. Global no-referrer policy and the
+ingress's query-free access-log format provide defense in depth. Do not log
+raw tokens or put them in email subjects.
 
 ## Responding to an image that contains secrets
 

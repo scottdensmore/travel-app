@@ -45,8 +45,18 @@ describe('container secret protection', () => {
         expect(composeFile).toContain('NEXTAUTH_URL: ${NEXTAUTH_URL:?NEXTAUTH_URL is required}');
         expect(composeFile).toContain('NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required}');
         expect(appService).toContain('AUTH_TRUSTED_PROXY_HOPS: "1"');
+        expect(appService).toContain('AUTH_EMAIL_FROM:');
+        expect(appService).toContain('AUTH_EMAIL_PROVIDER: mailpit');
+        expect(appService).toContain('AUTH_EMAIL_API_URL: http://mailpit:8025/api/v1/send');
         expect(appService).toContain('expose:');
         expect(appService).not.toContain('ports:');
+    });
+
+    it('provides a loopback-only local test inbox on a pinned security-fixed release', () => {
+        const composeFile = readRepositoryFile('docker-compose.yml');
+
+        expect(composeFile).toContain('image: axllent/mailpit:v1.30.0');
+        expect(composeFile).toContain('"127.0.0.1:8025:8025"');
     });
 
     it('publishes the app only through a proxy that replaces forwarded client addresses', () => {
@@ -59,6 +69,17 @@ describe('container secret protection', () => {
         expect(proxyConfiguration).toContain('proxy_pass http://app:3000;');
         expect(proxyConfiguration).toContain('proxy_set_header X-Forwarded-For $remote_addr;');
         expect(proxyConfiguration).not.toContain('$proxy_add_x_forwarded_for');
+        expect(proxyConfiguration).toContain('log_format no_query');
+        expect(proxyConfiguration).toContain('$request_method $uri $server_protocol');
+        expect(proxyConfiguration).not.toContain('$request_uri');
+        expect(proxyConfiguration).not.toContain('$http_referer');
+    });
+
+    it('prevents authentication fragments from leaking through referrers', () => {
+        const nextConfiguration = readRepositoryFile('next.config.mjs');
+
+        expect(nextConfiguration).toContain("key: 'Referrer-Policy'");
+        expect(nextConfiguration).toContain("value: 'no-referrer'");
     });
 
     it('checks the final container image in CI', () => {
@@ -68,6 +89,7 @@ describe('container secret protection', () => {
         expect(workflow).toContain('.env.secret-scan');
         expect(workflow).toContain('SECRET_SCAN_SENTINEL="$sentinel"');
         expect(workflow).toContain('docker build --tag travel-app:ci .');
+        expect(workflow).toContain('npm audit --omit=dev --audit-level=high');
         expect(workflow).toContain('travel-app:secret-probe');
         expect(workflow).toContain('travel-app:env-layer-probe');
         expect(workflow).toContain('./scripts/verify-container-secrets.sh travel-app:ci');
@@ -76,6 +98,7 @@ describe('container secret protection', () => {
         expect(verificationScript).toContain('save --output');
         expect(verificationScript).toContain('scan-image-layers.sh');
         expect(verificationScript).toContain('SECRET_SCAN_SENTINEL');
+        expect(verificationScript).toContain('AUTH_EMAIL_API_TOKEN');
     });
 
     it('provides safe configuration and secret-rotation guidance', () => {
@@ -87,6 +110,9 @@ describe('container secret protection', () => {
         expect(exampleEnvironment).toContain('NEXTAUTH_SECRET=');
         expect(exampleEnvironment.match(/^NEXTAUTH_SECRET=(.*)$/m)?.[1]).toBe('');
         expect(exampleEnvironment).toContain('AUTH_TRUSTED_PROXY_HOPS=0');
+        expect(exampleEnvironment).toContain('AUTH_EMAIL_FROM=');
+        expect(exampleEnvironment).toContain('AUTH_EMAIL_PROVIDER=mailpit');
+        expect(exampleEnvironment).toContain('AUTH_EMAIL_API_URL=http://localhost:8025/api/v1/send');
         expect(securityGuide).toContain('Rotate exposed secrets');
         expect(securityGuide).toContain('Rebuild and redeploy');
     });

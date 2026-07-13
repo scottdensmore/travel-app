@@ -1,17 +1,21 @@
 import { expect, Page } from '@playwright/test';
+import bcrypt from 'bcryptjs';
+import { prisma } from '../../lib/prisma';
 
-export async function registerAccount(
-  page: Page,
+export async function createVerifiedAccount(
+  _page: Page,
   account: { name: string; email: string; password: string }
 ) {
-  await page.goto('/signup');
-  await page.fill('#name', account.name);
-  await page.fill('#email', account.email);
-  await page.fill('#password', account.password);
-  await page.click('button:has-text("Create account")');
-  await expect(page.locator('form').getByRole('status')).toHaveText(
-    'If this address is eligible, you can now sign in with your credentials.'
-  );
+  const email = account.email.trim().toLowerCase();
+  const password = await bcrypt.hash(account.password, 10);
+  await prisma.user.create({
+    data: {
+      name: account.name,
+      email,
+      password,
+      emailVerified: new Date(),
+    },
+  });
 }
 
 export async function signInWithCredentials(
@@ -29,6 +33,6 @@ export async function registerAndSignIn(
   page: Page,
   account: { name: string; email: string; password: string }
 ) {
-  await registerAccount(page, account);
+  await createVerifiedAccount(page, account);
   await signInWithCredentials(page, account);
 }

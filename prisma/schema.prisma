@@ -51,6 +51,7 @@ model User {
   image         String?
   password      String?
   role          Role           @default(USER)
+  authVersion   Int            @default(0)
   accounts      Account[]
   sessions      Session[]
   bookings      Booking[]
@@ -60,11 +61,12 @@ model User {
 }
 
 model VerificationToken {
-  identifier String
+  identifier String   @unique
   token      String   @unique
   expires    DateTime
 
   @@unique([identifier, token])
+  @@index([expires])
 }
 
 model AuthRateLimit {

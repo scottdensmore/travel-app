@@ -91,7 +91,7 @@ describe('UserAuthForm registration errors', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
 
         expect(await screen.findByRole('status')).toHaveTextContent(
-            'If this address is eligible, you can now sign in with your credentials.'
+            'If this address is eligible, check your email for a verification link.'
         );
         expect(screen.getByRole('status')).toHaveStyle({ color: '#86efac' });
         expect(screen.getByLabelText('Password')).toHaveAttribute('autocomplete', 'new-password');

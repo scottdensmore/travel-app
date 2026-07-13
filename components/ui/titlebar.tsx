@@ -102,8 +102,8 @@ const TitleBar: React.FC = () => {
         <header className={pathname?.startsWith('/admin') ? 'admin-header' : ''}>
             <div className="logo">
                 <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}>
-                    <img src="/img/logo.svg" alt="Gemini Airways" width="32" height="32" />
-                    <span style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>Gemini Airways</span>
+                    <img src="/img/logo.svg" alt="Mona Airways" width="32" height="32" />
+                    <span style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>Mona Airways</span>
                 </Link>
                 <span>{pageTitle}</span>
             </div>

@@ -24,11 +24,16 @@ To quickly get the application running with a database and demo data, use Docker
 docker compose up --build
 ```
 
-This automatically starts the database, runs migrations, seeds data, and serves
+This automatically starts the database, local Mailpit test inbox, runs
+migrations, seeds data, and serves
 the app at [http://localhost:3000](http://localhost:3000). Compose exposes the
 app only through a bundled reverse proxy. The proxy replaces any incoming
 `X-Forwarded-For` value with the connecting address before forwarding the
 request, so clients cannot choose the identity used by authentication limits.
+Verification and recovery messages are visible only on the same machine at
+[http://localhost:8025](http://localhost:8025). Mailpit is for local testing;
+deployed environments must set `AUTH_EMAIL_PROVIDER=postmark`, use Postmark's
+HTTPS email endpoint, and inject `AUTH_EMAIL_API_TOKEN` from a secret manager.
 
 ### Manual Setup
 
@@ -43,6 +48,11 @@ Then run the development server:
 ```bash
 npm run dev
 ```
+
+For local verification and recovery email, start only the loopback test inbox
+with `docker compose up -d mailpit`; the `.env.example` values already target
+its HTTP API. Alternatively, configure the Postmark provider settings described
+in [SECURITY.md](SECURITY.md).
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result. You may need to set up a local Postgres database and run migrations manually (`npx prisma migrate deploy` and `npx prisma db seed`) if using this method.
 
