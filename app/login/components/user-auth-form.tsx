@@ -14,19 +14,35 @@ export default function UserAuthForm({ className, type, ...props }: UserAuthForm
         message: string;
         fields: Record<string, string[]>;
     } | null>(null);
+    const [formNotice, setFormNotice] = React.useState<string | null>(null);
+    const errorSummaryRef = React.useRef<HTMLDivElement>(null);
     const router = useRouter();
+
+    const showFormError = (message: string, fields: Record<string, string[]> = {}) => {
+        setFormError({ message, fields });
+        window.setTimeout(() => {
+            const firstInvalidField = ['name', 'email', 'password']
+                .find(field => fields[field]?.length);
+            if (firstInvalidField) {
+                document.getElementById(firstInvalidField)?.focus();
+            } else {
+                errorSummaryRef.current?.focus();
+            }
+        }, 0);
+    };
 
     async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
         setIsLoading(true);
         setFormError(null);
+        setFormNotice(null);
         const formData = new FormData(event.currentTarget);
         const email = String(formData.get('email') ?? '');
         const password = String(formData.get('password') ?? '');
         const name = String(formData.get('name') ?? '');
 
-        if (type === "signup") {
-            try {
+        try {
+            if (type === "signup") {
                 const response = await fetch("/api/auth/register", {
                     method: "POST",
                     headers: {
@@ -41,35 +57,17 @@ export default function UserAuthForm({ className, type, ...props }: UserAuthForm
 
                 if (!response.ok) {
                     const payload = await response.json().catch(() => null);
-                    setFormError({
-                        message: payload?.error?.message ?? 'Unable to create your account.',
-                        fields: payload?.error?.fields ?? {}
-                    });
+                    showFormError(
+                        payload?.error?.message ?? 'Unable to create your account.',
+                        payload?.error?.fields ?? {}
+                    );
                     return;
                 }
 
-                // Auto sign-in after registration
-                const result = await signIn("credentials", {
-                    redirect: false,
-                    email,
-                    password,
-                });
-
-                if (result?.error) {
-                    console.error(result.error);
-                } else {
-                    router.push("/");
-                    router.refresh();
-                }
-
-            } catch (error) {
-                console.error(error);
-                setFormError({ message: 'Unable to create your account.', fields: {} });
-            } finally {
-                setIsLoading(false);
+                setFormNotice('If this address is eligible, you can now sign in with your credentials.');
+                return;
             }
-        } else {
-            // Handle login
+
             const result = await signIn("credentials", {
                 redirect: false,
                 email,
@@ -77,11 +75,16 @@ export default function UserAuthForm({ className, type, ...props }: UserAuthForm
             });
 
             if (result?.error) {
-                console.error(result.error);
+                showFormError('Invalid email or password.');
             } else {
                 router.push("/");
                 router.refresh();
             }
+        } catch {
+            showFormError(type === 'signup'
+                ? 'Unable to create your account right now. Please try again.'
+                : 'Unable to sign in right now. Please try again.');
+        } finally {
             setIsLoading(false);
         }
     }
@@ -172,7 +175,7 @@ export default function UserAuthForm({ className, type, ...props }: UserAuthForm
                             placeholder="Password"
                             type="password"
                             autoCapitalize="none"
-                            autoComplete="current-password"
+                            autoComplete={type === 'signup' ? 'new-password' : 'current-password'}
                             autoCorrect="off"
                             disabled={isLoading}
                             aria-invalid={Boolean(formError?.fields.password)}
@@ -198,11 +201,22 @@ export default function UserAuthForm({ className, type, ...props }: UserAuthForm
                         )}
                     </div>
                     {formError && (
-                        <div role="alert" style={{ color: '#f87171', fontSize: '0.875rem' }}>
+                        <div
+                            ref={errorSummaryRef}
+                            role="alert"
+                            tabIndex={-1}
+                            style={{ color: '#f87171', fontSize: '0.875rem', outline: '2px solid #f87171', outlineOffset: '2px' }}>
                             {formError.message}
                         </div>
                     )}
-                    <button disabled={isLoading} style={{
+                    {(isLoading || formNotice) && (
+                        <div role="status" aria-live="polite" style={{ color: formNotice ? '#86efac' : '#d4d4d8', fontSize: '0.875rem' }}>
+                            {isLoading
+                                ? (type === 'signup' ? 'Creating account…' : 'Signing in…')
+                                : formNotice}
+                        </div>
+                    )}
+                    <button disabled={isLoading} aria-busy={isLoading} style={{
                         display: "inline-flex",
                         alignItems: "center",
                         justifyContent: "center",
@@ -215,10 +229,13 @@ export default function UserAuthForm({ className, type, ...props }: UserAuthForm
                         color: "#fafafa",
                         height: "2.5rem",
                         padding: "0.5rem 1rem",
-                        marginTop: "0.5rem"
+                        marginTop: "0.5rem",
+                        opacity: isLoading ? 0.65 : 1,
+                        cursor: isLoading ? 'not-allowed' : 'pointer'
                     }}>
                         {isLoading && (
                             <svg
+                                aria-hidden="true"
                                 className="mr-2 h-4 w-4 animate-spin"
                                 xmlns="http://www.w3.org/2000/svg"
                                 fill="none"
@@ -239,7 +256,9 @@ export default function UserAuthForm({ className, type, ...props }: UserAuthForm
                                 ></path>
                             </svg>
                         )}
-                        {type === "signup" ? "Create account" : "Sign In with Email"}
+                        {isLoading
+                            ? (type === 'signup' ? 'Creating account…' : 'Signing in…')
+                            : (type === "signup" ? "Create account" : "Sign In with Email")}
                     </button>
                 </div>
             </form>

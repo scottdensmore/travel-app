@@ -13,6 +13,7 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/travel_app
       NEXTAUTH_SECRET: ci-only-nextauth-secret-at-least-32-characters
       NEXTAUTH_URL: http://localhost:3000
+      AUTH_TRUSTED_PROXY_HOPS: 1
     steps:
       - uses: actions/checkout@v4
 
@@ -57,6 +58,10 @@ jobs:
 
       - name: Run Playwright E2E tests
         run: npx playwright test
+        env:
+          # Playwright connects directly to the local dev server, not through a
+          # trusted ingress. Ignore forwarded-address headers for this step.
+          AUTH_TRUSTED_PROXY_HOPS: 0
 
       - name: Build and inspect production container
         run: |

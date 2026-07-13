@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { prisma } from '../lib/prisma';
 import { calculateBookingTotal } from '../lib/bookingPricing';
+import { registerAndSignIn } from './helpers/auth';
 
 test.describe('Multi-Passenger Booking Journey', () => {
   const uniqueEmail = `multibook-${Date.now()}@example.com`;
@@ -9,12 +10,7 @@ test.describe('Multi-Passenger Booking Journey', () => {
 
   test.beforeEach(async ({ page }) => {
     // Register and login a fresh user
-    await page.goto('/signup');
-    await page.fill('#name', name);
-    await page.fill('#email', uniqueEmail);
-    await page.fill('#password', password);
-    await page.click('button:has-text("Create account")');
-    await expect(page).toHaveURL('/');
+    await registerAndSignIn(page, { name, email: uniqueEmail, password });
   });
 
   test.afterAll(async () => {

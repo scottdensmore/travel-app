@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { registerAndSignIn } from './helpers/auth';
 
 test.describe('Travel Guide Journey', () => {
   const uniqueEmail = `guidetest-${Date.now()}@example.com`;
@@ -7,12 +8,7 @@ test.describe('Travel Guide Journey', () => {
 
   test.beforeEach(async ({ page }) => {
     // Register and login a fresh user to isolate favorites/reviews state
-    await page.goto('/signup');
-    await page.fill('#name', name);
-    await page.fill('#email', uniqueEmail);
-    await page.fill('#password', password);
-    await page.click('button:has-text("Create account")');
-    await expect(page).toHaveURL('/');
+    await registerAndSignIn(page, { name, email: uniqueEmail, password });
   });
 
   test('User can select a city, write a review, and toggle favorite', async ({ page }) => {

@@ -10,19 +10,78 @@ jest.mock('next-auth/providers/credentials', () => ({
 jest.mock('@auth/prisma-adapter', () => ({ PrismaAdapter: () => ({}) }));
 jest.mock('@/lib/prisma', () => ({ prisma: { user: { findUnique: jest.fn() } } }));
 jest.mock('bcryptjs', () => ({ compare: jest.fn() }));
+jest.mock('@/lib/authRateLimit', () => ({
+    consumeAuthRateLimit: jest.fn(),
+    clearAuthRateLimit: jest.fn(),
+}));
 
 // Imported after mocks so the mocked deps are wired in.
 import { authOptions } from '@/lib/auth';
+import { clearAuthRateLimit, consumeAuthRateLimit } from '@/lib/authRateLimit';
 
 const authorize = (authOptions.providers[0] as any).authorize as (
-    credentials: Record<string, string> | undefined
+    credentials: Record<string, string> | undefined,
+    request?: { headers?: Record<string, string | string[] | undefined> }
 ) => Promise<any>;
 
 const mockedPrisma = prisma as unknown as { user: { findUnique: jest.Mock } };
 const mockedCompare = bcrypt.compare as unknown as jest.Mock;
+const mockedConsumeRateLimit = consumeAuthRateLimit as jest.Mock;
+const mockedClearRateLimit = clearAuthRateLimit as jest.Mock;
 
 describe('authOptions credential authorize', () => {
-    beforeEach(() => jest.clearAllMocks());
+    beforeEach(() => {
+        jest.clearAllMocks();
+        delete process.env.AUTH_TRUSTED_PROXY_HOPS;
+        mockedConsumeRateLimit.mockResolvedValue({ allowed: true, retryAfterSeconds: 0 });
+    });
+
+    it('normalizes the email before rate limiting and account lookup', async () => {
+        mockedPrisma.user.findUnique.mockResolvedValue(null);
+        mockedCompare.mockResolvedValue(false);
+
+        await authorize({ email: '  Ada@Example.COM ', password: 'whatever12' }).catch(() => {});
+
+        expect(mockedConsumeRateLimit).toHaveBeenCalledWith('login-email', 'ada@example.com', {
+            limit: 5,
+            windowSeconds: 15 * 60,
+        });
+        expect(mockedPrisma.user.findUnique).toHaveBeenCalledWith({
+            where: { email: 'ada@example.com' },
+        });
+    });
+
+    it('does not let targeted failed-attempt counters lock out valid credentials', async () => {
+        mockedConsumeRateLimit.mockResolvedValue({ allowed: false, retryAfterSeconds: 60 });
+        mockedPrisma.user.findUnique.mockResolvedValue({
+            id: 'u1', email: 'ada@example.com', name: 'Ada', image: null,
+            password: 'real-hash', role: 'USER',
+        });
+        mockedCompare.mockResolvedValue(true);
+
+        const result = await authorize({ email: 'ada@example.com', password: 'correct-horse' });
+
+        expect(result).toMatchObject({ id: 'u1' });
+        expect(mockedClearRateLimit).toHaveBeenCalledWith('login-email', 'ada@example.com');
+    });
+
+    it('blocks rotating-email spray from a throttled trusted source before password work', async () => {
+        process.env.AUTH_TRUSTED_PROXY_HOPS = '1';
+        mockedConsumeRateLimit.mockResolvedValueOnce({ allowed: false, retryAfterSeconds: 60 });
+
+        const error = await authorize(
+            { email: 'randomized@example.com', password: 'whatever12' },
+            { headers: { 'x-forwarded-for': 'spoofed, 203.0.113.10' } }
+        ).catch(e => e);
+
+        expect(error.message).toBe('Invalid email or password');
+        expect(mockedConsumeRateLimit).toHaveBeenCalledWith('login-source', '203.0.113.10', {
+            limit: 20,
+            windowSeconds: 15 * 60,
+        });
+        expect(mockedPrisma.user.findUnique).not.toHaveBeenCalled();
+        expect(mockedCompare).not.toHaveBeenCalled();
+    });
 
     it('returns the same generic error for unknown user and wrong password (no enumeration)', async () => {
         // Unknown user
@@ -63,6 +122,7 @@ describe('authOptions credential authorize', () => {
 
         expect(result).toMatchObject({ id: 'u1', email: 'a@b.com', role: 'USER' });
         expect(result.password).toBeUndefined();
+        expect(mockedClearRateLimit).toHaveBeenCalledWith('login-email', 'a@b.com');
     });
 
     it('throws error when email or password is missing', async () => {

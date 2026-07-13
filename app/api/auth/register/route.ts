@@ -8,6 +8,15 @@ import {
     registrationSchema,
     validationErrorPayload
 } from '@/lib/validation';
+import { consumeAuthRateLimit } from '@/lib/authRateLimit';
+import {
+    getTrustedClientAddressFromHeaders,
+    hasTrustedProxyConfiguration
+} from '@/lib/clientAddress';
+
+const ACCEPTED_RESPONSE = {
+    message: 'If this address can be registered, the request has been accepted.'
+};
 
 export async function POST(req: Request) {
     try {
@@ -17,37 +26,60 @@ export async function POST(req: Request) {
             MAX_REGISTRATION_BYTES
         );
 
+        const clientAddress = getTrustedClientAddressFromHeaders(req.headers);
+        if (hasTrustedProxyConfiguration() && !clientAddress) {
+            return NextResponse.json({
+                error: {
+                    code: 'INVALID_CLIENT_SOURCE',
+                    message: 'Unable to process this account request.',
+                    fields: {}
+                }
+            }, { status: 400 });
+        }
+
+        const emailLimit = await consumeAuthRateLimit(
+            'register-email', email, { limit: 3, windowSeconds: 60 * 60 }
+        );
+        const addressLimit = clientAddress
+            ? await consumeAuthRateLimit(
+                'register-address', clientAddress, { limit: 50, windowSeconds: 60 * 60 }
+            )
+            : { allowed: true, retryAfterSeconds: 0 };
+        if (!emailLimit.allowed || !addressLimit.allowed) {
+            const retryAfterSeconds = Math.max(emailLimit.retryAfterSeconds, addressLimit.retryAfterSeconds);
+            return NextResponse.json({
+                error: {
+                    code: 'RATE_LIMITED',
+                    message: 'Too many account requests. Please try again later.',
+                    fields: {}
+                }
+            }, {
+                status: 429,
+                headers: { 'Retry-After': String(retryAfterSeconds) }
+            });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+
         const existingUser = await prisma.user.findUnique({
             where: { email },
         });
 
         if (existingUser) {
-            return NextResponse.json({
-                error: {
-                    code: 'ACCOUNT_EXISTS',
-                    message: 'An account already exists for that email address.',
-                    fields: { email: ['Use a different email address or sign in.'] }
-                }
-            }, { status: 409 });
+            return NextResponse.json(ACCEPTED_RESPONSE, { status: 202 });
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
+        try {
+            await prisma.user.create({
+                data: { name, email, password: hashedPassword },
+            });
+        } catch (error) {
+            if (!(error && typeof error === 'object' && 'code' in error && error.code === 'P2002')) {
+                throw error;
+            }
+        }
 
-        const user = await prisma.user.create({
-            data: {
-                name,
-                email,
-                password: hashedPassword,
-            },
-        });
-
-        // Never return the password hash (or any other sensitive field) to the client.
-        const safeUser = { id: user.id, name: user.name, email: user.email, role: user.role };
-
-        return NextResponse.json(
-            { message: 'User registered successfully', user: safeUser },
-            { status: 201 }
-        );
+        return NextResponse.json(ACCEPTED_RESPONSE, { status: 202 });
     } catch (error) {
         if (error instanceof InputValidationError) {
             return NextResponse.json(

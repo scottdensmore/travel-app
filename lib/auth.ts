@@ -4,6 +4,11 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { clearAuthRateLimit, consumeAuthRateLimit } from '@/lib/authRateLimit';
+import {
+    getTrustedClientAddressFromHeaders,
+    hasTrustedProxyConfiguration
+} from '@/lib/clientAddress';
 
 // A valid bcrypt hash of a throwaway value, used only to equalize response
 // timing when no matching user exists (anti-enumeration). It is never a real
@@ -21,7 +26,7 @@ export const authOptions: NextAuthOptions = {
                 email: { label: 'Email', type: 'email', placeholder: 'user@example.com' },
                 password: { label: 'Password', type: 'password' },
             },
-            async authorize(credentials) {
+            async authorize(credentials, request) {
                 // Single generic message for every failure mode so the response
                 // never reveals whether an account with this email exists.
                 const INVALID = 'Invalid email or password';
@@ -30,8 +35,23 @@ export const authOptions: NextAuthOptions = {
                     throw new Error(INVALID);
                 }
 
+                const email = credentials.email.trim().toLowerCase();
+                const clientAddress = getTrustedClientAddressFromHeaders(request?.headers);
+                if (hasTrustedProxyConfiguration() && !clientAddress) throw new Error(INVALID);
+                if (clientAddress) {
+                    const sourceLimit = await consumeAuthRateLimit('login-source', clientAddress, {
+                        limit: 20,
+                        windowSeconds: 15 * 60,
+                    });
+                    if (!sourceLimit.allowed) throw new Error(INVALID);
+                }
+                await consumeAuthRateLimit('login-email', email, {
+                    limit: 5,
+                    windowSeconds: 15 * 60,
+                });
+
                 const user = await prisma.user.findUnique({
-                    where: { email: credentials.email },
+                    where: { email },
                 });
 
                 // Always run a bcrypt comparison — against the real hash when the
@@ -43,6 +63,8 @@ export const authOptions: NextAuthOptions = {
                 if (!user || !user.password || !isPasswordValid) {
                     throw new Error(INVALID);
                 }
+
+                await clearAuthRateLimit('login-email', email);
 
                 // Return only non-sensitive fields (never the password hash).
                 return {
