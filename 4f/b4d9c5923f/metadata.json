@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "4fb4d9c5923f",
+  "strategy": "manual-commit",
+  "branch": "scottdensmore/feat/server-validation",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "REAL_WORLD_ROADMAP.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/4f/b4d9c5923f/0/metadata.json",
+      "transcript": "/4f/b4d9c5923f/0/full.jsonl",
+      "compact_transcript": "/4f/b4d9c5923f/0/transcript.jsonl",
+      "content_hash": "/4f/b4d9c5923f/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 8915,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 1927424,
+    "output_tokens": 1530,
+    "api_call_count": 11
+  }
+}
