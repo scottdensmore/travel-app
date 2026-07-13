@@ -1,0 +1,21 @@
+what is going on..  did something go wrong?
+
+---
+
+What files are not checked in / tracked right now?
+
+---
+
+What about the roadmap file
+
+---
+
+ok lets do that
+
+---
+
+Is there anything else open and is the roadmap up to date?
+
+---
+
+we shouldn't have two things that don't stay in sync
