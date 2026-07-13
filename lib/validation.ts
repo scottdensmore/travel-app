@@ -172,11 +172,10 @@ export const passengerSchema = z.object({
 
 export const bookingRequestSchema = z.object({
     flightId: positiveId('Flight ID'),
-    totalPrice: z.string().trim().max(32).optional(),
     passengers: z.array(passengerSchema, { error: 'At least one passenger is required.' })
         .min(1, 'At least one passenger is required.')
         .max(MAX_PASSENGERS_PER_BOOKING),
-    paymentIntentId: z.string().trim().min(1).max(255).optional()
+    idempotencyKey: z.uuid('Booking request ID must be a UUID.')
 }).strict();
 
 export const flightBookingServiceSchema = bookingRequestSchema.extend({

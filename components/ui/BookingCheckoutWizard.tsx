@@ -1,10 +1,11 @@
 "use client"
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import Link from 'next/link';
 import { PassengerInput } from '@/lib/FlightBookingService';
 import { bookFlightAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
+import { CABIN_FARE_PERCENT, calculatePassengerFareCents, formatPrice, parsePriceToCents } from '@/lib/bookingPricing';
 
 interface Flight {
     id: number;
@@ -36,12 +37,12 @@ interface PassengerFormState {
     seatNumber: string;
 }
 
-const CABIN_MULTIPLIERS = {
-    ECONOMY: 1.0,
-    PREMIUM_ECONOMY: 1.5,
-    BUSINESS: 2.0,
-    FIRST: 3.0
-};
+interface ConfirmedPassenger {
+    firstName: string;
+    lastName: string;
+    seatNumber: string;
+    cabinClass: string;
+}
 
 const CABIN_LABELS = {
     ECONOMY: 'Economy',
@@ -50,15 +51,24 @@ const CABIN_LABELS = {
     FIRST: 'First Class (+200%)'
 };
 
+function createBookingRequestId(): string {
+    const bytes = new Uint8Array(16);
+    globalThis.crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOccupiedSeats }: BookingCheckoutWizardProps) {
-    const basePriceNum = parseInt(flight.price.replace(/[^0-9]/g, ""), 10) || 0;
+    const basePriceCents = parsePriceToCents(flight.price);
     const cabinRowCounts: Record<PassengerFormState['cabinClass'], number> = {
         ECONOMY: flight.economyRows ?? 20,
         PREMIUM_ECONOMY: flight.premiumEconomyRows ?? 4,
         BUSINESS: flight.businessRows ?? 3,
         FIRST: flight.firstClassRows ?? 3
     };
-    const availableCabins = (Object.keys(CABIN_MULTIPLIERS) as PassengerFormState['cabinClass'][])
+    const availableCabins = (Object.keys(CABIN_FARE_PERCENT) as PassengerFormState['cabinClass'][])
         .filter(cabin => cabinRowCounts[cabin] > 0);
     const defaultCabin = availableCabins[0];
 
@@ -75,20 +85,25 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
         }
     ]);
     const [activePassengerIndex, setActivePassengerIndex] = useState<number>(0);
-    const [paymentCard, setPaymentCard] = useState({ number: '', name: '', expiry: '', cvv: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [serverFieldErrors, setServerFieldErrors] = useState<Record<string, string[]>>({});
-    const [bookingResult, setBookingResult] = useState<{ id: number; paymentIntentId: string } | null>(null);
+    const [bookingResult, setBookingResult] = useState<{
+        id: number;
+        totalPrice: string;
+        passengers: ConfirmedPassenger[];
+    } | null>(null);
+    const idempotencyKeyRef = useRef<string | null>(null);
     const [autoAllocateGroup, setAutoAllocateGroup] = useState<boolean>(true);
     const [hoveredSuggestedSeats, setHoveredSuggestedSeats] = useState<string[]>([]);
 
     // Calculate total price
     const calculatePassengerPrice = (cabin: 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST') => {
-        return Math.round(basePriceNum * CABIN_MULTIPLIERS[cabin]);
+        return calculatePassengerFareCents(basePriceCents, cabin);
     };
 
-    const totalPrice = passengers.reduce((sum, p) => sum + calculatePassengerPrice(p.cabinClass), 0);
+    const totalPriceCents = passengers.reduce((sum, p) => sum + calculatePassengerPrice(p.cabinClass), 0);
+    const totalPriceDisplay = formatPrice(totalPriceCents);
 
     const handleAddPassenger = () => {
         setPassengers([
@@ -155,28 +170,6 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                 setErrorMessage(`Please select a seat for Passenger ${i + 1}.`);
                 return false;
             }
-        }
-        setErrorMessage(null);
-        return true;
-    };
-
-    const validateStep3 = () => {
-        const { number, name, expiry, cvv } = paymentCard;
-        if (!number.replace(/\s/g, '').match(/^\d{16}$/)) {
-            setErrorMessage('Card number must be 16 digits.');
-            return false;
-        }
-        if (!name.trim()) {
-            setErrorMessage('Cardholder name is required.');
-            return false;
-        }
-        if (!expiry.match(/^(0[1-9]|1[0-2])\/?([0-9]{2})$/)) {
-            setErrorMessage('Expiry date must be MM/YY format.');
-            return false;
-        }
-        if (!cvv.match(/^\d{3,4}$/)) {
-            setErrorMessage('CVV must be 3 or 4 digits.');
-            return false;
         }
         setErrorMessage(null);
         return true;
@@ -466,7 +459,6 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
     };
 
     const handleSubmitBooking = async () => {
-        if (!validateStep3()) return;
         setIsSubmitting(true);
         setErrorMessage(null);
         setServerFieldErrors({});
@@ -482,11 +474,11 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                 cabinClass: p.cabinClass
             }));
 
+            idempotencyKeyRef.current ??= createBookingRequestId();
             const result = await bookFlightAction({
                 flightId: flight.id,
-                totalPrice: `$${totalPrice}`,
                 passengers: formattedPassengers,
-                paymentIntentId: `ch_${Math.random().toString(36).substr(2, 9)}`
+                idempotencyKey: idempotencyKeyRef.current
             });
 
             if (isActionValidationFailure(result)) {
@@ -510,11 +502,17 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
 
             setBookingResult({
                 id: result.id,
-                paymentIntentId: result.paymentIntentId || ''
+                totalPrice: result.totalPrice,
+                passengers: result.passengers.map(passenger => ({
+                    firstName: passenger.firstName,
+                    lastName: passenger.lastName,
+                    seatNumber: passenger.seatNumber,
+                    cabinClass: passenger.cabinClass
+                }))
             });
             setStep(4);
         } catch (error: unknown) {
-            const msg = error instanceof Error ? error.message : 'Payment processing failed. Please try again.';
+            const msg = error instanceof Error ? error.message : 'We couldn’t confirm your booking. Please try again.';
             setErrorMessage(msg);
         } finally {
             setIsSubmitting(false);
@@ -529,7 +527,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                 {[
                     { s: 1, label: 'Travelers' },
                     { s: 2, label: 'Seats' },
-                    { s: 3, label: 'Payment' },
+                    { s: 3, label: 'Review' },
                     { s: 4, label: 'E-Ticket' }
                 ].map((item) => (
                     <div key={item.s} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, flex: 1 }}>
@@ -678,7 +676,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                             </div>
                         ))}
 
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2rem' }}>
+                        <div className="booking-wizard-actions booking-traveler-actions">
                             <button
                                 type="button"
                                 onClick={handleAddPassenger}
@@ -686,8 +684,8 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                 + Add Traveler
                             </button>
 
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                                <span style={{ fontSize: '1.1rem', color: '#34d399', fontWeight: 'bold' }}>Total: ${totalPrice.toLocaleString()}</span>
+                            <div className="booking-traveler-primary-actions">
+                                <span style={{ fontSize: '1.1rem', color: '#34d399', fontWeight: 'bold' }}>Estimated total: {totalPriceDisplay}</span>
                                 <button
                                     type="button"
                                     onClick={handleNextStep}
@@ -985,7 +983,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                             </div>
                         </div>
 
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2.5rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1.5rem' }}>
+                        <div className="booking-wizard-actions booking-seat-actions">
                             <button
                                 type="button"
                                 onClick={handlePrevStep}
@@ -996,19 +994,19 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                 type="button"
                                 onClick={handleNextStep}
                                 style={{ backgroundColor: '#8b5cf6', color: '#fff', border: 'none', padding: '10px 28px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
-                                Billing & Summary →
+                                Review Booking →
                             </button>
                         </div>
                     </div>
                 )}
 
-                {/* STEP 3: BILLING & PAYMENT */}
+                {/* STEP 3: BOOKING REVIEW */}
                 {step === 3 && (
                     <div>
-                        <h2 style={{ fontSize: '1.8rem', color: '#c084fc', marginBottom: '0.5rem', fontWeight: 'bold' }}>Review & Purchase</h2>
-                        <p style={{ color: 'rgba(255,255,255,0.5)', marginBottom: '2rem' }}>Please verify your details and enter card information to complete the booking.</p>
+                        <h2 style={{ fontSize: '1.8rem', color: '#c084fc', marginBottom: '0.5rem', fontWeight: 'bold' }}>Review Booking</h2>
+                        <p style={{ color: 'rgba(255,255,255,0.5)', marginBottom: '2rem' }}>Verify the itinerary and traveler details before confirming.</p>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem', marginBottom: '2rem' }}>
+                        <div style={{ marginBottom: '2rem' }}>
                             {/* Summary list */}
                             <div style={{ border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '1.5rem', background: 'rgba(0,0,0,0.15)' }}>
                                 <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem', color: '#a78bfa' }}>Trip Summary</h3>
@@ -1029,71 +1027,27 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                                 <strong>{p.firstName} {p.lastName}</strong>
                                                 <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)' }}>Class: {p.cabinClass} | Seat: {p.seatNumber}</div>
                                             </div>
-                                            <span style={{ fontWeight: 'bold' }}>${calculatePassengerPrice(p.cabinClass)}</span>
+                                            <span style={{ fontWeight: 'bold' }}>{formatPrice(calculatePassengerPrice(p.cabinClass))}</span>
                                         </div>
                                     ))}
                                 </div>
 
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: 'bold', borderTop: '1px solid rgba(255,255,255,0.08)', marginTop: '1.25rem', paddingTop: '1rem', color: '#34d399' }}>
-                                    <span>Total Price</span>
-                                    <span>${totalPrice.toLocaleString()}</span>
+                                    <span>Estimated Total</span>
+                                    <span>{totalPriceDisplay}</span>
                                 </div>
                             </div>
-
-                            {/* Payment card entry fields */}
-                            <div>
-                                <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem', color: '#a78bfa' }}>Payment Details</h3>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                    <div>
-                                        <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}>Card Number</label>
-                                        <input
-                                            type="text"
-                                            value={paymentCard.number}
-                                            onChange={(e) => setPaymentCard({ ...paymentCard, number: e.target.value.replace(/[^0-9]/g, '').replace(/(\d{4})(?=\d)/g, '$1 ') })}
-                                            placeholder="4111 2222 3333 4444"
-                                            maxLength={19}
-                                            style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}>Cardholder Name</label>
-                                        <input
-                                            type="text"
-                                            value={paymentCard.name}
-                                            onChange={(e) => setPaymentCard({ ...paymentCard, name: e.target.value })}
-                                            placeholder="JOHN DOE"
-                                            style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
-                                        />
-                                    </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                        <div>
-                                            <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}>Expiry Date</label>
-                                            <input
-                                                type="text"
-                                                value={paymentCard.expiry}
-                                                onChange={(e) => setPaymentCard({ ...paymentCard, expiry: e.target.value })}
-                                                placeholder="MM/YY"
-                                                maxLength={5}
-                                                style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}>CVV</label>
-                                            <input
-                                                type="password"
-                                                value={paymentCard.cvv}
-                                                onChange={(e) => setPaymentCard({ ...paymentCard, cvv: e.target.value.replace(/[^0-9]/g, '') })}
-                                                placeholder="123"
-                                                maxLength={4}
-                                                style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            <p role="note" style={{ color: 'rgba(255,255,255,0.65)', margin: '1rem 0 0', fontSize: '0.9rem' }}>
+                                Payment is not collected in this demo. The server will confirm the current fare and seat availability when you book.
+                            </p>
                         </div>
 
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2.5rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1.5rem' }}>
+                        {isSubmitting && (
+                            <p role="status" aria-live="polite" style={{ color: '#a7f3d0', margin: '0 0 1rem', fontWeight: 600 }}>
+                                Confirming booking and checking availability.
+                            </p>
+                        )}
+                        <div className="booking-wizard-actions booking-review-actions">
                             <button
                                 type="button"
                                 onClick={handlePrevStep}
@@ -1105,8 +1059,9 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                 type="button"
                                 onClick={handleSubmitBooking}
                                 disabled={isSubmitting}
-                                style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '12px 32px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                {isSubmitting ? 'Processing Payment...' : `Pay $${totalPrice.toLocaleString()} & Book`}
+                                aria-busy={isSubmitting}
+                                style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '12px 32px', borderRadius: '8px', cursor: isSubmitting ? 'not-allowed' : 'pointer', opacity: isSubmitting ? 0.65 : 1, fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                {isSubmitting ? 'Confirming Booking...' : `Confirm ${totalPriceDisplay} booking`}
                             </button>
                         </div>
                     </div>
@@ -1131,10 +1086,11 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                             ✓
                         </div>
                         <h2 style={{ fontSize: '2rem', color: '#34d399', fontWeight: 'bold', marginBottom: '0.5rem' }}>Booking Confirmed!</h2>
-                        <p style={{ color: 'rgba(255,255,255,0.6)', marginBottom: '2rem' }}>Your payment was processed successfully. Thank you for flying with Gemini Airways!</p>
+                        <p style={{ color: 'rgba(255,255,255,0.6)', marginBottom: '0.5rem' }}>Your booking is confirmed. Payment is not collected in this demo.</p>
+                        <p style={{ color: '#34d399', marginBottom: '2rem', fontWeight: 'bold' }}>Confirmed total: {bookingResult.totalPrice}</p>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', alignItems: 'center', marginBottom: '2.5rem' }}>
-                            {passengers.map((p, idx) => (
+                            {bookingResult.passengers.map((p, idx) => (
                                 /* Boarding Pass Card View Overlay */
                                 <div key={idx} style={{
                                     width: '100%',
@@ -1203,7 +1159,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                             ))}
                         </div>
 
-                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                        <div className="booking-success-actions">
                             <Link href="/profile" style={{ display: 'inline-block', backgroundColor: '#8b5cf6', color: '#fff', textDecoration: 'none', padding: '10px 24px', borderRadius: '8px', fontWeight: 'bold' }}>
                                 View Profile Bookings
                             </Link>

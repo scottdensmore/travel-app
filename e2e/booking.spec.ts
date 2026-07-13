@@ -43,7 +43,7 @@ test.describe('Flight Booking Journey', () => {
     }
   });
 
-  test('User can search, select cabin/seat, complete payment wizard, and view ticket on profile', async ({ page }) => {
+  test('User can search, select cabin and seat, confirm booking, and view it on profile', async ({ page }) => {
     // Find an upcoming flight instance from the seeded database to make search reliable
     const targetFlight = await prisma.flight.findFirst({
       where: {
@@ -89,9 +89,11 @@ test.describe('Flight Booking Journey', () => {
 
     // Expect to be redirected to the booking checkout page
     await expect(page).toHaveURL(new RegExp(`/book/${targetFlight.id}`));
+    await page.setViewportSize({ width: 320, height: 800 });
 
     // --- STEP 1: Traveler Information ---
     await expect(page.locator('h2:has-text("Traveler Information")')).toBeVisible();
+    await expect(page.locator('.booking-traveler-actions')).toHaveCSS('flex-direction', 'column');
     
     // Fill in Passenger #1 details
     await page.fill('input[placeholder="John"]', 'Bob');
@@ -104,35 +106,50 @@ test.describe('Flight Booking Journey', () => {
 
     // --- STEP 2: Seat Selection ---
     await expect(page.locator('h2:has-text("Select Your Seats")')).toBeVisible();
+    await expect(page.locator('.booking-seat-actions')).toHaveCSS('flex-direction', 'column');
     
     // Select seat 11A (an economy seat)
     const seatButton = page.locator('button[title="Select Seat 11A"]');
     await expect(seatButton).toBeVisible();
     await seatButton.click();
     
-    // Click Billing & Summary
-    await page.click('button:has-text("Billing & Summary →")');
+    // Continue to review
+    await page.click('button:has-text("Review Booking →")');
 
-    // --- STEP 3: Payment ---
-    await expect(page.locator('h2:has-text("Review & Purchase")')).toBeVisible();
+    // --- STEP 3: Review ---
+    await expect(page.locator('h2:has-text("Review Booking")')).toBeVisible();
     
     // Verify booking summary details
     await expect(page.locator('text=Bob Jones').first()).toBeVisible();
     await expect(page.locator('text=Class: ECONOMY | Seat: 11A').first()).toBeVisible();
 
-    // Fill simulated payment card information
-    await page.fill('input[placeholder="4111 2222 3333 4444"]', '4111222233334444');
-    await page.fill('input[placeholder="JOHN DOE"]', 'BOB JONES');
-    await page.fill('input[placeholder="MM/YY"]', '12/29');
-    await page.fill('input[placeholder="123"]', '123');
+    await expect(page.locator('text=Payment is not collected in this demo')).toBeVisible();
+    await expect(page.locator('input[placeholder="4111 2222 3333 4444"]')).not.toBeVisible();
 
-    // Submit Booking
-    await page.click('button:has-text("Pay ")');
+    const reviewActions = page.locator('.booking-review-actions');
+    await expect(reviewActions).toHaveCSS('flex-direction', 'column');
+    const confirmButton = page.locator('button:has-text("Confirm $")');
+    const actionsBox = await reviewActions.boundingBox();
+    const confirmBox = await confirmButton.boundingBox();
+    expect(actionsBox).not.toBeNull();
+    expect(confirmBox).not.toBeNull();
+    expect(confirmBox!.width).toBeLessThanOrEqual(actionsBox!.width);
+
+    // Confirm Booking
+    await confirmButton.click();
 
     // --- STEP 4: Success & Boarding Pass ---
     await expect(page.locator('h2:has-text("Booking Confirmed!")')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('.booking-success-actions')).toHaveCSS('flex-direction', 'column');
     await expect(page.locator('text=Bob Jones').first()).toBeVisible();
     await expect(page.locator('text=11A').first()).toBeVisible();
+    const persistedBooking = await prisma.booking.findFirstOrThrow({
+      where: { user: { email: uniqueEmail } },
+      orderBy: { createdAt: 'desc' }
+    });
+    expect(persistedBooking.totalPrice).toBe(targetFlight.price);
+    expect(persistedBooking.paymentIntentId).toBeNull();
+    expect(persistedBooking.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/i);
     
     // Navigate to profile bookings
     await page.click('a:has-text("View Profile Bookings")');

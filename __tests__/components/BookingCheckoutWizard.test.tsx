@@ -34,7 +34,7 @@ describe('BookingCheckoutWizard', () => {
         expect(screen.getByText('Passenger #1')).toBeInTheDocument();
 
         // Total price should initially be $100 (Economy)
-        expect(screen.getByText('Total: $100')).toBeInTheDocument();
+        expect(screen.getByText('Estimated total: $100')).toBeInTheDocument();
 
         // Fill passenger details
         fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Alice' } });
@@ -48,14 +48,14 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.change(classSelect, { target: { value: 'BUSINESS' } });
 
         // Total price should double to $200
-        expect(screen.getByText('Total: $200')).toBeInTheDocument();
+        expect(screen.getByText('Estimated total: $200')).toBeInTheDocument();
 
         // Add a second passenger
         fireEvent.click(screen.getByText('+ Add Traveler'));
         expect(screen.getByText('Passenger #2')).toBeInTheDocument();
 
         // Total price should be $200 (Passenger 1: Business) + $100 (Passenger 2: Economy) = $300
-        expect(screen.getByText('Total: $300')).toBeInTheDocument();
+        expect(screen.getByText('Estimated total: $300')).toBeInTheDocument();
 
         // Remove Passenger #2
         const removeButtons = screen.getAllByText('✕ Remove');
@@ -63,7 +63,7 @@ describe('BookingCheckoutWizard', () => {
 
         // Verify Passenger #2 is removed and price updates back to $200
         expect(screen.queryByText('Passenger #2')).not.toBeInTheDocument();
-        expect(screen.getByText('Total: $200')).toBeInTheDocument();
+        expect(screen.getByText('Estimated total: $200')).toBeInTheDocument();
     });
 
     it('shows validation errors in Step 1 if fields are missing', async () => {
@@ -133,14 +133,20 @@ describe('BookingCheckoutWizard', () => {
         expect(screen.getByText(/Seat:/).textContent).toContain('4A');
 
         // Proceed to Step 3
-        fireEvent.click(screen.getByText('Billing & Summary →'));
-        expect(screen.getByText('Review & Purchase')).toBeInTheDocument();
+        fireEvent.click(screen.getByText('Review Booking →'));
+        expect(screen.getByText('Review Booking')).toBeInTheDocument();
     });
 
-    it('validates card payment details and completes booking successfully (Step 3 & 4)', async () => {
+    it('confirms a server-priced booking without collecting payment card data', async () => {
         mockBookFlightAction.mockResolvedValue({
             id: 12345,
-            paymentIntentId: 'ch_mock123'
+            totalPrice: '$100',
+            passengers: [{
+                firstName: 'Robert',
+                lastName: 'Jones',
+                seatNumber: '11C',
+                cabinClass: 'ECONOMY'
+            }]
         });
 
         const { container } = render(<BookingCheckoutWizard flight={sampleFlight} occupiedSeats={[]} />);
@@ -159,25 +165,18 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.click(seat11C);
         
         // Proceed to Billing
-        fireEvent.click(screen.getByText('Billing & Summary →'));
+        fireEvent.click(screen.getByText('Review Booking →'));
 
         // Verify summary details are correct
         expect(screen.getByText('Bob Jones')).toBeInTheDocument();
         expect(screen.getByText('Class: ECONOMY | Seat: 11C')).toBeInTheDocument();
-        expect(screen.getByText('Total Price')).toBeInTheDocument();
+        expect(screen.getByText('Estimated Total')).toBeInTheDocument();
 
-        // Try to pay with invalid card number
-        fireEvent.click(screen.getByRole('button', { name: /Pay \$100 & Book/i }));
-        expect(screen.getByText(/Card number must be 16 digits/i)).toBeInTheDocument();
-
-        // Fill card info properly
-        fireEvent.change(screen.getByPlaceholderText('4111 2222 3333 4444'), { target: { value: '4111 2222 3333 4444' } });
-        fireEvent.change(screen.getByPlaceholderText('JOHN DOE'), { target: { value: 'BOB JONES' } });
-        fireEvent.change(screen.getByPlaceholderText('MM/YY'), { target: { value: '12/29' } });
-        fireEvent.change(screen.getByPlaceholderText('123'), { target: { value: '123' } });
+        expect(screen.queryByPlaceholderText('4111 2222 3333 4444')).not.toBeInTheDocument();
+        expect(screen.getByText(/Payment is not collected in this demo/i)).toBeInTheDocument();
 
         // Submit Booking
-        fireEvent.click(screen.getByRole('button', { name: /Pay \$100 & Book/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Confirm \$100 booking/i }));
 
         // Wait for step 4 success page
         await waitFor(() => {
@@ -185,7 +184,6 @@ describe('BookingCheckoutWizard', () => {
             expect(mockBookFlightAction).toHaveBeenCalledTimes(1);
             expect(mockBookFlightAction).toHaveBeenCalledWith({
                 flightId: 42,
-                totalPrice: '$100',
                 passengers: [{
                     firstName: 'Bob',
                     lastName: 'Jones',
@@ -195,12 +193,12 @@ describe('BookingCheckoutWizard', () => {
                     seatNumber: '11C',
                     cabinClass: 'ECONOMY'
                 }],
-                paymentIntentId: expect.any(String)
+                idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/i)
             });
         });
 
         // Verify Boarding Pass renders details
-        expect(screen.getByText('Bob Jones')).toBeInTheDocument();
+        expect(screen.getByText('Robert Jones')).toBeInTheDocument();
         expect(screen.getByText('GA404')).toBeInTheDocument();
         expect(screen.getByText('11C')).toBeInTheDocument();
         expect(screen.getByText('ECONOMY')).toBeInTheDocument();
@@ -221,21 +219,68 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.click(screen.getByText('Select Seats →'));
         fireEvent.click(screen.getByTitle('Select Seat 11D'));
 
-        // Payment Step
-        fireEvent.click(screen.getByText('Billing & Summary →'));
-
-        // Fill card info
-        fireEvent.change(screen.getByPlaceholderText('4111 2222 3333 4444'), { target: { value: '4111222233334444' } });
-        fireEvent.change(screen.getByPlaceholderText('JOHN DOE'), { target: { value: 'JOHN DOE' } });
-        fireEvent.change(screen.getByPlaceholderText('MM/YY'), { target: { value: '09/27' } });
-        fireEvent.change(screen.getByPlaceholderText('123'), { target: { value: '321' } });
+        // Review Step
+        fireEvent.click(screen.getByText('Review Booking →'));
 
         // Submit Booking
-        fireEvent.click(screen.getByRole('button', { name: /Pay \$100 & Book/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Confirm \$100 booking/i }));
 
         // Check if error is displayed
         await waitFor(() => {
             expect(screen.getByText(/Seats already taken!/i)).toBeInTheDocument();
+        });
+    });
+
+    it('announces and visibly disables the confirmation action while booking', async () => {
+        let resolveBooking!: (value: {
+            id: number;
+            totalPrice: string;
+            passengers: Array<{ firstName: string; lastName: string; seatNumber: string; cabinClass: string }>;
+        }) => void;
+        mockBookFlightAction.mockImplementation(() => new Promise((resolve) => {
+            resolveBooking = resolve;
+        }));
+
+        const { container } = render(<BookingCheckoutWizard flight={sampleFlight} occupiedSeats={[]} />);
+        fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Bob' } });
+        fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Jones' } });
+        fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1988-12-01' } });
+        fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US9876543' } });
+        fireEvent.click(screen.getByText('Select Seats →'));
+        fireEvent.click(screen.getByTitle('Select Seat 11C'));
+        fireEvent.click(screen.getByText('Review Booking →'));
+
+        fireEvent.click(screen.getByRole('button', { name: /Confirm \$100 booking/i }));
+
+        const pendingButton = screen.getByRole('button', { name: /Confirming Booking/i });
+        expect(pendingButton).toBeDisabled();
+        expect(pendingButton).toHaveAttribute('aria-busy', 'true');
+        expect(pendingButton).toHaveStyle({ opacity: '0.65', cursor: 'not-allowed' });
+        expect(screen.getByRole('status')).toHaveTextContent('Confirming booking and checking availability.');
+
+        resolveBooking({
+            id: 12345,
+            totalPrice: '$100',
+            passengers: [{ firstName: 'Bob', lastName: 'Jones', seatNumber: '11C', cabinClass: 'ECONOMY' }]
+        });
+        await waitFor(() => expect(screen.getByText('Booking Confirmed!')).toBeInTheDocument());
+    });
+
+    it('uses booking-specific copy for an unknown submission failure', async () => {
+        mockBookFlightAction.mockRejectedValue('network failure');
+
+        const { container } = render(<BookingCheckoutWizard flight={sampleFlight} occupiedSeats={[]} />);
+        fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Bob' } });
+        fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Jones' } });
+        fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1988-12-01' } });
+        fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US9876543' } });
+        fireEvent.click(screen.getByText('Select Seats →'));
+        fireEvent.click(screen.getByTitle('Select Seat 11C'));
+        fireEvent.click(screen.getByText('Review Booking →'));
+        fireEvent.click(screen.getByRole('button', { name: /Confirm \$100 booking/i }));
+
+        await waitFor(() => {
+            expect(screen.getByRole('alert')).toHaveTextContent('We couldn’t confirm your booking. Please try again.');
         });
     });
 
@@ -257,12 +302,8 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US9876543' } });
         fireEvent.click(screen.getByText('Select Seats →'));
         fireEvent.click(screen.getByTitle('Select Seat 11C'));
-        fireEvent.click(screen.getByText('Billing & Summary →'));
-        fireEvent.change(screen.getByPlaceholderText('4111 2222 3333 4444'), { target: { value: '4111222233334444' } });
-        fireEvent.change(screen.getByPlaceholderText('JOHN DOE'), { target: { value: 'BOB JONES' } });
-        fireEvent.change(screen.getByPlaceholderText('MM/YY'), { target: { value: '12/29' } });
-        fireEvent.change(screen.getByPlaceholderText('123'), { target: { value: '123' } });
-        fireEvent.click(screen.getByRole('button', { name: /Pay \$100 & Book/i }));
+        fireEvent.click(screen.getByText('Review Booking →'));
+        fireEvent.click(screen.getByRole('button', { name: /Confirm \$100 booking/i }));
 
         await waitFor(() => expect(screen.getByText('Traveler Information')).toBeInTheDocument());
         expect(screen.getByRole('alert')).toHaveTextContent('First name is required.');
@@ -289,12 +330,8 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US9876543' } });
         fireEvent.click(screen.getByText('Select Seats →'));
         fireEvent.click(screen.getByTitle('Select Seat 11C'));
-        fireEvent.click(screen.getByText('Billing & Summary →'));
-        fireEvent.change(screen.getByPlaceholderText('4111 2222 3333 4444'), { target: { value: '4111222233334444' } });
-        fireEvent.change(screen.getByPlaceholderText('JOHN DOE'), { target: { value: 'BOB JONES' } });
-        fireEvent.change(screen.getByPlaceholderText('MM/YY'), { target: { value: '12/29' } });
-        fireEvent.change(screen.getByPlaceholderText('123'), { target: { value: '123' } });
-        fireEvent.click(screen.getByRole('button', { name: /Pay \$100 & Book/i }));
+        fireEvent.click(screen.getByText('Review Booking →'));
+        fireEvent.click(screen.getByRole('button', { name: /Confirm \$100 booking/i }));
 
         await waitFor(() => expect(screen.getByText('Select Your Seats')).toBeInTheDocument());
         const passengerTarget = screen.getByRole('button', { name: /Bob Jones.*Seat: 11C/i });

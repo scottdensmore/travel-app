@@ -96,15 +96,11 @@ test.describe('User Notifications & Alerts Journey', () => {
     const seatBtn = page.locator('button[title="Select Seat 11A"]');
     await expect(seatBtn).toBeVisible();
     await seatBtn.click();
-    await page.click('button:has-text("Billing & Summary →")');
+    await page.click('button:has-text("Review Booking →")');
 
-    // Purchase
-    await expect(page.locator('h2:has-text("Review & Purchase")')).toBeVisible();
-    await page.fill('input[placeholder="4111 2222 3333 4444"]', '4111222233334444');
-    await page.fill('input[placeholder="JOHN DOE"]', 'BOB JONES');
-    await page.fill('input[placeholder="MM/YY"]', '12/29');
-    await page.fill('input[placeholder="123"]', '123');
-    await page.click('button:has-text("Pay ")');
+    // Confirm booking
+    await expect(page.locator('h2:has-text("Review Booking")')).toBeVisible();
+    await page.click('button:has-text("Confirm $")');
 
     // Expect confirmation
     await expect(page.locator('h2:has-text("Booking Confirmed!")')).toBeVisible({ timeout: 12000 });

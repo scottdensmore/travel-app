@@ -259,7 +259,13 @@ describe('bookFlightAction', () => {
 
     it('calls FlightBookingService with flightId and userId from session and creates a notification', async () => {
         mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
-        mockBookFlight.mockResolvedValue({ id: 1, flightId: 42, userId: 'user-123' });
+        mockBookFlight.mockResolvedValue({
+            id: 1,
+            flightId: 42,
+            userId: 'user-123',
+            totalPrice: '$200',
+            wasCreated: true
+        });
         mockedFlightFindUnique.mockResolvedValue({
             id: 42,
             airline: 'Gemini Airways',
@@ -274,15 +280,25 @@ describe('bookFlightAction', () => {
             passportNumber: 'AB123456', gender: 'Female', seatNumber: '11A',
             cabinClass: 'ECONOMY'
         }];
-        const result = await bookFlightAction({ flightId: 42, totalPrice: '$200', passengers });
+        const result = await bookFlightAction({
+            flightId: 42,
+            passengers,
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
+        });
 
         expect(mockBookFlight).toHaveBeenCalledWith(expect.objectContaining({
             flightId: 42,
             userId: 'user-123',
-            totalPrice: '$200',
-            passengers
+            passengers,
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
         }));
-        expect(result).toEqual({ id: 1, flightId: 42, userId: 'user-123' });
+        expect(result).toEqual({
+            id: 1,
+            flightId: 42,
+            userId: 'user-123',
+            totalPrice: '$200',
+            wasCreated: true
+        });
 
         expect(mockedNotificationCreate).toHaveBeenCalledWith({
             data: {
@@ -304,7 +320,8 @@ describe('bookFlightAction', () => {
 
         await expect(bookFlightAction({
             flightId: 42,
-            passengers: Array.from({ length: 10 }, () => passenger)
+            passengers: Array.from({ length: 10 }, () => passenger),
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
         })).resolves.toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR' } });
         expect(mockBookFlight).not.toHaveBeenCalled();
     });
@@ -317,6 +334,51 @@ describe('bookFlightAction', () => {
             error: { code: 'VALIDATION_ERROR', fields: { passengers: expect.any(Array) } }
         });
         expect(mockBookFlight).not.toHaveBeenCalled();
+    });
+
+    it('rejects client prices and payment identifiers before calling the booking service', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        const passenger = {
+            firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
+            passportNumber: 'AB123456', gender: 'Female', seatNumber: '11A',
+            cabinClass: 'ECONOMY'
+        };
+
+        await expect(bookFlightAction({
+            flightId: 42,
+            passengers: [passenger],
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+            totalPrice: '$0.01',
+            paymentIntentId: 'forged-payment'
+        } as any)).resolves.toMatchObject({
+            ok: false,
+            error: { code: 'VALIDATION_ERROR' }
+        });
+        expect(mockBookFlight).not.toHaveBeenCalled();
+    });
+
+    it('does not duplicate booking notifications for an idempotent retry', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        mockBookFlight.mockResolvedValue({
+            id: 1,
+            flightId: 42,
+            userId: 'user-123',
+            totalPrice: '$200',
+            wasCreated: false
+        });
+        mockedFlightFindUnique.mockResolvedValue({ id: 42, flightNumber: 'GA101' });
+
+        await bookFlightAction({
+            flightId: 42,
+            passengers: [{
+                firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
+                passportNumber: 'AB123456', gender: 'Female', seatNumber: '11A',
+                cabinClass: 'ECONOMY'
+            }],
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
+        });
+
+        expect(mockedNotificationCreate).not.toHaveBeenCalled();
     });
 });
 
@@ -428,7 +490,7 @@ describe('cancelBookingAction', () => {
         mockedBookingFindUnique.mockResolvedValue({
             id: 1,
             userId: 'user-123',
-            totalPrice: '$200',
+            totalPrice: '$69.97',
             flightId: 10,
             flight: { flightNumber: 'GA101', airline: 'Gemini Airways', price: '$200' }
         });
@@ -451,7 +513,7 @@ describe('cancelBookingAction', () => {
             data: {
                 userId: 'user-123',
                 title: 'Booking Cancelled: Gemini Airways GA101',
-                message: 'Booking for flight GA101 has been cancelled. Deducted -200 status points.',
+                message: 'Booking for flight GA101 has been cancelled. Deducted -69 status points.',
                 type: 'POINTS'
             }
         });

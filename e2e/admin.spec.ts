@@ -233,7 +233,8 @@ test.describe('Admin Control Journey', () => {
           gender: 'Other',
           seatNumber: '11A',
           cabinClass: 'ECONOMY'
-        }]
+        }],
+        idempotencyKey: '92160e58-74ee-460d-a98f-f58d1ea71477'
       })
     ]);
 

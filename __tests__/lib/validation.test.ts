@@ -125,16 +125,19 @@ describe('shared server validation schemas', () => {
             .toBe(false);
         expect(bookingRequestSchema.safeParse({
             flightId: 1,
-            passengers: Array.from({ length: 9 }, () => passenger)
+            passengers: Array.from({ length: 9 }, () => passenger),
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
         }).success).toBe(true);
         expect(bookingRequestSchema.safeParse({
             flightId: 1,
-            passengers: Array.from({ length: 10 }, () => passenger)
+            passengers: Array.from({ length: 10 }, () => passenger),
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
         }).success).toBe(false);
         expect(flightBookingServiceSchema.safeParse({
             flightId: 1,
             userId: 'user-1',
-            passengers: [passenger]
+            passengers: [passenger],
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
         }).success).toBe(true);
         expect(flightBookingServiceSchema.safeParse({ flightId: 1, userId: '' }).success)
             .toBe(false);
@@ -253,9 +256,27 @@ describe('shared server validation schemas', () => {
         const passengers = Array.from({ length: 9 }, (_, index) => ({
             ...passenger, passportNumber: `P${index}`, seatNumber: `${index + 1}A`
         }));
-        expect(bookingRequestSchema.safeParse({ flightId: 1, passengers }).success).toBe(true);
-        expect(bookingRequestSchema.safeParse({ flightId: 1, passengers: [] }).success).toBe(false);
-        expect(bookingRequestSchema.safeParse({ flightId: 1, passengers: [...passengers, passenger] }).success).toBe(false);
+        const idempotencyKey = '8ea59a65-9251-45b3-95d0-3920c49f5735';
+        expect(bookingRequestSchema.safeParse({ flightId: 1, passengers, idempotencyKey }).success).toBe(true);
+        expect(bookingRequestSchema.safeParse({ flightId: 1, passengers: [], idempotencyKey }).success).toBe(false);
+        expect(bookingRequestSchema.safeParse({ flightId: 1, passengers: [...passengers, passenger], idempotencyKey }).success).toBe(false);
+        expect(bookingRequestSchema.safeParse({
+            flightId: 1,
+            passengers,
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
+        }).success).toBe(true);
+        expect(bookingRequestSchema.safeParse({
+            flightId: 1,
+            passengers,
+            idempotencyKey: 'not-a-uuid'
+        }).success).toBe(false);
+        expect(bookingRequestSchema.safeParse({
+            flightId: 1,
+            passengers,
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+            totalPrice: '$1',
+            paymentIntentId: 'forged'
+        }).success).toBe(false);
 
         const seatChanges = Array.from({ length: 9 }, (_, index) => ({ passengerId: `p${index}`, seatNumber: `${index + 1}A` }));
         expect(seatChangesSchema.safeParse({ bookingId: 1, seatChanges }).success).toBe(true);

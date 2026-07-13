@@ -522,6 +522,49 @@ footer a:hover {
   border: 0 !important;
 }
 
+.booking-wizard-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.booking-traveler-primary-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.booking-seat-actions,
+.booking-review-actions {
+  margin-top: 2.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 1.5rem;
+}
+
+.booking-success-actions {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
+@media (max-width: 480px) {
+  .booking-wizard-actions,
+  .booking-traveler-primary-actions,
+  .booking-success-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .booking-wizard-actions button,
+  .booking-success-actions > a {
+    box-sizing: border-box;
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+  }
+}
+
 /* Custom Scrollbar for premium feel */
 ::-webkit-scrollbar {
   width: 8px;

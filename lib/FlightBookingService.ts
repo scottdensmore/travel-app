@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { assertSeatAvailableForCabin } from '@/lib/seatLayout';
 import { lockFlightForUpdate } from '@/lib/flightLock';
 import { flightBookingServiceSchema, parseInput } from '@/lib/validation';
+import { calculateBookingTotal } from '@/lib/bookingPricing';
 
 export interface PassengerInput {
   firstName: string;
@@ -13,15 +14,43 @@ export interface PassengerInput {
   cabinClass: string;
 }
 
+function passengerRequestSignature(passenger: PassengerInput): string {
+    const dateOfBirth = passenger.dateOfBirth instanceof Date
+        ? passenger.dateOfBirth.toISOString().slice(0, 10)
+        : passenger.dateOfBirth.slice(0, 10);
+    return JSON.stringify([
+        passenger.firstName,
+        passenger.lastName,
+        dateOfBirth,
+        passenger.passportNumber,
+        passenger.gender,
+        passenger.seatNumber,
+        passenger.cabinClass
+    ]);
+}
+
+function matchesPersistedRequest(
+    existingFlightId: number | null,
+    existingPassengers: PassengerInput[],
+    flightId: number,
+    passengers: PassengerInput[]
+): boolean {
+    if (existingFlightId !== flightId || existingPassengers.length !== passengers.length) {
+        return false;
+    }
+    const existingSignatures = existingPassengers.map(passengerRequestSignature).sort();
+    const requestedSignatures = passengers.map(passengerRequestSignature).sort();
+    return existingSignatures.every((signature, index) => signature === requestedSignatures[index]);
+}
+
 export default class FlightBookingService {
     async bookFlight(bookingData: { 
-        flightId?: number; 
-        userId?: string; 
-        totalPrice?: string; 
+        flightId: number;
+        userId: string;
         passengers: PassengerInput[];
-        paymentIntentId?: string; 
+        idempotencyKey: string;
     }) {
-        const { flightId, userId, totalPrice, passengers, paymentIntentId } = parseInput(
+        const { flightId, userId, passengers, idempotencyKey } = parseInput(
             flightBookingServiceSchema,
             bookingData
         );
@@ -31,6 +60,26 @@ export default class FlightBookingService {
             await lockFlightForUpdate(tx, flightId);
             const flight = await tx.flight.findUnique({ where: { id: flightId } });
             if (!flight) throw new Error("Flight not found");
+
+            const existingRequest = await tx.booking.findFirst({
+                where: { userId, idempotencyKey },
+                include: { passengers: true }
+            });
+            if (existingRequest) {
+                if (!matchesPersistedRequest(
+                    existingRequest.flightId,
+                    existingRequest.passengers,
+                    flightId,
+                    passengers
+                )) {
+                    throw new Error('Booking request ID was already used for a different booking.');
+                }
+                return { ...existingRequest, wasCreated: false };
+            }
+
+            if (flight.status === 'CANCELLED' || flight.departureDate.getTime() <= Date.now()) {
+                throw new Error('Flight is not available for booking.');
+            }
 
             // Check if any seat is already booked on this flight
             const requestedSeats = passengers.map(p => p.seatNumber);
@@ -63,13 +112,21 @@ export default class FlightBookingService {
                 }
             }
 
+            const total = calculateBookingTotal(
+                flight.price,
+                passengers.map(passenger => ({
+                    cabinClass: passenger.cabinClass as 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST'
+                }))
+            );
+
             // Create booking with nested passengers
-            return await tx.booking.create({
+            const booking = await tx.booking.create({
                 data: {
                     flightId,
                     userId,
-                    totalPrice: totalPrice || "$0",
-                    paymentIntentId: paymentIntentId || `mock_tx_${Date.now()}`,
+                    totalPrice: total.formatted,
+                    paymentIntentId: null,
+                    idempotencyKey,
                     passengers: {
                         create: passengers.map(p => ({
                             firstName: p.firstName,
@@ -87,6 +144,7 @@ export default class FlightBookingService {
                     passengers: true
                 }
             });
+            return { ...booking, wasCreated: true };
         });
 
         return savedBooking;

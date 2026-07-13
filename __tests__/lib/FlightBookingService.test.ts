@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 const mockTx = {
     $queryRaw: jest.fn(),
     booking: {
+        findFirst: jest.fn(),
         findMany: jest.fn(),
         create: jest.fn(),
     },
@@ -23,6 +24,7 @@ describe('FlightBookingService', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         mockTx.booking.findMany.mockReset();
+        mockTx.booking.findFirst.mockReset();
         mockTx.booking.create.mockReset();
         mockTx.flight.findUnique.mockReset();
         mockTx.$queryRaw.mockReset();
@@ -36,15 +38,19 @@ describe('FlightBookingService', () => {
         expect(mockTx.booking.create).not.toHaveBeenCalled();
     });
 
-    it('creates a detailed booking with passengers and validates seat selections', async () => {
+    it('calculates price from the locked flight and selected cabins', async () => {
         mockTx.flight.findUnique.mockResolvedValue({
             id: 7,
+            price: '$350',
+            status: 'ON_TIME',
+            departureDate: new Date('2099-01-01T10:00:00Z'),
             firstClassRows: 2,
             businessRows: 4,
             premiumEconomyRows: 4,
             economyRows: 20,
             seatPattern: 'ABC-DEF'
         });
+        mockTx.booking.findFirst.mockResolvedValue(null);
         mockTx.booking.findMany.mockResolvedValue([
             {
                 id: 10,
@@ -59,13 +65,14 @@ describe('FlightBookingService', () => {
             id: 2,
             flightId: 7,
             userId: 'u1',
-            totalPrice: '$525',
+            totalPrice: '$700',
+            paymentIntentId: null,
             passengers: [
                 {
                     firstName: 'Alice',
                     lastName: 'Smith',
-                    seatNumber: '12C',
-                    cabinClass: 'ECONOMY'
+                    seatNumber: '4C',
+                    cabinClass: 'BUSINESS'
                 }
             ]
         });
@@ -77,17 +84,24 @@ describe('FlightBookingService', () => {
                 dateOfBirth: '1995-05-15',
                 passportNumber: 'US123456',
                 gender: 'Female',
-                seatNumber: '12C',
-                cabinClass: 'ECONOMY'
+                seatNumber: '4C',
+                cabinClass: 'BUSINESS'
             }
         ];
 
         const result = await new FlightBookingService().bookFlight({
             flightId: 7,
             userId: 'u1',
-            totalPrice: '$525',
             passengers: passengersList,
-            paymentIntentId: 'mock_intent_123'
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
+        });
+
+        expect(mockTx.booking.findFirst).toHaveBeenCalledWith({
+            where: {
+                userId: 'u1',
+                idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
+            },
+            include: { passengers: true }
         });
 
         expect(mockTx.booking.findMany).toHaveBeenCalledWith({
@@ -99,8 +113,9 @@ describe('FlightBookingService', () => {
             data: {
                 flightId: 7,
                 userId: 'u1',
-                totalPrice: '$525',
-                paymentIntentId: 'mock_intent_123',
+                totalPrice: '$700',
+                paymentIntentId: null,
+                idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
                 passengers: {
                     create: [
                         {
@@ -109,8 +124,8 @@ describe('FlightBookingService', () => {
                             dateOfBirth: new Date('1995-05-15'),
                             passportNumber: 'US123456',
                             gender: 'Female',
-                            seatNumber: '12C',
-                            cabinClass: 'ECONOMY',
+                            seatNumber: '4C',
+                            cabinClass: 'BUSINESS',
                             flightId: 7
                         }
                     ]
@@ -119,12 +134,113 @@ describe('FlightBookingService', () => {
             include: { passengers: true }
         });
 
-        expect(result).toMatchObject({ id: 2, totalPrice: '$525' });
+        expect(result).toMatchObject({ id: 2, totalPrice: '$700' });
+    });
+
+    it('returns the existing booking when an idempotency key is retried', async () => {
+        const existing = {
+            id: 12,
+            userId: 'u1',
+            flightId: 7,
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+            totalPrice: '$350',
+            passengers: [{
+                firstName: 'Alice', lastName: 'Smith', dateOfBirth: new Date('1995-05-15T00:00:00.000Z'),
+                passportNumber: 'US123456', gender: 'Female', seatNumber: '11A', cabinClass: 'ECONOMY'
+            }]
+        };
+        mockTx.flight.findUnique.mockResolvedValue({
+            id: 7,
+            price: '$350',
+            status: 'ON_TIME',
+            departureDate: new Date('2099-01-01T10:00:00Z')
+        });
+        mockTx.booking.findFirst.mockResolvedValue(existing);
+
+        const result = await new FlightBookingService().bookFlight({
+            flightId: 7,
+            userId: 'u1',
+            passengers: [{
+                firstName: 'Alice', lastName: 'Smith', dateOfBirth: '1995-05-15',
+                passportNumber: 'US123456', gender: 'Female', seatNumber: '11A',
+                cabinClass: 'ECONOMY'
+            }],
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
+        });
+
+        expect(result).toEqual({ ...existing, wasCreated: false });
+        expect(mockTx.booking.create).not.toHaveBeenCalled();
+        expect(mockTx.booking.findMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects reuse of an idempotency key for a different flight or passenger request', async () => {
+        const existing = {
+            id: 12,
+            userId: 'u1',
+            flightId: 8,
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+            totalPrice: '$350',
+            passengers: [{
+                firstName: 'Alice', lastName: 'Smith', dateOfBirth: new Date('1995-05-15T00:00:00.000Z'),
+                passportNumber: 'US123456', gender: 'Female', seatNumber: '11A', cabinClass: 'ECONOMY'
+            }]
+        };
+        mockTx.flight.findUnique.mockResolvedValue({
+            id: 7, price: '$350', status: 'ON_TIME', departureDate: new Date('2099-01-01T10:00:00Z')
+        });
+        mockTx.booking.findFirst.mockResolvedValue(existing);
+        const request = {
+            flightId: 7,
+            userId: 'u1',
+            passengers: [{
+                firstName: 'Alice', lastName: 'Smith', dateOfBirth: '1995-05-15',
+                passportNumber: 'US123456', gender: 'Female', seatNumber: '11A', cabinClass: 'ECONOMY'
+            }],
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
+        };
+
+        await expect(new FlightBookingService().bookFlight(request))
+            .rejects.toThrow('Booking request ID was already used for a different booking.');
+
+        existing.flightId = 7;
+        request.passengers[0].seatNumber = '11B';
+        await expect(new FlightBookingService().bookFlight(request))
+            .rejects.toThrow('Booking request ID was already used for a different booking.');
+        expect(mockTx.booking.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects cancelled and departed flight inventory', async () => {
+        const request = {
+            flightId: 7,
+            userId: 'u1',
+            passengers: [{
+                firstName: 'Alice', lastName: 'Smith', dateOfBirth: '1995-05-15',
+                passportNumber: 'US123456', gender: 'Female', seatNumber: '11A',
+                cabinClass: 'ECONOMY'
+            }],
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
+        };
+        mockTx.booking.findFirst.mockResolvedValue(null);
+        mockTx.flight.findUnique.mockResolvedValue({
+            id: 7, price: '$350', status: 'CANCELLED', departureDate: new Date('2099-01-01T10:00:00Z')
+        });
+        await expect(new FlightBookingService().bookFlight(request))
+            .rejects.toThrow('Flight is not available for booking.');
+
+        mockTx.flight.findUnique.mockResolvedValue({
+            id: 7, price: '$350', status: 'ON_TIME', departureDate: new Date('2020-01-01T10:00:00Z')
+        });
+        await expect(new FlightBookingService().bookFlight(request))
+            .rejects.toThrow('Flight is not available for booking.');
+        expect(mockTx.booking.create).not.toHaveBeenCalled();
     });
 
     it('rejects seats outside the configured cabin layout', async () => {
         mockTx.flight.findUnique.mockResolvedValue({
             id: 7,
+            price: '$350',
+            status: 'ON_TIME',
+            departureDate: new Date('2099-01-01T10:00:00Z'),
             firstClassRows: 1,
             businessRows: 1,
             premiumEconomyRows: 1,
@@ -146,20 +262,26 @@ describe('FlightBookingService', () => {
         await expect(new FlightBookingService().bookFlight({
             flightId: 7,
             userId: 'u1',
-            passengers: [passenger]
+            passengers: [passenger],
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
         })).rejects.toThrow('Seat 1A is not available for ECONOMY on this flight.');
 
         passenger.seatNumber = '8F';
         await expect(new FlightBookingService().bookFlight({
             flightId: 7,
             userId: 'u1',
-            passengers: [passenger]
+            passengers: [passenger],
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
         })).rejects.toThrow('Seat 8F is not available for ECONOMY on this flight.');
         expect(mockTx.booking.create).not.toHaveBeenCalled();
     });
 
     it('rejects duplicate seats within one booking request', async () => {
-        mockTx.flight.findUnique.mockResolvedValue({ id: 7 });
+        mockTx.flight.findUnique.mockResolvedValue({
+            id: 7, price: '$350', status: 'ON_TIME',
+            departureDate: new Date('2099-01-01T10:00:00Z')
+        });
+        mockTx.booking.findFirst.mockResolvedValue(null);
         mockTx.booking.findMany.mockResolvedValue([]);
         const passenger = {
             firstName: 'Alice',
@@ -174,13 +296,18 @@ describe('FlightBookingService', () => {
         await expect(new FlightBookingService().bookFlight({
             flightId: 7,
             userId: 'u1',
-            passengers: [passenger, { ...passenger, firstName: 'Bob' }]
+            passengers: [passenger, { ...passenger, firstName: 'Bob' }],
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
         })).rejects.toThrow('Duplicate seats selected in request.');
         expect(mockTx.booking.create).not.toHaveBeenCalled();
     });
 
     it('throws an error if a requested seat is already occupied', async () => {
-        mockTx.flight.findUnique.mockResolvedValue({ id: 7 });
+        mockTx.flight.findUnique.mockResolvedValue({
+            id: 7, price: '$350', status: 'ON_TIME',
+            departureDate: new Date('2099-01-01T10:00:00Z')
+        });
+        mockTx.booking.findFirst.mockResolvedValue(null);
         mockTx.booking.findMany.mockResolvedValue([
             {
                 id: 10,
@@ -206,10 +333,27 @@ describe('FlightBookingService', () => {
         await expect(new FlightBookingService().bookFlight({
             flightId: 7,
             userId: 'u1',
-            totalPrice: '$350',
-            passengers: passengersList
+            passengers: passengersList,
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
         })).rejects.toThrow('Seat 12A is already occupied on this flight.');
 
         expect(mockTx.booking.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects client-supplied prices and payment identifiers', async () => {
+        await expect(new FlightBookingService().bookFlight({
+            flightId: 7,
+            userId: 'u1',
+            passengers: [{
+                firstName: 'Alice', lastName: 'Smith', dateOfBirth: '1995-05-15',
+                passportNumber: 'US123456', gender: 'Female', seatNumber: '11A',
+                cabinClass: 'ECONOMY'
+            }],
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+            totalPrice: '$0.01',
+            paymentIntentId: 'forged'
+        } as any)).rejects.toThrow('Unrecognized');
+
+        expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 });

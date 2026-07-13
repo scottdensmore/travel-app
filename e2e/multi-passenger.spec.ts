@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { prisma } from '../lib/prisma';
+import { calculateBookingTotal } from '../lib/bookingPricing';
 
 test.describe('Multi-Passenger Booking Journey', () => {
   const uniqueEmail = `multibook-${Date.now()}@example.com`;
@@ -119,23 +120,17 @@ test.describe('Multi-Passenger Booking Journey', () => {
     await expect(page.locator('text=Seat: 11B')).toBeVisible();
 
     // Let's go to step 3
-    await page.click('button:has-text("Billing & Summary →")');
+    await page.click('button:has-text("Review Booking →")');
 
-    // --- STEP 3: Billing & Review ---
-    await expect(page.locator('h2:has-text("Review & Purchase")')).toBeVisible();
+    // --- STEP 3: Review ---
+    await expect(page.locator('h2:has-text("Review Booking")')).toBeVisible();
     await expect(page.locator('text=Alice Smith')).toBeVisible();
     await expect(page.locator('text=Class: ECONOMY | Seat: 11A')).toBeVisible();
     await expect(page.locator('text=Bob Jones')).toBeVisible();
     await expect(page.locator('text=Class: ECONOMY | Seat: 11B')).toBeVisible();
 
-    // Fill card info
-    await page.fill('input[placeholder="4111 2222 3333 4444"]', '4111222233334444');
-    await page.fill('input[placeholder="JOHN DOE"]', 'ALICE SMITH');
-    await page.fill('input[placeholder="MM/YY"]', '12/29');
-    await page.fill('input[placeholder="123"]', '123');
-
-    // Pay
-    await page.click('button:has-text("Pay ")');
+    // Confirm
+    await page.click('button:has-text("Confirm $")');
 
     // --- STEP 4: Confirmation & Boarding Passes ---
     await expect(page.locator('h2:has-text("Booking Confirmed!")')).toBeVisible({ timeout: 12000 });
@@ -145,5 +140,14 @@ test.describe('Multi-Passenger Booking Journey', () => {
     await expect(page.locator('text=11A').first()).toBeVisible();
     await expect(page.locator('text=Bob Jones').first()).toBeVisible();
     await expect(page.locator('text=11B').first()).toBeVisible();
+    const persistedBooking = await prisma.booking.findFirstOrThrow({
+      where: { user: { email: uniqueEmail } },
+      orderBy: { createdAt: 'desc' }
+    });
+    expect(persistedBooking.totalPrice).toBe(calculateBookingTotal(targetFlight.price, [
+      { cabinClass: 'ECONOMY' },
+      { cabinClass: 'ECONOMY' }
+    ]).formatted);
+    expect(persistedBooking.paymentIntentId).toBeNull();
   });
 });

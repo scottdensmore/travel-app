@@ -79,12 +79,14 @@ model CityGuide {
   favorites UserFavorite[]
   reviews   Review[]
 }
+
 model Booking {
-  id              Int         @id @default(autoincrement())
-  createdAt       DateTime    @default(now())
-  status          String      @default("CONFIRMED")
+  id              Int      @id @default(autoincrement())
+  createdAt       DateTime @default(now())
+  status          String   @default("CONFIRMED")
   paymentIntentId String?
-  totalPrice      String      @default("")
+  totalPrice      String   @default("")
+  idempotencyKey  String?
 
   flightId Int?
   flight   Flight? @relation(fields: [flightId], references: [id])
@@ -93,6 +95,8 @@ model Booking {
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   passengers Passenger[]
+
+  @@unique([userId, idempotencyKey])
 }
 
 model Passenger {
@@ -108,12 +112,11 @@ model Passenger {
   bookingId Int
   booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
-  flightId  Int
-  flight    Flight  @relation(fields: [flightId], references: [id], onDelete: Cascade)
+  flightId Int
+  flight   Flight @relation(fields: [flightId], references: [id], onDelete: Cascade)
 
   @@unique([flightId, seatNumber])
 }
-
 
 model Flight {
   id            Int       @id @default(autoincrement())
@@ -132,7 +135,7 @@ model Flight {
   economyRows        Int?
   seatPattern        String?
 
-  bookings Booking[]
+  bookings   Booking[]
   passengers Passenger[]
 
   @@unique([flightNumber, departureDate])
@@ -163,7 +166,7 @@ model Review {
 }
 
 model FlightSchedule {
-  id            Int      @id @default(autoincrement())
+  id            Int     @id @default(autoincrement())
   flightNumber  String
   airline       String
   from          String
@@ -172,7 +175,7 @@ model FlightSchedule {
   returnTime    String?
   daysOfWeek    Int[]
   price         String
-  isActive      Boolean  @default(true)
+  isActive      Boolean @default(true)
 
   firstClassRows     Int?
   businessRows       Int?
@@ -187,7 +190,7 @@ model Notification {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String
   message   String
-  type      String   // "FLIGHT_STATUS" | "POINTS" | "SYSTEM"
+  type      String // "FLIGHT_STATUS" | "POINTS" | "SYSTEM"
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 
