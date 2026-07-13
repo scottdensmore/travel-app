@@ -1,0 +1,53 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "10d8596c9fb5",
+  "strategy": "manual-commit",
+  "branch": "scottdensmore/feat/server-validation",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "REAL_WORLD_ROADMAP.md",
+    "__tests__/app/actions.test.ts",
+    "__tests__/app/api/register.test.ts",
+    "__tests__/components/BookingCheckoutWizard.test.tsx",
+    "__tests__/components/ProfileClient.test.tsx",
+    "__tests__/components/TravelGuideClient.test.tsx",
+    "__tests__/components/UserAuthForm.test.tsx",
+    "__tests__/components/flightBookingForm.test.tsx",
+    "__tests__/components/travelGuideForm.test.tsx",
+    "__tests__/lib/FlightBookingService.test.ts",
+    "__tests__/lib/validation.test.ts",
+    "app/actions.ts",
+    "app/admin/flights/DeleteScheduleButton.tsx",
+    "app/admin/flights/FlightStatusSelector.tsx",
+    "app/admin/travelguide/DeleteGuideButton.tsx",
+    "app/api/auth/register/route.ts",
+    "app/login/components/user-auth-form.tsx",
+    "components/ui/BookingCheckoutWizard.tsx",
+    "components/ui/ManualOccurrenceBuilder.tsx",
+    "components/ui/ProfileClient.tsx",
+    "components/ui/TravelGuideClient.tsx",
+    "components/ui/flightBookingForm.tsx",
+    "components/ui/flightScheduleForm.tsx",
+    "components/ui/travelGuideForm.tsx",
+    "lib/FlightBookingService.ts",
+    "lib/TravelGuideService.ts",
+    "lib/actionResult.ts",
+    "lib/validation.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/10/d8596c9fb5/0/metadata.json",
+      "transcript": "/10/d8596c9fb5/0/full.jsonl",
+      "compact_transcript": "/10/d8596c9fb5/0/transcript.jsonl",
+      "content_hash": "/10/d8596c9fb5/0/content_hash.txt",
+      "prompt": "/10/d8596c9fb5/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3312987,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 204505088,
+    "output_tokens": 264953,
+    "api_call_count": 1253
+  }
+}
