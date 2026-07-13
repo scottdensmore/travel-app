@@ -1,6 +1,7 @@
 import { PointsActivityData, StartingPoints } from "./data/PointsActivityData";
 import { PointsActivityDisplayData } from "./types/PointsActivity";
 import { Booking, Flight } from "@prisma/client";
+import { parsePriceToCents } from "./bookingPricing";
 
 type BookingWithFlight = Booking & { flight: Flight | null };
 
@@ -15,7 +16,11 @@ class PointsActivityService {
 
   private parsePrice(priceStr: string | null | undefined): number {
     if (!priceStr) return 0;
-    return parseInt(priceStr.replace(/[^0-9]/g, ""), 10) || 0;
+    try {
+      return Math.floor(parsePriceToCents(priceStr) / 100);
+    } catch {
+      return 0;
+    }
   }
 
   getCurrentPoints(): number {

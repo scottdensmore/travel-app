@@ -98,6 +98,19 @@ describe('PointsActivityService dynamic calculations', () => {
         expect(activities[0].points).toBe(450);
     });
 
+    it('awards whole-dollar points for authoritative decimal fares', () => {
+        const service = new PointsActivityService([{
+            id: 4,
+            createdAt: new Date('2026-03-11'),
+            status: 'CONFIRMED',
+            totalPrice: '$69.97',
+            flight: null
+        } as any], 500);
+
+        expect(service.getCurrentPoints()).toBe(569);
+        expect(service.getPointsActivity()[0].points).toBe(69);
+    });
+
     it('correctly handles CANCELLED bookings by not counting points and rendering negative log rows', () => {
         const bookingsWithCancelled: any[] = [
             {

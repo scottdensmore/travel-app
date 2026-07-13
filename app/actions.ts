@@ -12,6 +12,7 @@ import { assertSeatAvailableForCabin, validateSeatingLayout } from '@/lib/seatLa
 import { lockFlightForUpdate } from '@/lib/flightLock';
 import { updateFlightSeatingLayout } from '@/lib/FlightSeatLayoutService';
 import { actionValidationFailure } from '@/lib/actionResult';
+import { parsePriceToCents } from '@/lib/bookingPricing';
 import {
     bookingRequestSchema,
     cityGuideSchema,
@@ -107,10 +108,9 @@ export async function getFlightRoutesAction() {
 }
 
 export async function bookFlightAction(bookingData: { 
-    flightId: number; 
-    totalPrice?: string; 
+    flightId: number;
     passengers: PassengerInput[];
-    paymentIntentId?: string; 
+    idempotencyKey: string;
 }) {
     const session = await getServerSession(authOptions);
     const userId = session?.user?.id;
@@ -122,16 +122,14 @@ export async function bookFlightAction(bookingData: {
     const result = await flightBookingService.bookFlight({
         flightId: bookingData.flightId,
         userId,
-        totalPrice: bookingData.totalPrice,
         passengers: bookingData.passengers,
-        paymentIntentId: bookingData.paymentIntentId
+        idempotencyKey: bookingData.idempotencyKey
     });
 
     try {
         const flight = await prisma.flight.findUnique({ where: { id: bookingData.flightId } });
-        if (flight) {
-            const rawPrice = bookingData.totalPrice || flight.price;
-            const points = parseInt(rawPrice.replace(/[^0-9]/g, ""), 10) || 0;
+        if (flight && result.wasCreated) {
+            const points = Math.floor(parsePriceToCents(result.totalPrice) / 100);
             await prisma.notification.create({
                 data: {
                     userId,
@@ -256,7 +254,7 @@ export async function cancelBookingAction(bookingId: number) {
         const flight = booking.flight;
         if (flight && booking.userId) {
             const rawPrice = booking.totalPrice || flight.price;
-            const points = parseInt(rawPrice.replace(/[^0-9]/g, ""), 10) || 0;
+            const points = Math.floor(parsePriceToCents(rawPrice) / 100);
             await prisma.notification.create({
                 data: {
                     userId: booking.userId,
