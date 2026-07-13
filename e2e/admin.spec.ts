@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { prisma } from '../lib/prisma';
 import FlightBookingService from '../lib/FlightBookingService';
 import { updateFlightSeatingLayout } from '../lib/FlightSeatLayoutService';
-import { registerAccount, registerAndSignIn, signInWithCredentials } from './helpers/auth';
+import { createVerifiedAccount, registerAndSignIn, signInWithCredentials } from './helpers/auth';
 
 test.describe('Admin Control Journey', () => {
   const adminEmail = `admin-${Date.now()}@example.com`;
@@ -46,7 +46,7 @@ test.describe('Admin Control Journey', () => {
 
   test('Admin user can access dashboard, create schedule, and change live status', async ({ page }) => {
     // Register admin user
-    await registerAccount(page, { name: 'Admin User', email: adminEmail, password });
+    await createVerifiedAccount(page, { name: 'Admin User', email: adminEmail, password });
 
     // Promote the user to ADMIN directly in the database
     await prisma.user.update({

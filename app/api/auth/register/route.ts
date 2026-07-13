@@ -13,6 +13,8 @@ import {
     getTrustedClientAddressFromHeaders,
     hasTrustedProxyConfiguration
 } from '@/lib/clientAddress';
+import { requestEmailVerification } from '@/lib/authAccountFlows';
+import { scheduleAfterResponse } from '@/lib/afterResponse';
 
 const ACCEPTED_RESPONSE = {
     message: 'If this address can be registered, the request has been accepted.'
@@ -65,19 +67,28 @@ export async function POST(req: Request) {
             where: { email },
         });
 
-        if (existingUser) {
-            return NextResponse.json(ACCEPTED_RESPONSE, { status: 202 });
-        }
-
-        try {
-            await prisma.user.create({
-                data: { name, email, password: hashedPassword },
-            });
-        } catch (error) {
-            if (!(error && typeof error === 'object' && 'code' in error && error.code === 'P2002')) {
-                throw error;
+        if (!existingUser) {
+            try {
+                await prisma.user.create({
+                    data: { name, email, password: hashedPassword },
+                });
+            } catch (error) {
+                if (!(error && typeof error === 'object' && 'code' in error && error.code === 'P2002')) {
+                    throw error;
+                }
             }
         }
+
+        scheduleAfterResponse(async () => {
+            try {
+                await requestEmailVerification(email);
+            } catch {
+                // Keep the immediate response indistinguishable for new, existing,
+                // and temporarily undeliverable accounts. The user can request a
+                // replacement verification email from the login journey.
+                console.error('Unable to deliver registration verification email.');
+            }
+        });
 
         return NextResponse.json(ACCEPTED_RESPONSE, { status: 202 });
     } catch (error) {

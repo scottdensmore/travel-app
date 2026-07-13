@@ -1,6 +1,7 @@
 import { z, ZodError, ZodType } from 'zod';
 import { validateSeatingLayout } from '@/lib/seatLayout';
 import { ActionValidationFailure } from '@/lib/actionResult';
+import { isValidAuthToken } from '@/lib/authTokenFormat';
 
 export const MAX_MUTATION_BYTES = 1_000_000;
 export const MAX_REGISTRATION_BYTES = 16_384;
@@ -59,16 +60,32 @@ const isoDateSchema = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'Dates must
         return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
     }, 'Date is invalid.');
 
+export const emailAddressSchema = z.string()
+    .trim()
+    .toLowerCase()
+    .max(254, 'Email address is too long.')
+    .email('Enter a valid email address.');
+
+export const passwordSchema = z.string()
+    .min(8, 'Password must be at least 8 characters.')
+    .max(128, 'Password is too long.');
+
+const oneTimeTokenSchema = z.string().refine(
+    isValidAuthToken,
+    'This link is invalid or expired.'
+);
+
 export const registrationSchema = z.object({
     name: requiredText('Name', 100),
-    email: z.string()
-        .trim()
-        .toLowerCase()
-        .max(254, 'Email address is too long.')
-        .email('Enter a valid email address.'),
-    password: z.string()
-        .min(8, 'Password must be at least 8 characters.')
-        .max(128, 'Password is too long.')
+    email: emailAddressSchema,
+    password: passwordSchema
+}).strict();
+
+export const authEmailRequestSchema = z.object({ email: emailAddressSchema }).strict();
+export const authTokenSchema = z.object({ token: oneTimeTokenSchema }).strict();
+export const passwordResetSchema = z.object({
+    token: oneTimeTokenSchema,
+    password: passwordSchema,
 }).strict();
 
 export const favoriteSchema = z.object({

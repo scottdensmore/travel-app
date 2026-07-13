@@ -32,7 +32,7 @@ export default function AuthenticationPage() {
                         >
                             <path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3" />
                         </svg>
-                        Gemini Airways
+                        Mona Airways
                     </div>
                     <div className="relative z-20 mt-auto">
                         <blockquote className="space-y-2">
@@ -56,6 +56,14 @@ export default function AuthenticationPage() {
                             </p>
                         </div>
                         <UserAuthForm type="login" />
+                        <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+                            <Link href="/forgot-password" className="underline underline-offset-4 hover:text-primary">
+                                Forgot password?
+                            </Link>
+                            <Link href="/resend-verification" className="underline underline-offset-4 hover:text-primary">
+                                Resend verification
+                            </Link>
+                        </div>
                         <p className="px-8 text-center text-sm text-muted-foreground">
                             By clicking continue, you agree to our{" "}
                             <Link

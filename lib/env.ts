@@ -1,10 +1,18 @@
-type RequiredEnvironmentVariable = 'DATABASE_URL' | 'NEXTAUTH_URL' | 'NEXTAUTH_SECRET';
+type RequiredEnvironmentVariable =
+    | 'DATABASE_URL'
+    | 'NEXTAUTH_URL'
+    | 'NEXTAUTH_SECRET'
+    | 'AUTH_EMAIL_FROM'
+    | 'AUTH_EMAIL_PROVIDER'
+    | 'AUTH_EMAIL_API_URL';
 type Environment = Partial<Record<RequiredEnvironmentVariable, string | undefined>> & {
     NODE_ENV?: string;
     AUTH_TRUSTED_PROXY_HOPS?: string;
+    AUTH_EMAIL_API_TOKEN?: string;
 };
 type ValidatedEnvironment = Record<RequiredEnvironmentVariable, string> & {
     AUTH_TRUSTED_PROXY_HOPS?: string;
+    AUTH_EMAIL_API_TOKEN?: string;
 };
 
 function requireValue(environment: Environment, key: RequiredEnvironmentVariable): string {
@@ -29,6 +37,9 @@ export function validateServerEnvironment(environment: Environment): ValidatedEn
     const DATABASE_URL = requireValue(environment, 'DATABASE_URL');
     const NEXTAUTH_URL = requireValue(environment, 'NEXTAUTH_URL');
     const NEXTAUTH_SECRET = requireValue(environment, 'NEXTAUTH_SECRET');
+    const AUTH_EMAIL_FROM = requireValue(environment, 'AUTH_EMAIL_FROM');
+    const AUTH_EMAIL_PROVIDER = requireValue(environment, 'AUTH_EMAIL_PROVIDER');
+    const AUTH_EMAIL_API_URL = requireValue(environment, 'AUTH_EMAIL_API_URL');
 
     const databaseUrl = parseUrl(DATABASE_URL, 'DATABASE_URL');
     if (!['postgresql:', 'postgres:'].includes(databaseUrl.protocol)) {
@@ -50,6 +61,31 @@ export function validateServerEnvironment(environment: Environment): ValidatedEn
         throw new Error('NEXTAUTH_SECRET must be at least 32 characters');
     }
 
+    if (/\r|\n/.test(AUTH_EMAIL_FROM)) {
+        throw new Error('AUTH_EMAIL_FROM must not contain line breaks');
+    }
+    if (!['mailpit', 'postmark'].includes(AUTH_EMAIL_PROVIDER)) {
+        throw new Error('AUTH_EMAIL_PROVIDER must be mailpit or postmark');
+    }
+    const authEmailApiUrl = parseUrl(AUTH_EMAIL_API_URL, 'AUTH_EMAIL_API_URL');
+    if (!['http:', 'https:'].includes(authEmailApiUrl.protocol)) {
+        throw new Error('AUTH_EMAIL_API_URL must be a valid http:// or https:// URL');
+    }
+    if (AUTH_EMAIL_PROVIDER === 'postmark' && authEmailApiUrl.protocol !== 'https:') {
+        throw new Error('Postmark AUTH_EMAIL_API_URL must use https://');
+    }
+    if (AUTH_EMAIL_PROVIDER === 'postmark'
+        && (authEmailApiUrl.hostname !== 'api.postmarkapp.com' || authEmailApiUrl.pathname !== '/email')) {
+        throw new Error('Postmark AUTH_EMAIL_API_URL must be https://api.postmarkapp.com/email');
+    }
+    if (AUTH_EMAIL_PROVIDER === 'postmark' && nextAuthUrl.protocol !== 'https:') {
+        throw new Error('Postmark NEXTAUTH_URL must use https://');
+    }
+    const AUTH_EMAIL_API_TOKEN = environment.AUTH_EMAIL_API_TOKEN?.trim();
+    if (AUTH_EMAIL_PROVIDER === 'postmark' && !AUTH_EMAIL_API_TOKEN) {
+        throw new Error('AUTH_EMAIL_API_TOKEN is required for Postmark');
+    }
+
     const AUTH_TRUSTED_PROXY_HOPS = environment.AUTH_TRUSTED_PROXY_HOPS?.trim();
     if (environment.NODE_ENV === 'production' && !/^[1-5]$/.test(AUTH_TRUSTED_PROXY_HOPS ?? '')) {
         throw new Error('AUTH_TRUSTED_PROXY_HOPS must be between 1 and 5 in production');
@@ -59,6 +95,10 @@ export function validateServerEnvironment(environment: Environment): ValidatedEn
         DATABASE_URL,
         NEXTAUTH_URL,
         NEXTAUTH_SECRET,
+        AUTH_EMAIL_FROM,
+        AUTH_EMAIL_PROVIDER,
+        AUTH_EMAIL_API_URL,
+        ...(AUTH_EMAIL_API_TOKEN ? { AUTH_EMAIL_API_TOKEN } : {}),
         ...(AUTH_TRUSTED_PROXY_HOPS ? { AUTH_TRUSTED_PROXY_HOPS } : {})
     };
 }

@@ -14,6 +14,7 @@ declare module 'next-auth' {
     // Shape returned by the credentials `authorize` callback and passed into `jwt`.
     interface User {
         role: Role;
+        authVersion: number;
     }
 }
 
@@ -21,5 +22,7 @@ declare module 'next-auth/jwt' {
     interface JWT {
         id: string;
         role: Role;
+        authVersion: number;
+        invalidated?: boolean;
     }
 }

@@ -18,31 +18,13 @@ its acceptance criteria are met and its tests have passed.
 - Follow the repository's test-first, verification, review, and squash-merge
   rules for every implementation change.
 
-## Current baseline
+## Sources of truth
 
-Baseline recorded on 2026-07-11:
-
-- [x] 128 Jest tests pass across 16 suites.
-- [x] 8 Playwright end-to-end journeys pass.
-- [x] Production build and lint complete successfully.
-- [ ] Remove seven `next/image` lint warnings.
-- [ ] Remove React `act(...)` warnings and debug output from the Jest run.
-- [x] Resolve the production dependency audit: 13 findings, including 8 high
-  severity findings.
-
-Observed product gaps:
-
-- Default booking search can return no flights because the chosen date is not
-  guaranteed to be an operating day.
-- Return date, travel class, and reward-flight controls do not affect results.
-- Check-In and Multicity are dead links.
-- Travel-guide content overlaps and duplicates at desktop width.
-- The desktop footer renders as a long left-aligned list.
-- Flight status presents historical/seeded data as real-time and does not label
-  the displayed timezone.
-- Mona Airways, Gemini Airways, and Mona Boulevard branding are mixed.
-- Most routes do not provide meaningful document metadata.
-- The global stylesheet contains no responsive breakpoints.
+- GitHub CI is the source of truth for current test counts and build, lint,
+  type-check, migration, audit, browser, and container status.
+- Pull requests record the verification performed for each delivered change.
+- The phase checklists and progress log below are the only tracking lists for
+  remaining product work; do not duplicate those gaps in a separate baseline.
 
 ## Phase 0: Security and correctness
 
@@ -118,8 +100,8 @@ Acceptance criteria:
 
 - [x] Normalize email addresses and prevent case-variant duplicate accounts.
 - [x] Add registration and authentication rate limits.
-- [ ] Add email verification, password reset, and recovery flows.
-- [ ] Use generic account-existence responses where appropriate.
+- [x] Add email verification, password reset, and recovery flows.
+- [x] Use generic account-existence responses where appropriate.
 - [ ] Define encryption, access, retention, redaction, and deletion rules for
   passport numbers and dates of birth.
 - [ ] Add stronger protection for staff accounts.
@@ -502,15 +484,4 @@ Add one row when work starts, becomes blocked, or completes.
 | 2026-07-12 | P1.4 | In progress | #32 | Added a concurrency-safe manual occurrence generator with custom seating; scheduled background generation and horizon monitoring remain. |
 | 2026-07-12 | P0.3 | Complete | #37 | Added shared Zod schemas, normalized mutation inputs, structured safe errors, and request/mutation limits. |
 | 2026-07-12 | P0.4 | Complete | #38 | Made server fares and inventory authoritative, removed fake payment identifiers, and added idempotent, concurrency-tested booking persistence. |
-| 2026-07-12 | P0.5 | In progress | Pending | Canonicalized email identity, added database-backed registration and login throttles, and made immediate registration responses generic; verified activation remains. |
-
-## Recommended first delivery sequence
-
-1. P0.1: protect container and runtime secrets.
-2. P0.2: remediate production dependency vulnerabilities.
-3. P0.3 and P0.4: validate mutations and make booking prices authoritative.
-4. P1.1 and P1.3: make the default search succeed and remove demo-only controls.
-5. P1.2 and P2.1: introduce itinerary, airport, fare, money, and timezone models.
-6. P2.2 through P2.5: build holds, payments, disruption handling, and check-in.
-7. P3: complete responsive, accessible customer-facing polish.
-8. P4 and P5: complete staff operations and production hardening.
+| 2026-07-12 | P0.5 | In progress | #39 + #40 | Canonicalized email identity, added database-backed registration and login throttles, and implemented generic verified-email activation and password recovery journeys. Staff protection and passenger-data rules remain. |

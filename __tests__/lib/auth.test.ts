@@ -55,7 +55,7 @@ describe('authOptions credential authorize', () => {
         mockedConsumeRateLimit.mockResolvedValue({ allowed: false, retryAfterSeconds: 60 });
         mockedPrisma.user.findUnique.mockResolvedValue({
             id: 'u1', email: 'ada@example.com', name: 'Ada', image: null,
-            password: 'real-hash', role: 'USER',
+            password: 'real-hash', role: 'USER', emailVerified: new Date(),
         });
         mockedCompare.mockResolvedValue(true);
 
@@ -105,6 +105,18 @@ describe('authOptions credential authorize', () => {
         expect(wrongPwErr.message).not.toBe('Invalid password');
     });
 
+    it('does not authenticate an account until its email is verified', async () => {
+        mockedPrisma.user.findUnique.mockResolvedValue({
+            id: 'u1', email: 'a@b.com', password: 'real-hash', role: 'USER', emailVerified: null,
+        });
+        (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+        const error = await authorize({ email: 'a@b.com', password: 'correct-horse' }).catch(e => e);
+
+        expect(error.message).toBe('Invalid email or password');
+        expect(clearAuthRateLimit).not.toHaveBeenCalled();
+    });
+
     it('always runs a bcrypt comparison even when the user does not exist (timing safety)', async () => {
         mockedPrisma.user.findUnique.mockResolvedValue(null);
         mockedCompare.mockResolvedValue(false);
@@ -115,6 +127,7 @@ describe('authOptions credential authorize', () => {
     it('does not return the password hash on a valid login', async () => {
         mockedPrisma.user.findUnique.mockResolvedValue({
             id: 'u1', email: 'a@b.com', name: 'Ada', image: null, password: 'real-hash', role: 'USER',
+            emailVerified: new Date(),
         });
         mockedCompare.mockResolvedValue(true);
 
@@ -141,17 +154,32 @@ describe('authOptions jwt/session callbacks', () => {
     const jwt = (authOptions.callbacks!.jwt as any);
     const session = (authOptions.callbacks!.session as any);
 
-    it('jwt callback copies id and role from user onto the token', async () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it('jwt callback copies id, role, and auth version from user onto the token', async () => {
         const token = await jwt({
             token: {},
-            user: { id: 'u1', role: 'ADMIN' },
+            user: { id: 'u1', role: 'ADMIN', authVersion: 2 },
         });
-        expect(token).toMatchObject({ id: 'u1', role: 'ADMIN' });
+        expect(token).toMatchObject({ id: 'u1', role: 'ADMIN', authVersion: 2 });
     });
 
-    it('jwt callback leaves the token unchanged when there is no user', async () => {
-        const token = await jwt({ token: { id: 'existing', role: 'USER' } });
-        expect(token).toMatchObject({ id: 'existing', role: 'USER' });
+    it('jwt callback refreshes account state and invalidates older auth versions', async () => {
+        mockedPrisma.user.findUnique.mockResolvedValueOnce({
+            role: 'USER', authVersion: 1, emailVerified: new Date()
+        });
+        const current = await jwt({
+            token: { id: 'existing', role: 'ADMIN', authVersion: 1 }
+        });
+        expect(current).toMatchObject({ role: 'USER', invalidated: false });
+
+        mockedPrisma.user.findUnique.mockResolvedValueOnce({
+            role: 'USER', authVersion: 2, emailVerified: new Date()
+        });
+        const stale = await jwt({
+            token: { id: 'existing', role: 'USER', authVersion: 1 }
+        });
+        expect(stale).toMatchObject({ invalidated: true });
     });
 
     it('session callback exposes id and role on session.user', async () => {
@@ -160,5 +188,13 @@ describe('authOptions jwt/session callbacks', () => {
             token: { id: 'u1', role: 'ADMIN' },
         });
         expect(result.user).toMatchObject({ id: 'u1', role: 'ADMIN', email: 'a@b.com' });
+    });
+
+    it('session callback returns no session for an invalidated token', async () => {
+        const result = await session({
+            session: { user: { email: 'a@b.com' } },
+            token: { id: 'u1', role: 'USER', invalidated: true },
+        });
+        expect(result).toBeNull();
     });
 });

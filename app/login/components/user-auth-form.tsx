@@ -64,7 +64,7 @@ export default function UserAuthForm({ className, type, ...props }: UserAuthForm
                     return;
                 }
 
-                setFormNotice('If this address is eligible, you can now sign in with your credentials.');
+                setFormNotice('If this address is eligible, check your email for a verification link.');
                 return;
             }
 

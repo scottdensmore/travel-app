@@ -11,9 +11,14 @@ services:
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required}
       # The bundled proxy below is the single trusted right-most proxy.
       AUTH_TRUSTED_PROXY_HOPS: "1"
+      AUTH_EMAIL_FROM: "${AUTH_EMAIL_FROM:-Mona Airways <no-reply@localhost>}"
+      AUTH_EMAIL_PROVIDER: mailpit
+      AUTH_EMAIL_API_URL: http://mailpit:8025/api/v1/send
     depends_on:
       migrate:
         condition: service_completed_successfully
+      mailpit:
+        condition: service_started
 
   proxy:
     image: nginxinc/nginx-unprivileged:1.27-alpine
@@ -35,6 +40,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
+
+  mailpit:
+    image: axllent/mailpit:v1.30.0
+    ports:
+      - "127.0.0.1:8025:8025"
 
   db:
     image: postgres:15-alpine

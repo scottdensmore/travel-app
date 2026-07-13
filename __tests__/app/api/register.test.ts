@@ -2,12 +2,18 @@
 import { POST } from '@/app/api/auth/register/route';
 import { prisma } from '@/lib/prisma';
 import { consumeAuthRateLimit } from '@/lib/authRateLimit';
+import { requestEmailVerification } from '@/lib/authAccountFlows';
+import { scheduleAfterResponse } from '@/lib/afterResponse';
 
 jest.mock('@/lib/prisma', () => ({
     prisma: { user: { findUnique: jest.fn(), create: jest.fn() } },
 }));
 jest.mock('bcryptjs', () => ({ hash: jest.fn().mockResolvedValue('hashed-pw') }));
 jest.mock('@/lib/authRateLimit', () => ({ consumeAuthRateLimit: jest.fn() }));
+jest.mock('@/lib/authAccountFlows', () => ({ requestEmailVerification: jest.fn() }));
+jest.mock('@/lib/afterResponse', () => ({
+    scheduleAfterResponse: jest.fn((operation: () => Promise<void>) => { void operation(); })
+}));
 
 const mockedPrisma = prisma as unknown as {
     user: { findUnique: jest.Mock; create: jest.Mock };
@@ -25,6 +31,8 @@ describe('POST /api/auth/register', () => {
         jest.clearAllMocks();
         delete process.env.AUTH_TRUSTED_PROXY_HOPS;
         mockedConsumeRateLimit.mockResolvedValue({ allowed: true, retryAfterSeconds: 0 });
+        (requestEmailVerification as jest.Mock).mockReset().mockResolvedValue(undefined);
+        (scheduleAfterResponse as jest.Mock).mockClear();
     });
 
     it('does not create a global address bucket when proxy trust is not configured', async () => {
@@ -84,6 +92,7 @@ describe('POST /api/auth/register', () => {
         const data = await res.json();
         expect(data.user).toBeUndefined();
         expect(data).toEqual({ message: 'If this address can be registered, the request has been accepted.' });
+        expect(requestEmailVerification).toHaveBeenCalledWith('ada@example.com');
     });
 
     it('rejects an invalid email', async () => {
@@ -166,6 +175,25 @@ describe('POST /api/auth/register', () => {
             message: 'If this address can be registered, the request has been accepted.'
         });
         expect(mockedPrisma.user.create).not.toHaveBeenCalled();
+        expect(requestEmailVerification).toHaveBeenCalledWith('ada@example.com');
+    });
+
+    it('keeps the generic response when verification delivery fails', async () => {
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+        mockedPrisma.user.findUnique.mockResolvedValue({ id: 'existing' });
+        (requestEmailVerification as jest.Mock).mockRejectedValue(new Error('SMTP detail'));
+
+        const res = await POST(makeReq({
+            name: 'Ada', email: 'ada@example.com', password: 'password123'
+        }));
+
+        expect(res.status).toBe(202);
+        expect(await res.json()).toEqual({
+            message: 'If this address can be registered, the request has been accepted.'
+        });
+        expect(requestEmailVerification).toHaveBeenCalledWith('ada@example.com');
+        expect(consoleErrorSpy.mock.calls.flat().join(' ')).not.toContain('SMTP detail');
+        consoleErrorSpy.mockRestore();
     });
 
     it('rate limits registration by normalized email and client address', async () => {
