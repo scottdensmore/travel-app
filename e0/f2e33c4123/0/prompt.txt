@@ -1,17 +1,1 @@
-Why did you stop?
-
----
-
-Go ahead and merge the Pr if all the checks pass
-
----
-
-Ok what is next?
-
----
-
-Ok lets do P0.5
-
----
-
 what is going on..  did something go wrong?
