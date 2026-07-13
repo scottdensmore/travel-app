@@ -502,7 +502,7 @@ Add one row when work starts, becomes blocked, or completes.
 | 2026-07-12 | P1.4 | In progress | #32 | Added a concurrency-safe manual occurrence generator with custom seating; scheduled background generation and horizon monitoring remain. |
 | 2026-07-12 | P0.3 | Complete | #37 | Added shared Zod schemas, normalized mutation inputs, structured safe errors, and request/mutation limits. |
 | 2026-07-12 | P0.4 | Complete | #38 | Made server fares and inventory authoritative, removed fake payment identifiers, and added idempotent, concurrency-tested booking persistence. |
-| 2026-07-12 | P0.5 | In progress | #39 + Pending | Canonicalized email identity, added database-backed registration and login throttles, and implemented generic verified-email activation and password recovery journeys. Staff protection and passenger-data rules remain. |
+| 2026-07-12 | P0.5 | In progress | #39 + #40 | Canonicalized email identity, added database-backed registration and login throttles, and implemented generic verified-email activation and password recovery journeys. Staff protection and passenger-data rules remain. |
 
 ## Recommended first delivery sequence
 
