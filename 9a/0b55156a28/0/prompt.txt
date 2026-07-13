@@ -1,0 +1,13 @@
+lets pull the latest code and then look at the roadmap and see what is next to do
+
+---
+
+Ok lets merge that pull request first
+
+---
+
+Before we move on to the next item. Do you have everything you need to build the app and test it? Is everything ready? (subagents, tools, workflow etc)
+
+---
+
+Ok lets get started on setting things up locally. We should make sure that there is a way to pick node 22 for things so the environemnt is always updated when checked out

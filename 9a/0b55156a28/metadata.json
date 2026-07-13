@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "9a0b55156a28",
+  "strategy": "manual-commit",
+  "branch": "chore/local-node-22-setup",
+  "checkpoints_count": 3,
+  "files_touched": [
+    ".gitignore",
+    ".npmrc",
+    ".nvmrc",
+    "README.md",
+    "__tests__/security/dependencyPolicy.test.ts",
+    "mise.toml",
+    "package-lock.json",
+    "package.json"
+  ],
+  "sessions": [
+    {
+      "metadata": "/9a/0b55156a28/0/metadata.json",
+      "transcript": "/9a/0b55156a28/0/full.jsonl",
+      "compact_transcript": "/9a/0b55156a28/0/transcript.jsonl",
+      "content_hash": "/9a/0b55156a28/0/content_hash.txt",
+      "prompt": "/9a/0b55156a28/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 147836,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 6317312,
+    "output_tokens": 20593,
+    "api_call_count": 83
+  }
+}
