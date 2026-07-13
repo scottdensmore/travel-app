@@ -11,6 +11,22 @@ import { prisma } from '@/lib/prisma';
 import { assertSeatAvailableForCabin, validateSeatingLayout } from '@/lib/seatLayout';
 import { lockFlightForUpdate } from '@/lib/flightLock';
 import { updateFlightSeatingLayout } from '@/lib/FlightSeatLayoutService';
+import { actionValidationFailure } from '@/lib/actionResult';
+import {
+    bookingRequestSchema,
+    cityGuideSchema,
+    favoriteSchema,
+    flightStatusSchema,
+    numericIdSchema,
+    occurrenceRequestSchema,
+    parseActionInput,
+    parseInput,
+    reviewSchema,
+    scheduleSchema,
+    searchFlightsSchema,
+    seatChangesSchema,
+    stringIdSchema
+} from '@/lib/validation';
 
 const travelGuideService = new TravelGuideService();
 const flightBookingService = new FlightBookingService();
@@ -19,7 +35,9 @@ export async function saveCityGuideAction(cityGuide: CityGuide) {
     const session = await getServerSession(authOptions);
     if (session?.user?.role !== 'ADMIN') throw new Error("Unauthorized");
 
-    const result = await travelGuideService.saveCityGuide(cityGuide);
+    const parsed = parseActionInput(cityGuideSchema, cityGuide);
+    if (!parsed.ok) return parsed;
+    const result = await travelGuideService.saveCityGuide(parsed.data as CityGuide);
     revalidatePath('/admin/travelguide');
     revalidatePath('/travelguide');
     return result;
@@ -29,6 +47,9 @@ export async function deleteCityGuideAction(cityGuideId: number) {
     const session = await getServerSession(authOptions);
     if (session?.user?.role !== 'ADMIN') throw new Error("Unauthorized");
 
+    const parsed = parseActionInput(numericIdSchema, cityGuideId);
+    if (!parsed.ok) return parsed;
+    cityGuideId = parsed.data;
     await prisma.cityGuide.delete({
         where: { id: cityGuideId }
     });
@@ -37,6 +58,16 @@ export async function deleteCityGuideAction(cityGuideId: number) {
 }
 
 export async function searchFlightsAction(from: string, to: string, departureDateStr?: string) {
+    const parsed = parseActionInput(searchFlightsSchema, {
+        from,
+        to,
+        departureDate: departureDateStr === '' || departureDateStr === undefined
+            ? undefined
+            : departureDateStr
+    });
+    if (!parsed.ok) return parsed;
+    ({ from, to, departureDate: departureDateStr } = parsed.data);
+
     if (!departureDateStr) {
         return await prisma.flight.findMany({
             where: { from, to },
@@ -78,12 +109,15 @@ export async function getFlightRoutesAction() {
 export async function bookFlightAction(bookingData: { 
     flightId: number; 
     totalPrice?: string; 
-    passengers?: PassengerInput[]; 
+    passengers: PassengerInput[];
     paymentIntentId?: string; 
 }) {
     const session = await getServerSession(authOptions);
     const userId = session?.user?.id;
     if (!userId) throw new Error("Unauthorized");
+    const parsed = parseActionInput(bookingRequestSchema, bookingData);
+    if (!parsed.ok) return parsed;
+    bookingData = parsed.data as typeof bookingData;
 
     const result = await flightBookingService.bookFlight({
         flightId: bookingData.flightId,
@@ -116,6 +150,7 @@ export async function bookFlightAction(bookingData: {
 }
 
 export async function getOccupiedSeatsAction(flightId: number) {
+    flightId = parseInput(numericIdSchema, flightId);
     const passengers = await prisma.passenger.findMany({
         where: {
             booking: {
@@ -135,6 +170,9 @@ export async function toggleFavoriteCityGuideAction(cityGuideId: number) {
     const userId = session?.user?.id;
     if (!userId) throw new Error("Unauthorized");
 
+    const parsed = parseActionInput(favoriteSchema, { cityGuideId });
+    if (!parsed.ok) return parsed;
+    cityGuideId = parsed.data.cityGuideId;
     const existing = await prisma.userFavorite.findUnique({
         where: { userId_cityGuideId: { userId, cityGuideId } }
     });
@@ -157,12 +195,15 @@ export async function submitCityGuideReviewAction(cityGuideId: number, rating: n
     const userId = session?.user?.id;
     if (!userId) throw new Error("Unauthorized");
 
+    const parsed = parseActionInput(reviewSchema, { cityGuideId, rating, content });
+    if (!parsed.ok) return parsed;
+    const validated = parsed.data;
     return await prisma.review.create({
         data: {
             userId,
-            cityGuideId,
-            rating,
-            content
+            cityGuideId: validated.cityGuideId,
+            rating: validated.rating,
+            content: validated.content
         }
     });
 }
@@ -172,6 +213,9 @@ export async function cancelBookingAction(bookingId: number) {
     const userId = session?.user?.id;
     if (!userId) throw new Error("Unauthorized");
 
+    const parsed = parseActionInput(numericIdSchema, bookingId);
+    if (!parsed.ok) return parsed;
+    bookingId = parsed.data;
     const booking = await prisma.booking.findUnique({
         where: { id: bookingId },
         include: { flight: true }
@@ -238,6 +282,10 @@ export async function changeBookingSeatsAction(
     const session = await getServerSession(authOptions);
     const userId = session?.user?.id;
     if (!userId) throw new Error("Unauthorized");
+    const parsed = parseActionInput(seatChangesSchema, { bookingId, seatChanges });
+    if (!parsed.ok) return parsed;
+    bookingId = parsed.data.bookingId;
+    seatChanges = parsed.data.seatChanges;
 
     const booking = await prisma.booking.findUnique({
         where: { id: bookingId },
@@ -319,6 +367,9 @@ export async function deleteReviewAction(reviewId: string) {
     const userId = session?.user?.id;
     if (!userId) throw new Error("Unauthorized");
 
+    const parsed = parseActionInput(stringIdSchema, reviewId);
+    if (!parsed.ok) return parsed;
+    reviewId = parsed.data;
     const review = await prisma.review.findUnique({
         where: { id: reviewId }
     });
@@ -356,6 +407,9 @@ export async function saveFlightScheduleAction(data: {
 }) {
     const session = await getServerSession(authOptions);
     if (session?.user?.role !== 'ADMIN') throw new Error("Unauthorized");
+    const parsed = parseActionInput(scheduleSchema, data);
+    if (!parsed.ok) return parsed;
+    data = parsed.data as typeof data;
 
     // Server-side validation
     if (!data.flightNumber || !data.airline || !data.from || !data.to || !data.departureTime || !data.price) {
@@ -381,13 +435,21 @@ export async function saveFlightScheduleAction(data: {
     const economyRows = data.economyRows !== undefined && data.economyRows !== null ? Number(data.economyRows) : 20;
     const seatPattern = data.seatPattern ?? "ABC-DEF";
 
-    const normalizedSeatPattern = validateSeatingLayout(
-        firstClassRows,
-        businessRows,
-        premiumEconomyRows,
-        economyRows,
-        seatPattern
-    );
+    let normalizedSeatPattern: string;
+    try {
+        normalizedSeatPattern = validateSeatingLayout(
+            firstClassRows,
+            businessRows,
+            premiumEconomyRows,
+            economyRows,
+            seatPattern
+        );
+    } catch (error) {
+        return actionValidationFailure(
+            error instanceof Error ? error.message : 'Seating layout is invalid.',
+            'seatingConfig'
+        );
+    }
 
     let savedSchedule;
     if (data.id) {
@@ -506,6 +568,17 @@ export async function generateFlightOccurrencesAction(
 ) {
     const session = await getServerSession(authOptions);
     if (session?.user?.role !== 'ADMIN') throw new Error("Unauthorized");
+    const parsed = parseActionInput(occurrenceRequestSchema, {
+        scheduleId,
+        startDate: startDateStr,
+        endDate: endDateStr,
+        seatingConfig
+    });
+    if (!parsed.ok) return parsed;
+    scheduleId = parsed.data.scheduleId;
+    startDateStr = parsed.data.startDate;
+    endDateStr = parsed.data.endDate;
+    seatingConfig = parsed.data.seatingConfig;
 
     const schedule = await prisma.flightSchedule.findUnique({
         where: { id: scheduleId }
@@ -542,13 +615,21 @@ export async function generateFlightOccurrencesAction(
         ? seatingConfig.seatPattern
         : (schedule.seatPattern ?? "ABC-DEF");
 
-    const normalizedSeatPattern = validateSeatingLayout(
-        firstClassRows,
-        businessRows,
-        premiumEconomyRows,
-        economyRows,
-        seatPattern
-    );
+    let normalizedSeatPattern: string;
+    try {
+        normalizedSeatPattern = validateSeatingLayout(
+            firstClassRows,
+            businessRows,
+            premiumEconomyRows,
+            economyRows,
+            seatPattern
+        );
+    } catch (error) {
+        return actionValidationFailure(
+            error instanceof Error ? error.message : 'Seating layout is invalid.',
+            'seatingConfig'
+        );
+    }
 
     const current = new Date(start);
     let occurrencesCreated = 0;
@@ -652,6 +733,9 @@ export async function deleteFlightScheduleAction(scheduleId: number) {
     const session = await getServerSession(authOptions);
     if (session?.user?.role !== 'ADMIN') throw new Error("Unauthorized");
 
+    const parsed = parseActionInput(numericIdSchema, scheduleId);
+    if (!parsed.ok) return parsed;
+    scheduleId = parsed.data;
     await prisma.flightSchedule.delete({
         where: { id: scheduleId }
     });
@@ -665,6 +749,12 @@ export async function updateFlightStatusAction(flightId: number, status: 'ON_TIM
     const session = await getServerSession(authOptions);
     if (session?.user?.role !== 'ADMIN') throw new Error("Unauthorized");
 
+    const parsedId = parseActionInput(numericIdSchema, flightId);
+    if (!parsedId.ok) return parsedId;
+    const parsedStatus = parseActionInput(flightStatusSchema, status);
+    if (!parsedStatus.ok) return parsedStatus;
+    flightId = parsedId.data;
+    status = parsedStatus.data;
     const updated = await prisma.flight.update({
         where: { id: flightId },
         data: { status }
@@ -717,6 +807,9 @@ export async function markNotificationAsReadAction(id: string) {
     const userId = session?.user?.id;
     if (!userId) throw new Error("Unauthorized");
 
+    const parsed = parseActionInput(stringIdSchema, id);
+    if (!parsed.ok) return parsed;
+    id = parsed.data;
     const notif = await prisma.notification.findUnique({
         where: { id }
     });

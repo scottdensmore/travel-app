@@ -5,6 +5,7 @@ import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { searchFlightsAction } from '@/app/actions'
 import { Flight } from '@prisma/client'
+import { isActionValidationFailure } from '@/lib/actionResult'
 
 interface FlightBookingFormProps {
     routes?: { from: string; to: string }[];
@@ -48,9 +49,13 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({ routes = [] }) =>
 
         try {
             const results = await searchFlightsAction(fromLocation, toLocation, departureDate);
+            if (isActionValidationFailure(results)) {
+                setBookingState({ status: 'error', message: results.error.message });
+                return;
+            }
             setSearchResults(results);
         } catch (error) {
-            console.error(error);
+            setBookingState({ status: 'error', message: 'Unable to search for flights right now.' });
         } finally {
             setIsSearching(false);
         }

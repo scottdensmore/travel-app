@@ -28,23 +28,12 @@ describe('FlightBookingService', () => {
         mockTx.$queryRaw.mockReset();
     });
 
-    it('creates a simple booking when no passengers list is provided (backwards compatibility)', async () => {
-        mockTx.flight.findUnique.mockResolvedValue({ id: 7, price: '$350' });
-        mockTx.booking.create.mockResolvedValue({
-            id: 1,
-            flightId: 7,
-            userId: 'u1',
-            totalPrice: '$350',
-            createdAt: new Date('2026-03-01'),
-        });
+    it('rejects a booking without passengers before starting a transaction', async () => {
+        await expect(new FlightBookingService().bookFlight({ flightId: 7, userId: 'u1' } as any))
+            .rejects.toThrow('At least one passenger is required.');
 
-        const result = await new FlightBookingService().bookFlight({ flightId: 7, userId: 'u1' });
-
-        expect(mockTx.flight.findUnique).toHaveBeenCalledWith({ where: { id: 7 } });
-        expect(mockTx.booking.create).toHaveBeenCalledWith({
-            data: { flightId: 7, userId: 'u1', totalPrice: '$350', paymentIntentId: expect.stringContaining('mock_tx_') },
-        });
-        expect(result).toMatchObject({ id: 1, flightId: 7, userId: 'u1', totalPrice: '$350' });
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+        expect(mockTx.booking.create).not.toHaveBeenCalled();
     });
 
     it('creates a detailed booking with passengers and validates seat selections', async () => {

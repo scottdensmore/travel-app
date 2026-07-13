@@ -4,6 +4,7 @@ import React, { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { saveFlightScheduleAction } from '@/app/actions';
 import { validateSeatingLayout } from '@/lib/seatLayout';
+import { isActionValidationFailure } from '@/lib/actionResult';
 
 interface FlightSchedule {
     id?: number;
@@ -109,7 +110,7 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
 
         startTransition(async () => {
             try {
-                await saveFlightScheduleAction({
+                const result = await saveFlightScheduleAction({
                     id: initialSchedule?.id,
                     flightNumber,
                     airline,
@@ -125,6 +126,10 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                     economyRows: eRows,
                     seatPattern: normalizedSeatPattern
                 });
+                if (isActionValidationFailure(result)) {
+                    setError(result.error.message);
+                    return;
+                }
 
                 setSuccess(initialSchedule ? 'Schedule updated successfully!' : 'New schedule created successfully!');
                 if (!initialSchedule) {

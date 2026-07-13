@@ -6,6 +6,7 @@ import PointsActivityTable from "@/components/ui/pointsActivityTable";
 import NextStatusChart from "@/components/ui/charts/nextStatusChart";
 import PointsHistoryChart from "@/components/ui/charts/pointsHistoryChart";
 import { cancelBookingAction, deleteReviewAction, toggleFavoriteCityGuideAction, changeBookingSeatsAction, getOccupiedSeatsAction } from '@/app/actions';
+import { isActionValidationFailure } from '@/lib/actionResult';
 import { PointsActivityDisplayData } from '@/lib/types/PointsActivity';
 
 interface Flight {
@@ -126,7 +127,8 @@ export default function ProfileClient({
 
         startTransition(async () => {
             try {
-                await cancelBookingAction(bookingId);
+                const result = await cancelBookingAction(bookingId);
+                if (isActionValidationFailure(result)) throw new Error(result.error.message);
                 router.refresh();
             } catch (error) {
                 alert('Failed to cancel booking. Please try again.');
@@ -139,7 +141,8 @@ export default function ProfileClient({
 
         startTransition(async () => {
             try {
-                await deleteReviewAction(reviewId);
+                const result = await deleteReviewAction(reviewId);
+                if (isActionValidationFailure(result)) throw new Error(result.error.message);
                 router.refresh();
             } catch (error) {
                 alert('Failed to delete review. Please try again.');
@@ -150,7 +153,8 @@ export default function ProfileClient({
     const handleUnfavorite = (cityId: number, cityName: string) => {
         startTransition(async () => {
             try {
-                await toggleFavoriteCityGuideAction(cityId);
+                const result = await toggleFavoriteCityGuideAction(cityId);
+                if (isActionValidationFailure(result)) throw new Error(result.error.message);
                 router.refresh();
             } catch (error) {
                 alert('Failed to update favorite. Please try again.');
@@ -177,7 +181,11 @@ export default function ProfileClient({
                 seatNumber: passengerSeats[pid]
             }));
 
-            await changeBookingSeatsAction(selectedBooking.id, seatChanges);
+            const result = await changeBookingSeatsAction(selectedBooking.id, seatChanges);
+            if (isActionValidationFailure(result)) {
+                setModalError(result.error.message);
+                return;
+            }
             setSelectedBooking(null);
             router.refresh();
         } catch (error: unknown) {
@@ -471,7 +479,7 @@ export default function ProfileClient({
                         </div>
 
                         {modalError && (
-                            <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '10px', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.9rem' }}>
+                            <div role="alert" style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '10px', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.9rem' }}>
                                 ⚠️ {modalError}
                             </div>
                         )}
@@ -482,10 +490,16 @@ export default function ProfileClient({
                                 <h3 style={{ fontSize: '0.95rem', color: '#a78bfa', marginBottom: '0.75rem' }}>Passengers</h3>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                     {selectedBooking.passengers.map((p, idx) => (
-                                        <div
+                                        <button
+                                            type="button"
                                             key={p.id}
                                             onClick={() => setActivePassengerIdx(idx)}
+                                            aria-pressed={activePassengerIdx === idx}
+                                            aria-label={`${p.firstName} ${p.lastName}, Seat: ${passengerSeats[p.id] || 'None'}, ${p.cabinClass}`}
                                             style={{
+                                                width: '100%',
+                                                color: 'inherit',
+                                                textAlign: 'left',
                                                 padding: '10px',
                                                 borderRadius: '8px',
                                                 border: activePassengerIdx === idx ? '2px solid #8b5cf6' : '1px solid rgba(255,255,255,0.08)',
@@ -497,7 +511,7 @@ export default function ProfileClient({
                                             <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>
                                                 Seat: <span style={{ color: '#34d399', fontWeight: 'bold' }}>{passengerSeats[p.id] || 'None'}</span> ({p.cabinClass})
                                             </div>
-                                        </div>
+                                        </button>
                                     ))}
                                 </div>
                             </div>

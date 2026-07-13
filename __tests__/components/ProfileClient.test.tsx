@@ -253,4 +253,37 @@ describe('ProfileClient interactive dashboard', () => {
             expect(mockRefresh).toHaveBeenCalled();
         });
     });
+
+    it('uses accessible passenger selectors and announces seat validation errors', async () => {
+        mockGetOccupiedSeats.mockResolvedValue([]);
+        mockChangeBookingSeats.mockResolvedValue({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'Choose a valid seat.',
+                fields: { 'seatChanges.0.seatNumber': ['Choose a valid seat.'] },
+            },
+        });
+
+        render(
+            <ProfileClient
+                userName="Jane Doe"
+                userAvatar="avatar.png"
+                currentStatus="Gold"
+                currentPoints={4200}
+                bookings={sampleBookings}
+                favorites={[]}
+                reviews={[]}
+                activityData={[]}
+                monthlyHistory={[]}
+            />
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Change Seats' }));
+        const passengerSelector = await screen.findByRole('button', { name: /Jane Doe.*Seat: 12A/i });
+        expect(passengerSelector).toHaveAttribute('aria-pressed', 'true');
+        fireEvent.click(screen.getByRole('button', { name: 'Save New Seats' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Choose a valid seat.');
+    });
 });

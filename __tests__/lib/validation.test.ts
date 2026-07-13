@@ -1,0 +1,270 @@
+/** @jest-environment node */
+import {
+    bookingRequestSchema,
+    cityGuideSchema,
+    favoriteSchema,
+    flightBookingServiceSchema,
+    flightStatusSchema,
+    InputValidationError,
+    MAX_MUTATION_BYTES,
+    occurrenceRequestSchema,
+    parseInput,
+    passengerSchema,
+    registrationSchema,
+    reviewSchema,
+    scheduleSchema,
+    searchFlightsSchema,
+    seatChangesSchema
+} from '@/lib/validation';
+
+describe('shared server validation schemas', () => {
+    it('normalizes valid registration input', () => {
+        expect(registrationSchema.parse({
+            name: '  Ada Lovelace  ',
+            email: '  ADA@Example.COM ',
+            password: 'password123'
+        })).toEqual({
+            name: 'Ada Lovelace',
+            email: 'ada@example.com',
+            password: 'password123'
+        });
+    });
+
+    it('rejects malformed and oversized registration input', () => {
+        expect(registrationSchema.safeParse({
+            name: 'A'.repeat(101),
+            email: 'not-an-email',
+            password: 'short'
+        }).success).toBe(false);
+    });
+
+    it('validates and normalizes reviews and favorite identifiers', () => {
+        expect(reviewSchema.parse({ cityGuideId: 3, rating: 5, content: '  Great trip  ' }))
+            .toEqual({ cityGuideId: 3, rating: 5, content: 'Great trip' });
+        expect(reviewSchema.safeParse({ cityGuideId: 0, rating: 6, content: '' }).success)
+            .toBe(false);
+        expect(favoriteSchema.parse({ cityGuideId: 1 })).toEqual({ cityGuideId: 1 });
+        expect(favoriteSchema.safeParse({ cityGuideId: 1.5 }).success).toBe(false);
+    });
+
+    it('enforces city-guide coordinate, text, image, and array limits', () => {
+        expect(cityGuideSchema.parse({
+            city: ' Paris ',
+            country: ' France ',
+            latlong: [48.85, 2.35],
+            description: ' City of light ',
+            highlights: [' Eiffel Tower '],
+            coverImage: null
+        })).toMatchObject({
+            city: 'Paris',
+            country: 'France',
+            description: 'City of light',
+            highlights: ['Eiffel Tower']
+        });
+        expect(cityGuideSchema.safeParse({
+            city: 'Paris',
+            country: 'France',
+            latlong: [91, 2.35],
+            description: 'Description',
+            highlights: Array.from({ length: 21 }, () => 'Highlight')
+        }).success).toBe(false);
+    });
+
+    it('validates schedules and rejects duplicate days or invalid layouts', () => {
+        expect(scheduleSchema.parse({
+            flightNumber: ' aa 101 ',
+            airline: ' Example Air ',
+            from: ' Seattle, USA ',
+            to: ' Detroit, USA ',
+            departureTime: '08:00',
+            returnTime: null,
+            daysOfWeek: [5, 1],
+            price: '$350',
+            firstClassRows: 3,
+            businessRows: 3,
+            premiumEconomyRows: 4,
+            economyRows: 20,
+            seatPattern: ' abc-def '
+        })).toMatchObject({
+            flightNumber: 'AA101',
+            airline: 'Example Air',
+            daysOfWeek: [1, 5],
+            seatPattern: 'ABC-DEF'
+        });
+        expect(scheduleSchema.safeParse({
+            flightNumber: 'AA101', airline: 'Air', from: 'A', to: 'B',
+            departureTime: '08:00', returnTime: null, daysOfWeek: [1, 1], price: '$1'
+        }).success).toBe(false);
+    });
+
+    it('validates passengers, dates, cabins, seats, and booking array limits', () => {
+        const passenger = {
+            firstName: ' Ada ',
+            lastName: ' Lovelace ',
+            dateOfBirth: '1990-01-02',
+            passportNumber: ' ab123456 ',
+            gender: 'Female',
+            seatNumber: '11a',
+            cabinClass: 'ECONOMY'
+        };
+        expect(passengerSchema.parse(passenger)).toMatchObject({
+            firstName: 'Ada',
+            lastName: 'Lovelace',
+            passportNumber: 'AB123456',
+            seatNumber: '11A'
+        });
+        expect(passengerSchema.parse({
+            ...passenger,
+            dateOfBirth: '1990-01-02T00:00:00.000Z'
+        }).dateOfBirth).toBe('1990-01-02');
+        expect(passengerSchema.safeParse({
+            ...passenger,
+            dateOfBirth: '1990-01-02Tgarbage'
+        }).success).toBe(false);
+        expect(passengerSchema.safeParse({ ...passenger, dateOfBirth: '2999-01-01' }).success)
+            .toBe(false);
+        expect(bookingRequestSchema.safeParse({
+            flightId: 1,
+            passengers: Array.from({ length: 9 }, () => passenger)
+        }).success).toBe(true);
+        expect(bookingRequestSchema.safeParse({
+            flightId: 1,
+            passengers: Array.from({ length: 10 }, () => passenger)
+        }).success).toBe(false);
+        expect(flightBookingServiceSchema.safeParse({
+            flightId: 1,
+            userId: 'user-1',
+            passengers: [passenger]
+        }).success).toBe(true);
+        expect(flightBookingServiceSchema.safeParse({ flightId: 1, userId: '' }).success)
+            .toBe(false);
+    });
+
+    it('validates occurrence dates, ranges, identifiers, and override shapes', () => {
+        expect(occurrenceRequestSchema.parse({
+            scheduleId: 2,
+            startDate: '2026-07-01',
+            endDate: '2026-07-31',
+            seatingConfig: { economyRows: 22, seatPattern: 'ABC-DEF' }
+        })).toMatchObject({ scheduleId: 2, startDate: '2026-07-01' });
+        expect(occurrenceRequestSchema.safeParse({
+            scheduleId: 0,
+            startDate: '07/01/2026',
+            endDate: '2027-07-31',
+            seatingConfig: { unknown: true }
+        }).success).toBe(false);
+    });
+
+    it('validates seat changes and rejects duplicate passengers or seats', () => {
+        expect(seatChangesSchema.parse({
+            bookingId: 2,
+            seatChanges: [{ passengerId: ' passenger-1 ', seatNumber: '12b' }]
+        })).toEqual({
+            bookingId: 2,
+            seatChanges: [{ passengerId: 'passenger-1', seatNumber: '12B' }]
+        });
+        expect(seatChangesSchema.safeParse({
+            bookingId: 2,
+            seatChanges: [
+                { passengerId: 'p1', seatNumber: '12A' },
+                { passengerId: 'p2', seatNumber: '12A' }
+            ]
+        }).success).toBe(false);
+    });
+
+    it('throws structured customer-safe errors and enforces mutation byte limits', () => {
+        expect(() => parseInput(favoriteSchema, { cityGuideId: -1 })).toThrow(InputValidationError);
+        try {
+            parseInput(favoriteSchema, { cityGuideId: -1 });
+        } catch (error) {
+            expect(error).toMatchObject({
+                code: 'VALIDATION_ERROR'
+            });
+            expect((error as InputValidationError).fields).toHaveProperty('cityGuideId');
+        }
+
+        expect(() => parseInput(
+            cityGuideSchema,
+            { padding: 'x'.repeat(MAX_MUTATION_BYTES) }
+        )).toThrow('Request is too large.');
+    });
+
+    it('covers exact registration, review, and search boundaries', () => {
+        expect(registrationSchema.safeParse({
+            name: 'N'.repeat(100), email: 'a@example.com', password: 'p'.repeat(128)
+        }).success).toBe(true);
+        expect(registrationSchema.safeParse({
+            name: 'N'.repeat(101), email: 'a@example.com', password: 'p'.repeat(129)
+        }).success).toBe(false);
+        expect(registrationSchema.safeParse({
+            name: 'Ada', email: 'a@example.com', password: 'password', extra: true
+        }).success).toBe(false);
+
+        expect(reviewSchema.safeParse({ cityGuideId: 1, rating: 1, content: 'x'.repeat(2_000) }).success).toBe(true);
+        expect(reviewSchema.safeParse({ cityGuideId: 1, rating: 5, content: 'x'.repeat(2_001) }).success).toBe(false);
+        expect(reviewSchema.safeParse({ cityGuideId: '1', rating: 3, content: 'Review' }).success).toBe(false);
+
+        expect(searchFlightsSchema.parse({
+            from: ` ${'A'.repeat(120)} `, to: ' B ', departureDate: '2026-06-25'
+        })).toEqual({ from: 'A'.repeat(120), to: 'B', departureDate: '2026-06-25' });
+        expect(searchFlightsSchema.safeParse({ from: 'A'.repeat(121), to: '', departureDate: '06/25/2026' }).success).toBe(false);
+        expect(searchFlightsSchema.safeParse({ from: 'A', to: 'B', unknown: true }).success).toBe(false);
+    });
+
+    it('covers exact city-guide and schedule boundaries', () => {
+        const imagePrefix = 'data:image/png;base64,';
+        const boundaryGuide = {
+            city: 'C'.repeat(100),
+            country: 'K'.repeat(100),
+            latlong: [-90, 180],
+            description: 'D'.repeat(5_000),
+            highlights: Array.from({ length: 20 }, () => 'H'.repeat(200)),
+            coverImage: imagePrefix + 'a'.repeat(750_000 - imagePrefix.length)
+        };
+        expect(cityGuideSchema.safeParse(boundaryGuide).success).toBe(true);
+        expect(cityGuideSchema.safeParse({ ...boundaryGuide, description: 'D'.repeat(5_001) }).success).toBe(false);
+        expect(cityGuideSchema.safeParse({ ...boundaryGuide, highlights: [...boundaryGuide.highlights, 'extra'] }).success).toBe(false);
+        expect(cityGuideSchema.safeParse({ ...boundaryGuide, coverImage: boundaryGuide.coverImage + 'a' }).success).toBe(false);
+        expect(cityGuideSchema.safeParse({ ...boundaryGuide, latlong: ['north', 180] }).success).toBe(false);
+
+        const boundarySchedule = {
+            flightNumber: 'AB12345678', airline: 'A'.repeat(120), from: 'F'.repeat(120), to: 'T'.repeat(120),
+            departureTime: '23:59', returnTime: '00:00', daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+            price: '$999999.99', firstClassRows: 0, businessRows: 0,
+            premiumEconomyRows: 0, economyRows: 1, seatPattern: 'ABCDEFGHIJKL'
+        };
+        expect(scheduleSchema.safeParse(boundarySchedule).success).toBe(true);
+        expect(scheduleSchema.safeParse({ ...boundarySchedule, airline: 'A'.repeat(121) }).success).toBe(false);
+        expect(scheduleSchema.safeParse({ ...boundarySchedule, daysOfWeek: [...boundarySchedule.daysOfWeek, 0] }).success).toBe(false);
+        expect(scheduleSchema.safeParse({ ...boundarySchedule, seatPattern: 'ABCDEFGHIJKLM' }).success).toBe(false);
+        expect(scheduleSchema.safeParse({ ...boundarySchedule, departureTime: 1200 }).success).toBe(false);
+    });
+
+    it('covers exact passenger, booking, seat-change, occurrence, and enum boundaries', () => {
+        const passenger = {
+            firstName: 'F'.repeat(100), lastName: 'L'.repeat(100), dateOfBirth: '1900-01-01',
+            passportNumber: 'P'.repeat(32), gender: 'Other', seatNumber: '999A', cabinClass: 'FIRST'
+        };
+        expect(passengerSchema.safeParse(passenger).success).toBe(true);
+        expect(passengerSchema.safeParse({ ...passenger, firstName: 'F'.repeat(101) }).success).toBe(false);
+        expect(passengerSchema.safeParse({ ...passenger, gender: 'Unknown' }).success).toBe(false);
+        expect(passengerSchema.safeParse({ ...passenger, extra: true }).success).toBe(false);
+
+        const passengers = Array.from({ length: 9 }, (_, index) => ({
+            ...passenger, passportNumber: `P${index}`, seatNumber: `${index + 1}A`
+        }));
+        expect(bookingRequestSchema.safeParse({ flightId: 1, passengers }).success).toBe(true);
+        expect(bookingRequestSchema.safeParse({ flightId: 1, passengers: [] }).success).toBe(false);
+        expect(bookingRequestSchema.safeParse({ flightId: 1, passengers: [...passengers, passenger] }).success).toBe(false);
+
+        const seatChanges = Array.from({ length: 9 }, (_, index) => ({ passengerId: `p${index}`, seatNumber: `${index + 1}A` }));
+        expect(seatChangesSchema.safeParse({ bookingId: 1, seatChanges }).success).toBe(true);
+        expect(seatChangesSchema.safeParse({ bookingId: 1, seatChanges: [...seatChanges, { passengerId: 'p9', seatNumber: '10A' }] }).success).toBe(false);
+        expect(seatChangesSchema.safeParse({ bookingId: '1', seatChanges }).success).toBe(false);
+
+        expect(occurrenceRequestSchema.safeParse({ scheduleId: 1, startDate: '2026-01-01', endDate: '2027-01-02' }).success).toBe(true);
+        expect(occurrenceRequestSchema.safeParse({ scheduleId: 1, startDate: '2026-01-01', endDate: '2027-01-03' }).success).toBe(false);
+        expect(flightStatusSchema.safeParse('CANCELLED').success).toBe(true);
+        expect(flightStatusSchema.safeParse('BOARDING').success).toBe(false);
+    });
+});

@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { PassengerInput } from '@/lib/FlightBookingService';
 import { bookFlightAction } from '@/app/actions';
+import { isActionValidationFailure } from '@/lib/actionResult';
 
 interface Flight {
     id: number;
@@ -77,6 +78,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
     const [paymentCard, setPaymentCard] = useState({ number: '', name: '', expiry: '', cvv: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [serverFieldErrors, setServerFieldErrors] = useState<Record<string, string[]>>({});
     const [bookingResult, setBookingResult] = useState<{ id: number; paymentIntentId: string } | null>(null);
     const [autoAllocateGroup, setAutoAllocateGroup] = useState<boolean>(true);
     const [hoveredSuggestedSeats, setHoveredSuggestedSeats] = useState<string[]>([]);
@@ -123,7 +125,17 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
             updated[index].seatNumber = '';
         }
         setPassengers(updated);
+        const fieldPath = `passengers.${index}.${field}`;
+        setServerFieldErrors(current => {
+            if (!current[fieldPath]) return current;
+            const next = { ...current };
+            delete next[fieldPath];
+            return next;
+        });
     };
+
+    const getPassengerFieldError = (index: number, field: keyof PassengerFormState) =>
+        serverFieldErrors[`passengers.${index}.${field}`]?.[0];
 
     const validateStep1 = () => {
         for (let i = 0; i < passengers.length; i++) {
@@ -394,6 +406,9 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
 
     const handleSeatClick = (seat: string) => {
         const cabinClass = passengers[activePassengerIndex]?.cabinClass || 'ECONOMY';
+        setServerFieldErrors(current => Object.fromEntries(
+            Object.entries(current).filter(([field]) => !/^passengers\.\d+\.seatNumber$/.test(field))
+        ));
 
         if (autoAllocateGroup && passengers.length > 1) {
             const sameClassPassengerIndices = passengers
@@ -454,6 +469,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
         if (!validateStep3()) return;
         setIsSubmitting(true);
         setErrorMessage(null);
+        setServerFieldErrors({});
 
         try {
             const formattedPassengers: PassengerInput[] = passengers.map(p => ({
@@ -472,6 +488,25 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                 passengers: formattedPassengers,
                 paymentIntentId: `ch_${Math.random().toString(36).substr(2, 9)}`
             });
+
+            if (isActionValidationFailure(result)) {
+                setErrorMessage(result.error.message);
+                setServerFieldErrors(result.error.fields);
+                const firstFieldPath = Object.keys(result.error.fields)[0];
+                const passengerMatch = /^passengers\.(\d+)\.(\w+)$/.exec(firstFieldPath || '');
+                if (passengerMatch) {
+                    const passengerIndex = Number(passengerMatch[1]);
+                    setActivePassengerIndex(passengerIndex);
+                    setStep(passengerMatch[2] === 'seatNumber' ? 2 : 1);
+                    setTimeout(() => {
+                        const field = document.querySelector<HTMLElement>(
+                            `[data-validation-path="${firstFieldPath}"]`
+                        );
+                        field?.focus();
+                    }, 0);
+                }
+                return;
+            }
 
             setBookingResult({
                 id: result.id,
@@ -520,7 +555,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
             </div>
 
             {errorMessage && (
-                <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '12px', borderRadius: '8px', marginBottom: '1.5rem' }}>
+                <div role="alert" style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '12px', borderRadius: '8px', marginBottom: '1.5rem' }}>
                     ⚠️ {errorMessage}
                 </div>
             )}
@@ -563,8 +598,12 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                             value={passenger.firstName}
                                             onChange={(e) => handlePassengerChange(index, 'firstName', e.target.value)}
                                             placeholder="John"
+                                            data-validation-path={`passengers.${index}.firstName`}
+                                            aria-invalid={Boolean(getPassengerFieldError(index, 'firstName'))}
+                                            aria-describedby={getPassengerFieldError(index, 'firstName') ? `passenger-${index}-firstName-error` : undefined}
                                             style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
                                         />
+                                        {getPassengerFieldError(index, 'firstName') && <div id={`passenger-${index}-firstName-error`} style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '4px' }}>{getPassengerFieldError(index, 'firstName')}</div>}
                                     </div>
                                     <div>
                                         <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}>Last Name</label>
@@ -573,8 +612,12 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                             value={passenger.lastName}
                                             onChange={(e) => handlePassengerChange(index, 'lastName', e.target.value)}
                                             placeholder="Doe"
+                                            data-validation-path={`passengers.${index}.lastName`}
+                                            aria-invalid={Boolean(getPassengerFieldError(index, 'lastName'))}
+                                            aria-describedby={getPassengerFieldError(index, 'lastName') ? `passenger-${index}-lastName-error` : undefined}
                                             style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
                                         />
+                                        {getPassengerFieldError(index, 'lastName') && <div id={`passenger-${index}-lastName-error`} style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '4px' }}>{getPassengerFieldError(index, 'lastName')}</div>}
                                     </div>
                                 </div>
 
@@ -585,8 +628,12 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                             type="date"
                                             value={passenger.dateOfBirth}
                                             onChange={(e) => handlePassengerChange(index, 'dateOfBirth', e.target.value)}
+                                            data-validation-path={`passengers.${index}.dateOfBirth`}
+                                            aria-invalid={Boolean(getPassengerFieldError(index, 'dateOfBirth'))}
+                                            aria-describedby={getPassengerFieldError(index, 'dateOfBirth') ? `passenger-${index}-dateOfBirth-error` : undefined}
                                             style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
                                         />
+                                        {getPassengerFieldError(index, 'dateOfBirth') && <div id={`passenger-${index}-dateOfBirth-error`} style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '4px' }}>{getPassengerFieldError(index, 'dateOfBirth')}</div>}
                                     </div>
                                     <div>
                                         <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}>Passport Number</label>
@@ -595,8 +642,12 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                             value={passenger.passportNumber}
                                             onChange={(e) => handlePassengerChange(index, 'passportNumber', e.target.value)}
                                             placeholder="A00000000"
+                                            data-validation-path={`passengers.${index}.passportNumber`}
+                                            aria-invalid={Boolean(getPassengerFieldError(index, 'passportNumber'))}
+                                            aria-describedby={getPassengerFieldError(index, 'passportNumber') ? `passenger-${index}-passportNumber-error` : undefined}
                                             style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
                                         />
+                                        {getPassengerFieldError(index, 'passportNumber') && <div id={`passenger-${index}-passportNumber-error`} style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '4px' }}>{getPassengerFieldError(index, 'passportNumber')}</div>}
                                     </div>
                                 </div>
 
@@ -708,10 +759,19 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                 <h3 style={{ fontSize: '1rem', color: '#a78bfa', marginBottom: '1rem' }}>Passengers</h3>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                                     {passengers.map((p, idx) => (
-                                        <div
-                                            key={idx}
+                                        <React.Fragment key={idx}>
+                                        <button
+                                            type="button"
                                             onClick={() => setActivePassengerIndex(idx)}
+                                            data-validation-path={`passengers.${idx}.seatNumber`}
+                                            aria-label={`${p.firstName || 'Passenger'} ${p.lastName || `#${idx + 1}`}, Class: ${p.cabinClass}, Seat: ${p.seatNumber || 'Not Chosen'}`}
+                                            aria-pressed={activePassengerIndex === idx}
+                                            data-invalid={Boolean(getPassengerFieldError(idx, 'seatNumber')) || undefined}
+                                            aria-describedby={getPassengerFieldError(idx, 'seatNumber') ? `passenger-${idx}-seatNumber-error` : undefined}
                                             style={{
+                                                width: '100%',
+                                                color: 'inherit',
+                                                textAlign: 'left',
                                                 padding: '12px',
                                                 borderRadius: '8px',
                                                 border: activePassengerIndex === idx ? '2px solid #8b5cf6' : '1px solid rgba(255,255,255,0.08)',
@@ -719,11 +779,17 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                                 cursor: 'pointer',
                                                 transition: 'all 0.2s'
                                             }}>
-                                            <div style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{p.firstName || 'Passenger'} {p.lastName || `#${idx + 1}`}</div>
-                                            <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>
+                                            <span style={{ display: 'block', fontWeight: 'bold', fontSize: '0.9rem' }}>{p.firstName || 'Passenger'} {p.lastName || `#${idx + 1}`}</span>
+                                            <span style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>
                                                 Class: {p.cabinClass} | Seat: <span style={{ color: '#34d399', fontWeight: 'bold' }}>{p.seatNumber || 'Not Chosen'}</span>
+                                            </span>
+                                        </button>
+                                        {getPassengerFieldError(idx, 'seatNumber') && (
+                                            <div id={`passenger-${idx}-seatNumber-error`} style={{ color: '#f87171', fontSize: '0.8rem' }}>
+                                                {getPassengerFieldError(idx, 'seatNumber')}
                                             </div>
-                                        </div>
+                                        )}
+                                        </React.Fragment>
                                     ))}
                                 </div>
                             </div>

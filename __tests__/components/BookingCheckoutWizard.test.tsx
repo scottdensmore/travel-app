@@ -239,6 +239,70 @@ describe('BookingCheckoutWizard', () => {
         });
     });
 
+    it('routes server passenger validation errors back to the associated field', async () => {
+        mockBookFlightAction.mockResolvedValue({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'First name is required.',
+                fields: { 'passengers.0.firstName': ['First name is required.'] },
+            },
+        });
+
+        const { container } = render(<BookingCheckoutWizard flight={sampleFlight} occupiedSeats={[]} />);
+        const firstName = screen.getByPlaceholderText('John');
+        fireEvent.change(firstName, { target: { value: 'Bob' } });
+        fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Jones' } });
+        fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1988-12-01' } });
+        fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US9876543' } });
+        fireEvent.click(screen.getByText('Select Seats →'));
+        fireEvent.click(screen.getByTitle('Select Seat 11C'));
+        fireEvent.click(screen.getByText('Billing & Summary →'));
+        fireEvent.change(screen.getByPlaceholderText('4111 2222 3333 4444'), { target: { value: '4111222233334444' } });
+        fireEvent.change(screen.getByPlaceholderText('JOHN DOE'), { target: { value: 'BOB JONES' } });
+        fireEvent.change(screen.getByPlaceholderText('MM/YY'), { target: { value: '12/29' } });
+        fireEvent.change(screen.getByPlaceholderText('123'), { target: { value: '123' } });
+        fireEvent.click(screen.getByRole('button', { name: /Pay \$100 & Book/i }));
+
+        await waitFor(() => expect(screen.getByText('Traveler Information')).toBeInTheDocument());
+        expect(screen.getByRole('alert')).toHaveTextContent('First name is required.');
+        const invalidFirstName = screen.getByPlaceholderText('John');
+        expect(invalidFirstName).toHaveAttribute('aria-invalid', 'true');
+        expect(invalidFirstName).toHaveAccessibleDescription('First name is required.');
+        await waitFor(() => expect(invalidFirstName).toHaveFocus());
+    });
+
+    it('routes server seat validation errors to an accessible passenger target', async () => {
+        mockBookFlightAction.mockResolvedValue({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'Seat number is invalid.',
+                fields: { 'passengers.0.seatNumber': ['Seat number is invalid.'] },
+            },
+        });
+
+        const { container } = render(<BookingCheckoutWizard flight={sampleFlight} occupiedSeats={[]} />);
+        fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Bob' } });
+        fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Jones' } });
+        fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1988-12-01' } });
+        fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US9876543' } });
+        fireEvent.click(screen.getByText('Select Seats →'));
+        fireEvent.click(screen.getByTitle('Select Seat 11C'));
+        fireEvent.click(screen.getByText('Billing & Summary →'));
+        fireEvent.change(screen.getByPlaceholderText('4111 2222 3333 4444'), { target: { value: '4111222233334444' } });
+        fireEvent.change(screen.getByPlaceholderText('JOHN DOE'), { target: { value: 'BOB JONES' } });
+        fireEvent.change(screen.getByPlaceholderText('MM/YY'), { target: { value: '12/29' } });
+        fireEvent.change(screen.getByPlaceholderText('123'), { target: { value: '123' } });
+        fireEvent.click(screen.getByRole('button', { name: /Pay \$100 & Book/i }));
+
+        await waitFor(() => expect(screen.getByText('Select Your Seats')).toBeInTheDocument());
+        const passengerTarget = screen.getByRole('button', { name: /Bob Jones.*Seat: 11C/i });
+        expect(passengerTarget).toHaveAttribute('data-invalid', 'true');
+        expect(passengerTarget).toHaveAccessibleDescription('Seat number is invalid.');
+        await waitFor(() => expect(passengerTarget).toHaveFocus());
+    });
+
     describe('Multi-Passenger Coordinated Adjacent Seat Maps', () => {
         const twoPassengersFlight = {
             ...sampleFlight,
@@ -361,10 +425,7 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(seat11A);
 
             // Switch active passenger to Passenger 2
-            const passengerListItems = screen.getAllByText(/Class:/);
-            // Click the card for Passenger 2
-            const p2Card = passengerListItems[1].closest('div');
-            fireEvent.click(p2Card!);
+            fireEvent.click(screen.getByRole('button', { name: /Bob Jones.*Seat: Not Chosen/i }));
 
             // Select seat 11C for Passenger 2
             const seat11C = screen.getByTitle('Select Seat 11C');
@@ -376,8 +437,7 @@ describe('BookingCheckoutWizard', () => {
             expect(cards[1].textContent).toContain('Seat: 11C');
 
             // Switch back to Passenger 1
-            const p1Card = passengerListItems[0].closest('div');
-            fireEvent.click(p1Card!);
+            fireEvent.click(screen.getByRole('button', { name: /Alice Smith.*Seat: 11A/i }));
 
             // Click Bob's seat (11C) to swap
             fireEvent.click(screen.getByTitle(/Seat 11C/));

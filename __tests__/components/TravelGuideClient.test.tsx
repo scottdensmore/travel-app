@@ -131,6 +131,27 @@ describe('TravelGuideClient', () => {
         });
     });
 
+    it('shows the server validation message when a favorite mutation is rejected', async () => {
+        mockToggleFavorite.mockResolvedValue({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'City guide was not found.',
+                fields: { cityGuideId: ['City guide was not found.'] },
+            },
+        });
+
+        render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
+        const favoriteButton = screen.getAllByRole('button', { name: '🤍' })[0];
+        fireEvent.click(favoriteButton);
+
+        await waitFor(() => {
+            expect(global.alert).toHaveBeenCalledWith('City guide was not found.');
+            expect(favoriteButton).toHaveTextContent('🤍');
+        });
+        expect(global.alert).not.toHaveBeenCalledWith('Please sign in to save favorites.');
+    });
+
 
 
     it('submits a review successfully and shows alert on error', async () => {

@@ -3,6 +3,7 @@
 import React, { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { updateFlightStatusAction } from '@/app/actions';
+import { isActionValidationFailure } from '@/lib/actionResult';
 
 export default function FlightStatusSelector({ id, currentStatus }: { id: number, currentStatus: string }) {
     const router = useRouter();
@@ -12,7 +13,11 @@ export default function FlightStatusSelector({ id, currentStatus }: { id: number
         const nextStatus = e.target.value as 'ON_TIME' | 'DELAYED' | 'CANCELLED';
         startTransition(async () => {
             try {
-                await updateFlightStatusAction(id, nextStatus);
+                const result = await updateFlightStatusAction(id, nextStatus);
+                if (isActionValidationFailure(result)) {
+                    alert(result.error.message);
+                    return;
+                }
                 router.refresh();
             } catch (err) {
                 const message = err instanceof Error ? err.message : 'Failed to update flight status.';

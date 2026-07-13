@@ -3,6 +3,7 @@
 import React, { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { deleteFlightScheduleAction } from '@/app/actions';
+import { isActionValidationFailure } from '@/lib/actionResult';
 
 export default function DeleteScheduleButton({ id }: { id: number }) {
     const router = useRouter();
@@ -15,7 +16,11 @@ export default function DeleteScheduleButton({ id }: { id: number }) {
 
         startTransition(async () => {
             try {
-                await deleteFlightScheduleAction(id);
+                const result = await deleteFlightScheduleAction(id);
+                if (isActionValidationFailure(result)) {
+                    alert(result.error.message);
+                    return;
+                }
                 router.refresh();
             } catch (err) {
                 const message = err instanceof Error ? err.message : 'Failed to delete schedule.';

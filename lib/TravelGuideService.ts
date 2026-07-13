@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import CityGuide from "./types/CityGuide";
+import { cityGuideSchema, parseInput } from "./validation";
 
 class TravelGuideService {
 
@@ -14,6 +15,7 @@ class TravelGuideService {
   }
 
   async saveCityGuide(cityGuide: CityGuide): Promise<CityGuide> {
+    cityGuide = parseInput(cityGuideSchema, cityGuide) as CityGuide;
     const saved = await prisma.cityGuide.create({
       data: {
         city: cityGuide.city,

@@ -28,7 +28,8 @@
     "react-dom": "^18",
     "react-simple-maps": "^3.0.0",
     "recharts": "^2.12.7",
-    "tailwind-merge": "^2.5.2"
+    "tailwind-merge": "^2.5.2",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@babel/core": "^7.29.6",

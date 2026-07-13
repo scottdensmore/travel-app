@@ -4,6 +4,7 @@ import React, { useState, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { generateFlightOccurrencesAction } from '@/app/actions';
 import { validateSeatingLayout } from '@/lib/seatLayout';
+import { isActionValidationFailure } from '@/lib/actionResult';
 
 interface ScheduleItem {
     id: number;
@@ -106,6 +107,11 @@ export default function ManualOccurrenceBuilder({ schedules }: { schedules: Sche
                         seatPattern: normalizedSeatPattern
                     }
                 );
+
+                if (isActionValidationFailure(result)) {
+                    setError(result.error.message);
+                    return;
+                }
 
                 if (result.success) {
                     setSuccess(

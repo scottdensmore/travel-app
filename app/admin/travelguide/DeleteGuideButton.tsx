@@ -1,6 +1,7 @@
 "use client"
 import React, { useTransition } from 'react';
 import { deleteCityGuideAction } from '@/app/actions';
+import { isActionValidationFailure } from '@/lib/actionResult';
 
 export default function DeleteGuideButton({ id }: { id: number }) {
     const [isPending, startTransition] = useTransition();
@@ -8,7 +9,8 @@ export default function DeleteGuideButton({ id }: { id: number }) {
     const handleDelete = () => {
         if (confirm('Are you sure you want to delete this guide?')) {
             startTransition(async () => {
-                await deleteCityGuideAction(id);
+                const result = await deleteCityGuideAction(id);
+                if (isActionValidationFailure(result)) alert(result.error.message);
             });
         }
     };

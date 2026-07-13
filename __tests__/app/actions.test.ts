@@ -136,6 +136,22 @@ describe('saveCityGuideAction authorization', () => {
         expect(mockSaveCityGuide).toHaveBeenCalledWith(sampleGuide);
         expect(result).toHaveProperty('id', 1);
     });
+
+    it('normalizes guide text before saving', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+        mockSaveCityGuide.mockResolvedValue({ id: 1 });
+
+        await saveCityGuideAction({
+            ...sampleGuide,
+            city: '  Paris ',
+            highlights: [' Eiffel Tower ']
+        });
+
+        expect(mockSaveCityGuide).toHaveBeenCalledWith(expect.objectContaining({
+            city: 'Paris',
+            highlights: ['Eiffel Tower']
+        }));
+    });
 });
 
 describe('deleteCityGuideAction authorization and execution', () => {
@@ -205,6 +221,18 @@ describe('searchFlightsAction', () => {
         });
         expect(result).toBe(flights);
     });
+
+    it('rejects malformed and oversized searches before generation or database access', async () => {
+        await expect(searchFlightsAction('Seattle, USA', 'Detroit, USA', '06/25/2026'))
+            .resolves.toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR' } });
+        await expect(searchFlightsAction('x'.repeat(121), 'Detroit, USA', '2026-06-25'))
+            .resolves.toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR' } });
+        await expect(searchFlightsAction('Seattle, USA', 'Detroit, USA', false as any))
+            .resolves.toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR' } });
+
+        expect(mockGenerateFlightsForDate).not.toHaveBeenCalled();
+        expect(mockedFlightFindMany).not.toHaveBeenCalled();
+    });
 });
 
 describe('getFlightRoutesAction', () => {
@@ -241,9 +269,19 @@ describe('bookFlightAction', () => {
             to: 'B'
         });
 
-        const result = await bookFlightAction({ flightId: 42, totalPrice: '$200' });
+        const passengers = [{
+            firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
+            passportNumber: 'AB123456', gender: 'Female', seatNumber: '11A',
+            cabinClass: 'ECONOMY'
+        }];
+        const result = await bookFlightAction({ flightId: 42, totalPrice: '$200', passengers });
 
-        expect(mockBookFlight).toHaveBeenCalledWith({ flightId: 42, userId: 'user-123', totalPrice: '$200' });
+        expect(mockBookFlight).toHaveBeenCalledWith(expect.objectContaining({
+            flightId: 42,
+            userId: 'user-123',
+            totalPrice: '$200',
+            passengers
+        }));
         expect(result).toEqual({ id: 1, flightId: 42, userId: 'user-123' });
 
         expect(mockedNotificationCreate).toHaveBeenCalledWith({
@@ -254,6 +292,31 @@ describe('bookFlightAction', () => {
                 type: 'POINTS'
             }
         });
+    });
+
+    it('rejects oversized passenger arrays before calling the booking service', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        const passenger = {
+            firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
+            passportNumber: 'AB123456', gender: 'Female', seatNumber: '11A',
+            cabinClass: 'ECONOMY'
+        };
+
+        await expect(bookFlightAction({
+            flightId: 42,
+            passengers: Array.from({ length: 10 }, () => passenger)
+        })).resolves.toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR' } });
+        expect(mockBookFlight).not.toHaveBeenCalled();
+    });
+
+    it('rejects bookings without passengers before calling the booking service', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+
+        await expect(bookFlightAction({ flightId: 42 } as any)).resolves.toMatchObject({
+            ok: false,
+            error: { code: 'VALIDATION_ERROR', fields: { passengers: expect.any(Array) } }
+        });
+        expect(mockBookFlight).not.toHaveBeenCalled();
     });
 });
 
@@ -294,6 +357,15 @@ describe('toggleFavoriteCityGuideAction', () => {
         });
         expect(result).toEqual({ isFavorite: true });
     });
+
+    it('rejects malformed favorite identifiers before database access', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+
+        await expect(toggleFavoriteCityGuideAction(-1)).resolves.toMatchObject({
+            ok: false, error: { code: 'VALIDATION_ERROR' }
+        });
+        expect(mockedUserFavoriteFindUnique).not.toHaveBeenCalled();
+    });
 });
 
 describe('submitCityGuideReviewAction', () => {
@@ -319,6 +391,14 @@ describe('submitCityGuideReviewAction', () => {
             }
         });
         expect(result).toEqual({ id: 99, userId: 'user-123', cityGuideId: 5, rating: 5, content: 'Great!' });
+    });
+
+    it('rejects oversized review content before database access', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+
+        await expect(submitCityGuideReviewAction(5, 5, 'x'.repeat(2_001)))
+            .resolves.toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR' } });
+        expect(mockedReviewCreate).not.toHaveBeenCalled();
     });
 });
 
@@ -511,10 +591,21 @@ describe('changeBookingSeatsAction', () => {
         });
         mockTx.booking.findUnique.mockResolvedValue({ status: 'CANCELLED', passengers: [] });
 
-        await expect(changeBookingSeatsAction(1, [])).rejects.toThrow(
+        await expect(changeBookingSeatsAction(1, [
+            { passengerId: 'p-1', seatNumber: '12A' }
+        ])).rejects.toThrow(
             'Seats cannot be changed on a cancelled booking'
         );
         expect(mockTx.passenger.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects malformed seat changes before starting a transaction', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+
+        await expect(changeBookingSeatsAction(-1, [
+            { passengerId: '', seatNumber: 'not-a-seat' }
+        ])).resolves.toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR' } });
+        expect((prisma as any).$transaction).not.toHaveBeenCalled();
     });
 });
 
@@ -597,7 +688,13 @@ describe('admin flight schedule actions', () => {
             await expect(saveFlightScheduleAction({
                 ...sampleScheduleInput,
                 seatPattern: ''
-            })).rejects.toThrow('Seat pattern is required.');
+            })).resolves.toMatchObject({
+                ok: false,
+                error: {
+                    code: 'VALIDATION_ERROR',
+                    fields: { seatPattern: ['Seat pattern is required.'] }
+                }
+            });
 
             expect(mockedFlightScheduleCreate).not.toHaveBeenCalled();
         });
@@ -645,6 +742,20 @@ describe('admin flight schedule actions', () => {
                 }
             });
             expect(result).toHaveProperty('id', 1);
+        });
+
+        it('normalizes schedule identifiers before persistence', async () => {
+            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+            mockedFlightScheduleCreate.mockResolvedValue({ id: 1, daysOfWeek: [] });
+
+            await saveFlightScheduleAction({
+                ...sampleScheduleInput,
+                flightNumber: ' aa 101 '
+            });
+
+            expect(mockedFlightScheduleCreate).toHaveBeenCalledWith({
+                data: expect.objectContaining({ flightNumber: 'AA101' })
+            });
         });
 
         it('allows admin to update an existing flight schedule', async () => {
@@ -887,47 +998,56 @@ describe('admin flight schedule actions', () => {
                 // Negative row count
                 await expect(generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10', {
                     firstClassRows: -1
-                })).rejects.toThrow('Row configurations must be non-negative integers.');
+                })).resolves.toMatchObject({
+                    ok: false,
+                    error: { message: 'Row configurations must be non-negative integers.' }
+                });
 
                 // Fractional and empty layouts
                 await expect(generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10', {
                     firstClassRows: 1.5
-                })).rejects.toThrow('Row configurations must be non-negative integers.');
+                })).resolves.toMatchObject({
+                    ok: false,
+                    error: { message: 'Row configurations must be non-negative integers.' }
+                });
                 await expect(generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10', {
                     firstClassRows: 0,
                     businessRows: 0,
                     premiumEconomyRows: 0,
                     economyRows: 0
-                })).rejects.toThrow('At least one seating row is required.');
+                })).resolves.toMatchObject({
+                    ok: false,
+                    error: { message: 'At least one seating row is required.' }
+                });
 
                 // Duplicate seat letters
                 await expect(generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10', {
                     seatPattern: 'ABC-ABC'
-                })).rejects.toThrow('Seat pattern letters must be unique.');
+                })).resolves.toMatchObject({ ok: false, error: { message: 'Seat pattern letters must be unique.' } });
 
                 // No seat letters (only hyphens)
                 await expect(generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10', {
                     seatPattern: '---'
-                })).rejects.toThrow('Seat pattern must contain at least one seat letter.');
+                })).resolves.toMatchObject({ ok: false, error: { message: 'Seat pattern must contain at least one seat letter.' } });
 
                 // Invalid characters
                 await expect(generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10', {
                     seatPattern: 'ABC_DEF'
-                })).rejects.toThrow('Seat pattern must only contain uppercase letters and hyphens.');
+                })).resolves.toMatchObject({ ok: false, error: { message: 'Seat pattern must only contain uppercase letters and hyphens.' } });
 
                 await expect(generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10', {
                     seatPattern: 'ABC--DEF'
-                })).rejects.toThrow('Seat pattern must contain seat-letter groups separated by single hyphens.');
+                })).resolves.toMatchObject({ ok: false, error: { message: 'Seat pattern must contain seat-letter groups separated by single hyphens.' } });
                 await expect(generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10', {
                     seatPattern: ''
-                })).rejects.toThrow('Seat pattern is required.');
+                })).resolves.toMatchObject({ ok: false, error: { message: 'Seat pattern is required.' } });
 
                 await expect(generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10', {
                     economyRows: 101
-                })).rejects.toThrow('Seating layouts cannot exceed 100 total rows.');
+                })).resolves.toMatchObject({ ok: false, error: { message: 'Seating layouts cannot exceed 100 total rows.' } });
                 await expect(generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10', {
                     seatPattern: 'ABCDEFGHIJKLM'
-                })).rejects.toThrow('Seat patterns cannot exceed 12 seats per row.');
+                })).resolves.toMatchObject({ ok: false, error: { message: 'Seat patterns cannot exceed 12 seats per row.' } });
             });
 
             it('normalizes seat patterns before persisting occurrences', async () => {
@@ -1033,10 +1153,10 @@ describe('admin flight schedule actions', () => {
 
                 await expect(
                     generateFlightOccurrencesAction(1, '07/05/2026', '2026-07-10')
-                ).rejects.toThrow('Dates must use YYYY-MM-DD format.');
+                ).resolves.toMatchObject({ ok: false, error: { message: 'Dates must use YYYY-MM-DD format.' } });
                 await expect(
                     generateFlightOccurrencesAction(1, '2026-01-01', '2027-01-03')
-                ).rejects.toThrow('Date range cannot exceed 366 days.');
+                ).resolves.toMatchObject({ ok: false, error: { message: 'Date range cannot exceed 366 days.' } });
             });
 
             it('does not invalidate seats already assigned to passengers', async () => {

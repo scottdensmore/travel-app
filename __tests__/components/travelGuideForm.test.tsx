@@ -116,6 +116,25 @@ describe('TravelGuideForm', () => {
         });
     });
 
+    it('announces server validation failures as errors rather than success', async () => {
+        mockSave.mockResolvedValue({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'City is required.',
+                fields: { city: ['City is required.'] },
+            },
+        });
+
+        render(<TravelGuideForm />);
+        fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent('City is required.');
+        expect(alert).toHaveClass('text-red-500');
+        expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+
     it('supports adding and editing highlights', async () => {
         render(<TravelGuideForm />);
 
@@ -161,4 +180,3 @@ describe('TravelGuideForm', () => {
         global.FileReader = originalFileReader;
     });
 });
-
