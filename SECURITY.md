@@ -10,12 +10,26 @@
   runtime environment in deployed environments.
 - Generate `NEXTAUTH_SECRET` with a cryptographically secure generator and use
   at least 32 characters.
+- Local development may use `AUTH_TRUSTED_PROXY_HOPS=0`. Production requires a
+  value from 1 through 5 and a trusted ingress that sanitizes
+  `X-Forwarded-For`. Set it to the exact number of trusted right-most proxy
+  entries. Requests with incomplete chains fail closed.
+- The recommended Compose deployment exposes only its bundled proxy. That
+  proxy replaces client-provided `X-Forwarded-For` content with the connecting
+  address, and the app trusts exactly that one proxy hop. For other deployment
+  topologies, every trusted ingress must overwrite or safely append the header
+  according to the configured hop count; the app must not be directly
+  reachable around those ingresses.
 - Store deployment secrets in the hosting platform's secret manager and limit
   access to the people and workloads that require them.
 
 The application validates required server settings during Node.js startup. A
 missing or malformed setting prevents startup instead of allowing a partially
 configured deployment.
+
+Authentication throttles store only keyed digests of email/IP identifiers.
+Every throttle operation deletes a bounded batch of expired rows so attacker-
+controlled identifiers are not retained indefinitely.
 
 ## Responding to an image that contains secrets
 

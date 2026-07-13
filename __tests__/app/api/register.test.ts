@@ -1,26 +1,74 @@
 /** @jest-environment node */
 import { POST } from '@/app/api/auth/register/route';
 import { prisma } from '@/lib/prisma';
+import { consumeAuthRateLimit } from '@/lib/authRateLimit';
 
 jest.mock('@/lib/prisma', () => ({
     prisma: { user: { findUnique: jest.fn(), create: jest.fn() } },
 }));
 jest.mock('bcryptjs', () => ({ hash: jest.fn().mockResolvedValue('hashed-pw') }));
+jest.mock('@/lib/authRateLimit', () => ({ consumeAuthRateLimit: jest.fn() }));
 
 const mockedPrisma = prisma as unknown as {
     user: { findUnique: jest.Mock; create: jest.Mock };
 };
+const mockedConsumeRateLimit = consumeAuthRateLimit as jest.Mock;
 
-const makeReq = (body: unknown) => new Request('http://localhost/api/auth/register', {
+const makeReq = (body: unknown, headers: Record<string, string> = {}) => new Request('http://localhost/api/auth/register', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify(body)
 });
 
 describe('POST /api/auth/register', () => {
-    beforeEach(() => jest.clearAllMocks());
+    beforeEach(() => {
+        jest.clearAllMocks();
+        delete process.env.AUTH_TRUSTED_PROXY_HOPS;
+        mockedConsumeRateLimit.mockResolvedValue({ allowed: true, retryAfterSeconds: 0 });
+    });
 
-    it('never returns the password hash on success', async () => {
+    it('does not create a global address bucket when proxy trust is not configured', async () => {
+        mockedPrisma.user.findUnique.mockResolvedValue({ id: 'existing' });
+
+        await POST(makeReq(
+            { name: 'Ada', email: 'ada@example.com', password: 'password123' },
+            { 'x-forwarded-for': '198.51.100.10' }
+        ));
+
+        expect(mockedConsumeRateLimit).not.toHaveBeenCalledWith(
+            'register-address', expect.anything(), expect.anything()
+        );
+    });
+
+    it('fails closed when a configured trusted ingress does not provide a complete chain', async () => {
+        process.env.AUTH_TRUSTED_PROXY_HOPS = '2';
+
+        const res = await POST(makeReq(
+            { name: 'Ada', email: 'ada@example.com', password: 'password123' },
+            { 'x-forwarded-for': '203.0.113.9' }
+        ));
+
+        expect(res.status).toBe(400);
+        expect(mockedConsumeRateLimit).not.toHaveBeenCalled();
+        expect(mockedPrisma.user.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('uses the right-side address supplied by the configured trusted ingress', async () => {
+        process.env.AUTH_TRUSTED_PROXY_HOPS = '1';
+        mockedPrisma.user.findUnique.mockResolvedValue({ id: 'existing' });
+
+        await POST(makeReq(
+            { name: 'Ada', email: 'ada@example.com', password: 'password123' },
+            { 'x-forwarded-for': 'spoofed-by-client, 203.0.113.9' }
+        ));
+
+        expect(mockedConsumeRateLimit).toHaveBeenNthCalledWith(2, 'register-address', '203.0.113.9', {
+            limit: 50,
+            windowSeconds: 60 * 60,
+        });
+    });
+
+    it('returns only a generic acceptance response on success', async () => {
         mockedPrisma.user.findUnique.mockResolvedValue(null);
         mockedPrisma.user.create.mockResolvedValue({
             id: 'u1',
@@ -31,12 +79,11 @@ describe('POST /api/auth/register', () => {
         });
 
         const res = await POST(makeReq({ name: 'Ada', email: 'ada@example.com', password: 'password123' }));
-        expect(res.status).toBe(201);
+        expect(res.status).toBe(202);
 
         const data = await res.json();
-        expect(data.user).toBeDefined();
-        expect(data.user.password).toBeUndefined();
-        expect(data.user).toMatchObject({ id: 'u1', email: 'ada@example.com' });
+        expect(data.user).toBeUndefined();
+        expect(data).toEqual({ message: 'If this address can be registered, the request has been accepted.' });
     });
 
     it('rejects an invalid email', async () => {
@@ -111,12 +158,53 @@ describe('POST /api/auth/register', () => {
         expect(mockedPrisma.user.create).not.toHaveBeenCalled();
     });
 
-    it('rejects a duplicate user', async () => {
+    it('uses the same response for an existing account to prevent enumeration', async () => {
         mockedPrisma.user.findUnique.mockResolvedValue({ id: 'existing' });
         const res = await POST(makeReq({ name: 'Ada', email: 'ada@example.com', password: 'password123' }));
-        expect(res.status).toBe(409);
-        expect(await res.json()).toMatchObject({ error: { code: 'ACCOUNT_EXISTS' } });
+        expect(res.status).toBe(202);
+        expect(await res.json()).toEqual({
+            message: 'If this address can be registered, the request has been accepted.'
+        });
         expect(mockedPrisma.user.create).not.toHaveBeenCalled();
+    });
+
+    it('rate limits registration by normalized email and client address', async () => {
+        process.env.AUTH_TRUSTED_PROXY_HOPS = '1';
+        mockedConsumeRateLimit
+            .mockResolvedValueOnce({ allowed: true, retryAfterSeconds: 0 })
+            .mockResolvedValueOnce({ allowed: false, retryAfterSeconds: 120 });
+
+        const res = await POST(makeReq(
+            { name: 'Ada', email: ' ADA@Example.COM ', password: 'password123' },
+            { 'x-forwarded-for': '203.0.113.9' }
+        ));
+
+        expect(res.status).toBe(429);
+        expect(res.headers.get('retry-after')).toBe('120');
+        expect(await res.json()).toEqual({
+            error: {
+                code: 'RATE_LIMITED',
+                message: 'Too many account requests. Please try again later.',
+                fields: {}
+            }
+        });
+        expect(mockedConsumeRateLimit).toHaveBeenNthCalledWith(1, 'register-email', 'ada@example.com', {
+            limit: 3,
+            windowSeconds: 60 * 60,
+        });
+        expect(mockedPrisma.user.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('treats a concurrent normalized-email conflict as the generic accepted response', async () => {
+        mockedPrisma.user.findUnique.mockResolvedValue(null);
+        mockedPrisma.user.create.mockRejectedValue({ code: 'P2002' });
+
+        const res = await POST(makeReq({ name: 'Ada', email: 'ada@example.com', password: 'password123' }));
+
+        expect(res.status).toBe(202);
+        expect(await res.json()).toEqual({
+            message: 'If this address can be registered, the request has been accepted.'
+        });
     });
 
     it('returns 500 when an internal database error occurs', async () => {

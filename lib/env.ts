@@ -1,6 +1,11 @@
 type RequiredEnvironmentVariable = 'DATABASE_URL' | 'NEXTAUTH_URL' | 'NEXTAUTH_SECRET';
-type Environment = Partial<Record<RequiredEnvironmentVariable, string | undefined>>;
-type ValidatedEnvironment = Record<RequiredEnvironmentVariable, string>;
+type Environment = Partial<Record<RequiredEnvironmentVariable, string | undefined>> & {
+    NODE_ENV?: string;
+    AUTH_TRUSTED_PROXY_HOPS?: string;
+};
+type ValidatedEnvironment = Record<RequiredEnvironmentVariable, string> & {
+    AUTH_TRUSTED_PROXY_HOPS?: string;
+};
 
 function requireValue(environment: Environment, key: RequiredEnvironmentVariable): string {
     const value = environment[key]?.trim();
@@ -45,5 +50,15 @@ export function validateServerEnvironment(environment: Environment): ValidatedEn
         throw new Error('NEXTAUTH_SECRET must be at least 32 characters');
     }
 
-    return { DATABASE_URL, NEXTAUTH_URL, NEXTAUTH_SECRET };
+    const AUTH_TRUSTED_PROXY_HOPS = environment.AUTH_TRUSTED_PROXY_HOPS?.trim();
+    if (environment.NODE_ENV === 'production' && !/^[1-5]$/.test(AUTH_TRUSTED_PROXY_HOPS ?? '')) {
+        throw new Error('AUTH_TRUSTED_PROXY_HOPS must be between 1 and 5 in production');
+    }
+
+    return {
+        DATABASE_URL,
+        NEXTAUTH_URL,
+        NEXTAUTH_SECRET,
+        ...(AUTH_TRUSTED_PROXY_HOPS ? { AUTH_TRUSTED_PROXY_HOPS } : {})
+    };
 }

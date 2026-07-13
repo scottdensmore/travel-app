@@ -37,9 +37,28 @@ describe('container secret protection', () => {
 
     it('injects authentication configuration into the app container at runtime', () => {
         const composeFile = readRepositoryFile('docker-compose.yml');
+        const appService = composeFile.slice(
+            composeFile.indexOf('  app:'),
+            composeFile.indexOf('\n  proxy:')
+        );
 
         expect(composeFile).toContain('NEXTAUTH_URL: ${NEXTAUTH_URL:?NEXTAUTH_URL is required}');
         expect(composeFile).toContain('NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required}');
+        expect(appService).toContain('AUTH_TRUSTED_PROXY_HOPS: "1"');
+        expect(appService).toContain('expose:');
+        expect(appService).not.toContain('ports:');
+    });
+
+    it('publishes the app only through a proxy that replaces forwarded client addresses', () => {
+        const composeFile = readRepositoryFile('docker-compose.yml');
+        const proxyConfiguration = readRepositoryFile('deploy/nginx.conf');
+
+        expect(composeFile).toContain('proxy:');
+        expect(composeFile).toContain('- "3000:8080"');
+        expect(composeFile).toContain('./deploy/nginx.conf:/etc/nginx/nginx.conf:ro');
+        expect(proxyConfiguration).toContain('proxy_pass http://app:3000;');
+        expect(proxyConfiguration).toContain('proxy_set_header X-Forwarded-For $remote_addr;');
+        expect(proxyConfiguration).not.toContain('$proxy_add_x_forwarded_for');
     });
 
     it('checks the final container image in CI', () => {
@@ -67,6 +86,7 @@ describe('container secret protection', () => {
         expect(exampleEnvironment).toContain('NEXTAUTH_URL=');
         expect(exampleEnvironment).toContain('NEXTAUTH_SECRET=');
         expect(exampleEnvironment.match(/^NEXTAUTH_SECRET=(.*)$/m)?.[1]).toBe('');
+        expect(exampleEnvironment).toContain('AUTH_TRUSTED_PROXY_HOPS=0');
         expect(securityGuide).toContain('Rotate exposed secrets');
         expect(securityGuide).toContain('Rebuild and redeploy');
     });

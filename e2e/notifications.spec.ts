@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { prisma } from '../lib/prisma';
+import { registerAndSignIn } from './helpers/auth';
 
 test.describe('User Notifications & Alerts Journey', () => {
   const uniqueEmail = `notiftest-${Date.now()}@example.com`;
@@ -8,12 +9,7 @@ test.describe('User Notifications & Alerts Journey', () => {
 
   test.beforeEach(async ({ page }) => {
     // Register and login a fresh user to isolate notifications state
-    await page.goto('/signup');
-    await page.fill('#name', name);
-    await page.fill('#email', uniqueEmail);
-    await page.fill('#password', password);
-    await page.click('button:has-text("Create account")');
-    await expect(page).toHaveURL('/');
+    await registerAndSignIn(page, { name, email: uniqueEmail, password });
   });
 
   test.afterAll(async () => {

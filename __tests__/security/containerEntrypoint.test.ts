@@ -7,6 +7,7 @@ const validEnvironment: NodeJS.ProcessEnv = {
     DATABASE_URL: 'postgresql://postgres:postgres@db:5432/travel_app',
     NEXTAUTH_URL: 'http://localhost:3000',
     NEXTAUTH_SECRET: 'a-secure-test-secret-that-is-at-least-32-characters',
+    AUTH_TRUSTED_PROXY_HOPS: '1',
 };
 
 function runEntrypoint(environment: NodeJS.ProcessEnv) {
@@ -21,7 +22,7 @@ describe('container entrypoint', () => {
         expect(runEntrypoint(validEnvironment).status).toBe(0);
     });
 
-    it.each(['DATABASE_URL', 'NEXTAUTH_URL', 'NEXTAUTH_SECRET'] as const)(
+    it.each(['DATABASE_URL', 'NEXTAUTH_URL', 'NEXTAUTH_SECRET', 'AUTH_TRUSTED_PROXY_HOPS'] as const)(
         'fails before startup when %s is missing',
         (key) => {
             const environment = { ...validEnvironment };
@@ -53,5 +54,13 @@ describe('container entrypoint', () => {
         expect(invalidDatabase.status).not.toBe(0);
         expect(invalidNextAuth.status).not.toBe(0);
         expect(shortSecret.status).not.toBe(0);
+    });
+
+    it('rejects an invalid trusted proxy hop count', () => {
+        const result = runEntrypoint({ ...validEnvironment, AUTH_TRUSTED_PROXY_HOPS: '0' });
+        expect(result.status).not.toBe(0);
+        expect(`${result.stdout}${result.stderr}`).toContain(
+            'AUTH_TRUSTED_PROXY_HOPS must be between 1 and 5'
+        );
     });
 });

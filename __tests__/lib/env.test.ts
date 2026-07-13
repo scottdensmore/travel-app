@@ -43,4 +43,18 @@ describe('validateServerEnvironment', () => {
             NEXTAUTH_SECRET: 'too-short',
         })).toThrow('NEXTAUTH_SECRET must be at least 32 characters');
     });
+
+    it('requires a trusted proxy contract in production', () => {
+        expect(() => validateServerEnvironment({
+            ...validEnvironment,
+            NODE_ENV: 'production',
+            AUTH_TRUSTED_PROXY_HOPS: '0',
+        })).toThrow('AUTH_TRUSTED_PROXY_HOPS must be between 1 and 5 in production');
+
+        expect(validateServerEnvironment({
+            ...validEnvironment,
+            NODE_ENV: 'production',
+            AUTH_TRUSTED_PROXY_HOPS: '1',
+        })).toMatchObject({ AUTH_TRUSTED_PROXY_HOPS: '1' });
+    });
 });

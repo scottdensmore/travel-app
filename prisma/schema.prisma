@@ -67,6 +67,15 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
+model AuthRateLimit {
+  key         String   @id
+  attempts    Int      @default(0)
+  windowStart DateTime
+  expiresAt   DateTime
+
+  @@index([expiresAt])
+}
+
 model CityGuide {
   id          Int      @id @default(autoincrement())
   city        String

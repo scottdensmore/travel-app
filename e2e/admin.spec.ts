@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { prisma } from '../lib/prisma';
 import FlightBookingService from '../lib/FlightBookingService';
 import { updateFlightSeatingLayout } from '../lib/FlightSeatLayoutService';
+import { registerAccount, registerAndSignIn, signInWithCredentials } from './helpers/auth';
 
 test.describe('Admin Control Journey', () => {
   const adminEmail = `admin-${Date.now()}@example.com`;
@@ -33,12 +34,7 @@ test.describe('Admin Control Journey', () => {
 
   test('Non-admin user is blocked from admin dashboard', async ({ page }) => {
     // Register standard user
-    await page.goto('/signup');
-    await page.fill('#name', 'Standard User');
-    await page.fill('#email', userEmail);
-    await page.fill('#password', password);
-    await page.click('button:has-text("Create account")');
-    await expect(page).toHaveURL('/');
+    await registerAndSignIn(page, { name: 'Standard User', email: userEmail, password });
 
     // Attempt to access admin page
     await page.goto('/admin');
@@ -50,12 +46,7 @@ test.describe('Admin Control Journey', () => {
 
   test('Admin user can access dashboard, create schedule, and change live status', async ({ page }) => {
     // Register admin user
-    await page.goto('/signup');
-    await page.fill('#name', 'Admin User');
-    await page.fill('#email', adminEmail);
-    await page.fill('#password', password);
-    await page.click('button:has-text("Create account")');
-    await expect(page).toHaveURL('/');
+    await registerAccount(page, { name: 'Admin User', email: adminEmail, password });
 
     // Promote the user to ADMIN directly in the database
     await prisma.user.update({
@@ -63,14 +54,7 @@ test.describe('Admin Control Journey', () => {
       data: { role: 'ADMIN' }
     });
 
-    // Logout and login again to refresh the JWT session token role
-    await page.click('button:has-text("Sign Out")');
-    await expect(page.locator('a:has-text("Sign In")')).toBeVisible();
-    await page.goto('/login');
-    await page.fill('#email', adminEmail);
-    await page.fill('#password', password);
-    await page.click('button:has-text("Sign In with Email")');
-    await expect(page).toHaveURL('/');
+    await signInWithCredentials(page, { email: adminEmail, password });
 
     // Access admin dashboard
     await page.goto('/admin');

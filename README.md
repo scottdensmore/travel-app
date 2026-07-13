@@ -9,9 +9,12 @@ cp .env.example .env
 ```
 
 Replace `NEXTAUTH_SECRET` with a securely generated value of at least 32
-characters. Deployed environments must inject all configuration at runtime;
-never bake `.env` into an image. See [SECURITY.md](SECURITY.md) for rotation and
-incident guidance.
+characters. Local non-container development may leave
+`AUTH_TRUSTED_PROXY_HOPS` at `0`. The recommended Compose deployment supplies
+its own safe value; other deployments must set it to the exact number of
+trusted right-most proxy entries. Deployed environments must inject all secret
+configuration at runtime; never bake `.env` into an image. See
+[SECURITY.md](SECURITY.md) for rotation and incident guidance.
 
 ### Using Docker (Recommended)
 
@@ -21,7 +24,11 @@ To quickly get the application running with a database and demo data, use Docker
 docker compose up --build
 ```
 
-This will automatically start the database, run migrations, seed data, and serve the app at [http://localhost:3000](http://localhost:3000).
+This automatically starts the database, runs migrations, seeds data, and serves
+the app at [http://localhost:3000](http://localhost:3000). Compose exposes the
+app only through a bundled reverse proxy. The proxy replaces any incoming
+`X-Forwarded-For` value with the connecting address before forwarding the
+request, so clients cannot choose the identity used by authentication limits.
 
 ### Manual Setup
 
