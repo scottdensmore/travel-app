@@ -1,8 +1,15 @@
+import { randomUUID } from 'node:crypto';
 import { prisma } from '@/lib/prisma';
 import { assertSeatAvailableForCabin } from '@/lib/seatLayout';
 import { lockFlightForUpdate } from '@/lib/flightLock';
 import { flightBookingServiceSchema, parseInput } from '@/lib/validation';
 import { calculateBookingTotal } from '@/lib/bookingPricing';
+import { safePassengerSelect } from '@/lib/passengerDataAccess';
+import {
+    decryptPassengerData,
+    encryptPassengerData,
+    getPassengerDataRetentionDeadline,
+} from '@/lib/passengerDataProtection';
 
 export interface PassengerInput {
   firstName: string;
@@ -29,16 +36,39 @@ function passengerRequestSignature(passenger: PassengerInput): string {
     ]);
 }
 
+interface ProtectedPassenger extends Omit<PassengerInput, 'dateOfBirth' | 'passportNumber'> {
+    id: string;
+    dateOfBirthEncrypted: string | null;
+    passportNumberEncrypted: string | null;
+}
+
+function protectedPassengerRequestSignature(passenger: ProtectedPassenger): string {
+    if (!passenger.dateOfBirthEncrypted || !passenger.passportNumberEncrypted) {
+        throw new Error('Passenger identity data is no longer available.');
+    }
+    return passengerRequestSignature({
+        ...passenger,
+        dateOfBirth: decryptPassengerData(passenger.dateOfBirthEncrypted, {
+            passengerId: passenger.id,
+            field: 'dateOfBirth',
+        }),
+        passportNumber: decryptPassengerData(passenger.passportNumberEncrypted, {
+            passengerId: passenger.id,
+            field: 'passportNumber',
+        }),
+    });
+}
+
 function matchesPersistedRequest(
     existingFlightId: number | null,
-    existingPassengers: PassengerInput[],
+    existingPassengers: ProtectedPassenger[],
     flightId: number,
     passengers: PassengerInput[]
 ): boolean {
     if (existingFlightId !== flightId || existingPassengers.length !== passengers.length) {
         return false;
     }
-    const existingSignatures = existingPassengers.map(passengerRequestSignature).sort();
+    const existingSignatures = existingPassengers.map(protectedPassengerRequestSignature).sort();
     const requestedSignatures = passengers.map(passengerRequestSignature).sort();
     return existingSignatures.every((signature, index) => signature === requestedSignatures[index]);
 }
@@ -63,7 +93,15 @@ export default class FlightBookingService {
 
             const existingRequest = await tx.booking.findFirst({
                 where: { userId, idempotencyKey },
-                include: { passengers: true }
+                include: {
+                    passengers: {
+                        select: {
+                            ...safePassengerSelect,
+                            dateOfBirthEncrypted: true,
+                            passportNumberEncrypted: true,
+                        }
+                    }
+                }
             });
             if (existingRequest) {
                 if (!matchesPersistedRequest(
@@ -74,7 +112,18 @@ export default class FlightBookingService {
                 )) {
                     throw new Error('Booking request ID was already used for a different booking.');
                 }
-                return { ...existingRequest, wasCreated: false };
+                return {
+                    ...existingRequest,
+                    passengers: existingRequest.passengers.map(passenger => ({
+                        id: passenger.id,
+                        firstName: passenger.firstName,
+                        lastName: passenger.lastName,
+                        gender: passenger.gender,
+                        seatNumber: passenger.seatNumber,
+                        cabinClass: passenger.cabinClass,
+                    })),
+                    wasCreated: false,
+                };
             }
 
             if (flight.status === 'CANCELLED' || flight.departureDate.getTime() <= Date.now()) {
@@ -97,7 +146,7 @@ export default class FlightBookingService {
 
             const existingBookings = await tx.booking.findMany({
                 where: { flightId, status: { not: "CANCELLED" } },
-                include: { passengers: true }
+                include: { passengers: { select: { seatNumber: true } } }
             });
 
             const occupiedSeats = new Set(
@@ -119,6 +168,30 @@ export default class FlightBookingService {
                 }))
             );
 
+            const sensitiveDataExpiresAt = getPassengerDataRetentionDeadline(flight.departureDate);
+            const protectedPassengers = passengers.map(passenger => {
+                const id = randomUUID();
+                const dateOfBirth = passenger.dateOfBirth.slice(0, 10);
+                return {
+                    id,
+                    firstName: passenger.firstName,
+                    lastName: passenger.lastName,
+                    dateOfBirthEncrypted: encryptPassengerData(dateOfBirth, {
+                        passengerId: id,
+                        field: 'dateOfBirth',
+                    }),
+                    passportNumberEncrypted: encryptPassengerData(passenger.passportNumber, {
+                        passengerId: id,
+                        field: 'passportNumber',
+                    }),
+                    sensitiveDataExpiresAt,
+                    gender: passenger.gender,
+                    seatNumber: passenger.seatNumber,
+                    cabinClass: passenger.cabinClass,
+                    flightId,
+                };
+            });
+
             // Create booking with nested passengers
             const booking = await tx.booking.create({
                 data: {
@@ -128,20 +201,11 @@ export default class FlightBookingService {
                     paymentIntentId: null,
                     idempotencyKey,
                     passengers: {
-                        create: passengers.map(p => ({
-                            firstName: p.firstName,
-                            lastName: p.lastName,
-                            dateOfBirth: new Date(p.dateOfBirth),
-                            passportNumber: p.passportNumber,
-                            gender: p.gender,
-                            seatNumber: p.seatNumber,
-                            cabinClass: p.cabinClass,
-                            flightId
-                        }))
+                        create: protectedPassengers
                     }
                 },
                 include: {
-                    passengers: true
+                    passengers: { select: safePassengerSelect }
                 }
             });
             return { ...booking, wasCreated: true };

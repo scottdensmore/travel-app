@@ -29,8 +29,6 @@ interface Passenger {
     id: string;
     firstName: string;
     lastName: string;
-    dateOfBirth: Date | string;
-    passportNumber: string;
     gender: string;
     seatNumber: string;
     cabinClass: string;

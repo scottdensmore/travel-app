@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import ProfileClient from "@/components/ui/ProfileClient";
+import { safePassengerSelect } from "@/lib/passengerDataAccess";
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +23,10 @@ export default async function ProfilePage() {
   const userBookings = await prisma.booking.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },
-    include: { flight: true, passengers: true },
+    include: {
+      flight: true,
+      passengers: { select: safePassengerSelect },
+    },
   });
 
   const userFavorites = await prisma.userFavorite.findMany({

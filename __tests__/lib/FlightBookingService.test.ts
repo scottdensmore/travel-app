@@ -1,6 +1,8 @@
 /** @jest-environment node */
 import FlightBookingService, { PassengerInput } from '@/lib/FlightBookingService';
 import { prisma } from '@/lib/prisma';
+import { safePassengerSelect } from '@/lib/passengerDataAccess';
+import { encryptPassengerData } from '@/lib/passengerDataProtection';
 
 const mockTx = {
     $queryRaw: jest.fn(),
@@ -101,12 +103,20 @@ describe('FlightBookingService', () => {
                 userId: 'u1',
                 idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
             },
-            include: { passengers: true }
+            include: {
+                passengers: {
+                    select: {
+                        ...safePassengerSelect,
+                        dateOfBirthEncrypted: true,
+                        passportNumberEncrypted: true,
+                    }
+                }
+            }
         });
 
         expect(mockTx.booking.findMany).toHaveBeenCalledWith({
             where: { flightId: 7, status: { not: "CANCELLED" } },
-            include: { passengers: true }
+            include: { passengers: { select: { seatNumber: true } } }
         });
 
         expect(mockTx.booking.create).toHaveBeenCalledWith({
@@ -119,10 +129,12 @@ describe('FlightBookingService', () => {
                 passengers: {
                     create: [
                         {
+                            id: expect.any(String),
                             firstName: 'Alice',
                             lastName: 'Smith',
-                            dateOfBirth: new Date('1995-05-15'),
-                            passportNumber: 'US123456',
+                            dateOfBirthEncrypted: expect.stringMatching(/^v1:/),
+                            passportNumberEncrypted: expect.stringMatching(/^v1:/),
+                            sensitiveDataExpiresAt: new Date('2099-01-31T10:00:00.000Z'),
                             gender: 'Female',
                             seatNumber: '4C',
                             cabinClass: 'BUSINESS',
@@ -131,13 +143,14 @@ describe('FlightBookingService', () => {
                     ]
                 }
             },
-            include: { passengers: true }
+            include: { passengers: { select: safePassengerSelect } }
         });
 
         expect(result).toMatchObject({ id: 2, totalPrice: '$700' });
     });
 
     it('returns the existing booking when an idempotency key is retried', async () => {
+        const passengerId = 'passenger-1';
         const existing = {
             id: 12,
             userId: 'u1',
@@ -145,8 +158,11 @@ describe('FlightBookingService', () => {
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
             totalPrice: '$350',
             passengers: [{
-                firstName: 'Alice', lastName: 'Smith', dateOfBirth: new Date('1995-05-15T00:00:00.000Z'),
-                passportNumber: 'US123456', gender: 'Female', seatNumber: '11A', cabinClass: 'ECONOMY'
+                id: passengerId,
+                firstName: 'Alice', lastName: 'Smith',
+                dateOfBirthEncrypted: encryptPassengerData('1995-05-15', { passengerId, field: 'dateOfBirth' }),
+                passportNumberEncrypted: encryptPassengerData('US123456', { passengerId, field: 'passportNumber' }),
+                gender: 'Female', seatNumber: '11A', cabinClass: 'ECONOMY'
             }]
         };
         mockTx.flight.findUnique.mockResolvedValue({
@@ -168,12 +184,24 @@ describe('FlightBookingService', () => {
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
         });
 
-        expect(result).toEqual({ ...existing, wasCreated: false });
+        expect(result).toEqual({
+            ...existing,
+            passengers: [{
+                id: passengerId,
+                firstName: 'Alice',
+                lastName: 'Smith',
+                gender: 'Female',
+                seatNumber: '11A',
+                cabinClass: 'ECONOMY',
+            }],
+            wasCreated: false,
+        });
         expect(mockTx.booking.create).not.toHaveBeenCalled();
         expect(mockTx.booking.findMany).not.toHaveBeenCalled();
     });
 
     it('rejects reuse of an idempotency key for a different flight or passenger request', async () => {
+        const passengerId = 'passenger-2';
         const existing = {
             id: 12,
             userId: 'u1',
@@ -181,8 +209,11 @@ describe('FlightBookingService', () => {
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
             totalPrice: '$350',
             passengers: [{
-                firstName: 'Alice', lastName: 'Smith', dateOfBirth: new Date('1995-05-15T00:00:00.000Z'),
-                passportNumber: 'US123456', gender: 'Female', seatNumber: '11A', cabinClass: 'ECONOMY'
+                id: passengerId,
+                firstName: 'Alice', lastName: 'Smith',
+                dateOfBirthEncrypted: encryptPassengerData('1995-05-15', { passengerId, field: 'dateOfBirth' }),
+                passportNumberEncrypted: encryptPassengerData('US123456', { passengerId, field: 'passportNumber' }),
+                gender: 'Female', seatNumber: '11A', cabinClass: 'ECONOMY'
             }]
         };
         mockTx.flight.findUnique.mockResolvedValue({

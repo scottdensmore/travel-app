@@ -44,6 +44,7 @@ describe('container secret protection', () => {
 
         expect(composeFile).toContain('NEXTAUTH_URL: ${NEXTAUTH_URL:?NEXTAUTH_URL is required}');
         expect(composeFile).toContain('NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required}');
+        expect(composeFile).toContain('PASSENGER_DATA_ENCRYPTION_KEYS: ${PASSENGER_DATA_ENCRYPTION_KEYS:?PASSENGER_DATA_ENCRYPTION_KEYS is required}');
         expect(appService).toContain('AUTH_TRUSTED_PROXY_HOPS: "1"');
         expect(appService).toContain('AUTH_EMAIL_FROM:');
         expect(appService).toContain('AUTH_EMAIL_PROVIDER: mailpit');
@@ -99,6 +100,7 @@ describe('container secret protection', () => {
         expect(verificationScript).toContain('scan-image-layers.sh');
         expect(verificationScript).toContain('SECRET_SCAN_SENTINEL');
         expect(verificationScript).toContain('AUTH_EMAIL_API_TOKEN');
+        expect(verificationScript).toContain('PASSENGER_DATA_ENCRYPTION_KEYS');
     });
 
     it('provides safe configuration and secret-rotation guidance', () => {
@@ -109,6 +111,8 @@ describe('container secret protection', () => {
         expect(exampleEnvironment).toContain('NEXTAUTH_URL=');
         expect(exampleEnvironment).toContain('NEXTAUTH_SECRET=');
         expect(exampleEnvironment.match(/^NEXTAUTH_SECRET=(.*)$/m)?.[1]).toBe('');
+        expect(exampleEnvironment).toContain('PASSENGER_DATA_ENCRYPTION_KEYS=');
+        expect(exampleEnvironment.match(/^PASSENGER_DATA_ENCRYPTION_KEYS=(.*)$/m)?.[1]).toBe('');
         expect(exampleEnvironment).toContain('AUTH_TRUSTED_PROXY_HOPS=0');
         expect(exampleEnvironment).toContain('AUTH_EMAIL_FROM=');
         expect(exampleEnvironment).toContain('AUTH_EMAIL_PROVIDER=mailpit');
