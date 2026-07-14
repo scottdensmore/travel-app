@@ -82,6 +82,8 @@ work in this repository. All agents and sub-agents must follow them.
      remain unchanged.
    - Push and create the pull request only after local verification and any
      required code review are complete.
+   - Open a normal, ready-for-review pull request by default. Do not open draft
+     pull requests unless the user explicitly asks for a draft.
 
 11. **Merge only clean, passing pull requests.** Merge only after GitHub
     reports a clean merge state and every configured check passes. Never bypass
