@@ -13,7 +13,15 @@ export default async function AdminDashboard() {
     const recentBookings = await prisma.booking.findMany({
         take: 5,
         orderBy: { createdAt: 'desc' },
-        include: { user: true, flight: true }
+        include: {
+            user: {
+                select: {
+                    name: true,
+                    email: true,
+                },
+            },
+            flight: true,
+        },
     });
 
     return (

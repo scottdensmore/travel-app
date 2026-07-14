@@ -3,6 +3,14 @@ import { prisma } from '../lib/prisma';
 import FlightBookingService from '../lib/FlightBookingService';
 import { updateFlightSeatingLayout } from '../lib/FlightSeatLayoutService';
 import { createVerifiedAccount, registerAndSignIn, signInWithCredentials } from './helpers/auth';
+import { createStaffTotpCode } from '../lib/staffMfa';
+
+async function waitForStableTotpWindow() {
+  const remainder = Date.now() % 30_000;
+  if (remainder > 24_000) {
+    await new Promise(resolve => setTimeout(resolve, 31_000 - remainder));
+  }
+}
 
 test.describe('Admin Control Journey', () => {
   const adminEmail = `admin-${Date.now()}@example.com`;
@@ -54,10 +62,24 @@ test.describe('Admin Control Journey', () => {
       data: { role: 'ADMIN' }
     });
 
-    await signInWithCredentials(page, { email: adminEmail, password });
+    await signInWithCredentials(page, { email: adminEmail, password }, '/staff/mfa');
+
+    await page.getByRole('button', { name: 'Set up authenticator' }).click();
+    const secret = (await page.getByTestId('staff-mfa-manual-key').textContent())!.trim();
+    await waitForStableTotpWindow();
+    const enrollmentTime = new Date();
+    await page.getByLabel('Six-digit security code')
+      .fill(createStaffTotpCode(secret, new Date(enrollmentTime.getTime() - 30_000)));
+    await page.getByRole('button', { name: 'Verify and finish setup' }).click();
+    await expect(page).toHaveURL(/\/login\?staffMfa=enrolled/);
+
+    await signInWithCredentials(page, {
+      email: adminEmail,
+      password,
+      staffCode: createStaffTotpCode(secret),
+    }, '/admin');
 
     // Access admin dashboard
-    await page.goto('/admin');
     await expect(page.locator('h1:has-text("Admin Control Center")')).toBeVisible();
 
     // Go to Flight Manager

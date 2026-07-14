@@ -7,6 +7,7 @@ import FlightScheduleService from '@/lib/FlightScheduleService';
 import CityGuide from '@/lib/types/CityGuide';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { hasVerifiedStaffAccess } from '@/lib/staffAuthorization';
 import { prisma } from '@/lib/prisma';
 import { assertSeatAvailableForCabin, validateSeatingLayout } from '@/lib/seatLayout';
 import { lockFlightForUpdate } from '@/lib/flightLock';
@@ -34,7 +35,7 @@ const flightBookingService = new FlightBookingService();
 
 export async function saveCityGuideAction(cityGuide: CityGuide) {
     const session = await getServerSession(authOptions);
-    if (session?.user?.role !== 'ADMIN') throw new Error("Unauthorized");
+    if (!hasVerifiedStaffAccess(session)) throw new Error("Unauthorized");
 
     const parsed = parseActionInput(cityGuideSchema, cityGuide);
     if (!parsed.ok) return parsed;
@@ -46,7 +47,7 @@ export async function saveCityGuideAction(cityGuide: CityGuide) {
 
 export async function deleteCityGuideAction(cityGuideId: number) {
     const session = await getServerSession(authOptions);
-    if (session?.user?.role !== 'ADMIN') throw new Error("Unauthorized");
+    if (!hasVerifiedStaffAccess(session)) throw new Error("Unauthorized");
 
     const parsed = parseActionInput(numericIdSchema, cityGuideId);
     if (!parsed.ok) return parsed;
@@ -220,7 +221,7 @@ export async function cancelBookingAction(bookingId: number) {
     });
     if (!booking) throw new Error("Booking not found");
 
-    if (session.user.role !== 'ADMIN' && booking.userId !== userId) {
+    if (!hasVerifiedStaffAccess(session) && booking.userId !== userId) {
         throw new Error("Unauthorized");
     }
 
@@ -292,7 +293,7 @@ export async function changeBookingSeatsAction(
     });
     if (!booking) throw new Error("Booking not found");
 
-    if (session.user.role !== 'ADMIN' && booking.userId !== userId) {
+    if (!hasVerifiedStaffAccess(session) && booking.userId !== userId) {
         throw new Error("Unauthorized");
     }
 
@@ -377,7 +378,7 @@ export async function deleteReviewAction(reviewId: string) {
     });
     if (!review) throw new Error("Review not found");
 
-    if (session.user.role !== 'ADMIN' && review.userId !== userId) {
+    if (!hasVerifiedStaffAccess(session) && review.userId !== userId) {
         throw new Error("Unauthorized");
     }
 
@@ -408,7 +409,7 @@ export async function saveFlightScheduleAction(data: {
     seatPattern?: string | null;
 }) {
     const session = await getServerSession(authOptions);
-    if (session?.user?.role !== 'ADMIN') throw new Error("Unauthorized");
+    if (!hasVerifiedStaffAccess(session)) throw new Error("Unauthorized");
     const parsed = parseActionInput(scheduleSchema, data);
     if (!parsed.ok) return parsed;
     data = parsed.data as typeof data;
@@ -569,7 +570,7 @@ export async function generateFlightOccurrencesAction(
     }
 ) {
     const session = await getServerSession(authOptions);
-    if (session?.user?.role !== 'ADMIN') throw new Error("Unauthorized");
+    if (!hasVerifiedStaffAccess(session)) throw new Error("Unauthorized");
     const parsed = parseActionInput(occurrenceRequestSchema, {
         scheduleId,
         startDate: startDateStr,
@@ -733,7 +734,7 @@ export async function generateFlightOccurrencesAction(
 
 export async function deleteFlightScheduleAction(scheduleId: number) {
     const session = await getServerSession(authOptions);
-    if (session?.user?.role !== 'ADMIN') throw new Error("Unauthorized");
+    if (!hasVerifiedStaffAccess(session)) throw new Error("Unauthorized");
 
     const parsed = parseActionInput(numericIdSchema, scheduleId);
     if (!parsed.ok) return parsed;
@@ -749,7 +750,7 @@ export async function deleteFlightScheduleAction(scheduleId: number) {
 
 export async function updateFlightStatusAction(flightId: number, status: 'ON_TIME' | 'DELAYED' | 'CANCELLED') {
     const session = await getServerSession(authOptions);
-    if (session?.user?.role !== 'ADMIN') throw new Error("Unauthorized");
+    if (!hasVerifiedStaffAccess(session)) throw new Error("Unauthorized");
 
     const parsedId = parseActionInput(numericIdSchema, flightId);
     if (!parsedId.ok) return parsedId;

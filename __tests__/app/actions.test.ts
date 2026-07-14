@@ -127,8 +127,16 @@ describe('saveCityGuideAction authorization', () => {
         expect(mockSaveCityGuide).not.toHaveBeenCalled();
     });
 
+    it('rejects an admin whose staff factor has not been verified', async () => {
+        mockedGetServerSession.mockResolvedValue({
+            user: { role: 'ADMIN', staffMfaVerified: false },
+        });
+        await expect(saveCityGuideAction(sampleGuide)).rejects.toThrow('Unauthorized');
+        expect(mockSaveCityGuide).not.toHaveBeenCalled();
+    });
+
     it('allows an admin user and saves the guide', async () => {
-        mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+        mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
         mockSaveCityGuide.mockResolvedValue({ ...sampleGuide, id: 1 });
 
         const result = await saveCityGuideAction(sampleGuide);
@@ -138,7 +146,7 @@ describe('saveCityGuideAction authorization', () => {
     });
 
     it('normalizes guide text before saving', async () => {
-        mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+        mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
         mockSaveCityGuide.mockResolvedValue({ id: 1 });
 
         await saveCityGuideAction({
@@ -170,7 +178,7 @@ describe('deleteCityGuideAction authorization and execution', () => {
     });
 
     it('allows an admin user and deletes the guide', async () => {
-        mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+        mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
         mockedCityGuideDelete.mockResolvedValue({});
 
         await deleteCityGuideAction(1);
@@ -520,7 +528,7 @@ describe('cancelBookingAction', () => {
     });
 
     it('allows an admin to cancel any booking', async () => {
-        mockedGetServerSession.mockResolvedValue({ user: { id: 'admin-123', role: 'ADMIN' } });
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'admin-123', role: 'ADMIN', staffMfaVerified: true } });
         mockedBookingFindUnique.mockResolvedValue({
             id: 1,
             userId: 'some-user',
@@ -700,7 +708,7 @@ describe('deleteReviewAction', () => {
     });
 
     it('allows an admin to delete any review', async () => {
-        mockedGetServerSession.mockResolvedValue({ user: { id: 'admin-123', role: 'ADMIN' } });
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'admin-123', role: 'ADMIN', staffMfaVerified: true } });
         mockedReviewFindUnique.mockResolvedValue({ id: 'rev-123', userId: 'some-user' });
         mockedReviewDelete.mockResolvedValue({ id: 'rev-123' });
 
@@ -745,7 +753,7 @@ describe('admin flight schedule actions', () => {
         });
 
         it('rejects an explicitly empty seat pattern', async () => {
-            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
 
             await expect(saveFlightScheduleAction({
                 ...sampleScheduleInput,
@@ -762,7 +770,7 @@ describe('admin flight schedule actions', () => {
         });
 
         it('allows admin to create a new flight schedule and generates flights', async () => {
-            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
             mockedFlightScheduleCreate.mockResolvedValue({
                 id: 1,
                 ...sampleScheduleInput,
@@ -807,7 +815,7 @@ describe('admin flight schedule actions', () => {
         });
 
         it('normalizes schedule identifiers before persistence', async () => {
-            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
             mockedFlightScheduleCreate.mockResolvedValue({ id: 1, daysOfWeek: [] });
 
             await saveFlightScheduleAction({
@@ -821,7 +829,7 @@ describe('admin flight schedule actions', () => {
         });
 
         it('allows admin to update an existing flight schedule', async () => {
-            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
             const scheduleWithId = { id: 5, ...sampleScheduleInput };
             mockedFlightScheduleUpdate.mockResolvedValue(scheduleWithId);
             mockedFlightFindFirst.mockResolvedValue({}); // existing instances, skips creating new ones
@@ -851,7 +859,7 @@ describe('admin flight schedule actions', () => {
         });
 
         it('allows admin to delete schedule', async () => {
-            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
             mockedFlightScheduleDelete.mockResolvedValue({});
 
             await deleteFlightScheduleAction(12);
@@ -869,7 +877,7 @@ describe('admin flight schedule actions', () => {
         });
 
         it('allows admin to update status and creates flight update notifications for affected users', async () => {
-            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
             mockedFlightUpdate.mockResolvedValue({
                 id: 99,
                 airline: 'Gemini Airways',
@@ -1003,7 +1011,7 @@ describe('admin flight schedule actions', () => {
             });
 
             it('generates flight instances and updates existing ones', async () => {
-                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
 
                 mockedFlightScheduleFindUnique.mockResolvedValue({
                     id: 1,
@@ -1050,7 +1058,7 @@ describe('admin flight schedule actions', () => {
             });
 
             it('rejects invalid seating configuration inputs', async () => {
-                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
 
                 mockedFlightScheduleFindUnique.mockResolvedValue({
                     id: 1,
@@ -1113,7 +1121,7 @@ describe('admin flight schedule actions', () => {
             });
 
             it('normalizes seat patterns before persisting occurrences', async () => {
-                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
                 mockedFlightScheduleFindUnique.mockResolvedValue({
                     id: 1,
                     flightNumber: 'AA101',
@@ -1137,7 +1145,7 @@ describe('admin flight schedule actions', () => {
             });
 
             it('reports existing occurrences as updated', async () => {
-                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
                 mockedFlightScheduleFindUnique.mockResolvedValue({
                     id: 1,
                     flightNumber: 'AA101',
@@ -1168,7 +1176,7 @@ describe('admin flight schedule actions', () => {
             });
 
             it('applies the requested layout after a concurrent occurrence create', async () => {
-                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
                 mockedFlightScheduleFindUnique.mockResolvedValue({
                     id: 1,
                     flightNumber: 'AA101',
@@ -1210,7 +1218,7 @@ describe('admin flight schedule actions', () => {
             });
 
             it('rejects malformed or excessive occurrence date ranges', async () => {
-                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
                 mockedFlightScheduleFindUnique.mockResolvedValue({ id: 1, daysOfWeek: [] });
 
                 await expect(
@@ -1222,7 +1230,7 @@ describe('admin flight schedule actions', () => {
             });
 
             it('does not invalidate seats already assigned to passengers', async () => {
-                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
                 mockedFlightScheduleFindUnique.mockResolvedValue({
                     id: 1,
                     flightNumber: 'AA101',
@@ -1264,7 +1272,7 @@ describe('admin flight schedule actions', () => {
             });
 
             it('does not move an occupied seat across cabin boundaries', async () => {
-                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN' } });
+                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
                 mockedFlightScheduleFindUnique.mockResolvedValue({
                     id: 1,
                     flightNumber: 'AA101',

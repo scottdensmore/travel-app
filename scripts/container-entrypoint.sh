@@ -16,6 +16,7 @@ require_value DATABASE_URL
 require_value NEXTAUTH_URL
 require_value NEXTAUTH_SECRET
 require_value PASSENGER_DATA_ENCRYPTION_KEYS
+require_value STAFF_MFA_ENCRYPTION_KEYS
 require_value AUTH_TRUSTED_PROXY_HOPS
 require_value AUTH_EMAIL_FROM
 require_value AUTH_EMAIL_PROVIDER

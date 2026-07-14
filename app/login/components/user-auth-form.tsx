@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { signIn } from "next-auth/react";
+import { getSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
 interface UserAuthFormProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -39,6 +39,7 @@ export default function UserAuthForm({ className, type, ...props }: UserAuthForm
         const formData = new FormData(event.currentTarget);
         const email = String(formData.get('email') ?? '');
         const password = String(formData.get('password') ?? '');
+        const staffCode = String(formData.get('staffCode') ?? '');
         const name = String(formData.get('name') ?? '');
 
         try {
@@ -72,12 +73,18 @@ export default function UserAuthForm({ className, type, ...props }: UserAuthForm
                 redirect: false,
                 email,
                 password,
+                staffCode,
             });
 
             if (result?.error) {
                 showFormError('Invalid email or password.');
             } else {
-                router.push("/");
+                const session = await getSession();
+                if (session?.user?.role === 'ADMIN') {
+                    router.push(session.user.staffMfaVerified ? "/admin" : "/staff/mfa");
+                } else {
+                    router.push("/");
+                }
                 router.refresh();
             }
         } catch {
@@ -165,6 +172,34 @@ export default function UserAuthForm({ className, type, ...props }: UserAuthForm
                             </p>
                         )}
                     </div>
+                    {type === 'login' && (
+                        <div className="grid gap-1">
+                            <label htmlFor="staffCode" style={{ fontSize: '0.8rem', color: '#d4d4d8' }}>
+                                Staff security code <span style={{ color: '#71717a' }}>(staff only)</span>
+                            </label>
+                            <input
+                                id="staffCode"
+                                name="staffCode"
+                                placeholder="123456"
+                                type="text"
+                                inputMode="numeric"
+                                autoComplete="one-time-code"
+                                pattern="[0-9]{6}"
+                                maxLength={6}
+                                disabled={isLoading}
+                                style={{
+                                    display: "flex",
+                                    height: "2.5rem",
+                                    width: "100%",
+                                    borderRadius: "0.375rem",
+                                    border: "1px solid #e4e4e7",
+                                    backgroundColor: "transparent",
+                                    padding: "0.5rem 0.75rem",
+                                    fontSize: "0.875rem",
+                                }}
+                            />
+                        </div>
+                    )}
                     <div className="grid gap-1">
                         <label className="sr-only" htmlFor="password">
                             Password

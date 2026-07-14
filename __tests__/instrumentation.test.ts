@@ -19,6 +19,7 @@ describe('server instrumentation', () => {
             NEXTAUTH_URL: 'http://localhost:3000',
             NEXTAUTH_SECRET: 'a-secure-test-secret-that-is-at-least-32-characters',
             PASSENGER_DATA_ENCRYPTION_KEYS: 'test-v1:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
+            STAFF_MFA_ENCRYPTION_KEYS: 'test-v1:YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODk=',
             AUTH_EMAIL_FROM: 'Mona Airways <no-reply@localhost>',
             AUTH_EMAIL_PROVIDER: 'mailpit',
             AUTH_EMAIL_API_URL: 'http://localhost:8025/api/v1/send',

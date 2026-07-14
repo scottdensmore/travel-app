@@ -9,7 +9,18 @@ export default async function TravelGuidePage() {
     const userId = session?.user?.id ?? null;
 
     const cities = await prisma.cityGuide.findMany({
-        include: { reviews: { include: { user: true } } }
+        include: {
+            reviews: {
+                include: {
+                    user: {
+                        select: {
+                            name: true,
+                            image: true,
+                        },
+                    },
+                },
+            },
+        },
     });
 
     let initialFavorites: number[] = [];

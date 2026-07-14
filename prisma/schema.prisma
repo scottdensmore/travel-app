@@ -52,6 +52,9 @@ model User {
   password      String?
   role          Role           @default(USER)
   authVersion   Int            @default(0)
+  staffMfaSecretEncrypted String? @db.Text
+  staffMfaEnrolledAt      DateTime?
+  staffMfaLastUsedStep    Int?
   accounts      Account[]
   sessions      Session[]
   bookings      Booking[]

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerAndSignIn } from './helpers/auth';
+import { prisma } from '../lib/prisma';
 
 test.describe('Travel Guide Journey', () => {
   const uniqueEmail = `guidetest-${Date.now()}@example.com`;
@@ -45,6 +46,22 @@ test.describe('Travel Guide Journey', () => {
     // Expect the review text to appear in the reviews list
     const newReviewItem = activeSidebar.locator('li', { hasText: reviewText });
     await expect(newReviewItem).toBeVisible();
+
+    const reviewer = await prisma.user.update({
+      where: { email: uniqueEmail },
+      data: { staffMfaSecretEncrypted: 'staff-mfa-secret-sentinel' },
+      select: {
+        password: true,
+        staffMfaSecretEncrypted: true,
+      },
+    });
+    const publicResponse = await page.request.get('/travelguide');
+    expect(publicResponse.ok()).toBe(true);
+    const publicResponseBody = await publicResponse.text();
+    expect(publicResponseBody).not.toContain(reviewer.password!);
+    expect(publicResponseBody).not.toContain(reviewer.staffMfaSecretEncrypted!);
+    expect(publicResponseBody).not.toContain('staffMfaSecretEncrypted');
+    expect(publicResponseBody).not.toContain('staffMfaLastUsedStep');
 
     // Toggle favorite state
     const favoriteBtn = activeSidebar.locator('button:has-text("Favorite")');

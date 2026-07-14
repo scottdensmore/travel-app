@@ -33,7 +33,7 @@ const mockMarkAllNotificationsAsRead = markAllNotificationsAsReadAction as jest.
 describe('TitleBar', () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        mockGetUserNotifications.mockResolvedValue([]);
+        mockGetUserNotifications.mockReturnValue(new Promise(() => { }));
     });
 
     it('renders the correct title when pathname is /book', () => {
@@ -56,12 +56,25 @@ describe('TitleBar', () => {
 
     it('renders the admin view when pathname is /admin/travelguide', () => {
         (usePathname as jest.Mock).mockReturnValue('/admin/travelguide');
-        (require('next-auth/react').useSession as jest.Mock).mockReturnValue({ data: { user: { role: 'ADMIN' } } });
+        (require('next-auth/react').useSession as jest.Mock).mockReturnValue({
+            data: { user: { role: 'ADMIN', staffMfaVerified: true } }
+        });
 
         render(<TitleBar />);
 
         expect(screen.getByText('Admin')).toBeInTheDocument();
         expect(screen.queryByText('Book Flight')).not.toBeInTheDocument();
+    });
+
+    it('does not expose the admin navigation before staff MFA is verified', () => {
+        (usePathname as jest.Mock).mockReturnValue('/book');
+        (require('next-auth/react').useSession as jest.Mock).mockReturnValue({
+            data: { user: { role: 'ADMIN', staffMfaVerified: false } }
+        });
+
+        render(<TitleBar />);
+
+        expect(screen.queryByText('Admin')).not.toBeInTheDocument();
     });
 
     it('calls signOut when the Sign Out button is clicked', () => {
@@ -131,7 +144,9 @@ describe('TitleBar', () => {
         expect(notifItem).toBeInTheDocument();
         fireEvent.click(notifItem!);
 
-        expect(mockMarkNotificationAsRead).toHaveBeenCalledWith('n1');
+        await waitFor(() => {
+            expect(mockMarkNotificationAsRead).toHaveBeenCalledWith('n1');
+        });
     });
 
     it('handles mark all as read action', async () => {
@@ -154,6 +169,8 @@ describe('TitleBar', () => {
         });
 
         fireEvent.click(screen.getByRole('button', { name: 'Mark all read' }));
-        expect(mockMarkAllNotificationsAsRead).toHaveBeenCalled();
+        await waitFor(() => {
+            expect(mockMarkAllNotificationsAsRead).toHaveBeenCalled();
+        });
     });
 });

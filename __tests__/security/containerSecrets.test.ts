@@ -45,6 +45,7 @@ describe('container secret protection', () => {
         expect(composeFile).toContain('NEXTAUTH_URL: ${NEXTAUTH_URL:?NEXTAUTH_URL is required}');
         expect(composeFile).toContain('NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required}');
         expect(composeFile).toContain('PASSENGER_DATA_ENCRYPTION_KEYS: ${PASSENGER_DATA_ENCRYPTION_KEYS:?PASSENGER_DATA_ENCRYPTION_KEYS is required}');
+        expect(composeFile).toContain('STAFF_MFA_ENCRYPTION_KEYS: ${STAFF_MFA_ENCRYPTION_KEYS:?STAFF_MFA_ENCRYPTION_KEYS is required}');
         expect(appService).toContain('AUTH_TRUSTED_PROXY_HOPS: "1"');
         expect(appService).toContain('AUTH_EMAIL_FROM:');
         expect(appService).toContain('AUTH_EMAIL_PROVIDER: mailpit');
@@ -68,6 +69,8 @@ describe('container secret protection', () => {
         expect(composeFile).toContain('- "3000:8080"');
         expect(composeFile).toContain('./deploy/nginx.conf:/etc/nginx/nginx.conf:ro');
         expect(proxyConfiguration).toContain('proxy_pass http://app:3000;');
+        expect(proxyConfiguration).toContain('proxy_set_header Host $host;');
+        expect(proxyConfiguration).toContain('proxy_set_header X-Forwarded-Host $http_host;');
         expect(proxyConfiguration).toContain('proxy_set_header X-Forwarded-For $remote_addr;');
         expect(proxyConfiguration).not.toContain('$proxy_add_x_forwarded_for');
         expect(proxyConfiguration).toContain('log_format no_query');
@@ -101,6 +104,7 @@ describe('container secret protection', () => {
         expect(verificationScript).toContain('SECRET_SCAN_SENTINEL');
         expect(verificationScript).toContain('AUTH_EMAIL_API_TOKEN');
         expect(verificationScript).toContain('PASSENGER_DATA_ENCRYPTION_KEYS');
+        expect(verificationScript).toContain('STAFF_MFA_ENCRYPTION_KEYS');
     });
 
     it('provides safe configuration and secret-rotation guidance', () => {
@@ -113,6 +117,8 @@ describe('container secret protection', () => {
         expect(exampleEnvironment.match(/^NEXTAUTH_SECRET=(.*)$/m)?.[1]).toBe('');
         expect(exampleEnvironment).toContain('PASSENGER_DATA_ENCRYPTION_KEYS=');
         expect(exampleEnvironment.match(/^PASSENGER_DATA_ENCRYPTION_KEYS=(.*)$/m)?.[1]).toBe('');
+        expect(exampleEnvironment).toContain('STAFF_MFA_ENCRYPTION_KEYS=');
+        expect(exampleEnvironment.match(/^STAFF_MFA_ENCRYPTION_KEYS=(.*)$/m)?.[1]).toBe('');
         expect(exampleEnvironment).toContain('AUTH_TRUSTED_PROXY_HOPS=0');
         expect(exampleEnvironment).toContain('AUTH_EMAIL_FROM=');
         expect(exampleEnvironment).toContain('AUTH_EMAIL_PROVIDER=mailpit');

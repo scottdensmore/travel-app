@@ -1,4 +1,5 @@
 import { parsePassengerDataEncryptionKeys } from '@/lib/passengerDataProtection';
+import { parseStaffMfaEncryptionKeys } from '@/lib/staffMfa';
 
 type RequiredEnvironmentVariable =
     | 'DATABASE_URL'
@@ -7,7 +8,8 @@ type RequiredEnvironmentVariable =
     | 'AUTH_EMAIL_FROM'
     | 'AUTH_EMAIL_PROVIDER'
     | 'AUTH_EMAIL_API_URL'
-    | 'PASSENGER_DATA_ENCRYPTION_KEYS';
+    | 'PASSENGER_DATA_ENCRYPTION_KEYS'
+    | 'STAFF_MFA_ENCRYPTION_KEYS';
 type Environment = Partial<Record<RequiredEnvironmentVariable, string | undefined>> & {
     NODE_ENV?: string;
     AUTH_TRUSTED_PROXY_HOPS?: string;
@@ -45,6 +47,8 @@ export function validateServerEnvironment(environment: Environment): ValidatedEn
     const AUTH_EMAIL_API_URL = requireValue(environment, 'AUTH_EMAIL_API_URL');
     const PASSENGER_DATA_ENCRYPTION_KEYS = requireValue(environment, 'PASSENGER_DATA_ENCRYPTION_KEYS');
     parsePassengerDataEncryptionKeys(PASSENGER_DATA_ENCRYPTION_KEYS);
+    const STAFF_MFA_ENCRYPTION_KEYS = requireValue(environment, 'STAFF_MFA_ENCRYPTION_KEYS');
+    parseStaffMfaEncryptionKeys(STAFF_MFA_ENCRYPTION_KEYS);
 
     const databaseUrl = parseUrl(DATABASE_URL, 'DATABASE_URL');
     if (!['postgresql:', 'postgres:'].includes(databaseUrl.protocol)) {
@@ -104,6 +108,7 @@ export function validateServerEnvironment(environment: Environment): ValidatedEn
         AUTH_EMAIL_PROVIDER,
         AUTH_EMAIL_API_URL,
         PASSENGER_DATA_ENCRYPTION_KEYS,
+        STAFF_MFA_ENCRYPTION_KEYS,
         ...(AUTH_EMAIL_API_TOKEN ? { AUTH_EMAIL_API_TOKEN } : {}),
         ...(AUTH_TRUSTED_PROXY_HOPS ? { AUTH_TRUSTED_PROXY_HOPS } : {})
     };
