@@ -96,19 +96,87 @@ test.describe('Admin Control Journey', () => {
     await expect(flightRow.locator('text=0 / 180')).toBeVisible();
     await expect(flightRow.locator('text=0.0% full')).toBeVisible();
 
+    // Persist a real protected passenger so the browser journey proves the
+    // database-to-RSC-to-DOM projection never exposes restricted fields.
+    const activeOccurrence = await prisma.flight.findFirstOrThrow({
+      where: {
+        flightNumber: 'E2E606',
+        departureDate: { gt: new Date() }
+      },
+      orderBy: { departureDate: 'asc' }
+    });
+    const admin = await prisma.user.findUniqueOrThrow({ where: { email: adminEmail } });
+    await new FlightBookingService().bookFlight({
+      flightId: activeOccurrence.id,
+      userId: admin.id,
+      passengers: [{
+        firstName: 'Manifest',
+        lastName: 'Traveler',
+        dateOfBirth: '1988-04-12',
+        passportNumber: 'E2EMANIFEST123',
+        gender: 'Other',
+        seatNumber: '11A',
+        cabinClass: 'ECONOMY'
+      }],
+      idempotencyKey: 'de45ec8a-4ae2-4ac7-aa64-e8d9588963c2'
+    });
+    const protectedPassenger = await prisma.passenger.findFirstOrThrow({
+      where: {
+        booking: { userId: admin.id, flightId: activeOccurrence.id }
+      }
+    });
+    const restrictedValues = [
+      '1988-04-12',
+      'E2EMANIFEST123',
+      protectedPassenger.dateOfBirthEncrypted!,
+      protectedPassenger.passportNumberEncrypted!
+    ];
+
+    const profileResponse = await page.goto('/profile');
+    expect(profileResponse?.ok()).toBe(true);
+    const profileResponseBody = await profileResponse!.text();
+    const profileVisibleText = await page.locator('body').innerText();
+    await expect(page.getByText('Manifest (11A)')).toBeVisible();
+    for (const value of restrictedValues) {
+      expect(profileResponseBody).not.toContain(value);
+      expect(profileVisibleText).not.toContain(value);
+    }
+    expect(profileVisibleText).not.toContain('Passport');
+    expect(profileVisibleText).not.toContain('DOB');
+
+    const adminFlightsResponse = await page.goto('/admin/flights');
+    expect(adminFlightsResponse?.ok()).toBe(true);
+    const adminFlightsResponseBody = await adminFlightsResponse!.text();
+    const adminVisibleText = await page.locator('body').innerText();
+    for (const value of restrictedValues) {
+      expect(adminFlightsResponseBody).not.toContain(value);
+      expect(adminVisibleText).not.toContain(value);
+    }
+
+    const populatedFlightRow = page.locator('table').nth(1)
+      .locator(`tr:has-text("${activeOccurrence.flightNumber}"):has-text("1 Active")`).first();
+    await expect(populatedFlightRow.locator('text=1 Active')).toBeVisible();
+    await expect(populatedFlightRow.locator('text=1 / 180')).toBeVisible();
+
     // Click Manifest button
-    await flightRow.locator('button:has-text("Manifest")').click();
+    await populatedFlightRow.locator('button:has-text("Manifest")').click();
 
     // Verify manifest modal opens
     await expect(page.locator('h2:has-text("Passenger Manifest")')).toBeVisible();
-    await expect(page.locator('text=No passengers booked on this occurrence.')).toBeVisible();
+    await expect(page.getByText('Manifest Traveler')).toBeVisible();
+    const manifestText = await page.getByRole('dialog', { name: 'Passenger Manifest' }).innerText();
+    for (const value of restrictedValues) {
+      expect(manifestText).not.toContain(value);
+    }
+    expect(manifestText).not.toContain('Passport');
+    expect(manifestText).not.toContain('DOB');
 
     // Close manifest modal
     await page.locator('button:has-text("Close")').click();
     await expect(page.locator('h2:has-text("Passenger Manifest")')).not.toBeVisible();
 
     // Select the newly generated flight's live status selector and change to "Delayed"
-    const statusSelect = flightRow.locator('select').first();
+    const statusSelect = populatedFlightRow.locator('select').first();
     await expect(statusSelect).toBeVisible();
     await statusSelect.selectOption('DELAYED');
 
@@ -197,7 +265,6 @@ test.describe('Admin Control Journey', () => {
         seatPattern: 'ABC-DEF'
       }
     });
-    const admin = await prisma.user.findUniqueOrThrow({ where: { email: adminEmail } });
     const raceResults = await Promise.allSettled([
       updateFlightSeatingLayout(raceFlight.id, {
         firstClassRows: 4,

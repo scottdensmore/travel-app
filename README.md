@@ -30,7 +30,10 @@ cp .env.example .env
 ```
 
 Replace `NEXTAUTH_SECRET` with a securely generated value of at least 32
-characters. Local non-container development may leave
+characters. Generate the active passenger-data key with
+`openssl rand -base64 32` and set it as
+`PASSENGER_DATA_ENCRYPTION_KEYS=local-v1:<generated-value>`. Local
+non-container development may leave
 `AUTH_TRUSTED_PROXY_HOPS` at `0`. The recommended Compose deployment supplies
 its own safe value; other deployments must set it to the exact number of
 trusted right-most proxy entries. Deployed environments must inject all secret

@@ -7,6 +7,7 @@ const validEnvironment = {
     AUTH_EMAIL_FROM: 'Mona Airways <no-reply@localhost>',
     AUTH_EMAIL_PROVIDER: 'mailpit',
     AUTH_EMAIL_API_URL: 'http://localhost:8025/api/v1/send',
+    PASSENGER_DATA_ENCRYPTION_KEYS: `local:${Buffer.from('0123456789abcdef0123456789abcdef').toString('base64')}`,
 };
 
 describe('validateServerEnvironment', () => {
@@ -16,7 +17,7 @@ describe('validateServerEnvironment', () => {
 
     it.each([
         'DATABASE_URL', 'NEXTAUTH_URL', 'NEXTAUTH_SECRET', 'AUTH_EMAIL_FROM',
-        'AUTH_EMAIL_PROVIDER', 'AUTH_EMAIL_API_URL'
+        'AUTH_EMAIL_PROVIDER', 'AUTH_EMAIL_API_URL', 'PASSENGER_DATA_ENCRYPTION_KEYS'
     ] as const)(
         'rejects a missing %s',
         (key) => {
@@ -28,6 +29,13 @@ describe('validateServerEnvironment', () => {
             );
         }
     );
+
+    it('rejects malformed passenger-data encryption keys', () => {
+        expect(() => validateServerEnvironment({
+            ...validEnvironment,
+            PASSENGER_DATA_ENCRYPTION_KEYS: 'local:not-a-32-byte-key',
+        })).toThrow('PASSENGER_DATA_ENCRYPTION_KEYS');
+    });
 
     it('rejects a non-PostgreSQL database URL', () => {
         expect(() => validateServerEnvironment({

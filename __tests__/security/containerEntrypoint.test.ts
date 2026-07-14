@@ -7,6 +7,7 @@ const validEnvironment: NodeJS.ProcessEnv = {
     DATABASE_URL: 'postgresql://postgres:postgres@db:5432/travel_app',
     NEXTAUTH_URL: 'http://localhost:3000',
     NEXTAUTH_SECRET: 'a-secure-test-secret-that-is-at-least-32-characters',
+    PASSENGER_DATA_ENCRYPTION_KEYS: 'test-v1:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
     AUTH_TRUSTED_PROXY_HOPS: '1',
     AUTH_EMAIL_FROM: 'Mona Airways <no-reply@localhost>',
     AUTH_EMAIL_PROVIDER: 'mailpit',
@@ -27,7 +28,8 @@ describe('container entrypoint', () => {
 
     it.each([
         'DATABASE_URL', 'NEXTAUTH_URL', 'NEXTAUTH_SECRET', 'AUTH_TRUSTED_PROXY_HOPS',
-        'AUTH_EMAIL_FROM', 'AUTH_EMAIL_PROVIDER', 'AUTH_EMAIL_API_URL'
+        'AUTH_EMAIL_FROM', 'AUTH_EMAIL_PROVIDER', 'AUTH_EMAIL_API_URL',
+        'PASSENGER_DATA_ENCRYPTION_KEYS'
     ] as const)(
         'fails before startup when %s is missing',
         (key) => {

@@ -5,6 +5,7 @@ import FlightScheduleForm from '@/components/ui/flightScheduleForm';
 import DeleteScheduleButton from './DeleteScheduleButton';
 import AdminFlightsTable from './AdminFlightsTable';
 import ManualOccurrenceBuilder from '@/components/ui/ManualOccurrenceBuilder';
+import { safePassengerSelect } from '@/lib/passengerDataAccess';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,7 +29,7 @@ export default async function AdminFlightsPage() {
         include: {
             bookings: {
                 include: {
-                    passengers: true
+                    passengers: { select: safePassengerSelect }
                 }
             }
         },

@@ -1,14 +1,12 @@
 "use client"
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import FlightStatusSelector from './FlightStatusSelector';
 
 interface Passenger {
     id: string;
     firstName: string;
     lastName: string;
-    dateOfBirth: Date | string;
-    passportNumber: string;
     gender: string;
     seatNumber: string;
     cabinClass: string;
@@ -40,6 +38,56 @@ interface AdminFlightsTableProps {
 
 export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableProps) {
     const [selectedFlight, setSelectedFlight] = useState<Flight | null>(null);
+    const dialogRef = useRef<HTMLDivElement>(null);
+    const closeButtonRef = useRef<HTMLButtonElement>(null);
+    const manifestTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+    const closeManifest = () => setSelectedFlight(null);
+
+    useEffect(() => {
+        if (!selectedFlight) return;
+
+        const trigger = manifestTriggerRef.current;
+        closeButtonRef.current?.focus();
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                closeManifest();
+                return;
+            }
+
+            if (event.key !== 'Tab' || !dialogRef.current) return;
+
+            const focusableElements = Array.from(
+                dialogRef.current.querySelectorAll<HTMLElement>(
+                    'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+                )
+            );
+            const firstElement = focusableElements[0];
+            const lastElement = focusableElements[focusableElements.length - 1];
+
+            if (!firstElement || !lastElement) {
+                event.preventDefault();
+                dialogRef.current.focus();
+            } else if (event.shiftKey && document.activeElement === firstElement) {
+                event.preventDefault();
+                lastElement.focus();
+            } else if (!event.shiftKey && document.activeElement === lastElement) {
+                event.preventDefault();
+                firstElement.focus();
+            } else if (!dialogRef.current.contains(document.activeElement)) {
+                event.preventDefault();
+                firstElement.focus();
+            }
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+            trigger?.focus();
+        };
+    }, [selectedFlight]);
 
     const manifestPassengers = selectedFlight
         ? selectedFlight.bookings.flatMap(b =>
@@ -110,7 +158,10 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                                         </td>
                                         <td style={{ padding: '12px', textAlign: 'right' }}>
                                             <button
-                                                onClick={() => setSelectedFlight(flight)}
+                                                onClick={(event) => {
+                                                    manifestTriggerRef.current = event.currentTarget;
+                                                    setSelectedFlight(flight);
+                                                }}
                                                 style={{
                                                     color: '#fff',
                                                     border: 'none',
@@ -157,7 +208,13 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                     justifyContent: 'center',
                     padding: '1rem'
                 }}>
-                    <div style={{
+                    <div
+                        ref={dialogRef}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="passenger-manifest-title"
+                        tabIndex={-1}
+                        style={{
                         background: 'linear-gradient(135deg, #131127 0%, #200f28 100%)',
                         border: '1px solid rgba(255, 255, 255, 0.1)',
                         borderRadius: '24px',
@@ -172,7 +229,7 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                         {/* Header */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '12px' }}>
                             <div>
-                                <h2 style={{ fontSize: '1.5rem', color: '#c084fc', margin: 0, fontWeight: 'bold' }}>
+                                <h2 id="passenger-manifest-title" style={{ fontSize: '1.5rem', color: '#c084fc', margin: 0, fontWeight: 'bold' }}>
                                     Passenger Manifest
                                 </h2>
                                 <p suppressHydrationWarning style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.5)', margin: '4px 0 0 0' }}>
@@ -180,7 +237,9 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                                 </p>
                             </div>
                             <button 
-                                onClick={() => setSelectedFlight(null)}
+                                ref={closeButtonRef}
+                                onClick={closeManifest}
+                                aria-label="Close passenger manifest"
                                 style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: '1.5rem', cursor: 'pointer' }}
                             >
                                 ✕
@@ -224,8 +283,6 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                                     <tr style={{ borderBottom: '2px solid rgba(255, 255, 255, 0.08)' }}>
                                         <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.8rem', textTransform: 'uppercase' }}>Passenger</th>
                                         <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.8rem', textTransform: 'uppercase' }}>Gender</th>
-                                        <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.8rem', textTransform: 'uppercase' }}>DOB</th>
-                                        <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.8rem', textTransform: 'uppercase' }}>Passport</th>
                                         <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.8rem', textTransform: 'uppercase' }}>Class / Seat</th>
                                         <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.8rem', textTransform: 'uppercase' }}>Booking Status</th>
                                     </tr>
@@ -241,12 +298,6 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                                                     </td>
                                                     <td style={{ padding: '10px 12px', fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.7)' }}>
                                                         {passenger.gender}
-                                                    </td>
-                                                    <td suppressHydrationWarning style={{ padding: '10px 12px', fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.7)' }}>
-                                                        {new Date(passenger.dateOfBirth).toLocaleDateString()}
-                                                    </td>
-                                                    <td style={{ padding: '10px 12px', fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.7)' }}>
-                                                        {passenger.passportNumber}
                                                     </td>
                                                     <td style={{ padding: '10px 12px', fontSize: '0.85rem' }}>
                                                         <div>{passenger.cabinClass}</div>
@@ -268,7 +319,7 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                                         })
                                     ) : (
                                         <tr>
-                                            <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.4)' }}>
+                                            <td colSpan={4} style={{ padding: '24px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.4)' }}>
                                                 No passengers booked on this occurrence.
                                             </td>
                                         </tr>
@@ -280,7 +331,7 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                         {/* Footer */}
                         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '1rem' }}>
                             <button
-                                onClick={() => setSelectedFlight(null)}
+                                onClick={closeManifest}
                                 style={{
                                     background: 'rgba(255, 255, 255, 0.05)',
                                     border: '1px solid rgba(255, 255, 255, 0.1)',

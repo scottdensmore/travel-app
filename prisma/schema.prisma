@@ -111,14 +111,16 @@ model Booking {
 }
 
 model Passenger {
-  id             String   @id @default(cuid())
-  firstName      String
-  lastName       String
-  dateOfBirth    DateTime
-  passportNumber String
-  gender         String
-  seatNumber     String
-  cabinClass     String
+  id                      String    @id @default(cuid())
+  firstName               String
+  lastName                String
+  dateOfBirthEncrypted    String?   @db.Text
+  passportNumberEncrypted String?   @db.Text
+  sensitiveDataExpiresAt  DateTime?
+  sensitiveDataDeletedAt  DateTime?
+  gender                  String
+  seatNumber              String
+  cabinClass              String
 
   bookingId Int
   booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
@@ -127,6 +129,7 @@ model Passenger {
   flight   Flight @relation(fields: [flightId], references: [id], onDelete: Cascade)
 
   @@unique([flightId, seatNumber])
+  @@index([sensitiveDataExpiresAt])
 }
 
 model Flight {

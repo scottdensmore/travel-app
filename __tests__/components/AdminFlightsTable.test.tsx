@@ -40,8 +40,6 @@ const mockFlights = [
                         id: 'p1',
                         firstName: 'John',
                         lastName: 'Doe',
-                        dateOfBirth: '1990-01-01T00:00:00.000Z',
-                        passportNumber: 'P123',
                         gender: 'M',
                         seatNumber: '12A',
                         cabinClass: 'ECONOMY',
@@ -58,8 +56,6 @@ const mockFlights = [
                         id: 'p2',
                         firstName: 'Jane',
                         lastName: 'Smith',
-                        dateOfBirth: '1992-02-02T00:00:00.000Z',
-                        passportNumber: 'P456',
                         gender: 'F',
                         seatNumber: 'CANCELLED-12B',
                         cabinClass: 'BUSINESS',
@@ -165,13 +161,15 @@ describe('AdminFlightsTable', () => {
         // Passenger rows in table
         expect(screen.getByText('John Doe')).toBeInTheDocument();
         expect(screen.getByText('M')).toBeInTheDocument();
-        expect(screen.getByText('P123')).toBeInTheDocument();
+        expect(screen.queryByText('P123')).not.toBeInTheDocument();
         expect(screen.getByText('ECONOMY')).toBeInTheDocument();
         expect(screen.getByText('Seat 12A')).toBeInTheDocument();
         
         expect(screen.getByText('Jane Smith')).toBeInTheDocument();
         expect(screen.getByText('F')).toBeInTheDocument();
-        expect(screen.getByText('P456')).toBeInTheDocument();
+        expect(screen.queryByText('P456')).not.toBeInTheDocument();
+        expect(screen.queryByText('DOB')).not.toBeInTheDocument();
+        expect(screen.queryByText('Passport')).not.toBeInTheDocument();
         expect(screen.getByText('BUSINESS')).toBeInTheDocument();
         expect(screen.getByText('Released')).toBeInTheDocument();
 
@@ -203,9 +201,42 @@ describe('AdminFlightsTable', () => {
         expect(screen.getByText('No passengers booked on this occurrence.')).toBeInTheDocument();
 
         // Close via ✕ button
-        const closeCross = screen.getByRole('button', { name: '✕' });
+        const closeCross = screen.getByRole('button', { name: 'Close passenger manifest' });
         fireEvent.click(closeCross);
 
         expect(screen.queryByText('Passenger Manifest')).not.toBeInTheDocument();
+    });
+
+    it('provides accessible dialog semantics and restores focus when Escape closes the manifest', () => {
+        render(<AdminFlightsTable initialFlights={mockFlights} />);
+
+        const trigger = screen.getAllByRole('button', { name: 'Manifest' })[0];
+        fireEvent.click(trigger);
+
+        const dialog = screen.getByRole('dialog', { name: 'Passenger Manifest' });
+        const closeButton = screen.getByRole('button', { name: 'Close passenger manifest' });
+        expect(dialog).toHaveAttribute('aria-modal', 'true');
+        expect(closeButton).toHaveFocus();
+
+        fireEvent.keyDown(document, { key: 'Escape' });
+
+        expect(screen.queryByRole('dialog', { name: 'Passenger Manifest' })).not.toBeInTheDocument();
+        expect(trigger).toHaveFocus();
+    });
+
+    it('keeps keyboard focus inside the open manifest', () => {
+        render(<AdminFlightsTable initialFlights={mockFlights} />);
+
+        fireEvent.click(screen.getAllByRole('button', { name: 'Manifest' })[0]);
+        const closeButton = screen.getByRole('button', { name: 'Close passenger manifest' });
+        const footerCloseButton = screen.getByRole('button', { name: 'Close' });
+
+        footerCloseButton.focus();
+        fireEvent.keyDown(document, { key: 'Tab' });
+        expect(closeButton).toHaveFocus();
+
+        closeButton.focus();
+        fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+        expect(footerCloseButton).toHaveFocus();
     });
 });

@@ -22,6 +22,10 @@
   reachable around those ingresses.
 - Store deployment secrets in the hosting platform's secret manager and limit
   access to the people and workloads that require them.
+- Generate each `PASSENGER_DATA_ENCRYPTION_KEYS` entry as a random 32-byte key,
+  keep it separate from the database, and follow the access, rotation,
+  retention, and deletion rules in
+  [docs/PASSENGER_DATA_POLICY.md](docs/PASSENGER_DATA_POLICY.md).
 - Set `AUTH_EMAIL_PROVIDER=postmark`, configure `AUTH_EMAIL_FROM` and
   `AUTH_EMAIL_API_URL=https://api.postmarkapp.com/email`, and inject
   `AUTH_EMAIL_API_TOKEN` through the secret manager for deployed transactional

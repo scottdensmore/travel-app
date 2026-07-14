@@ -234,7 +234,8 @@ export async function cancelBookingAction(bookingId: number) {
         if (lockedBooking.status === "CANCELLED") throw new Error("Booking is already cancelled");
 
         const passengers = await tx.passenger.findMany({
-            where: { bookingId }
+            where: { bookingId },
+            select: { id: true, seatNumber: true },
         });
         
         for (const passenger of passengers) {
@@ -287,7 +288,7 @@ export async function changeBookingSeatsAction(
 
     const booking = await prisma.booking.findUnique({
         where: { id: bookingId },
-        include: { passengers: true, flight: true }
+        include: { flight: true }
     });
     if (!booking) throw new Error("Booking not found");
 
@@ -303,7 +304,10 @@ export async function changeBookingSeatsAction(
         await lockFlightForUpdate(tx, flightId);
         const lockedBooking = await tx.booking.findUnique({
             where: { id: bookingId },
-            include: { passengers: true }
+            select: {
+                status: true,
+                passengers: { select: { id: true, cabinClass: true } },
+            }
         });
         if (!lockedBooking) throw new Error("Booking not found");
         if (lockedBooking.status === "CANCELLED") {
