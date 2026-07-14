@@ -8,6 +8,8 @@ declare module 'next-auth' {
         user: {
             id: string;
             role: Role;
+            staffMfaVerified: boolean;
+            staffMfaEnrollmentRequired: boolean;
         } & NonNullable<DefaultSession['user']>;
     }
 
@@ -15,6 +17,9 @@ declare module 'next-auth' {
     interface User {
         role: Role;
         authVersion: number;
+        staffMfaVerified: boolean;
+        staffMfaEnrollmentRequired: boolean;
+        staffMfaVerifiedAt?: number;
     }
 }
 
@@ -24,5 +29,8 @@ declare module 'next-auth/jwt' {
         role: Role;
         authVersion: number;
         invalidated?: boolean;
+        staffMfaVerified: boolean;
+        staffMfaEnrollmentRequired: boolean;
+        staffMfaVerifiedAt?: number;
     }
 }

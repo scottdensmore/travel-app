@@ -2,11 +2,14 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import UserAuthForm from '@/app/login/components/user-auth-form';
-import { signIn } from 'next-auth/react';
+import { getSession, signIn } from 'next-auth/react';
 
-jest.mock('next-auth/react', () => ({ signIn: jest.fn() }));
+const mockPush = jest.fn();
+const mockRefresh = jest.fn();
+
+jest.mock('next-auth/react', () => ({ getSession: jest.fn(), signIn: jest.fn() }));
 jest.mock('next/navigation', () => ({
-    useRouter: () => ({ push: jest.fn(), refresh: jest.fn() })
+    useRouter: () => ({ push: mockPush, refresh: mockRefresh })
 }));
 
 const contrastRatio = (foreground: string, background: string) => {
@@ -26,6 +29,7 @@ describe('UserAuthForm registration errors', () => {
         jest.restoreAllMocks();
         jest.clearAllMocks();
         global.fetch = jest.fn();
+        (getSession as jest.Mock).mockResolvedValue({ user: { role: 'USER' } });
     });
 
     it('keeps accepted and pending status text above WCAG AA contrast', () => {
@@ -74,6 +78,55 @@ describe('UserAuthForm registration errors', () => {
         const alert = await screen.findByRole('alert');
         expect(alert).toHaveTextContent('Invalid email or password.');
         await waitFor(() => expect(alert).toHaveFocus());
+    });
+
+    it('routes regular users to the home page after login', async () => {
+        (signIn as jest.Mock).mockResolvedValue({ ok: true });
+        render(<UserAuthForm type="login" />);
+
+        fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'user@example.com' } });
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Sign In with Email' }));
+
+        await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/'));
+        expect(mockRefresh).toHaveBeenCalled();
+    });
+
+    it('continues first-time staff through the enrollment gate', async () => {
+        (signIn as jest.Mock).mockResolvedValue({ ok: true });
+        (getSession as jest.Mock).mockResolvedValue({
+            user: { role: 'ADMIN', staffMfaVerified: false, staffMfaEnrollmentRequired: true },
+        });
+        render(<UserAuthForm type="login" />);
+
+        fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'admin@example.com' } });
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Sign In with Email' }));
+
+        await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/staff/mfa'));
+        expect(mockRefresh).toHaveBeenCalled();
+    });
+
+    it('submits the optional staff code and routes verified staff to admin', async () => {
+        (signIn as jest.Mock).mockResolvedValue({ ok: true });
+        (getSession as jest.Mock).mockResolvedValue({
+            user: { role: 'ADMIN', staffMfaVerified: true, staffMfaEnrollmentRequired: false },
+        });
+        render(<UserAuthForm type="login" />);
+
+        fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'admin@example.com' } });
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } });
+        fireEvent.change(screen.getByLabelText(/Staff security code/), { target: { value: '123456' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Sign In with Email' }));
+
+        await waitFor(() => expect(signIn).toHaveBeenCalledWith('credentials', {
+            redirect: false,
+            email: 'admin@example.com',
+            password: 'password123',
+            staffCode: '123456',
+        }));
+        expect(mockPush).toHaveBeenCalledWith('/admin');
+        expect(mockRefresh).toHaveBeenCalled();
     });
 
     it('shows the same neutral state after every accepted registration without signing in', async () => {

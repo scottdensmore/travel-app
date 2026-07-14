@@ -14,6 +14,7 @@ jobs:
       NEXTAUTH_SECRET: ci-only-nextauth-secret-at-least-32-characters
       NEXTAUTH_URL: http://localhost:3000
       PASSENGER_DATA_ENCRYPTION_KEYS: ci-v1:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      STAFF_MFA_ENCRYPTION_KEYS: ci-v1:YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODk=
       AUTH_TRUSTED_PROXY_HOPS: 1
       AUTH_EMAIL_FROM: Mona Airways <no-reply@localhost>
       AUTH_EMAIL_PROVIDER: mailpit

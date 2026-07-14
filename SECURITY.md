@@ -26,6 +26,10 @@
   keep it separate from the database, and follow the access, rotation,
   retention, and deletion rules in
   [docs/PASSENGER_DATA_POLICY.md](docs/PASSENGER_DATA_POLICY.md).
+- Generate each `STAFF_MFA_ENCRYPTION_KEYS` entry as a separate random 32-byte
+  key and keep it outside the database. Staff authenticator enrollment,
+  session limits, replay protection, reset, and rotation requirements are in
+  [docs/STAFF_ACCOUNT_POLICY.md](docs/STAFF_ACCOUNT_POLICY.md).
 - Set `AUTH_EMAIL_PROVIDER=postmark`, configure `AUTH_EMAIL_FROM` and
   `AUTH_EMAIL_API_URL=https://api.postmarkapp.com/email`, and inject
   `AUTH_EMAIL_API_TOKEN` through the secret manager for deployed transactional
@@ -44,6 +48,11 @@ configured deployment.
 Authentication throttles store only keyed digests of email/IP identifiers.
 Every throttle operation deletes a bounded batch of expired rows so attacker-
 controlled identifiers are not retained indefinitely.
+
+Every `ADMIN` session requires a password and a verified TOTP code. A new staff
+member receives only an enrollment session until setup is confirmed; admin
+pages and mutations independently reject that limited session. Staff proof
+expires after eight hours, and a TOTP time step can be consumed only once.
 
 Email verification and password reset tokens are random, single-use, scoped
 to one purpose, and stored only as SHA-256 digests. Verification tokens expire

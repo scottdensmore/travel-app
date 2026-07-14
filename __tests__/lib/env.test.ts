@@ -8,6 +8,7 @@ const validEnvironment = {
     AUTH_EMAIL_PROVIDER: 'mailpit',
     AUTH_EMAIL_API_URL: 'http://localhost:8025/api/v1/send',
     PASSENGER_DATA_ENCRYPTION_KEYS: `local:${Buffer.from('0123456789abcdef0123456789abcdef').toString('base64')}`,
+    STAFF_MFA_ENCRYPTION_KEYS: `local:${Buffer.from('abcdef0123456789abcdef0123456789').toString('base64')}`,
 };
 
 describe('validateServerEnvironment', () => {
@@ -17,7 +18,8 @@ describe('validateServerEnvironment', () => {
 
     it.each([
         'DATABASE_URL', 'NEXTAUTH_URL', 'NEXTAUTH_SECRET', 'AUTH_EMAIL_FROM',
-        'AUTH_EMAIL_PROVIDER', 'AUTH_EMAIL_API_URL', 'PASSENGER_DATA_ENCRYPTION_KEYS'
+        'AUTH_EMAIL_PROVIDER', 'AUTH_EMAIL_API_URL', 'PASSENGER_DATA_ENCRYPTION_KEYS',
+        'STAFF_MFA_ENCRYPTION_KEYS'
     ] as const)(
         'rejects a missing %s',
         (key) => {
@@ -35,6 +37,13 @@ describe('validateServerEnvironment', () => {
             ...validEnvironment,
             PASSENGER_DATA_ENCRYPTION_KEYS: 'local:not-a-32-byte-key',
         })).toThrow('PASSENGER_DATA_ENCRYPTION_KEYS');
+    });
+
+    it('rejects malformed staff MFA encryption keys', () => {
+        expect(() => validateServerEnvironment({
+            ...validEnvironment,
+            STAFF_MFA_ENCRYPTION_KEYS: 'local:not-a-32-byte-key',
+        })).toThrow('STAFF_MFA_ENCRYPTION_KEYS');
     });
 
     it('rejects a non-PostgreSQL database URL', () => {

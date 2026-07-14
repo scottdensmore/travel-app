@@ -14,10 +14,15 @@ jest.mock('@/lib/authRateLimit', () => ({
     consumeAuthRateLimit: jest.fn(),
     clearAuthRateLimit: jest.fn(),
 }));
+jest.mock('@/lib/staffMfa', () => ({
+    STAFF_MFA_SESSION_MAX_AGE_MS: 8 * 60 * 60 * 1_000,
+    verifyAndConsumeStaffTotp: jest.fn(),
+}));
 
 // Imported after mocks so the mocked deps are wired in.
 import { authOptions } from '@/lib/auth';
 import { clearAuthRateLimit, consumeAuthRateLimit } from '@/lib/authRateLimit';
+import { verifyAndConsumeStaffTotp } from '@/lib/staffMfa';
 
 const authorize = (authOptions.providers[0] as any).authorize as (
     credentials: Record<string, string> | undefined,
@@ -28,12 +33,14 @@ const mockedPrisma = prisma as unknown as { user: { findUnique: jest.Mock } };
 const mockedCompare = bcrypt.compare as unknown as jest.Mock;
 const mockedConsumeRateLimit = consumeAuthRateLimit as jest.Mock;
 const mockedClearRateLimit = clearAuthRateLimit as jest.Mock;
+const mockedVerifyStaffTotp = verifyAndConsumeStaffTotp as jest.Mock;
 
 describe('authOptions credential authorize', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         delete process.env.AUTH_TRUSTED_PROXY_HOPS;
         mockedConsumeRateLimit.mockResolvedValue({ allowed: true, retryAfterSeconds: 0 });
+        mockedVerifyStaffTotp.mockResolvedValue(false);
     });
 
     it('normalizes the email before rate limiting and account lookup', async () => {
@@ -138,6 +145,52 @@ describe('authOptions credential authorize', () => {
         expect(mockedClearRateLimit).toHaveBeenCalledWith('login-email', 'a@b.com');
     });
 
+    it('creates only a restricted enrollment session for staff without TOTP', async () => {
+        mockedPrisma.user.findUnique.mockResolvedValue({
+            id: 'admin-1', email: 'admin@example.com', name: 'Admin', image: null,
+            password: 'real-hash', role: 'ADMIN', authVersion: 3,
+            emailVerified: new Date(), staffMfaSecretEncrypted: null, staffMfaEnrolledAt: null,
+        });
+        mockedCompare.mockResolvedValue(true);
+
+        const result = await authorize({ email: 'admin@example.com', password: 'correct-horse' });
+
+        expect(result).toMatchObject({
+            role: 'ADMIN',
+            staffMfaVerified: false,
+            staffMfaEnrollmentRequired: true,
+        });
+    });
+
+    it('requires and consumes a valid TOTP code for enrolled staff', async () => {
+        mockedPrisma.user.findUnique.mockResolvedValue({
+            id: 'admin-1', email: 'admin@example.com', name: 'Admin', image: null,
+            password: 'real-hash', role: 'ADMIN', authVersion: 3,
+            emailVerified: new Date(), staffMfaSecretEncrypted: 'v1:active:iv:data:tag',
+            staffMfaEnrolledAt: new Date(),
+        });
+        mockedCompare.mockResolvedValue(true);
+
+        await expect(authorize({
+            email: 'admin@example.com', password: 'correct-horse', staffCode: '123456'
+        })).rejects.toThrow('Invalid email or password');
+
+        mockedVerifyStaffTotp.mockResolvedValue(true);
+        const result = await authorize({
+            email: 'admin@example.com', password: 'correct-horse', staffCode: '123456'
+        });
+        expect(mockedVerifyStaffTotp).toHaveBeenCalledWith(
+            'admin-1',
+            'v1:active:iv:data:tag',
+            '123456'
+        );
+        expect(result).toMatchObject({
+            staffMfaVerified: true,
+            staffMfaEnrollmentRequired: false,
+            staffMfaVerifiedAt: expect.any(Number),
+        });
+    });
+
     it('throws error when email or password is missing', async () => {
         const err1 = await authorize(undefined).catch((e) => e);
         const err2 = await authorize({ email: 'a@b.com' } as any).catch((e) => e);
@@ -159,9 +212,16 @@ describe('authOptions jwt/session callbacks', () => {
     it('jwt callback copies id, role, and auth version from user onto the token', async () => {
         const token = await jwt({
             token: {},
-            user: { id: 'u1', role: 'ADMIN', authVersion: 2 },
+            user: {
+                id: 'u1', role: 'ADMIN', authVersion: 2,
+                staffMfaVerified: true, staffMfaEnrollmentRequired: false,
+                staffMfaVerifiedAt: 1_000,
+            },
         });
-        expect(token).toMatchObject({ id: 'u1', role: 'ADMIN', authVersion: 2 });
+        expect(token).toMatchObject({
+            id: 'u1', role: 'ADMIN', authVersion: 2,
+            staffMfaVerified: true, staffMfaVerifiedAt: 1_000,
+        });
     });
 
     it('jwt callback refreshes account state and invalidates older auth versions', async () => {
@@ -182,12 +242,60 @@ describe('authOptions jwt/session callbacks', () => {
         expect(stale).toMatchObject({ invalidated: true });
     });
 
+    it('invalidates verified staff proof after eight hours', async () => {
+        mockedPrisma.user.findUnique.mockResolvedValue({
+            role: 'ADMIN',
+            authVersion: 1,
+            emailVerified: new Date(),
+            staffMfaEnrolledAt: new Date(),
+        });
+
+        const result = await jwt({
+            token: {
+                id: 'admin-1',
+                role: 'ADMIN',
+                authVersion: 1,
+                staffMfaVerified: true,
+                staffMfaVerifiedAt: Date.now() - (8 * 60 * 60 * 1_000) - 1,
+            },
+        });
+
+        expect(result).toMatchObject({ invalidated: true });
+    });
+
+    it('invalidates a verified staff session when MFA enrollment is removed', async () => {
+        mockedPrisma.user.findUnique.mockResolvedValue({
+            role: 'ADMIN',
+            authVersion: 1,
+            emailVerified: new Date(),
+            staffMfaEnrolledAt: null,
+        });
+
+        const result = await jwt({
+            token: {
+                id: 'admin-1',
+                role: 'ADMIN',
+                authVersion: 1,
+                staffMfaVerified: true,
+                staffMfaVerifiedAt: Date.now(),
+            },
+        });
+
+        expect(result).toMatchObject({ invalidated: true });
+    });
+
     it('session callback exposes id and role on session.user', async () => {
         const result = await session({
             session: { user: { email: 'a@b.com' } },
-            token: { id: 'u1', role: 'ADMIN' },
+            token: {
+                id: 'u1', role: 'ADMIN',
+                staffMfaVerified: true, staffMfaEnrollmentRequired: false,
+            },
         });
-        expect(result.user).toMatchObject({ id: 'u1', role: 'ADMIN', email: 'a@b.com' });
+        expect(result.user).toMatchObject({
+            id: 'u1', role: 'ADMIN', email: 'a@b.com',
+            staffMfaVerified: true, staffMfaEnrollmentRequired: false,
+        });
     });
 
     it('session callback returns no session for an invalidated token', async () => {

@@ -32,13 +32,19 @@ cp .env.example .env
 Replace `NEXTAUTH_SECRET` with a securely generated value of at least 32
 characters. Generate the active passenger-data key with
 `openssl rand -base64 32` and set it as
-`PASSENGER_DATA_ENCRYPTION_KEYS=local-v1:<generated-value>`. Local
+`PASSENGER_DATA_ENCRYPTION_KEYS=local-v1:<generated-value>`. Generate a
+different 32-byte key for staff authenticator secrets and set it as
+`STAFF_MFA_ENCRYPTION_KEYS=local-v1:<different-generated-value>`. Local
 non-container development may leave
 `AUTH_TRUSTED_PROXY_HOPS` at `0`. The recommended Compose deployment supplies
 its own safe value; other deployments must set it to the exact number of
 trusted right-most proxy entries. Deployed environments must inject all secret
 configuration at runtime; never bake `.env` into an image. See
 [SECURITY.md](SECURITY.md) for rotation and incident guidance.
+
+Staff accounts must enroll a TOTP authenticator before using any admin page or
+mutation. See [docs/STAFF_ACCOUNT_POLICY.md](docs/STAFF_ACCOUNT_POLICY.md) for
+the enrollment, reset, and key-rotation procedures.
 
 ### Using Docker (Recommended)
 

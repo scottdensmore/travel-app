@@ -9,6 +9,10 @@ import {
     getTrustedClientAddressFromHeaders,
     hasTrustedProxyConfiguration
 } from '@/lib/clientAddress';
+import {
+    STAFF_MFA_SESSION_MAX_AGE_MS,
+    verifyAndConsumeStaffTotp,
+} from '@/lib/staffMfa';
 
 // A valid bcrypt hash of a throwaway value, used only to equalize response
 // timing when no matching user exists (anti-enumeration). It is never a real
@@ -25,6 +29,7 @@ export const authOptions: NextAuthOptions = {
             credentials: {
                 email: { label: 'Email', type: 'email', placeholder: 'user@example.com' },
                 password: { label: 'Password', type: 'password' },
+                staffCode: { label: 'Staff security code', type: 'text' },
             },
             async authorize(credentials, request) {
                 // Single generic message for every failure mode so the response
@@ -64,6 +69,26 @@ export const authOptions: NextAuthOptions = {
                     throw new Error(INVALID);
                 }
 
+                let staffMfaVerified = false;
+                let staffMfaEnrollmentRequired = false;
+                let staffMfaVerifiedAt: number | undefined;
+                if (user.role === 'ADMIN') {
+                    if (!user.staffMfaSecretEncrypted || !user.staffMfaEnrolledAt) {
+                        staffMfaEnrollmentRequired = true;
+                    } else {
+                        staffMfaVerified = Boolean(
+                            credentials.staffCode
+                            && await verifyAndConsumeStaffTotp(
+                                user.id,
+                                user.staffMfaSecretEncrypted,
+                                credentials.staffCode,
+                            )
+                        );
+                        if (!staffMfaVerified) throw new Error(INVALID);
+                        staffMfaVerifiedAt = Date.now();
+                    }
+                }
+
                 await clearAuthRateLimit('login-email', email);
 
                 // Return only non-sensitive fields (never the password hash).
@@ -74,6 +99,9 @@ export const authOptions: NextAuthOptions = {
                     image: user.image,
                     role: user.role,
                     authVersion: user.authVersion,
+                    staffMfaVerified,
+                    staffMfaEnrollmentRequired,
+                    staffMfaVerifiedAt,
                 };
             },
         }),
@@ -92,16 +120,37 @@ export const authOptions: NextAuthOptions = {
                 token.role = user.role;
                 token.authVersion = user.authVersion;
                 token.invalidated = false;
+                token.staffMfaVerified = user.staffMfaVerified;
+                token.staffMfaEnrollmentRequired = user.staffMfaEnrollmentRequired;
+                token.staffMfaVerifiedAt = user.staffMfaVerifiedAt;
             } else if (token.id) {
                 const currentUser = await prisma.user.findUnique({
                     where: { id: token.id },
-                    select: { role: true, authVersion: true, emailVerified: true },
+                    select: {
+                        role: true,
+                        authVersion: true,
+                        emailVerified: true,
+                        staffMfaEnrolledAt: true,
+                    },
                 });
+                const staffSessionExpired = token.role === 'ADMIN'
+                    && token.staffMfaVerified === true
+                    && (!token.staffMfaVerifiedAt
+                        || Date.now() - token.staffMfaVerifiedAt > STAFF_MFA_SESSION_MAX_AGE_MS);
                 token.invalidated = !currentUser
                     || !currentUser.emailVerified
-                    || currentUser.authVersion !== token.authVersion;
+                    || currentUser.authVersion !== token.authVersion
+                    || staffSessionExpired
+                    || (token.role === 'ADMIN'
+                        && token.staffMfaVerified === true
+                        && !currentUser.staffMfaEnrolledAt);
                 if (currentUser && !token.invalidated) {
                     token.role = currentUser.role;
+                    if (currentUser.role !== 'ADMIN') {
+                        token.staffMfaVerified = false;
+                        token.staffMfaEnrollmentRequired = false;
+                        delete token.staffMfaVerifiedAt;
+                    }
                 }
             }
             return token;
@@ -111,6 +160,8 @@ export const authOptions: NextAuthOptions = {
             if (session.user) {
                 session.user.id = token.id;
                 session.user.role = token.role;
+                session.user.staffMfaVerified = token.staffMfaVerified === true;
+                session.user.staffMfaEnrollmentRequired = token.staffMfaEnrollmentRequired === true;
             }
             return session;
         },

@@ -38,7 +38,7 @@ const TitleBar: React.FC = () => {
 
     const pageTitle = pageTitles[pathname] || '';
     const userAvatar = session?.user?.image || "/img/my-profile-photo.jpg";
-    const isAdmin = session?.user?.role === 'ADMIN';
+    const isAdmin = session?.user?.role === 'ADMIN' && session.user.staffMfaVerified;
 
     const fetchNotifications = useCallback(async () => {
         if (session?.user) {

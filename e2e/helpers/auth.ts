@@ -20,13 +20,15 @@ export async function createVerifiedAccount(
 
 export async function signInWithCredentials(
   page: Page,
-  account: { email: string; password: string }
+  account: { email: string; password: string; staffCode?: string },
+  expectedPath = '/',
 ) {
   await page.goto('/login');
   await page.fill('#email', account.email);
   await page.fill('#password', account.password);
+  if (account.staffCode) await page.fill('#staffCode', account.staffCode);
   await page.click('button:has-text("Sign In with Email")');
-  await expect(page).toHaveURL('/');
+  await expect(page).toHaveURL(expectedPath);
 }
 
 export async function registerAndSignIn(

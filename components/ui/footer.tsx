@@ -1,5 +1,4 @@
 import React from 'react';
-import Link from 'next/link';
 
 const Footer: React.FC = () => {
     return (
@@ -11,7 +10,6 @@ const Footer: React.FC = () => {
                 <li>Contact Us</li>
                 <li>FAQ</li>
                 <li>About us</li>
-                <li><Link href="/admin/travelguide">Admin</Link></li>
             </ul>
             </div>
 
