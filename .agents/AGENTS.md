@@ -14,18 +14,26 @@ work in this repository. All agents and sub-agents must follow them.
    directly to `main`, and create the branch from the latest appropriate
    `main` state.
 
-3. **Use test-driven development when behavior or structure is testable.**
+3. **Choose a thin vertical slice.** Before implementing a roadmap item or
+   feature, define the smallest end-to-end slice that can be reviewed, tested,
+   shipped, and merged independently. Prefer one coherent user-visible or
+   operational outcome over a broad horizontal layer. If the next roadmap item
+   is too large for one pull request, split it into ordered slices and complete
+   only the current slice. Keep pull requests small enough for thorough review,
+   reliable verification, and quick rollback.
+
+4. **Use test-driven development when behavior or structure is testable.**
    - Add or update a focused test before implementation.
    - Run it and confirm it fails for the expected reason.
    - Implement the smallest appropriate change.
    - Run focused tests while iterating.
    - Refactor only while the relevant tests remain green.
 
-4. **Inspect the complete diff.** Review the branch diff plus all staged,
+5. **Inspect the complete diff.** Review the branch diff plus all staged,
    unstaged, and untracked files. Remove accidental or unrelated changes while
    preserving work that belongs to the user.
 
-5. **Run `ui-review` before verification.** After the main agent completes an
+6. **Run `ui-review` before verification.** After the main agent completes an
    implementation pass, invoke the `ui-review` sub-agent. The `ui-review`
    sub-agent must act as an expert in website design, usability,
    responsiveness, and accessibility. Address every actionable finding before
@@ -38,14 +46,14 @@ work in this repository. All agents and sub-agents must follow them.
    is not applicable, record the concrete reason rather than silently ignoring
    it.
 
-6. **Run `verifier` before code review.** Invoke the `verifier` sub-agent to run
+7. **Run `verifier` before code review.** Invoke the `verifier` sub-agent to run
    the builds, static checks, tests, and journey coverage appropriate for the
    change. The verifier must report failures, flakes, missing coverage, and
    environment issues. Fix or explicitly resolve every actionable finding
    before starting code review. If a verifier finding requires a code change,
    rerun the verifier after addressing it.
 
-7. **Run `code-review` before every commit.** Invoke the `code-review`
+8. **Run `code-review` before every commit.** Invoke the `code-review`
    sub-agent against the current branch diff and every staged, unstaged, and
    untracked file. The reviewer must act as an expert in the languages and
    frameworks used by this application, including TypeScript, React, Next.js,
@@ -54,7 +62,7 @@ work in this repository. All agents and sub-agents must follow them.
    tests and the `verifier`, then obtain a fresh `code-review` approval for the
    changed state.
 
-8. **Commit after approval.** Commit only after verification and code review
+9. **Commit after approval.** Commit only after verification and code review
    are complete. Use Conventional Commits:
 
    ```text
@@ -64,7 +72,7 @@ work in this repository. All agents and sub-agents must follow them.
    Keep the subject at 72 characters or fewer, describe why in the body when
    useful, and do not combine unrelated work.
 
-9. **Create pull requests from the reviewed state.**
+10. **Create pull requests from the reviewed state.**
    - Confirm that local verification remains valid.
    - Rerun `code-review` only if the reviewed state changed after the pre-commit
      review.
@@ -74,8 +82,10 @@ work in this repository. All agents and sub-agents must follow them.
      remain unchanged.
    - Push and create the pull request only after local verification and any
      required code review are complete.
+   - Open a normal, ready-for-review pull request by default. Do not open draft
+     pull requests unless the user explicitly asks for a draft.
 
-10. **Merge only clean, passing pull requests.** Merge only after GitHub
+11. **Merge only clean, passing pull requests.** Merge only after GitHub
     reports a clean merge state and every configured check passes. Never bypass
     a failing or pending required check. Self-merges are allowed when these
     conditions are met. Use squash merge for short-lived development branches
