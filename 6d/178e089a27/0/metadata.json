@@ -1,0 +1,58 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "6d178e089a27",
+  "session_id": "019f5d63-d808-77f2-8f4c-7d1415c91a7c",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-18T21:23:36.323991425Z",
+  "branch": "feat/p1-1-date-validation",
+  "checkpoints_count": 1,
+  "save_step_count": 1,
+  "files_touched": [
+    "__tests__/components/flightBookingForm.test.tsx",
+    "components/ui/flightBookingForm.tsx",
+    "e2e/search.spec.ts"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.6-sol",
+  "turn_id": "58d9a375ccf6",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 3515427,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 143878528,
+    "output_tokens": 279614,
+    "api_call_count": 1237
+  },
+  "session_metrics": {
+    "turn_count": 16
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-18T21:23:35.161327731Z",
+    "agent_lines": 14,
+    "agent_removed": 0,
+    "human_added": 86,
+    "human_modified": 9,
+    "human_removed": 0,
+    "total_committed": 109,
+    "total_lines_changed": 109,
+    "agent_percentage": 12.844036697247708,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 95,
+      "user_lines_removed": 9,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "__tests__/components/flightBookingForm.test.tsx": 41,
+        "components/ui/flightBookingForm.tsx": 33,
+        "e2e/search.spec.ts": 21
+      },
+      "user_removed_per_file": {
+        "components/ui/flightBookingForm.tsx": 9
+      }
+    }
+  ]
+}
