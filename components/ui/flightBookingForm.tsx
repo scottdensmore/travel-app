@@ -7,6 +7,7 @@ import { searchFlightsAction } from '@/app/actions'
 import { Flight } from '@prisma/client'
 import { isActionValidationFailure } from '@/lib/actionResult'
 import type { FlightRoute } from '@/lib/flightSearch'
+import { todayIsoDate } from '@/lib/dates'
 
 interface FlightBookingFormProps {
     routes?: FlightRoute[];
@@ -23,7 +24,7 @@ function addDaysToIsoDate(dateString: string, days: number): string {
 
 const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     routes = [],
-    minimumDepartureDate = new Date().toISOString().slice(0, 10),
+    minimumDepartureDate = todayIsoDate(),
 }) => {
     // Origins are the distinct departure cities; destinations depend on the
     // selected origin so only reachable routes can be chosen.
@@ -52,7 +53,10 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
 
     const handleTripTypeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setIsOneWay(e.target.value === 'one-way');
-        setBookingState({ status: 'idle' });
+        // Clear a stale date-validation error (e.g. a return-before-departure
+        // message that no longer applies once one-way is selected) without
+        // wiping any in-progress booking or success feedback.
+        setBookingState((prev) => (prev.status === 'error' ? { status: 'idle' } : prev));
         if (e.target.value === 'one-way') {
             setReturnDate(''); // Clear return date when switching to one-way
         }
@@ -67,6 +71,13 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
             setBookingState({
                 status: 'error',
                 message: 'Departure date cannot be in the past.',
+            });
+            return;
+        }
+        if (!isOneWay && !departureDate && returnDate) {
+            setBookingState({
+                status: 'error',
+                message: 'Departure date is required when a return date is provided.',
             });
             return;
         }

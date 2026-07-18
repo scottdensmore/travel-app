@@ -126,6 +126,10 @@ journey succeeds.
 - [ ] Suggest nearby operating dates when no exact match exists.
 - [ ] Preserve search criteria in URL parameters.
 - [ ] Add loading, empty, failure, retry, and degraded-service states.
+- [ ] Base the earliest selectable date and the past-departure rule on the origin
+  airport's local day once airport timezone data exists (interim: UTC via
+  `todayIsoDate`; see P4.2). The already-departed filter already compares UTC
+  instants and needs no change.
 
 Acceptance criteria:
 
@@ -374,7 +378,18 @@ Acceptance criteria:
 
 - [ ] Store schedule intent using airport-local time and IANA timezone.
 - [ ] Store flight-instance timestamps as unambiguous instants.
-- [ ] Display airport-local time with timezone abbreviation.
+- [ ] Maintain an airport reference (IATA code plus IANA timezone) as the single
+  source for every local conversion.
+- [ ] Store explicit elapsed duration and arrival instants; never derive duration
+  by subtracting displayed local times.
+- [ ] Display departure in the origin timezone and arrival in the destination
+  timezone, each with a timezone abbreviation and a next-day (+1) marker for legs
+  crossing midnight.
+- [ ] Show booking, ticket-issuance, and account-activity times in the customer's
+  timezone, labeled — never in the viewer's incidental browser timezone.
+- [ ] Keep comparisons and rules (already-departed, sorting, booking windows,
+  fare time limits) on the UTC instant, using local time only for display and
+  date pickers.
 - [ ] Separate upcoming, departed, arrived, delayed, and cancelled flights.
 - [ ] Replace the unqualified real-time claim unless a live data source exists.
 
@@ -382,6 +397,8 @@ Acceptance criteria:
 
 - Daylight-saving transitions and cross-date international legs have tests.
 - Customers can tell which timezone every displayed time uses.
+- No flight time renders in the viewer's browser timezone: flight times use the
+  relevant airport timezone and account times use the customer's timezone.
 
 ### P4.3 Add staff permissions and audit history
 

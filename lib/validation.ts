@@ -2,6 +2,7 @@ import { z, ZodError, ZodType } from 'zod';
 import { validateSeatingLayout } from '@/lib/seatLayout';
 import { ActionValidationFailure } from '@/lib/actionResult';
 import { isValidAuthToken } from '@/lib/authTokenFormat';
+import { todayIsoDate } from '@/lib/dates';
 
 export const MAX_MUTATION_BYTES = 1_000_000;
 export const MAX_REGISTRATION_BYTES = 16_384;
@@ -104,7 +105,7 @@ export const searchFlightsSchema = z.object({
     departureDate: isoDateSchema.optional(),
     returnDate: isoDateSchema.optional(),
 }).strict().superRefine(({ departureDate, returnDate }, context) => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayIsoDate();
 
     if (departureDate && departureDate < today) {
         context.addIssue({

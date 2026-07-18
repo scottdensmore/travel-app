@@ -77,7 +77,9 @@ export async function searchFlightsAction(
             : returnDateStr,
     });
     if (!parsed.ok) return parsed;
-    ({ from, to, departureDate: departureDateStr, returnDate: returnDateStr } = parsed.data);
+    // returnDate is validated by the schema (ordering vs. departure) but does
+    // not yet constrain the query, so it is intentionally not destructured here.
+    ({ from, to, departureDate: departureDateStr } = parsed.data);
 
     if (!departureDateStr) {
         return await prisma.flight.findMany({

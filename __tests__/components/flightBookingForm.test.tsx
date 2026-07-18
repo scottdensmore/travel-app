@@ -167,6 +167,21 @@ describe('FlightBookingForm', () => {
         });
     });
 
+    it('requires a departure date when a return date is provided before searching', async () => {
+        renderForm();
+        const form = screen.getByRole('button', { name: 'Find your trip' }).closest('form');
+        expect(form).not.toBeNull();
+
+        fireEvent.change(screen.getByLabelText('Depart'), { target: { value: '' } });
+        fireEvent.change(screen.getByLabelText('Return'), { target: { value: '2026-07-20' } });
+        fireEvent.submit(form!);
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Departure date is required when a return date is provided.'
+        );
+        expect(mockSearch).not.toHaveBeenCalled();
+    });
+
     it('shows a no-results message when no flights match the route', async () => {
         mockSearch.mockResolvedValue([]);
 

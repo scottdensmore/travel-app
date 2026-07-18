@@ -1,6 +1,7 @@
 import React from "react";
 import FlightBookingForm from "../components/ui/flightBookingForm";
 import { getFlightRoutesAction } from "./actions";
+import { todayIsoDate } from "@/lib/dates";
 
 // Reads live flight inventory from the DB, so render per-request rather than
 // statically prerendering at build time (which would need a database).
@@ -11,7 +12,7 @@ export default async function Home() {
   return (
     <FlightBookingForm
       routes={routes}
-      minimumDepartureDate={new Date().toISOString().slice(0, 10)}
+      minimumDepartureDate={todayIsoDate()}
     />
   );
 }

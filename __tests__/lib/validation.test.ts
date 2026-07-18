@@ -247,6 +247,21 @@ describe('shared server validation schemas', () => {
         ]));
     });
 
+    it('requires a departure date when a return date is provided', () => {
+        const returnWithoutDeparture = searchFlightsSchema.safeParse({
+            from: 'Seattle, USA',
+            to: 'Detroit, USA',
+            returnDate: '2026-07-20',
+        });
+
+        expect(returnWithoutDeparture.error?.issues).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                path: ['departureDate'],
+                message: 'Departure date is required when a return date is provided.',
+            }),
+        ]));
+    });
+
     it('covers exact city-guide and schedule boundaries', () => {
         const imagePrefix = 'data:image/png;base64,';
         const boundaryGuide = {
