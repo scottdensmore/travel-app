@@ -101,8 +101,33 @@ export const reviewSchema = z.object({
 export const searchFlightsSchema = z.object({
     from: requiredText('Origin', 120),
     to: requiredText('Destination', 120),
-    departureDate: isoDateSchema.optional()
-}).strict();
+    departureDate: isoDateSchema.optional(),
+    returnDate: isoDateSchema.optional(),
+}).strict().superRefine(({ departureDate, returnDate }, context) => {
+    const today = new Date().toISOString().slice(0, 10);
+
+    if (departureDate && departureDate < today) {
+        context.addIssue({
+            code: 'custom',
+            path: ['departureDate'],
+            message: 'Departure date cannot be in the past.',
+        });
+    }
+
+    if (returnDate && !departureDate) {
+        context.addIssue({
+            code: 'custom',
+            path: ['departureDate'],
+            message: 'Departure date is required when a return date is provided.',
+        });
+    } else if (departureDate && returnDate && returnDate < departureDate) {
+        context.addIssue({
+            code: 'custom',
+            path: ['returnDate'],
+            message: 'Return date cannot be before departure date.',
+        });
+    }
+});
 
 const coverImageSchema = z.string()
     .trim()

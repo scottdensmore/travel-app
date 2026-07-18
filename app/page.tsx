@@ -9,6 +9,9 @@ export const dynamic = 'force-dynamic';
 export default async function Home() {
   const routes = await getFlightRoutesAction();
   return (
-    <FlightBookingForm routes={routes} />
+    <FlightBookingForm
+      routes={routes}
+      minimumDepartureDate={new Date().toISOString().slice(0, 10)}
+    />
   );
 }

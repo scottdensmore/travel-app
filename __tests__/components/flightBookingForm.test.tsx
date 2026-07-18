@@ -80,7 +80,9 @@ const mockEnhancedFlights = [
     }
 ];
 
-const renderForm = () => render(<FlightBookingForm routes={routes} />);
+const renderForm = () => render(
+    <FlightBookingForm routes={routes} minimumDepartureDate="2026-07-14" />
+);
 
 describe('FlightBookingForm', () => {
     beforeEach(() => jest.clearAllMocks());
@@ -109,7 +111,9 @@ describe('FlightBookingForm', () => {
         renderForm();
 
         expect(screen.getByLabelText('Depart')).toHaveValue('2026-07-15');
+        expect(screen.getByLabelText('Depart')).toHaveAttribute('min', '2026-07-14');
         expect(screen.getByLabelText('Return')).toHaveValue('2026-07-22');
+        expect(screen.getByLabelText('Return')).toHaveAttribute('min', '2026-07-15');
 
         fireEvent.change(screen.getByLabelText('To'), { target: { value: 'Tokyo, Japan' } });
 
@@ -129,7 +133,38 @@ describe('FlightBookingForm', () => {
             expect(screen.getByText('Available Flights')).toBeInTheDocument();
             expect(screen.getByText('CA101')).toBeInTheDocument();
         });
-        expect(mockSearch).toHaveBeenCalledWith('Seattle, USA', 'Detroit, USA', expect.any(String));
+        expect(mockSearch).toHaveBeenCalledWith(
+            'Seattle, USA',
+            'Detroit, USA',
+            expect.any(String),
+            expect.any(String),
+        );
+    });
+
+    it('rejects past departures and returns before departure before searching', async () => {
+        renderForm();
+        const form = screen.getByRole('button', { name: 'Find your trip' }).closest('form');
+        expect(form).not.toBeNull();
+
+        fireEvent.change(screen.getByLabelText('Depart'), { target: { value: '2026-07-13' } });
+        fireEvent.submit(form!);
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Departure date cannot be in the past.'
+        );
+        expect(mockSearch).not.toHaveBeenCalled();
+
+        fireEvent.change(screen.getByLabelText('Depart'), { target: { value: '2026-07-15' } });
+        fireEvent.change(screen.getByLabelText('Return'), { target: { value: '2026-07-14' } });
+        fireEvent.submit(form!);
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Return date cannot be before departure date.'
+        );
+        expect(mockSearch).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByLabelText('One Way'));
+        await waitFor(() => {
+            expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        });
     });
 
     it('shows a no-results message when no flights match the route', async () => {
@@ -185,8 +220,8 @@ describe('FlightBookingForm', () => {
         expect(classSelect.value).toBe('business');
 
         const departInput = container.querySelector('#depart') as HTMLInputElement;
-        fireEvent.change(departInput, { target: { value: '2026-06-20' } });
-        expect(departInput.value).toBe('2026-06-20');
+        fireEvent.change(departInput, { target: { value: '2026-07-20' } });
+        expect(departInput.value).toBe('2026-07-20');
 
         const oneWayRadio = screen.getByLabelText('One Way');
         fireEvent.click(oneWayRadio);

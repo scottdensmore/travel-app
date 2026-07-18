@@ -191,6 +191,7 @@ describe('deleteCityGuideAction authorization and execution', () => {
 
 describe('searchFlightsAction', () => {
     beforeEach(() => jest.clearAllMocks());
+    afterEach(() => jest.useRealTimers());
 
     it('filters flights by the selected origin and destination without date', async () => {
         const flights = [
@@ -207,6 +208,7 @@ describe('searchFlightsAction', () => {
     });
 
     it('triggers lazy generation and queries by date when departureDateStr is provided', async () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
         const flights = [
             { id: 1, flightNumber: 'CA101', from: 'Seattle, USA', to: 'Detroit, USA', departureDate: new Date('2026-06-25T08:00:00Z') },
         ];
@@ -230,6 +232,27 @@ describe('searchFlightsAction', () => {
         expect(result).toBe(flights);
     });
 
+    it('excludes already-departed flights when searching today', async () => {
+        const now = new Date('2026-07-14T12:00:00.000Z');
+        jest.useFakeTimers().setSystemTime(now);
+        mockedFlightFindMany.mockResolvedValue([]);
+        mockGenerateFlightsForDate.mockResolvedValue([]);
+
+        await searchFlightsAction('Seattle, USA', 'Detroit, USA', '2026-07-14');
+
+        expect(mockedFlightFindMany).toHaveBeenCalledWith({
+            where: {
+                from: 'Seattle, USA',
+                to: 'Detroit, USA',
+                departureDate: {
+                    gt: now,
+                    lte: new Date('2026-07-14T23:59:59.999Z'),
+                },
+            },
+            orderBy: { departureDate: 'asc' },
+        });
+    });
+
     it('rejects malformed and oversized searches before generation or database access', async () => {
         await expect(searchFlightsAction('Seattle, USA', 'Detroit, USA', '06/25/2026'))
             .resolves.toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR' } });
@@ -237,6 +260,38 @@ describe('searchFlightsAction', () => {
             .resolves.toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR' } });
         await expect(searchFlightsAction('Seattle, USA', 'Detroit, USA', false as any))
             .resolves.toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR' } });
+
+        expect(mockGenerateFlightsForDate).not.toHaveBeenCalled();
+        expect(mockedFlightFindMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects invalid trip dates before generation or database access', async () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-07-14T12:00:00.000Z'));
+
+        await expect(searchFlightsAction(
+            'Seattle, USA',
+            'Detroit, USA',
+            '2026-07-13',
+            '2026-07-20',
+        )).resolves.toMatchObject({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                fields: { departureDate: ['Departure date cannot be in the past.'] },
+            },
+        });
+        await expect(searchFlightsAction(
+            'Seattle, USA',
+            'Detroit, USA',
+            '2026-07-15',
+            '2026-07-14',
+        )).resolves.toMatchObject({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                fields: { returnDate: ['Return date cannot be before departure date.'] },
+            },
+        });
 
         expect(mockGenerateFlightsForDate).not.toHaveBeenCalled();
         expect(mockedFlightFindMany).not.toHaveBeenCalled();
