@@ -1,0 +1,37 @@
+.
+
+---
+
+Do a code review on https://github.com/scottdensmore/travel-app/pull/46 and make comments on anything that you find
+
+---
+
+adjust the hook
+
+---
+
+I want to trust on the git hooks
+
+---
+
+what hooks where in place that blocked you
+
+---
+
+ok those are fine
+
+---
+
+Ok lets do all the things you metioned on this pr
+
+---
+
+I assume keeping UTC and then we take that and display the datetime for the timezone people are in. I also assume we always talk in local timezone of the place they are taking off then landing. So if I am leaving Seattle at one time, then the time I land is in the local time zone?
+
+---
+
+So lets think about this. This is supposed to be a real app that mimics something like delta. How would that normally work so dates and times always work out for the customer. Meaning they see the right date and times that make sense for departure / arrival and ticket issueance
+
+---
+
+lets add it as something to the roadmap section so we can fix it later

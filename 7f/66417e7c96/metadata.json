@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "7f66417e7c96",
+  "strategy": "manual-commit",
+  "branch": "feat/p1-1-date-validation",
+  "checkpoints_count": 9,
+  "files_touched": [
+    "REAL_WORLD_ROADMAP.md",
+    "__tests__/components/flightBookingForm.test.tsx",
+    "__tests__/lib/validation.test.ts",
+    "app/actions.ts",
+    "app/page.tsx",
+    "components/ui/flightBookingForm.tsx",
+    "lib/dates.ts",
+    "lib/validation.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/7f/66417e7c96/0/metadata.json",
+      "transcript": "/7f/66417e7c96/0/full.jsonl",
+      "compact_transcript": "/7f/66417e7c96/0/transcript.jsonl",
+      "content_hash": "/7f/66417e7c96/0/content_hash.txt",
+      "prompt": "/7f/66417e7c96/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 127,
+    "cache_creation_tokens": 78909,
+    "cache_read_tokens": 4772477,
+    "output_tokens": 53419,
+    "api_call_count": 64
+  }
+}
