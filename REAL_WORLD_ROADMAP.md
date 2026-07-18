@@ -507,4 +507,4 @@ Add one row when work starts, becomes blocked, or completes.
 | 2026-07-14 | P0.5 | Complete | #43 | Required TOTP for staff accounts, limited first-time enrollment sessions, encrypted authenticator secrets, replay-resistant codes, and an eight-hour staff authentication window. |
 | 2026-07-14 | P1.1 | In progress | #45 | Defaulted each route to its next future operating date and covered the seeded default search journey. Date constraints, nearby dates, URL state, and service states remain. |
 | 2026-07-17 | P1.1 | In progress | #46 | Rejected past departures and invalid return ordering in the UI and server, and excluded already-departed inventory from same-day results. Booking windows and later search slices remain. |
-| 2026-07-18 | P1.1 | In progress | Pending | Enforced an inclusive same-day through 365-day booking window for departures and returns in the UI and server. Nearby dates, URL state, and service states remain. |
+| 2026-07-18 | P1.1 | In progress | #47 | Enforced an inclusive same-day through 365-day booking window for departures and returns in the UI and server. Nearby dates, URL state, and service states remain. |
