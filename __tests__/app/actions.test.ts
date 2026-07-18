@@ -245,20 +245,42 @@ describe('searchFlightsAction', () => {
 
 describe('getFlightRoutesAction', () => {
     beforeEach(() => jest.clearAllMocks());
+    afterEach(() => jest.useRealTimers());
 
-    it('returns the distinct origin/destination pairs from schedules', async () => {
-        const routes = [
-            { from: 'Chicago, USA', to: 'Paris, France' },
-            { from: 'Seattle, USA', to: 'Detroit, USA' },
+    it('returns active routes with their next operating dates', async () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-07-14T12:00:00.000Z'));
+        const schedules = [
+            {
+                from: 'Chicago, USA',
+                to: 'Paris, France',
+                departureTime: '17:45',
+                daysOfWeek: [2],
+            },
+            {
+                from: 'Seattle, USA',
+                to: 'Detroit, USA',
+                departureTime: '08:00',
+                daysOfWeek: [1, 3, 5],
+            },
         ];
-        mockedFlightScheduleFindMany.mockResolvedValue(routes);
+        mockedFlightScheduleFindMany.mockResolvedValue(schedules);
 
         const result = await getFlightRoutesAction();
 
-        expect(result).toBe(routes);
-        expect(mockedFlightScheduleFindMany).toHaveBeenCalledWith(
-            expect.objectContaining({ distinct: ['from', 'to'], select: { from: true, to: true } })
-        );
+        expect(result).toEqual([
+            { from: 'Chicago, USA', to: 'Paris, France', nextOperatingDate: '2026-07-14' },
+            { from: 'Seattle, USA', to: 'Detroit, USA', nextOperatingDate: '2026-07-15' },
+        ]);
+        expect(mockedFlightScheduleFindMany).toHaveBeenCalledWith({
+            where: { isActive: true },
+            select: {
+                from: true,
+                to: true,
+                departureTime: true,
+                daysOfWeek: true,
+            },
+            orderBy: [{ from: 'asc' }, { to: 'asc' }, { departureTime: 'asc' }],
+        });
     });
 });
 

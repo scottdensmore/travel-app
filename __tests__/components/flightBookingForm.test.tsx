@@ -14,9 +14,9 @@ const mockSearch = searchFlightsAction as jest.Mock;
 const mockBook = bookFlightAction as jest.Mock;
 
 const routes = [
-    { from: 'Seattle, USA', to: 'Detroit, USA' },
-    { from: 'Seattle, USA', to: 'Tokyo, Japan' },
-    { from: 'New York, USA', to: 'London, UK' },
+    { from: 'Seattle, USA', to: 'Detroit, USA', nextOperatingDate: '2026-07-15' },
+    { from: 'Seattle, USA', to: 'Tokyo, Japan', nextOperatingDate: '2026-07-16' },
+    { from: 'New York, USA', to: 'London, UK', nextOperatingDate: '2026-07-18' },
 ];
 
 const mockFlights = [
@@ -88,6 +88,7 @@ describe('FlightBookingForm', () => {
     it('renders origins and the destinations reachable from the default origin', () => {
         renderForm();
         expect(screen.getByText('Where Your Journey Takes Flight')).toBeInTheDocument();
+        expect(screen.getByLabelText('Cabin class')).toHaveValue('economy');
         // Origins
         expect(screen.getByRole('option', { name: 'Seattle, USA' })).toBeInTheDocument();
         expect(screen.getByRole('option', { name: 'New York, USA' })).toBeInTheDocument();
@@ -102,6 +103,20 @@ describe('FlightBookingForm', () => {
         fireEvent.change(screen.getByLabelText('From'), { target: { value: 'New York, USA' } });
         expect(screen.getByRole('option', { name: 'London, UK' })).toBeInTheDocument();
         expect(screen.queryByRole('option', { name: 'Detroit, USA' })).not.toBeInTheDocument();
+    });
+
+    it('defaults to the next operating date and updates it with the route', async () => {
+        renderForm();
+
+        expect(screen.getByLabelText('Depart')).toHaveValue('2026-07-15');
+        expect(screen.getByLabelText('Return')).toHaveValue('2026-07-22');
+
+        fireEvent.change(screen.getByLabelText('To'), { target: { value: 'Tokyo, Japan' } });
+
+        await waitFor(() => {
+            expect(screen.getByLabelText('Depart')).toHaveValue('2026-07-16');
+            expect(screen.getByLabelText('Return')).toHaveValue('2026-07-23');
+        });
     });
 
     it('searches using the selected origin and destination', async () => {

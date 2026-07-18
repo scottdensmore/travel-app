@@ -120,7 +120,7 @@ journey succeeds.
 
 ### P1.1 Fix search dates and availability
 
-- [ ] Default to the next operating date for the selected route.
+- [x] Default to the next operating date for the selected route.
 - [ ] Prevent past departures and returns before departure.
 - [ ] Add minimum/maximum booking-window rules.
 - [ ] Suggest nearby operating dates when no exact match exists.
@@ -487,3 +487,4 @@ Add one row when work starts, becomes blocked, or completes.
 | 2026-07-12 | P0.5 | In progress | #39 + #40 | Canonicalized email identity, added database-backed registration and login throttles, and implemented generic verified-email activation and password recovery journeys. Staff protection and passenger-data rules remain. |
 | 2026-07-14 | P0.5 | In progress | #42 | Added authenticated encryption, safe customer/staff projections, automated retention deletion and key rotation, and a tested passenger-data policy. Stronger staff protection remains. |
 | 2026-07-14 | P0.5 | Complete | #43 | Required TOTP for staff accounts, limited first-time enrollment sessions, encrypted authenticator secrets, replay-resistant codes, and an eight-hour staff authentication window. |
+| 2026-07-14 | P1.1 | In progress | — | Defaulted each route to its next future operating date and covered the seeded default search journey. Date constraints, nearby dates, URL state, and service states remain. |
