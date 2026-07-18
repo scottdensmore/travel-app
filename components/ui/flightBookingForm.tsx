@@ -7,10 +7,22 @@ import { searchFlightsAction } from '@/app/actions'
 import { Flight } from '@prisma/client'
 import { isActionValidationFailure } from '@/lib/actionResult'
 import type { FlightRoute } from '@/lib/flightSearch'
+import { todayIsoDate } from '@/lib/dates'
 
 interface FlightBookingFormProps {
     routes?: FlightRoute[];
+    minimumDepartureDate?: string;
 }
+
+type BookingState = {
+    status: 'idle' | 'booking' | 'success' | 'error';
+    message?: string;
+    flightId?: number;
+    clearOnOneWay?: boolean;
+};
+
+const DEPARTURE_REQUIRED_WITH_RETURN_MESSAGE =
+    'Departure date is required when a return date is provided.';
 
 function addDaysToIsoDate(dateString: string, days: number): string {
     if (!dateString) return '';
@@ -20,7 +32,10 @@ function addDaysToIsoDate(dateString: string, days: number): string {
     return date.toISOString().slice(0, 10);
 }
 
-const FlightBookingForm: React.FC<FlightBookingFormProps> = ({ routes = [] }) => {
+const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
+    routes = [],
+    minimumDepartureDate = todayIsoDate(),
+}) => {
     // Origins are the distinct departure cities; destinations depend on the
     // selected origin so only reachable routes can be chosen.
     const origins = useMemo(() => Array.from(new Set(routes.map((r) => r.from))), [routes]);
@@ -39,7 +54,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({ routes = [] }) =>
     const [isOneWay, setIsOneWay] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
     const [searchResults, setSearchResults] = useState<Flight[] | null>(null);
-    const [bookingState, setBookingState] = useState<{ status: 'idle' | 'booking' | 'success' | 'error', message?: string, flightId?: number }>({ status: 'idle' });
+    const [bookingState, setBookingState] = useState<BookingState>({ status: 'idle' });
 
     // Interactive Filters & Sorting States
     const [sortBy, setSortBy] = useState('price-asc');
@@ -47,22 +62,67 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({ routes = [] }) =>
     const [selectedAirlines, setSelectedAirlines] = useState<string[]>([]);
 
     const handleTripTypeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setIsOneWay(e.target.value === 'one-way');
-        if (e.target.value === 'one-way') {
+        const isChangingToOneWay = e.target.value === 'one-way';
+        setIsOneWay(isChangingToOneWay);
+        // Clear only validation that depends on a return date, which no longer
+        // applies once one-way is selected. Other errors remain valid.
+        setBookingState((prev) => (
+            isChangingToOneWay && prev.status === 'error' && prev.clearOnOneWay
+                ? { status: 'idle' }
+                : prev
+        ));
+        if (isChangingToOneWay) {
             setReturnDate(''); // Clear return date when switching to one-way
         }
     };
 
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
-        setIsSearching(true);
         setSearchResults(null);
         setBookingState({ status: 'idle' });
 
+        if (departureDate && departureDate < minimumDepartureDate) {
+            setBookingState({
+                status: 'error',
+                message: 'Departure date cannot be in the past.',
+            });
+            return;
+        }
+        if (!isOneWay && !departureDate && returnDate) {
+            setBookingState({
+                status: 'error',
+                message: DEPARTURE_REQUIRED_WITH_RETURN_MESSAGE,
+                clearOnOneWay: true,
+            });
+            return;
+        }
+        if (!isOneWay && departureDate && returnDate && returnDate < departureDate) {
+            setBookingState({
+                status: 'error',
+                message: 'Return date cannot be before departure date.',
+                clearOnOneWay: true,
+            });
+            return;
+        }
+
+        setIsSearching(true);
         try {
-            const results = await searchFlightsAction(fromLocation, toLocation, departureDate);
+            const results = await searchFlightsAction(
+                fromLocation,
+                toLocation,
+                departureDate,
+                isOneWay ? undefined : returnDate,
+            );
             if (isActionValidationFailure(results)) {
-                setBookingState({ status: 'error', message: results.error.message });
+                const clearOnOneWay = Boolean(
+                    results.error.fields.returnDate?.includes(results.error.message)
+                    || results.error.message === DEPARTURE_REQUIRED_WITH_RETURN_MESSAGE
+                );
+                setBookingState({
+                    status: 'error',
+                    message: results.error.message,
+                    clearOnOneWay,
+                });
                 return;
             }
             setSearchResults(results);
@@ -232,7 +292,14 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({ routes = [] }) =>
                 <div className="date-container">
                     <div>
                         <label htmlFor="depart">Depart</label>
-                        <input type="date" id="depart" name="depart" value={departureDate} onChange={e => setDepartureDate(e.target.value)} />
+                        <input
+                            type="date"
+                            id="depart"
+                            name="depart"
+                            min={minimumDepartureDate}
+                            value={departureDate}
+                            onChange={e => setDepartureDate(e.target.value)}
+                        />
                     </div>
                     <div style={{ marginLeft: '12px' }}
                         className={isOneWay ? 'date-disabled' : ''}
@@ -243,6 +310,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({ routes = [] }) =>
                             id="returnDate"
                             name="returnDate"
                             className="w-full p-2 border border-gray-300 rounded text-lg"
+                            min={departureDate || minimumDepartureDate}
                             value={returnDate}
                             onChange={(e) => setReturnDate(e.target.value)}
                             disabled={isOneWay}

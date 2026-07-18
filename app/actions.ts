@@ -60,15 +60,25 @@ export async function deleteCityGuideAction(cityGuideId: number) {
     revalidatePath('/travelguide');
 }
 
-export async function searchFlightsAction(from: string, to: string, departureDateStr?: string) {
+export async function searchFlightsAction(
+    from: string,
+    to: string,
+    departureDateStr?: string,
+    returnDateStr?: string,
+) {
     const parsed = parseActionInput(searchFlightsSchema, {
         from,
         to,
         departureDate: departureDateStr === '' || departureDateStr === undefined
             ? undefined
-            : departureDateStr
+            : departureDateStr,
+        returnDate: returnDateStr === '' || returnDateStr === undefined
+            ? undefined
+            : returnDateStr,
     });
     if (!parsed.ok) return parsed;
+    // returnDate is validated by the schema (ordering vs. departure) but does
+    // not yet constrain the query, so it is intentionally not destructured here.
     ({ from, to, departureDate: departureDateStr } = parsed.data);
 
     if (!departureDateStr) {
@@ -85,13 +95,17 @@ export async function searchFlightsAction(from: string, to: string, departureDat
     const dateStr = searchDate.toISOString().split('T')[0];
     const startOfDay = new Date(`${dateStr}T00:00:00.000Z`);
     const endOfDay = new Date(`${dateStr}T23:59:59.999Z`);
+    const now = new Date();
+    const departureLowerBound = startOfDay <= now
+        ? { gt: now }
+        : { gte: startOfDay };
 
     return await prisma.flight.findMany({
         where: {
             from,
             to,
             departureDate: {
-                gte: startOfDay,
+                ...departureLowerBound,
                 lte: endOfDay
             }
         },

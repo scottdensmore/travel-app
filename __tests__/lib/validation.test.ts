@@ -18,6 +18,8 @@ import {
 } from '@/lib/validation';
 
 describe('shared server validation schemas', () => {
+    afterEach(() => jest.useRealTimers());
+
     it('normalizes valid registration input', () => {
         expect(registrationSchema.parse({
             name: '  Ada Lovelace  ',
@@ -193,6 +195,8 @@ describe('shared server validation schemas', () => {
     });
 
     it('covers exact registration, review, and search boundaries', () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
+
         expect(registrationSchema.safeParse({
             name: 'N'.repeat(100), email: 'a@example.com', password: 'p'.repeat(128)
         }).success).toBe(true);
@@ -212,6 +216,50 @@ describe('shared server validation schemas', () => {
         })).toEqual({ from: 'A'.repeat(120), to: 'B', departureDate: '2026-06-25' });
         expect(searchFlightsSchema.safeParse({ from: 'A'.repeat(121), to: '', departureDate: '06/25/2026' }).success).toBe(false);
         expect(searchFlightsSchema.safeParse({ from: 'A', to: 'B', unknown: true }).success).toBe(false);
+    });
+
+    it('rejects past departures and returns before departure', () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-07-14T12:00:00.000Z'));
+
+        const pastDeparture = searchFlightsSchema.safeParse({
+            from: 'Seattle, USA',
+            to: 'Detroit, USA',
+            departureDate: '2026-07-13',
+        });
+        const invalidReturn = searchFlightsSchema.safeParse({
+            from: 'Seattle, USA',
+            to: 'Detroit, USA',
+            departureDate: '2026-07-15',
+            returnDate: '2026-07-14',
+        });
+
+        expect(pastDeparture.error?.issues).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                path: ['departureDate'],
+                message: 'Departure date cannot be in the past.',
+            }),
+        ]));
+        expect(invalidReturn.error?.issues).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                path: ['returnDate'],
+                message: 'Return date cannot be before departure date.',
+            }),
+        ]));
+    });
+
+    it('requires a departure date when a return date is provided', () => {
+        const returnWithoutDeparture = searchFlightsSchema.safeParse({
+            from: 'Seattle, USA',
+            to: 'Detroit, USA',
+            returnDate: '2026-07-20',
+        });
+
+        expect(returnWithoutDeparture.error?.issues).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                path: ['departureDate'],
+                message: 'Departure date is required when a return date is provided.',
+            }),
+        ]));
     });
 
     it('covers exact city-guide and schedule boundaries', () => {

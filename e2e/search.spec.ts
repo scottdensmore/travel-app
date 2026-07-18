@@ -12,4 +12,65 @@ test.describe('Flight search', () => {
     await expect(page.getByRole('heading', { name: 'Available Flights' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Book Now' }).first()).toBeVisible();
   });
+
+  test('Date controls reject past departures and invalid return order', async ({ page }) => {
+    await page.goto('/');
+
+    const departure = page.getByLabel('Depart');
+    const returnDate = page.getByLabel('Return');
+    const form = page.locator('form');
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(`${today}T00:00:00.000Z`);
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    const yesterdayString = yesterday.toISOString().slice(0, 10);
+    const validDeparture = await departure.inputValue();
+
+    await expect(departure).toHaveAttribute('min', today);
+    await expect(returnDate).toHaveAttribute('min', validDeparture);
+
+    await departure.fill(yesterdayString);
+    await form.evaluate((element) => {
+      element.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    await expect(page.getByRole('alert').filter({
+      hasText: 'Departure date cannot be in the past.',
+    })).toBeVisible();
+
+    await page.getByLabel('One Way').check();
+    await expect(page.getByRole('alert').filter({
+      hasText: 'Departure date cannot be in the past.',
+    })).toBeVisible();
+    await page.getByLabel('Round Trip').check();
+
+    await departure.fill(validDeparture);
+    await returnDate.fill(yesterdayString);
+    await form.evaluate((element) => {
+      element.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    await expect(page.getByRole('alert').filter({
+      hasText: 'Return date cannot be before departure date.',
+    })).toBeVisible();
+
+    await page.getByLabel('One Way').check();
+    await expect(returnDate).toBeDisabled();
+    await expect(returnDate).toHaveValue('');
+    await expect(page.getByRole('alert').filter({
+      hasText: 'Return date cannot be before departure date.',
+    })).toHaveCount(0);
+
+    await page.getByLabel('Round Trip').check();
+    await departure.fill('');
+    await returnDate.fill(validDeparture);
+    await form.evaluate((element) => {
+      element.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    await expect(page.getByRole('alert').filter({
+      hasText: 'Departure date is required when a return date is provided.',
+    })).toBeVisible();
+
+    await page.getByLabel('One Way').check();
+    await expect(page.getByRole('alert').filter({
+      hasText: 'Departure date is required when a return date is provided.',
+    })).toHaveCount(0);
+  });
 });
