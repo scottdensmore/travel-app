@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "07440be86fdf",
+  "strategy": "manual-commit",
+  "branch": "feat/p1-1-booking-window",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "REAL_WORLD_ROADMAP.md",
+    "__tests__/app/actions.test.ts",
+    "__tests__/components/flightBookingForm.test.tsx",
+    "__tests__/lib/dates.test.ts",
+    "__tests__/lib/validation.test.ts",
+    "app/page.tsx",
+    "components/ui/flightBookingForm.tsx",
+    "e2e/search.spec.ts",
+    "lib/dates.ts",
+    "lib/validation.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/07/440be86fdf/0/metadata.json",
+      "transcript": "/07/440be86fdf/0/full.jsonl",
+      "compact_transcript": "/07/440be86fdf/0/transcript.jsonl",
+      "content_hash": "/07/440be86fdf/0/content_hash.txt",
+      "prompt": "/07/440be86fdf/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3699550,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 159396736,
+    "output_tokens": 310235,
+    "api_call_count": 1388
+  }
+}
