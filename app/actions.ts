@@ -14,6 +14,7 @@ import { lockFlightForUpdate } from '@/lib/flightLock';
 import { updateFlightSeatingLayout } from '@/lib/FlightSeatLayoutService';
 import { actionValidationFailure } from '@/lib/actionResult';
 import { parsePriceToCents } from '@/lib/bookingPricing';
+import { buildFlightRoutes } from '@/lib/flightSearch';
 import {
     bookingRequestSchema,
     cityGuideSchema,
@@ -99,13 +100,18 @@ export async function searchFlightsAction(from: string, to: string, departureDat
 }
 
 export async function getFlightRoutesAction() {
-    // Distinct origin/destination pairs that actually have flight schedules, so the
-    // booking form can offer only reachable routes.
-    return await prisma.flightSchedule.findMany({
-        distinct: ['from', 'to'],
-        select: { from: true, to: true },
-        orderBy: [{ from: 'asc' }, { to: 'asc' }],
+    const schedules = await prisma.flightSchedule.findMany({
+        where: { isActive: true },
+        select: {
+            from: true,
+            to: true,
+            departureTime: true,
+            daysOfWeek: true,
+        },
+        orderBy: [{ from: 'asc' }, { to: 'asc' }, { departureTime: 'asc' }],
     });
+
+    return buildFlightRoutes(schedules);
 }
 
 export async function bookFlightAction(bookingData: { 

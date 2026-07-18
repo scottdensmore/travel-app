@@ -6,9 +6,18 @@ import Link from 'next/link'
 import { searchFlightsAction } from '@/app/actions'
 import { Flight } from '@prisma/client'
 import { isActionValidationFailure } from '@/lib/actionResult'
+import type { FlightRoute } from '@/lib/flightSearch'
 
 interface FlightBookingFormProps {
-    routes?: { from: string; to: string }[];
+    routes?: FlightRoute[];
+}
+
+function addDaysToIsoDate(dateString: string, days: number): string {
+    if (!dateString) return '';
+
+    const date = new Date(`${dateString}T00:00:00.000Z`);
+    date.setUTCDate(date.getUTCDate() + days);
+    return date.toISOString().slice(0, 10);
 }
 
 const FlightBookingForm: React.FC<FlightBookingFormProps> = ({ routes = [] }) => {
@@ -21,8 +30,11 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({ routes = [] }) =>
         [routes, fromLocation]
     );
     const [toLocation, setToLocation] = useState(destinations[0] ?? '');
-    const [departureDate, setDepartureDate] = useState<string>('');
-    const [returnDate, setReturnDate] = useState<string>('');
+    const initialDepartureDate = routes[0]?.nextOperatingDate ?? '';
+    const [departureDate, setDepartureDate] = useState<string>(initialDepartureDate);
+    const [returnDate, setReturnDate] = useState<string>(
+        addDaysToIsoDate(initialDepartureDate, 7)
+    );
     const [flightClass, setFlightClass] = useState('economy');
     const [isOneWay, setIsOneWay] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
@@ -69,15 +81,17 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({ routes = [] }) =>
     }, [destinations, toLocation]);
 
     useEffect(() => {
-        const today = new Date();
-        const departure = new Date(today);
-        departure.setDate(today.getDate() + 7);
-        const returnD = new Date(departure);
-        returnD.setDate(departure.getDate() + 7);
+        const route = routes.find(
+            ({ from, to }) => from === fromLocation && to === toLocation
+        );
+        if (!route) return;
 
-        setDepartureDate(departure.toISOString().split('T')[0]);
-        setReturnDate(returnD.toISOString().split('T')[0]);
-    }, []);
+        setDepartureDate(route.nextOperatingDate);
+    }, [fromLocation, routes, toLocation]);
+
+    useEffect(() => {
+        setReturnDate(isOneWay ? '' : addDaysToIsoDate(departureDate, 7));
+    }, [departureDate, isOneWay]);
 
     // Helper to parse price string to number safely (handles $ and commas)
     const parsePrice = (priceStr?: string): number => {
@@ -237,6 +251,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({ routes = [] }) =>
                 </div>
 
                 <div className="fields-container">
+                    <label htmlFor="class">Cabin class</label>
                     <select id="class" name="class" value={flightClass} onChange={e => setFlightClass(e.target.value)}>
                         <option value="economy">Economy</option>
                         <option value="premium-economy">Premium Economy</option>
@@ -439,55 +454,32 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({ routes = [] }) =>
                             {filteredAndSortedResults.length > 0 ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                     {filteredAndSortedResults.map((flight) => (
-                                        <div key={flight.id} className="hover:bg-white/5 transition-colors" style={{
-                                            border: '1px solid rgba(255, 255, 255, 0.06)',
-                                            backgroundColor: 'rgba(255, 255, 255, 0.02)',
-                                            borderRadius: '12px',
-                                            padding: '16px',
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                            backdropFilter: 'blur(10px)',
-                                            WebkitBackdropFilter: 'blur(10px)',
-                                            boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
-                                        }}>
-                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                        <div key={flight.id} className="flight-result-card hover:bg-white/5 transition-colors">
+                                            <div className="flight-result-airline">
                                                 <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#c084fc' }}>{flight.airline}</span>
                                                 <span style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.flightNumber}</span>
                                             </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                                <span suppressHydrationWarning style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#fff' }}>
-                                                    {new Date(flight.departureDate).toLocaleDateString()}
-                                                </span>
-                                                <span style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.from}</span>
+                                            <div className="flight-result-route">
+                                                <div className="flight-result-stop">
+                                                    <span suppressHydrationWarning style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#fff' }}>
+                                                        {new Date(flight.departureDate).toLocaleDateString()}
+                                                    </span>
+                                                    <span style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.from}</span>
+                                                </div>
+                                                <span className="flight-result-arrow" aria-hidden="true">------&gt;</span>
+                                                <div className="flight-result-stop">
+                                                    <span suppressHydrationWarning style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#fff' }}>
+                                                        {flight.returnDate ? new Date(flight.returnDate).toLocaleDateString() : 'One Way'}
+                                                    </span>
+                                                    <span style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.to}</span>
+                                                </div>
                                             </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                                <span style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.3)' }}>------&gt;</span>
-                                            </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                                <span suppressHydrationWarning style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#fff' }}>
-                                                    {flight.returnDate ? new Date(flight.returnDate).toLocaleDateString() : 'One Way'}
-                                                </span>
-                                                <span style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.to}</span>
-                                            </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'end' }}>
+                                            <div className="flight-result-fare">
                                                 <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>{flight.price}</span>
                                                 <Link
+                                                    className="flight-result-book"
                                                     href={`/book/${flight.id}`}
-                                                    style={{ 
-                                                        backgroundColor: '#8b5cf6', 
-                                                        color: 'white',
-                                                        padding: '6px 16px',
-                                                        borderRadius: '6px',
-                                                        fontSize: '0.875rem',
-                                                        border: 'none',
-                                                        cursor: 'pointer',
-                                                        fontWeight: '600',
-                                                        textDecoration: 'none',
-                                                        marginTop: '8px',
-                                                        display: 'block',
-                                                        textAlign: 'center'
-                                                    }}>
+                                                >
                                                     Book Now
                                                 </Link>
                                             </div>

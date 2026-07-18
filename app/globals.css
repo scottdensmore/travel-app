@@ -704,7 +704,106 @@ footer a:hover {
   gap: 1rem;
 }
 
+.flight-result-card {
+  align-items: center;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(110px, 1fr) minmax(260px, 2fr) auto;
+  padding: 16px;
+}
+
+.flight-result-airline,
+.flight-result-fare,
+.flight-result-stop {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.flight-result-route {
+  align-items: center;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  min-width: 0;
+}
+
+.flight-result-stop {
+  align-items: center;
+  text-align: center;
+}
+
+.flight-result-stop span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.flight-result-arrow {
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 0.85rem;
+}
+
+.flight-result-fare {
+  align-items: flex-end;
+}
+
+.flight-result-book {
+  background-color: #8b5cf6;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-top: 8px;
+  padding: 6px 16px;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .flight-result-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .flight-result-route {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
 @media (max-width: 480px) {
+  .flight-result-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .flight-result-route,
+  .flight-result-fare {
+    grid-column: 1;
+  }
+
+  .flight-result-route {
+    grid-row: 2;
+  }
+
+  .flight-result-fare {
+    align-items: center;
+    flex-direction: row;
+    grid-row: 3;
+    justify-content: space-between;
+  }
+
+  .flight-result-book {
+    margin-top: 0;
+  }
+
   .booking-wizard-actions,
   .booking-traveler-primary-actions,
   .booking-success-actions {
