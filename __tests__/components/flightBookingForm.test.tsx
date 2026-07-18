@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import FlightBookingForm from '@/components/ui/flightBookingForm';
 import { bookFlightAction, searchFlightsAction } from '@/app/actions';
@@ -81,11 +81,19 @@ const mockEnhancedFlights = [
 ];
 
 const renderForm = () => render(
-    <FlightBookingForm routes={routes} minimumDepartureDate="2026-07-14" />
+    <FlightBookingForm
+        routes={routes}
+        minimumDepartureDate="2026-07-14"
+        maximumDepartureDate="2027-07-14"
+    />
 );
 
 describe('FlightBookingForm', () => {
-    beforeEach(() => jest.clearAllMocks());
+    beforeEach(() => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-07-14T12:00:00.000Z'));
+        jest.clearAllMocks();
+    });
+    afterEach(() => jest.useRealTimers());
 
     it('renders origins and the destinations reachable from the default origin', () => {
         renderForm();
@@ -112,8 +120,10 @@ describe('FlightBookingForm', () => {
 
         expect(screen.getByLabelText('Depart')).toHaveValue('2026-07-15');
         expect(screen.getByLabelText('Depart')).toHaveAttribute('min', '2026-07-14');
+        expect(screen.getByLabelText('Depart')).toHaveAttribute('max', '2027-07-14');
         expect(screen.getByLabelText('Return')).toHaveValue('2026-07-22');
         expect(screen.getByLabelText('Return')).toHaveAttribute('min', '2026-07-15');
+        expect(screen.getByLabelText('Return')).toHaveAttribute('max', '2027-07-14');
 
         fireEvent.change(screen.getByLabelText('To'), { target: { value: 'Tokyo, Japan' } });
 
@@ -121,6 +131,30 @@ describe('FlightBookingForm', () => {
             expect(screen.getByLabelText('Depart')).toHaveValue('2026-07-16');
             expect(screen.getByLabelText('Return')).toHaveValue('2026-07-23');
         });
+    });
+
+    it('refreshes the booking window when the UTC day changes', () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-07-14T23:59:59.000Z'));
+        renderForm();
+
+        expect(screen.getByLabelText('Depart')).toHaveAttribute('min', '2026-07-14');
+        expect(screen.getByLabelText('Depart')).toHaveAttribute('max', '2027-07-14');
+
+        act(() => jest.advanceTimersByTime(1_001));
+
+        expect(screen.getByLabelText('Depart')).toHaveAttribute('min', '2026-07-15');
+        expect(screen.getByLabelText('Depart')).toHaveAttribute('max', '2027-07-15');
+        expect(screen.getByLabelText('Return')).toHaveAttribute('max', '2027-07-15');
+    });
+
+    it('reconciles a stale server booking window during hydration', () => {
+        jest.setSystemTime(new Date('2026-07-15T00:00:01.000Z'));
+
+        renderForm();
+
+        expect(screen.getByLabelText('Depart')).toHaveAttribute('min', '2026-07-15');
+        expect(screen.getByLabelText('Depart')).toHaveAttribute('max', '2027-07-15');
+        expect(screen.getByLabelText('Return')).toHaveAttribute('max', '2027-07-15');
     });
 
     it('searches using the selected origin and destination', async () => {
@@ -196,6 +230,28 @@ describe('FlightBookingForm', () => {
         await waitFor(() => {
             expect(screen.queryByRole('alert')).not.toBeInTheDocument();
         });
+    });
+
+    it('rejects departures and returns beyond the booking window before searching', async () => {
+        renderForm();
+        const form = screen.getByRole('button', { name: 'Find your trip' }).closest('form');
+        expect(form).not.toBeNull();
+
+        fireEvent.change(screen.getByLabelText('Depart'), { target: { value: '2027-07-15' } });
+        fireEvent.submit(form!);
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Departure date cannot be more than 365 days in advance.'
+        );
+        expect(mockSearch).not.toHaveBeenCalled();
+
+        fireEvent.change(screen.getByLabelText('Depart'), { target: { value: '2027-07-14' } });
+        expect(screen.getByLabelText('Return')).toHaveValue('2027-07-14');
+        fireEvent.change(screen.getByLabelText('Return'), { target: { value: '2027-07-15' } });
+        fireEvent.submit(form!);
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Return date cannot be more than 365 days in advance.'
+        );
+        expect(mockSearch).not.toHaveBeenCalled();
     });
 
     it('shows a no-results message when no flights match the route', async () => {
