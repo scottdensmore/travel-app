@@ -14,6 +14,16 @@ interface FlightBookingFormProps {
     minimumDepartureDate?: string;
 }
 
+type BookingState = {
+    status: 'idle' | 'booking' | 'success' | 'error';
+    message?: string;
+    flightId?: number;
+    clearOnOneWay?: boolean;
+};
+
+const DEPARTURE_REQUIRED_WITH_RETURN_MESSAGE =
+    'Departure date is required when a return date is provided.';
+
 function addDaysToIsoDate(dateString: string, days: number): string {
     if (!dateString) return '';
 
@@ -44,7 +54,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     const [isOneWay, setIsOneWay] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
     const [searchResults, setSearchResults] = useState<Flight[] | null>(null);
-    const [bookingState, setBookingState] = useState<{ status: 'idle' | 'booking' | 'success' | 'error', message?: string, flightId?: number }>({ status: 'idle' });
+    const [bookingState, setBookingState] = useState<BookingState>({ status: 'idle' });
 
     // Interactive Filters & Sorting States
     const [sortBy, setSortBy] = useState('price-asc');
@@ -52,12 +62,16 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     const [selectedAirlines, setSelectedAirlines] = useState<string[]>([]);
 
     const handleTripTypeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setIsOneWay(e.target.value === 'one-way');
-        // Clear a stale date-validation error (e.g. a return-before-departure
-        // message that no longer applies once one-way is selected) without
-        // wiping any in-progress booking or success feedback.
-        setBookingState((prev) => (prev.status === 'error' ? { status: 'idle' } : prev));
-        if (e.target.value === 'one-way') {
+        const isChangingToOneWay = e.target.value === 'one-way';
+        setIsOneWay(isChangingToOneWay);
+        // Clear only validation that depends on a return date, which no longer
+        // applies once one-way is selected. Other errors remain valid.
+        setBookingState((prev) => (
+            isChangingToOneWay && prev.status === 'error' && prev.clearOnOneWay
+                ? { status: 'idle' }
+                : prev
+        ));
+        if (isChangingToOneWay) {
             setReturnDate(''); // Clear return date when switching to one-way
         }
     };
@@ -77,7 +91,8 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         if (!isOneWay && !departureDate && returnDate) {
             setBookingState({
                 status: 'error',
-                message: 'Departure date is required when a return date is provided.',
+                message: DEPARTURE_REQUIRED_WITH_RETURN_MESSAGE,
+                clearOnOneWay: true,
             });
             return;
         }
@@ -85,6 +100,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
             setBookingState({
                 status: 'error',
                 message: 'Return date cannot be before departure date.',
+                clearOnOneWay: true,
             });
             return;
         }
@@ -98,7 +114,15 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                 isOneWay ? undefined : returnDate,
             );
             if (isActionValidationFailure(results)) {
-                setBookingState({ status: 'error', message: results.error.message });
+                const clearOnOneWay = Boolean(
+                    results.error.fields.returnDate?.includes(results.error.message)
+                    || results.error.message === DEPARTURE_REQUIRED_WITH_RETURN_MESSAGE
+                );
+                setBookingState({
+                    status: 'error',
+                    message: results.error.message,
+                    clearOnOneWay,
+                });
                 return;
             }
             setSearchResults(results);

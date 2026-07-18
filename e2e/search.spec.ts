@@ -36,6 +36,12 @@ test.describe('Flight search', () => {
       hasText: 'Departure date cannot be in the past.',
     })).toBeVisible();
 
+    await page.getByLabel('One Way').check();
+    await expect(page.getByRole('alert').filter({
+      hasText: 'Departure date cannot be in the past.',
+    })).toBeVisible();
+    await page.getByLabel('Round Trip').check();
+
     await departure.fill(validDeparture);
     await returnDate.fill(yesterdayString);
     await form.evaluate((element) => {
@@ -50,6 +56,21 @@ test.describe('Flight search', () => {
     await expect(returnDate).toHaveValue('');
     await expect(page.getByRole('alert').filter({
       hasText: 'Return date cannot be before departure date.',
+    })).toHaveCount(0);
+
+    await page.getByLabel('Round Trip').check();
+    await departure.fill('');
+    await returnDate.fill(validDeparture);
+    await form.evaluate((element) => {
+      element.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    await expect(page.getByRole('alert').filter({
+      hasText: 'Departure date is required when a return date is provided.',
+    })).toBeVisible();
+
+    await page.getByLabel('One Way').check();
+    await expect(page.getByRole('alert').filter({
+      hasText: 'Departure date is required when a return date is provided.',
     })).toHaveCount(0);
   });
 });
