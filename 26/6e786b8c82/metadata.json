@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "266e786b8c82",
+  "strategy": "manual-commit",
+  "branch": "feat/p1-1-booking-window",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "REAL_WORLD_ROADMAP.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/26/6e786b8c82/0/metadata.json",
+      "transcript": "/26/6e786b8c82/0/full.jsonl",
+      "compact_transcript": "/26/6e786b8c82/0/transcript.jsonl",
+      "content_hash": "/26/6e786b8c82/0/content_hash.txt",
+      "prompt": "/26/6e786b8c82/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3712614,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 161499264,
+    "output_tokens": 312574,
+    "api_call_count": 1403
+  }
+}
