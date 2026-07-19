@@ -3,6 +3,7 @@ import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom';
 import FlightBookingForm from '@/components/ui/flightBookingForm';
 import { bookFlightAction, searchFlightsAction } from '@/app/actions';
+import type { FlightSearchCriteria } from '@/lib/flightSearchUrl';
 
 // Mock server actions
 jest.mock('@/app/actions', () => ({
@@ -85,11 +86,12 @@ const mockEnhancedFlights = [
     }
 ];
 
-const renderForm = () => render(
+const renderForm = (initialSearch?: FlightSearchCriteria) => render(
     <FlightBookingForm
         routes={routes}
         minimumDepartureDate="2026-07-14"
         maximumDepartureDate="2027-07-14"
+        initialSearch={initialSearch}
     />
 );
 
@@ -97,6 +99,7 @@ describe('FlightBookingForm', () => {
     beforeEach(() => {
         jest.useFakeTimers().setSystemTime(new Date('2026-07-14T12:00:00.000Z'));
         jest.clearAllMocks();
+        window.history.replaceState(null, '', '/');
     });
     afterEach(() => jest.useRealTimers());
 
@@ -178,6 +181,74 @@ describe('FlightBookingForm', () => {
             expect.any(String),
             expect.any(String),
         );
+    });
+
+    it('writes searched criteria to a shareable URL', async () => {
+        mockSearch.mockResolvedValue(searchSuccess(mockFlights));
+
+        renderForm();
+        fireEvent.click(screen.getByText('Find your trip'));
+
+        await waitFor(() => expect(screen.getByText('Available Flights')).toBeInTheDocument());
+        const params = new URLSearchParams(window.location.search);
+        expect(params.get('from')).toBe('Seattle, USA');
+        expect(params.get('to')).toBe('Detroit, USA');
+        expect(params.get('depart')).toBe('2026-07-15');
+        expect(params.get('return')).toBe('2026-07-22');
+        expect(params.get('trip')).toBe('round-trip');
+    });
+
+    it('restores shared criteria and automatically reruns the search', async () => {
+        mockSearch.mockResolvedValue(searchSuccess(mockFlights));
+        const initialSearch: FlightSearchCriteria = {
+            from: 'New York, USA',
+            to: 'London, UK',
+            departureDate: '2026-07-20',
+            returnDate: '2026-07-27',
+            tripType: 'round-trip',
+        };
+
+        renderForm(initialSearch);
+
+        expect(screen.getByLabelText('From')).toHaveValue('New York, USA');
+        expect(screen.getByLabelText('To')).toHaveValue('London, UK');
+        expect(screen.getByLabelText('Depart')).toHaveValue('2026-07-20');
+        expect(screen.getByLabelText('Return')).toHaveValue('2026-07-27');
+        await waitFor(() => {
+            expect(mockSearch).toHaveBeenCalledWith(
+                'New York, USA',
+                'London, UK',
+                '2026-07-20',
+                '2026-07-27',
+            );
+        });
+        expect(await screen.findByText('Available Flights')).toBeInTheDocument();
+        expect(screen.getByLabelText('Depart')).toHaveValue('2026-07-20');
+    });
+
+    it('restores and reruns a route-only search without optional dates', async () => {
+        mockSearch.mockResolvedValue(searchSuccess(mockFlights));
+        const initialSearch: FlightSearchCriteria = {
+            from: 'Seattle, USA',
+            to: 'Detroit, USA',
+            departureDate: '',
+            returnDate: '',
+            tripType: 'round-trip',
+        };
+
+        renderForm(initialSearch);
+
+        expect(screen.getByLabelText('Depart')).toHaveValue('');
+        expect(screen.getByLabelText('Return')).toHaveValue('');
+        await waitFor(() => {
+            expect(mockSearch).toHaveBeenCalledWith(
+                'Seattle, USA',
+                'Detroit, USA',
+                '',
+                '',
+            );
+        });
+        expect(await screen.findByText('Available Flights')).toBeInTheDocument();
     });
 
     it('rejects past departures and returns before departure before searching', async () => {

@@ -15,6 +15,89 @@ test.describe('Flight search', () => {
     await expect(page.getByRole('link', { name: 'Book Now' }).first()).toBeVisible();
   });
 
+  test('Search criteria and results survive a refresh', async ({ page }) => {
+    await page.goto('/');
+
+    await page.getByLabel('From').selectOption({ label: 'New York, USA' });
+    await expect(page.getByLabel('To')).toHaveValue('London, UK');
+    const departureDate = await page.getByLabel('Depart').inputValue();
+    const returnDate = await page.getByLabel('Return').inputValue();
+
+    await page.getByRole('button', { name: 'Find your trip' }).click();
+    await expect(page.getByRole('heading', { name: 'Available Flights' })).toBeVisible();
+
+    await expect.poll(() => {
+      const params = new URL(page.url()).searchParams;
+      return {
+        from: params.get('from'),
+        to: params.get('to'),
+        depart: params.get('depart'),
+        returnDate: params.get('return'),
+        trip: params.get('trip'),
+      };
+    }).toEqual({
+      from: 'New York, USA',
+      to: 'London, UK',
+      depart: departureDate,
+      returnDate,
+      trip: 'round-trip',
+    });
+
+    await page.reload();
+
+    await expect(page.getByLabel('From')).toHaveValue('New York, USA');
+    await expect(page.getByLabel('To')).toHaveValue('London, UK');
+    await expect(page.getByLabel('Depart')).toHaveValue(departureDate);
+    await expect(page.getByLabel('Return')).toHaveValue(returnDate);
+    await expect(page.getByLabel('Round Trip')).toBeChecked();
+    await expect(page.getByRole('heading', { name: 'Available Flights' })).toBeVisible();
+  });
+
+  test('A round trip without an optional return date survives a refresh', async ({ page }) => {
+    await page.goto('/');
+
+    const departureDate = await page.getByLabel('Depart').inputValue();
+    await page.getByLabel('Return').fill('');
+    await page.getByRole('button', { name: 'Find your trip' }).click();
+    await expect(page.getByRole('heading', { name: 'Available Flights' })).toBeVisible();
+
+    await expect.poll(() => {
+      const params = new URL(page.url()).searchParams;
+      return {
+        depart: params.get('depart'),
+        returnDate: params.get('return'),
+        trip: params.get('trip'),
+      };
+    }).toEqual({
+      depart: departureDate,
+      returnDate: null,
+      trip: 'round-trip',
+    });
+
+    await page.reload();
+
+    await expect(page.getByLabel('Depart')).toHaveValue(departureDate);
+    await expect(page.getByLabel('Return')).toHaveValue('');
+    await expect(page.getByLabel('Round Trip')).toBeChecked();
+    await expect(page.getByRole('heading', { name: 'Available Flights' })).toBeVisible();
+  });
+
+  test('Invalid shared criteria fall back to valid defaults', async ({ page }) => {
+    await page.goto(
+      '/?from=Seattle%2C+USA&to=London%2C+UK&depart=2020-01-01&return=2020-01-08&trip=round-trip'
+    );
+
+    await expect.poll(async () => ({
+      from: await page.getByLabel('From').inputValue(),
+      to: await page.getByLabel('To').inputValue(),
+    })).not.toEqual({
+      from: 'Seattle, USA',
+      to: 'London, UK',
+    });
+    await expect(page.getByLabel('Depart')).not.toHaveValue('2020-01-01');
+    await expect(page.getByRole('heading', { name: 'Available Flights' })).toHaveCount(0);
+  });
+
   test('Date controls reject past departures and invalid return order', async ({ page }) => {
     await page.goto('/');
 
