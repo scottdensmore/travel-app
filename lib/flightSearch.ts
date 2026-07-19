@@ -1,8 +1,21 @@
+import { addDaysToIsoDate, bookingWindowIsoDates } from '@/lib/dates';
+
 export interface FlightScheduleSummary {
     from: string;
     to: string;
     departureTime: string;
     daysOfWeek: number[];
+}
+
+export interface OperatingScheduleSummary {
+    flightNumber: string;
+    departureTime: string;
+    daysOfWeek: number[];
+}
+
+export interface CancelledFlightSummary {
+    flightNumber: string;
+    departureDate: Date;
 }
 
 export interface FlightRoute {
@@ -67,4 +80,68 @@ export function buildFlightRoutes(
     }
 
     return Array.from(routes.values(), ({ route }) => route);
+}
+
+function hasFutureDepartureOnDate(
+    schedules: OperatingScheduleSummary[],
+    dateString: string,
+    now: Date,
+    cancelledDepartureKeys: ReadonlySet<string>,
+): boolean {
+    const day = new Date(`${dateString}T00:00:00.000Z`).getUTCDay();
+
+    return schedules.some((schedule) => {
+        if (!schedule.daysOfWeek.includes(day)) return false;
+        const departure = new Date(`${dateString}T${schedule.departureTime}:00Z`);
+        if (Number.isNaN(departure.getTime())) return false;
+        const departureKey = `${schedule.flightNumber}\u0000${departure.toISOString()}`;
+        return departure > now
+            && !cancelledDepartureKeys.has(departureKey);
+    });
+}
+
+export function findNearbyOperatingDates(
+    schedules: OperatingScheduleSummary[],
+    requestedDate: string,
+    now = new Date(),
+    cancelledFlights: CancelledFlightSummary[] = [],
+): string[] {
+    const { earliestDate, latestDate } = bookingWindowIsoDates(now);
+    const cancelledDepartureKeys = new Set(cancelledFlights.map((flight) => (
+        `${flight.flightNumber}\u0000${flight.departureDate.toISOString()}`
+    )));
+    let earlierDate: string | undefined;
+    let laterDate: string | undefined;
+
+    for (let offset = 1; offset <= 365 && (!earlierDate || !laterDate); offset += 1) {
+        const earlierCandidate = addDaysToIsoDate(requestedDate, -offset);
+        if (
+            !earlierDate
+            && earlierCandidate >= earliestDate
+            && hasFutureDepartureOnDate(
+                schedules,
+                earlierCandidate,
+                now,
+                cancelledDepartureKeys,
+            )
+        ) {
+            earlierDate = earlierCandidate;
+        }
+
+        const laterCandidate = addDaysToIsoDate(requestedDate, offset);
+        if (
+            !laterDate
+            && laterCandidate <= latestDate
+            && hasFutureDepartureOnDate(
+                schedules,
+                laterCandidate,
+                now,
+                cancelledDepartureKeys,
+            )
+        ) {
+            laterDate = laterCandidate;
+        }
+    }
+
+    return [earlierDate, laterDate].filter((date): date is string => Boolean(date));
 }

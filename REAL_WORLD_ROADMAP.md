@@ -124,7 +124,8 @@ journey succeeds.
 - [x] Prevent past departures and returns before departure.
 - [x] Add minimum/maximum booking-window rules (same-day through 365 days,
   inclusive; interim UTC day boundary).
-- [ ] Suggest nearby operating dates when no exact match exists.
+- [x] Suggest the nearest earlier and later operating dates when no exact match
+  exists.
 - [ ] Preserve search criteria in URL parameters.
 - [ ] Add loading, empty, failure, retry, and degraded-service states.
 - [ ] Base the earliest selectable date and the past-departure rule on the origin
@@ -508,3 +509,4 @@ Add one row when work starts, becomes blocked, or completes.
 | 2026-07-14 | P1.1 | In progress | #45 | Defaulted each route to its next future operating date and covered the seeded default search journey. Date constraints, nearby dates, URL state, and service states remain. |
 | 2026-07-17 | P1.1 | In progress | #46 | Rejected past departures and invalid return ordering in the UI and server, and excluded already-departed inventory from same-day results. Booking windows and later search slices remain. |
 | 2026-07-18 | P1.1 | In progress | #47 | Enforced an inclusive same-day through 365-day booking window for departures and returns in the UI and server. Nearby dates, URL state, and service states remain. |
+| 2026-07-18 | P1.1 | In progress | #48 | Suggested the nearest earlier and later operating dates for empty exact-date searches and made each suggestion searchable. URL state and service states remain. |
