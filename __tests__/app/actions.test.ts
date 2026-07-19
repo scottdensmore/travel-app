@@ -190,7 +190,10 @@ describe('deleteCityGuideAction authorization and execution', () => {
 });
 
 describe('searchFlightsAction', () => {
-    beforeEach(() => jest.clearAllMocks());
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockedFlightScheduleFindMany.mockResolvedValue([]);
+    });
     afterEach(() => jest.useRealTimers());
 
     it('filters flights by the selected origin and destination without date', async () => {
@@ -204,7 +207,8 @@ describe('searchFlightsAction', () => {
         expect(mockedFlightFindMany).toHaveBeenCalledWith(
             expect.objectContaining({ where: { from: 'Seattle, USA', to: 'Detroit, USA' } })
         );
-        expect(result).toBe(flights);
+        expect(result).toEqual({ flights, nearbyDates: [] });
+        expect(mockedFlightScheduleFindMany).not.toHaveBeenCalled();
     });
 
     it('triggers lazy generation and queries by date when departureDateStr is provided', async () => {
@@ -222,6 +226,7 @@ describe('searchFlightsAction', () => {
             where: {
                 from: 'Seattle, USA',
                 to: 'Detroit, USA',
+                status: { not: 'CANCELLED' },
                 departureDate: {
                     gte: new Date('2026-06-25T00:00:00.000Z'),
                     lte: new Date('2026-06-25T23:59:59.999Z')
@@ -229,7 +234,61 @@ describe('searchFlightsAction', () => {
             },
             orderBy: { departureDate: 'asc' }
         });
-        expect(result).toBe(flights);
+        expect(result).toEqual({ flights, nearbyDates: [] });
+    });
+
+    it('suggests the nearest operating dates when the exact date has no flights', async () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-07-14T12:00:00.000Z'));
+        mockedFlightFindMany
+            .mockResolvedValueOnce([])
+            .mockResolvedValueOnce([
+                {
+                    flightNumber: 'CA101',
+                    departureDate: new Date('2026-07-15T08:00:00.000Z'),
+                },
+            ]);
+        mockedFlightScheduleFindMany.mockResolvedValue([
+            { flightNumber: 'CA101', departureTime: '08:00', daysOfWeek: [1, 3, 5] },
+        ]);
+        mockGenerateFlightsForDate.mockResolvedValue([]);
+
+        const result = await searchFlightsAction(
+            'Seattle, USA',
+            'Detroit, USA',
+            '2026-07-16',
+        );
+
+        expect(mockedFlightScheduleFindMany).toHaveBeenCalledWith({
+            where: {
+                isActive: true,
+                from: 'Seattle, USA',
+                to: 'Detroit, USA',
+            },
+            select: {
+                flightNumber: true,
+                departureTime: true,
+                daysOfWeek: true,
+            },
+        });
+        expect(mockedFlightFindMany).toHaveBeenNthCalledWith(2, {
+            where: {
+                from: 'Seattle, USA',
+                to: 'Detroit, USA',
+                status: 'CANCELLED',
+                departureDate: {
+                    gte: new Date('2026-07-14T00:00:00.000Z'),
+                    lte: new Date('2027-07-14T23:59:59.999Z'),
+                },
+            },
+            select: {
+                flightNumber: true,
+                departureDate: true,
+            },
+        });
+        expect(result).toEqual({
+            flights: [],
+            nearbyDates: ['2026-07-17'],
+        });
     });
 
     it('excludes already-departed flights when searching today', async () => {
@@ -244,6 +303,7 @@ describe('searchFlightsAction', () => {
             where: {
                 from: 'Seattle, USA',
                 to: 'Detroit, USA',
+                status: { not: 'CANCELLED' },
                 departureDate: {
                     gt: now,
                     lte: new Date('2026-07-14T23:59:59.999Z'),

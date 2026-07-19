@@ -45,6 +45,15 @@ function millisecondsUntilNextUtcDay(referenceDate = new Date()): number {
     return nextUtcDay - referenceDate.getTime();
 }
 
+function formatSuggestedDate(dateString: string): string {
+    return new Intl.DateTimeFormat('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        timeZone: 'UTC',
+    }).format(new Date(`${dateString}T00:00:00.000Z`));
+}
+
 const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     routes = [],
     minimumDepartureDate = earliestBookableDateIso(),
@@ -55,6 +64,8 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         latestDate: maximumDepartureDate,
     });
     const latestBookingDateRef = useRef(maximumDepartureDate);
+    const resultsHeadingRef = useRef<HTMLHeadingElement>(null);
+    const searchRequestIdRef = useRef(0);
     // Origins are the distinct departure cities; destinations depend on the
     // selected origin so only reachable routes can be chosen.
     const origins = useMemo(() => Array.from(new Set(routes.map((r) => r.from))), [routes]);
@@ -78,6 +89,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     const [isOneWay, setIsOneWay] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
     const [searchResults, setSearchResults] = useState<Flight[] | null>(null);
+    const [nearbyDates, setNearbyDates] = useState<string[]>([]);
     const [bookingState, setBookingState] = useState<BookingState>({ status: 'idle' });
 
     // Interactive Filters & Sorting States
@@ -85,7 +97,17 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     const [maxPrice, setMaxPrice] = useState<number>(0);
     const [selectedAirlines, setSelectedAirlines] = useState<string[]>([]);
 
+    const clearEmptySearchState = () => {
+        searchRequestIdRef.current += 1;
+        setIsSearching(false);
+        setNearbyDates([]);
+        setSearchResults((currentResults) => (
+            currentResults?.length === 0 ? null : currentResults
+        ));
+    };
+
     const handleTripTypeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        clearEmptySearchState();
         const isChangingToOneWay = e.target.value === 'one-way';
         setIsOneWay(isChangingToOneWay);
         // Clear only validation that depends on a return date, which no longer
@@ -100,9 +122,56 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         }
     };
 
+    const performSearch = async (
+        selectedDepartureDate: string,
+        selectedReturnDate: string,
+    ) => {
+        const requestId = searchRequestIdRef.current + 1;
+        searchRequestIdRef.current = requestId;
+        setSearchResults(null);
+        setNearbyDates([]);
+        setBookingState({ status: 'idle' });
+
+        setIsSearching(true);
+        try {
+            const results = await searchFlightsAction(
+                fromLocation,
+                toLocation,
+                selectedDepartureDate,
+                isOneWay ? undefined : selectedReturnDate,
+            );
+            if (requestId !== searchRequestIdRef.current) return;
+            if (isActionValidationFailure(results)) {
+                const clearOnOneWay = Boolean(
+                    results.error.fields.returnDate?.includes(results.error.message)
+                    || results.error.message === DEPARTURE_REQUIRED_WITH_RETURN_MESSAGE
+                );
+                setBookingState({
+                    status: 'error',
+                    message: results.error.message,
+                    clearOnOneWay,
+                });
+                return;
+            }
+            setSearchResults(results.flights);
+            setNearbyDates(results.nearbyDates);
+        } catch (error) {
+            if (requestId === searchRequestIdRef.current) {
+                setBookingState({ status: 'error', message: 'Unable to search for flights right now.' });
+            }
+        } finally {
+            if (requestId === searchRequestIdRef.current) {
+                setIsSearching(false);
+            }
+        }
+    };
+
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
+        searchRequestIdRef.current += 1;
+        setIsSearching(false);
         setSearchResults(null);
+        setNearbyDates([]);
         setBookingState({ status: 'idle' });
 
         if (departureDate && departureDate < bookingWindow.earliestDate) {
@@ -144,32 +213,19 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
             return;
         }
 
-        setIsSearching(true);
-        try {
-            const results = await searchFlightsAction(
-                fromLocation,
-                toLocation,
-                departureDate,
-                isOneWay ? undefined : returnDate,
+        await performSearch(departureDate, returnDate);
+    };
+
+    const handleNearbyDateSearch = async (suggestedDate: string) => {
+        const suggestedReturnDate = isOneWay
+            ? ''
+            : clampToMaximumDate(
+                addDaysToIsoDate(suggestedDate, 7),
+                latestBookingDateRef.current,
             );
-            if (isActionValidationFailure(results)) {
-                const clearOnOneWay = Boolean(
-                    results.error.fields.returnDate?.includes(results.error.message)
-                    || results.error.message === DEPARTURE_REQUIRED_WITH_RETURN_MESSAGE
-                );
-                setBookingState({
-                    status: 'error',
-                    message: results.error.message,
-                    clearOnOneWay,
-                });
-                return;
-            }
-            setSearchResults(results);
-        } catch (error) {
-            setBookingState({ status: 'error', message: 'Unable to search for flights right now.' });
-        } finally {
-            setIsSearching(false);
-        }
+        setDepartureDate(suggestedDate);
+        setReturnDate(suggestedReturnDate);
+        await performSearch(suggestedDate, suggestedReturnDate);
     };
 
     // When the origin changes, keep the destination valid for the new origin.
@@ -217,6 +273,12 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                 : clampToMaximumDate(proposedReturnDate, latestBookingDateRef.current)
         );
     }, [departureDate, isOneWay]);
+
+    useEffect(() => {
+        if (searchResults && searchResults.length > 0) {
+            resultsHeadingRef.current?.focus();
+        }
+    }, [searchResults]);
 
     // Helper to parse price string to number safely (handles $ and commas)
     const parsePrice = (priceStr?: string): number => {
@@ -338,7 +400,10 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
 
                 <div className="fields-container">
                     <label htmlFor="from">From</label>
-                    <select id="from" name="from" value={fromLocation} onChange={e => setFromLocation(e.target.value)}>
+                    <select id="from" name="from" value={fromLocation} onChange={(e) => {
+                        setFromLocation(e.target.value);
+                        clearEmptySearchState();
+                    }}>
                         {origins.map((loc) => (
                             <option key={loc} value={loc}>{loc}</option>
                         ))}
@@ -347,7 +412,10 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
 
                 <div className="fields-container">
                     <label htmlFor="to">To</label>
-                    <select id="to" name="to" value={toLocation} onChange={e => setToLocation(e.target.value)}>
+                    <select id="to" name="to" value={toLocation} onChange={(e) => {
+                        setToLocation(e.target.value);
+                        clearEmptySearchState();
+                    }}>
                         {destinations.map((loc) => (
                             <option key={loc} value={loc}>{loc}</option>
                         ))}
@@ -364,7 +432,10 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                             min={bookingWindow.earliestDate}
                             max={bookingWindow.latestDate}
                             value={departureDate}
-                            onChange={e => setDepartureDate(e.target.value)}
+                            onChange={(e) => {
+                                setDepartureDate(e.target.value);
+                                clearEmptySearchState();
+                            }}
                         />
                     </div>
                     <div style={{ marginLeft: '12px' }}
@@ -379,7 +450,10 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                             min={departureDate || bookingWindow.earliestDate}
                             max={bookingWindow.latestDate}
                             value={returnDate}
-                            onChange={(e) => setReturnDate(e.target.value)}
+                            onChange={(e) => {
+                                setReturnDate(e.target.value);
+                                clearEmptySearchState();
+                            }}
                             disabled={isOneWay}
                         />
                     </div>
@@ -442,7 +516,40 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                     color: 'rgba(255, 255, 255, 0.6)',
                                     marginTop: '24px'
                                 }}>
-                                    No flights found for this route. Try a different origin or destination.
+                                    <p style={{ margin: 0 }}>
+                                        No flights found for your selected date.
+                                    </p>
+                                    {nearbyDates.length > 0 && (
+                                        <div
+                                            aria-label="Nearby operating dates"
+                                            style={{ marginTop: '16px' }}
+                                        >
+                                            <p style={{ margin: '0 0 10px', color: 'rgba(255, 255, 255, 0.8)' }}>
+                                                Try a nearby date:
+                                            </p>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '10px' }}>
+                                                {nearbyDates.map((date) => (
+                                                    <button
+                                                        key={date}
+                                                        type="button"
+                                                        disabled={isSearching}
+                                                        onClick={() => void handleNearbyDateSearch(date)}
+                                                        style={{
+                                                            border: '1px solid rgba(192, 132, 252, 0.7)',
+                                                            borderRadius: '8px',
+                                                            background: 'rgba(192, 132, 252, 0.12)',
+                                                            color: '#e9d5ff',
+                                                            padding: '8px 12px',
+                                                            cursor: 'pointer',
+                                                            fontWeight: 600,
+                                                        }}
+                                                    >
+                                                        {formatSuggestedDate(date)}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -555,7 +662,14 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                 boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
                             }}>
                                 <div>
-                                    <h2 className="text-2xl font-bold" style={{ fontSize: '1.25rem', color: '#c084fc', margin: 0, display: 'inline-block' }}>Available Flights</h2>
+                                    <h2
+                                        ref={resultsHeadingRef}
+                                        tabIndex={-1}
+                                        className="text-2xl font-bold"
+                                        style={{ fontSize: '1.25rem', color: '#c084fc', margin: 0, display: 'inline-block' }}
+                                    >
+                                        Available Flights
+                                    </h2>
                                     <span style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.5)', marginLeft: '12px' }}>
                                         ({filteredAndSortedResults.length} {filteredAndSortedResults.length === 1 ? 'flight' : 'flights'} found)
                                     </span>

@@ -9,7 +9,9 @@ test.describe('Flight search', () => {
 
     await page.getByRole('button', { name: 'Find your trip' }).click();
 
-    await expect(page.getByRole('heading', { name: 'Available Flights' })).toBeVisible();
+    const resultsHeading = page.getByRole('heading', { name: 'Available Flights' });
+    await expect(resultsHeading).toBeVisible();
+    await expect(resultsHeading).toBeFocused();
     await expect(page.getByRole('link', { name: 'Book Now' }).first()).toBeVisible();
   });
 
@@ -88,5 +90,30 @@ test.describe('Flight search', () => {
     await expect(page.getByRole('alert').filter({
       hasText: 'Departure date is required when a return date is provided.',
     })).toHaveCount(0);
+  });
+
+  test('No exact flight offers a nearby operating date that can be searched', async ({ page }) => {
+    await page.goto('/');
+
+    const departure = page.getByLabel('Depart');
+    const exactOperatingDate = await departure.inputValue();
+    const noServiceDate = new Date(`${exactOperatingDate}T00:00:00.000Z`);
+    noServiceDate.setUTCDate(noServiceDate.getUTCDate() + 1);
+    await departure.fill(noServiceDate.toISOString().slice(0, 10));
+
+    await page.getByRole('button', { name: 'Find your trip' }).click();
+
+    await expect(page.getByText(/No flights found/i)).toBeVisible();
+    const suggestion = page
+      .getByLabel('Nearby operating dates')
+      .getByRole('button')
+      .first();
+    await expect(suggestion).toBeVisible();
+    await suggestion.click();
+
+    const resultsHeading = page.getByRole('heading', { name: 'Available Flights' });
+    await expect(resultsHeading).toBeVisible();
+    await expect(resultsHeading).toBeFocused();
+    await expect(page.getByRole('link', { name: 'Book Now' }).first()).toBeVisible();
   });
 });

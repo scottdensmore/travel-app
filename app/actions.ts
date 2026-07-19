@@ -14,7 +14,8 @@ import { lockFlightForUpdate } from '@/lib/flightLock';
 import { updateFlightSeatingLayout } from '@/lib/FlightSeatLayoutService';
 import { actionValidationFailure } from '@/lib/actionResult';
 import { parsePriceToCents } from '@/lib/bookingPricing';
-import { buildFlightRoutes } from '@/lib/flightSearch';
+import { buildFlightRoutes, findNearbyOperatingDates } from '@/lib/flightSearch';
+import { bookingWindowIsoDates } from '@/lib/dates';
 import {
     bookingRequestSchema,
     cityGuideSchema,
@@ -82,10 +83,11 @@ export async function searchFlightsAction(
     ({ from, to, departureDate: departureDateStr } = parsed.data);
 
     if (!departureDateStr) {
-        return await prisma.flight.findMany({
+        const flights = await prisma.flight.findMany({
             where: { from, to },
             orderBy: { departureDate: 'asc' },
         });
+        return { flights, nearbyDates: [] };
     }
 
     const searchDate = new Date(departureDateStr);
@@ -100,10 +102,11 @@ export async function searchFlightsAction(
         ? { gt: now }
         : { gte: startOfDay };
 
-    return await prisma.flight.findMany({
+    const flights = await prisma.flight.findMany({
         where: {
             from,
             to,
+            status: { not: 'CANCELLED' },
             departureDate: {
                 ...departureLowerBound,
                 lte: endOfDay
@@ -111,6 +114,49 @@ export async function searchFlightsAction(
         },
         orderBy: { departureDate: 'asc' },
     });
+
+    if (flights.length > 0) return { flights, nearbyDates: [] };
+
+    const { earliestDate, latestDate } = bookingWindowIsoDates(now);
+    const [schedules, cancelledFlights] = await Promise.all([
+        prisma.flightSchedule.findMany({
+            where: {
+                isActive: true,
+                from,
+                to,
+            },
+            select: {
+                flightNumber: true,
+                departureTime: true,
+                daysOfWeek: true,
+            },
+        }),
+        prisma.flight.findMany({
+            where: {
+                from,
+                to,
+                status: 'CANCELLED',
+                departureDate: {
+                    gte: new Date(`${earliestDate}T00:00:00.000Z`),
+                    lte: new Date(`${latestDate}T23:59:59.999Z`),
+                },
+            },
+            select: {
+                flightNumber: true,
+                departureDate: true,
+            },
+        }),
+    ]);
+
+    return {
+        flights,
+        nearbyDates: findNearbyOperatingDates(
+            schedules,
+            departureDateStr,
+            now,
+            cancelledFlights,
+        ),
+    };
 }
 
 export async function getFlightRoutesAction() {

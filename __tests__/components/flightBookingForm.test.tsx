@@ -13,6 +13,11 @@ jest.mock('@/app/actions', () => ({
 const mockSearch = searchFlightsAction as jest.Mock;
 const mockBook = bookFlightAction as jest.Mock;
 
+const searchSuccess = (flights: unknown[], nearbyDates: string[] = []) => ({
+    flights,
+    nearbyDates,
+});
+
 const routes = [
     { from: 'Seattle, USA', to: 'Detroit, USA', nextOperatingDate: '2026-07-15' },
     { from: 'Seattle, USA', to: 'Tokyo, Japan', nextOperatingDate: '2026-07-16' },
@@ -158,7 +163,7 @@ describe('FlightBookingForm', () => {
     });
 
     it('searches using the selected origin and destination', async () => {
-        mockSearch.mockResolvedValue(mockFlights);
+        mockSearch.mockResolvedValue(searchSuccess(mockFlights));
 
         renderForm();
         fireEvent.click(screen.getByText('Find your trip'));
@@ -254,8 +259,10 @@ describe('FlightBookingForm', () => {
         expect(mockSearch).not.toHaveBeenCalled();
     });
 
-    it('shows a no-results message when no flights match the route', async () => {
-        mockSearch.mockResolvedValue([]);
+    it('searches a suggested nearby date when no flights match the exact date', async () => {
+        mockSearch
+            .mockResolvedValueOnce(searchSuccess([], ['2026-07-15', '2026-07-17']))
+            .mockResolvedValueOnce(searchSuccess(mockFlights));
 
         renderForm();
         fireEvent.click(screen.getByText('Find your trip'));
@@ -263,6 +270,49 @@ describe('FlightBookingForm', () => {
         await waitFor(() => {
             expect(screen.getByText(/No flights found/i)).toBeInTheDocument();
         });
+        expect(screen.queryByText('Available Flights')).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Wed, Jul 15' }));
+
+        await waitFor(() => {
+            expect(screen.getByText('Available Flights')).toBeInTheDocument();
+        });
+        expect(screen.getByRole('heading', { name: 'Available Flights' })).toHaveFocus();
+        expect(mockSearch).toHaveBeenLastCalledWith(
+            'Seattle, USA',
+            'Detroit, USA',
+            '2026-07-15',
+            '2026-07-22',
+        );
+    });
+
+    it('removes nearby suggestions when the route changes', async () => {
+        mockSearch.mockResolvedValue(searchSuccess([], ['2026-07-15', '2026-07-17']));
+
+        renderForm();
+        fireEvent.click(screen.getByText('Find your trip'));
+        expect(await screen.findByLabelText('Nearby operating dates')).toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText('From'), { target: { value: 'New York, USA' } });
+
+        expect(screen.queryByLabelText('Nearby operating dates')).not.toBeInTheDocument();
+    });
+
+    it('discards a stale search response after the criteria change', async () => {
+        let resolveSearch: (result: ReturnType<typeof searchSuccess>) => void = () => undefined;
+        mockSearch.mockReturnValue(new Promise((resolve) => {
+            resolveSearch = resolve;
+        }));
+
+        renderForm();
+        fireEvent.click(screen.getByText('Find your trip'));
+        fireEvent.change(screen.getByLabelText('To'), { target: { value: 'Tokyo, Japan' } });
+
+        await act(async () => {
+            resolveSearch(searchSuccess([], ['2026-07-15', '2026-07-17']));
+        });
+
+        expect(screen.queryByLabelText('Nearby operating dates')).not.toBeInTheDocument();
         expect(screen.queryByText('Available Flights')).not.toBeInTheDocument();
     });
 
@@ -309,7 +359,7 @@ describe('FlightBookingForm', () => {
     });
 
     it('redirects to the book page when "Book Now" is clicked', async () => {
-        mockSearch.mockResolvedValue(mockFlights);
+        mockSearch.mockResolvedValue(searchSuccess(mockFlights));
 
         renderForm();
         fireEvent.click(screen.getByText('Find your trip'));
@@ -346,7 +396,7 @@ describe('FlightBookingForm', () => {
     });
 
     it('filters out cancelled flights and exposes interactive price, airline and sorting controls', async () => {
-        mockSearch.mockResolvedValue(mockEnhancedFlights);
+        mockSearch.mockResolvedValue(searchSuccess(mockEnhancedFlights));
 
         renderForm();
         fireEvent.click(screen.getByText('Find your trip'));
