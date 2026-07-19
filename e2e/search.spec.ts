@@ -20,13 +20,29 @@ test.describe('Flight search', () => {
     const returnDate = page.getByLabel('Return');
     const form = page.locator('form');
     const today = new Date().toISOString().slice(0, 10);
+    const latest = new Date(`${today}T00:00:00.000Z`);
+    latest.setUTCDate(latest.getUTCDate() + 365);
+    const latestString = latest.toISOString().slice(0, 10);
+    const beyondLatest = new Date(latest);
+    beyondLatest.setUTCDate(beyondLatest.getUTCDate() + 1);
+    const beyondLatestString = beyondLatest.toISOString().slice(0, 10);
     const yesterday = new Date(`${today}T00:00:00.000Z`);
     yesterday.setUTCDate(yesterday.getUTCDate() - 1);
     const yesterdayString = yesterday.toISOString().slice(0, 10);
     const validDeparture = await departure.inputValue();
 
     await expect(departure).toHaveAttribute('min', today);
+    await expect(departure).toHaveAttribute('max', latestString);
     await expect(returnDate).toHaveAttribute('min', validDeparture);
+    await expect(returnDate).toHaveAttribute('max', latestString);
+
+    await departure.fill(beyondLatestString);
+    await form.evaluate((element) => {
+      element.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    await expect(page.getByRole('alert').filter({
+      hasText: 'Departure date cannot be more than 365 days in advance.',
+    })).toBeVisible();
 
     await departure.fill(yesterdayString);
     await form.evaluate((element) => {

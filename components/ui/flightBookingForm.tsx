@@ -1,17 +1,25 @@
 "use client"
 
 import * as React from 'react'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { searchFlightsAction } from '@/app/actions'
 import { Flight } from '@prisma/client'
 import { isActionValidationFailure } from '@/lib/actionResult'
 import type { FlightRoute } from '@/lib/flightSearch'
-import { todayIsoDate } from '@/lib/dates'
+import {
+    DEPARTURE_AFTER_BOOKING_WINDOW_MESSAGE,
+    RETURN_AFTER_BOOKING_WINDOW_MESSAGE,
+    addDaysToIsoDate,
+    bookingWindowIsoDates,
+    earliestBookableDateIso,
+    latestBookableDateIso,
+} from '@/lib/dates'
 
 interface FlightBookingFormProps {
     routes?: FlightRoute[];
     minimumDepartureDate?: string;
+    maximumDepartureDate?: string;
 }
 
 type BookingState = {
@@ -24,18 +32,29 @@ type BookingState = {
 const DEPARTURE_REQUIRED_WITH_RETURN_MESSAGE =
     'Departure date is required when a return date is provided.';
 
-function addDaysToIsoDate(dateString: string, days: number): string {
-    if (!dateString) return '';
+function clampToMaximumDate(dateString: string, maximumDate: string): string {
+    return dateString && dateString > maximumDate ? maximumDate : dateString;
+}
 
-    const date = new Date(`${dateString}T00:00:00.000Z`);
-    date.setUTCDate(date.getUTCDate() + days);
-    return date.toISOString().slice(0, 10);
+function millisecondsUntilNextUtcDay(referenceDate = new Date()): number {
+    const nextUtcDay = Date.UTC(
+        referenceDate.getUTCFullYear(),
+        referenceDate.getUTCMonth(),
+        referenceDate.getUTCDate() + 1,
+    );
+    return nextUtcDay - referenceDate.getTime();
 }
 
 const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     routes = [],
-    minimumDepartureDate = todayIsoDate(),
+    minimumDepartureDate = earliestBookableDateIso(),
+    maximumDepartureDate = latestBookableDateIso(),
 }) => {
+    const [bookingWindow, setBookingWindow] = useState({
+        earliestDate: minimumDepartureDate,
+        latestDate: maximumDepartureDate,
+    });
+    const latestBookingDateRef = useRef(maximumDepartureDate);
     // Origins are the distinct departure cities; destinations depend on the
     // selected origin so only reachable routes can be chosen.
     const origins = useMemo(() => Array.from(new Set(routes.map((r) => r.from))), [routes]);
@@ -48,7 +67,12 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     const initialDepartureDate = routes[0]?.nextOperatingDate ?? '';
     const [departureDate, setDepartureDate] = useState<string>(initialDepartureDate);
     const [returnDate, setReturnDate] = useState<string>(
-        addDaysToIsoDate(initialDepartureDate, 7)
+        initialDepartureDate
+            ? clampToMaximumDate(
+                addDaysToIsoDate(initialDepartureDate, 7),
+                bookingWindow.latestDate
+            )
+            : ''
     );
     const [flightClass, setFlightClass] = useState('economy');
     const [isOneWay, setIsOneWay] = useState(false);
@@ -81,10 +105,17 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         setSearchResults(null);
         setBookingState({ status: 'idle' });
 
-        if (departureDate && departureDate < minimumDepartureDate) {
+        if (departureDate && departureDate < bookingWindow.earliestDate) {
             setBookingState({
                 status: 'error',
                 message: 'Departure date cannot be in the past.',
+            });
+            return;
+        }
+        if (departureDate && departureDate > bookingWindow.latestDate) {
+            setBookingState({
+                status: 'error',
+                message: DEPARTURE_AFTER_BOOKING_WINDOW_MESSAGE,
             });
             return;
         }
@@ -100,6 +131,14 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
             setBookingState({
                 status: 'error',
                 message: 'Return date cannot be before departure date.',
+                clearOnOneWay: true,
+            });
+            return;
+        }
+        if (!isOneWay && returnDate && returnDate > bookingWindow.latestDate) {
+            setBookingState({
+                status: 'error',
+                message: RETURN_AFTER_BOOKING_WINDOW_MESSAGE,
                 clearOnOneWay: true,
             });
             return;
@@ -150,7 +189,33 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     }, [fromLocation, routes, toLocation]);
 
     useEffect(() => {
-        setReturnDate(isOneWay ? '' : addDaysToIsoDate(departureDate, 7));
+        const currentBookingWindow = bookingWindowIsoDates();
+        if (
+            currentBookingWindow.earliestDate !== bookingWindow.earliestDate
+            || currentBookingWindow.latestDate !== bookingWindow.latestDate
+        ) {
+            latestBookingDateRef.current = currentBookingWindow.latestDate;
+            setBookingWindow(currentBookingWindow);
+        }
+
+        const rolloverTimer = window.setTimeout(() => {
+            const nextBookingWindow = bookingWindowIsoDates();
+            latestBookingDateRef.current = nextBookingWindow.latestDate;
+            setBookingWindow(nextBookingWindow);
+        }, millisecondsUntilNextUtcDay() + 1);
+
+        return () => window.clearTimeout(rolloverTimer);
+    }, [bookingWindow.earliestDate, bookingWindow.latestDate]);
+
+    useEffect(() => {
+        const proposedReturnDate = departureDate
+            ? addDaysToIsoDate(departureDate, 7)
+            : '';
+        setReturnDate(
+            isOneWay
+                ? ''
+                : clampToMaximumDate(proposedReturnDate, latestBookingDateRef.current)
+        );
     }, [departureDate, isOneWay]);
 
     // Helper to parse price string to number safely (handles $ and commas)
@@ -296,7 +361,8 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                             type="date"
                             id="depart"
                             name="depart"
-                            min={minimumDepartureDate}
+                            min={bookingWindow.earliestDate}
+                            max={bookingWindow.latestDate}
                             value={departureDate}
                             onChange={e => setDepartureDate(e.target.value)}
                         />
@@ -310,7 +376,8 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                             id="returnDate"
                             name="returnDate"
                             className="w-full p-2 border border-gray-300 rounded text-lg"
-                            min={departureDate || minimumDepartureDate}
+                            min={departureDate || bookingWindow.earliestDate}
+                            max={bookingWindow.latestDate}
                             value={returnDate}
                             onChange={(e) => setReturnDate(e.target.value)}
                             disabled={isOneWay}

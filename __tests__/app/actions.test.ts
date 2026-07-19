@@ -296,6 +296,41 @@ describe('searchFlightsAction', () => {
         expect(mockGenerateFlightsForDate).not.toHaveBeenCalled();
         expect(mockedFlightFindMany).not.toHaveBeenCalled();
     });
+
+    it('rejects travel beyond the booking window before database access', async () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-07-14T12:00:00.000Z'));
+
+        await expect(searchFlightsAction(
+            'Seattle, USA',
+            'Detroit, USA',
+            '2027-07-15',
+        )).resolves.toMatchObject({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                fields: {
+                    departureDate: ['Departure date cannot be more than 365 days in advance.'],
+                },
+            },
+        });
+        await expect(searchFlightsAction(
+            'Seattle, USA',
+            'Detroit, USA',
+            '2027-07-14',
+            '2027-07-15',
+        )).resolves.toMatchObject({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                fields: {
+                    returnDate: ['Return date cannot be more than 365 days in advance.'],
+                },
+            },
+        });
+
+        expect(mockGenerateFlightsForDate).not.toHaveBeenCalled();
+        expect(mockedFlightFindMany).not.toHaveBeenCalled();
+    });
 });
 
 describe('getFlightRoutesAction', () => {

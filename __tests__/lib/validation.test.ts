@@ -262,6 +262,42 @@ describe('shared server validation schemas', () => {
         ]));
     });
 
+    it('accepts the booking-window boundary and rejects later travel', () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-07-14T12:00:00.000Z'));
+
+        expect(searchFlightsSchema.safeParse({
+            from: 'Seattle, USA',
+            to: 'Detroit, USA',
+            departureDate: '2027-07-14',
+            returnDate: '2027-07-14',
+        }).success).toBe(true);
+
+        const lateDeparture = searchFlightsSchema.safeParse({
+            from: 'Seattle, USA',
+            to: 'Detroit, USA',
+            departureDate: '2027-07-15',
+        });
+        const lateReturn = searchFlightsSchema.safeParse({
+            from: 'Seattle, USA',
+            to: 'Detroit, USA',
+            departureDate: '2027-07-14',
+            returnDate: '2027-07-15',
+        });
+
+        expect(lateDeparture.error?.issues).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                path: ['departureDate'],
+                message: 'Departure date cannot be more than 365 days in advance.',
+            }),
+        ]));
+        expect(lateReturn.error?.issues).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                path: ['returnDate'],
+                message: 'Return date cannot be more than 365 days in advance.',
+            }),
+        ]));
+    });
+
     it('covers exact city-guide and schedule boundaries', () => {
         const imagePrefix = 'data:image/png;base64,';
         const boundaryGuide = {

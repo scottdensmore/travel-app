@@ -2,7 +2,11 @@ import { z, ZodError, ZodType } from 'zod';
 import { validateSeatingLayout } from '@/lib/seatLayout';
 import { ActionValidationFailure } from '@/lib/actionResult';
 import { isValidAuthToken } from '@/lib/authTokenFormat';
-import { todayIsoDate } from '@/lib/dates';
+import {
+    DEPARTURE_AFTER_BOOKING_WINDOW_MESSAGE,
+    RETURN_AFTER_BOOKING_WINDOW_MESSAGE,
+    bookingWindowIsoDates,
+} from '@/lib/dates';
 
 export const MAX_MUTATION_BYTES = 1_000_000;
 export const MAX_REGISTRATION_BYTES = 16_384;
@@ -105,13 +109,23 @@ export const searchFlightsSchema = z.object({
     departureDate: isoDateSchema.optional(),
     returnDate: isoDateSchema.optional(),
 }).strict().superRefine(({ departureDate, returnDate }, context) => {
-    const today = todayIsoDate();
+    const {
+        earliestDate: earliestBookableDate,
+        latestDate: latestBookableDate,
+    } = bookingWindowIsoDates();
 
-    if (departureDate && departureDate < today) {
+    if (departureDate && departureDate < earliestBookableDate) {
         context.addIssue({
             code: 'custom',
             path: ['departureDate'],
             message: 'Departure date cannot be in the past.',
+        });
+    }
+    if (departureDate && departureDate > latestBookableDate) {
+        context.addIssue({
+            code: 'custom',
+            path: ['departureDate'],
+            message: DEPARTURE_AFTER_BOOKING_WINDOW_MESSAGE,
         });
     }
 
@@ -126,6 +140,13 @@ export const searchFlightsSchema = z.object({
             code: 'custom',
             path: ['returnDate'],
             message: 'Return date cannot be before departure date.',
+        });
+    }
+    if (returnDate && returnDate > latestBookableDate) {
+        context.addIssue({
+            code: 'custom',
+            path: ['returnDate'],
+            message: RETURN_AFTER_BOOKING_WINDOW_MESSAGE,
         });
     }
 });
