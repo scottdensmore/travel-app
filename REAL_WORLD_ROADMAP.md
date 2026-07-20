@@ -510,4 +510,4 @@ Add one row when work starts, becomes blocked, or completes.
 | 2026-07-17 | P1.1 | In progress | #46 | Rejected past departures and invalid return ordering in the UI and server, and excluded already-departed inventory from same-day results. Booking windows and later search slices remain. |
 | 2026-07-18 | P1.1 | In progress | #47 | Enforced an inclusive same-day through 365-day booking window for departures and returns in the UI and server. Nearby dates, URL state, and service states remain. |
 | 2026-07-18 | P1.1 | In progress | #48 | Suggested the nearest earlier and later operating dates for empty exact-date searches and made each suggestion searchable. URL state and service states remain. |
-| 2026-07-18 | P1.1 | In progress | Pending | Preserved route, dates, and trip type in shareable result URLs, restored results on refresh, and safely ignored invalid shared criteria. Service states remain. |
+| 2026-07-18 | P1.1 | In progress | #49 | Preserved route, dates, and trip type in shareable result URLs, restored results on refresh, and safely ignored invalid shared criteria. Service states remain. |
