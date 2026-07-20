@@ -1,12 +1,16 @@
 "use client"
 
 import * as React from 'react'
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { searchFlightsAction } from '@/app/actions'
 import { Flight } from '@prisma/client'
 import { isActionValidationFailure } from '@/lib/actionResult'
 import type { FlightRoute } from '@/lib/flightSearch'
+import {
+    buildFlightSearchUrl,
+    type FlightSearchCriteria,
+} from '@/lib/flightSearchUrl'
 import {
     DEPARTURE_AFTER_BOOKING_WINDOW_MESSAGE,
     RETURN_AFTER_BOOKING_WINDOW_MESSAGE,
@@ -20,6 +24,7 @@ interface FlightBookingFormProps {
     routes?: FlightRoute[];
     minimumDepartureDate?: string;
     maximumDepartureDate?: string;
+    initialSearch?: FlightSearchCriteria;
 }
 
 type BookingState = {
@@ -58,6 +63,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     routes = [],
     minimumDepartureDate = earliestBookableDateIso(),
     maximumDepartureDate = latestBookableDateIso(),
+    initialSearch,
 }) => {
     const [bookingWindow, setBookingWindow] = useState({
         earliestDate: minimumDepartureDate,
@@ -66,28 +72,43 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     const latestBookingDateRef = useRef(maximumDepartureDate);
     const resultsHeadingRef = useRef<HTMLHeadingElement>(null);
     const searchRequestIdRef = useRef(0);
+    const restoredSearchStartedRef = useRef(false);
     // Origins are the distinct departure cities; destinations depend on the
     // selected origin so only reachable routes can be chosen.
     const origins = useMemo(() => Array.from(new Set(routes.map((r) => r.from))), [routes]);
-    const [fromLocation, setFromLocation] = useState(origins[0] ?? '');
+    const [fromLocation, setFromLocation] = useState(
+        initialSearch?.from ?? origins[0] ?? ''
+    );
     const destinations = useMemo(
         () => routes.filter((r) => r.from === fromLocation).map((r) => r.to),
         [routes, fromLocation]
     );
-    const [toLocation, setToLocation] = useState(destinations[0] ?? '');
-    const initialDepartureDate = routes[0]?.nextOperatingDate ?? '';
+    const [toLocation, setToLocation] = useState(
+        initialSearch?.to ?? destinations[0] ?? ''
+    );
+    const initialDepartureDate = initialSearch?.departureDate
+        ?? routes.find(
+            ({ from, to }) => from === fromLocation && to === toLocation
+        )?.nextOperatingDate
+        ?? '';
     const [departureDate, setDepartureDate] = useState<string>(initialDepartureDate);
     const [returnDate, setReturnDate] = useState<string>(
-        initialDepartureDate
+        initialSearch?.returnDate
+        ?? (initialDepartureDate
             ? clampToMaximumDate(
                 addDaysToIsoDate(initialDepartureDate, 7),
                 bookingWindow.latestDate
             )
-            : ''
+            : '')
     );
     const [flightClass, setFlightClass] = useState('economy');
-    const [isOneWay, setIsOneWay] = useState(false);
+    const [isOneWay, setIsOneWay] = useState(
+        initialSearch?.tripType === 'one-way'
+    );
+    const previousRouteDefaultsRef = useRef({ fromLocation, toLocation });
+    const previousReturnDefaultsRef = useRef({ departureDate, isOneWay });
     const [isSearching, setIsSearching] = useState(false);
+    const [isSearchReady, setIsSearchReady] = useState(false);
     const [searchResults, setSearchResults] = useState<Flight[] | null>(null);
     const [nearbyDates, setNearbyDates] = useState<string[]>([]);
     const [bookingState, setBookingState] = useState<BookingState>({ status: 'idle' });
@@ -122,9 +143,9 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         }
     };
 
-    const performSearch = async (
-        selectedDepartureDate: string,
-        selectedReturnDate: string,
+    const performSearch = useCallback(async (
+        criteria: FlightSearchCriteria,
+        updateUrl = true,
     ) => {
         const requestId = searchRequestIdRef.current + 1;
         searchRequestIdRef.current = requestId;
@@ -135,10 +156,10 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         setIsSearching(true);
         try {
             const results = await searchFlightsAction(
-                fromLocation,
-                toLocation,
-                selectedDepartureDate,
-                isOneWay ? undefined : selectedReturnDate,
+                criteria.from,
+                criteria.to,
+                criteria.departureDate,
+                criteria.tripType === 'one-way' ? undefined : criteria.returnDate,
             );
             if (requestId !== searchRequestIdRef.current) return;
             if (isActionValidationFailure(results)) {
@@ -153,6 +174,13 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                 });
                 return;
             }
+            if (updateUrl) {
+                window.history.replaceState(
+                    null,
+                    '',
+                    buildFlightSearchUrl(criteria, window.location.pathname),
+                );
+            }
             setSearchResults(results.flights);
             setNearbyDates(results.nearbyDates);
         } catch (error) {
@@ -164,7 +192,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                 setIsSearching(false);
             }
         }
-    };
+    }, []);
 
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -213,7 +241,13 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
             return;
         }
 
-        await performSearch(departureDate, returnDate);
+        await performSearch({
+            from: fromLocation,
+            to: toLocation,
+            departureDate,
+            returnDate: isOneWay ? '' : returnDate,
+            tripType: isOneWay ? 'one-way' : 'round-trip',
+        });
     };
 
     const handleNearbyDateSearch = async (suggestedDate: string) => {
@@ -225,7 +259,13 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
             );
         setDepartureDate(suggestedDate);
         setReturnDate(suggestedReturnDate);
-        await performSearch(suggestedDate, suggestedReturnDate);
+        await performSearch({
+            from: fromLocation,
+            to: toLocation,
+            departureDate: suggestedDate,
+            returnDate: suggestedReturnDate,
+            tripType: isOneWay ? 'one-way' : 'round-trip',
+        });
     };
 
     // When the origin changes, keep the destination valid for the new origin.
@@ -236,6 +276,13 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     }, [destinations, toLocation]);
 
     useEffect(() => {
+        const previousRoute = previousRouteDefaultsRef.current;
+        if (
+            previousRoute.fromLocation === fromLocation
+            && previousRoute.toLocation === toLocation
+        ) return;
+        previousRouteDefaultsRef.current = { fromLocation, toLocation };
+
         const route = routes.find(
             ({ from, to }) => from === fromLocation && to === toLocation
         );
@@ -264,6 +311,13 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     }, [bookingWindow.earliestDate, bookingWindow.latestDate]);
 
     useEffect(() => {
+        const previousDefaults = previousReturnDefaultsRef.current;
+        if (
+            previousDefaults.departureDate === departureDate
+            && previousDefaults.isOneWay === isOneWay
+        ) return;
+        previousReturnDefaultsRef.current = { departureDate, isOneWay };
+
         const proposedReturnDate = departureDate
             ? addDaysToIsoDate(departureDate, 7)
             : '';
@@ -273,6 +327,16 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                 : clampToMaximumDate(proposedReturnDate, latestBookingDateRef.current)
         );
     }, [departureDate, isOneWay]);
+
+    useEffect(() => {
+        if (!initialSearch || restoredSearchStartedRef.current) return;
+        restoredSearchStartedRef.current = true;
+        void performSearch(initialSearch, false);
+    }, [initialSearch, performSearch]);
+
+    useEffect(() => {
+        setIsSearchReady(true);
+    }, []);
 
     useEffect(() => {
         if (searchResults && searchResults.length > 0) {
@@ -482,7 +546,11 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     };
 
     return (
-        <div className="page-container home" style={{ minHeight: '100vh', padding: '40px 20px' }}>
+        <div
+            className="page-container home"
+            data-search-ready={isSearchReady ? 'true' : 'false'}
+            style={{ minHeight: '100vh', padding: '40px 20px' }}
+        >
             <div className="content" style={{
                 display: 'flex',
                 width: '100%',
