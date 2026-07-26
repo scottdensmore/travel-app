@@ -66,7 +66,9 @@ describe('production dependency policy', () => {
     });
 
     it('pins reviewed compatibility overrides for vulnerable legacy chains', () => {
+        expect(packageJson.overrides?.['next-auth']?.['@auth/core']).toBe('0.41.3');
         expect(packageJson.overrides?.['next-auth']?.uuid).toBe('^11.1.1');
+        expect(packageJson.overrides?.next?.sharp).toBe('^0.35.3');
         expect(packageJson.overrides?.['react-simple-maps']).toEqual({
             'd3-geo': '^3.1.1',
             'd3-selection': '^3.0.0',
@@ -74,7 +76,7 @@ describe('production dependency policy', () => {
         });
         expect(packageJson.overrides?.['d3-color']).toBe('^3.1.0');
         expect(packageJson.overrides?.['d3-transition']).toBe('^3.0.1');
-        expect(packageJson.overrides?.postcss).toBe('^8.5.15');
+        expect(packageJson.overrides?.postcss).toBe('^8.5.18');
     });
 
     it('keeps test and build tooling out of production dependencies', () => {
