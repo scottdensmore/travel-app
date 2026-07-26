@@ -401,7 +401,64 @@ describe('FlightBookingForm', () => {
         fireEvent.click(screen.getByText('Find your trip'));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Departure date is invalid.');
+        expect(screen.queryByRole('button', { name: 'Retry search' })).not.toBeInTheDocument();
         expect(screen.queryByText('Available Flights')).not.toBeInTheDocument();
+    });
+
+    it('announces search progress and prevents duplicate submissions while pending', async () => {
+        let resolveSearch: (result: ReturnType<typeof searchSuccess>) => void = () => undefined;
+        mockSearch.mockReturnValue(new Promise((resolve) => {
+            resolveSearch = resolve;
+        }));
+
+        renderForm();
+        const submitButton = screen.getByRole('button', { name: 'Find your trip' });
+        fireEvent.click(submitButton);
+
+        expect(await screen.findByRole('status')).toHaveTextContent('Searching for flights');
+        expect(screen.getByRole('button', { name: 'Searching...' })).toBeDisabled();
+        fireEvent.click(screen.getByRole('button', { name: 'Searching...' }));
+        expect(mockSearch).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+            resolveSearch(searchSuccess(mockFlights));
+        });
+
+        await waitFor(() => {
+            expect(screen.queryByRole('status')).not.toBeInTheDocument();
+        });
+    });
+
+    it('offers a retry after a service failure using the failed search criteria', async () => {
+        mockSearch
+            .mockRejectedValueOnce(new Error('Database unavailable'))
+            .mockResolvedValueOnce(searchSuccess(mockFlights));
+
+        renderForm();
+        fireEvent.change(screen.getByLabelText('To'), { target: { value: 'Tokyo, Japan' } });
+        await waitFor(() => {
+            expect(screen.getByLabelText('Depart')).toHaveValue('2026-07-16');
+            expect(screen.getByLabelText('Return')).toHaveValue('2026-07-23');
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Find your trip' }));
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent('Unable to search for flights right now.');
+        const retryButton = screen.getByRole('button', { name: 'Retry search' });
+        fireEvent.click(retryButton);
+
+        await waitFor(() => {
+            expect(screen.getByRole('heading', { name: 'Available Flights' })).toBeInTheDocument();
+        });
+        expect(mockSearch).toHaveBeenCalledTimes(2);
+        expect(mockSearch).toHaveBeenNthCalledWith(
+            2,
+            'Seattle, USA',
+            'Tokyo, Japan',
+            '2026-07-16',
+            '2026-07-23',
+        );
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
 
     it('preserves a displayed departure error when the server also reports a return error', async () => {

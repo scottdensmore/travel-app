@@ -32,6 +32,7 @@ type BookingState = {
     message?: string;
     flightId?: number;
     clearOnOneWay?: boolean;
+    retryCriteria?: FlightSearchCriteria;
 };
 
 const DEPARTURE_REQUIRED_WITH_RETURN_MESSAGE =
@@ -125,6 +126,11 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         setSearchResults((currentResults) => (
             currentResults?.length === 0 ? null : currentResults
         ));
+        setBookingState((currentState) => (
+            currentState.status === 'error' && currentState.retryCriteria
+                ? { status: 'idle' }
+                : currentState
+        ));
     };
 
     const handleTripTypeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -134,7 +140,9 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         // Clear only validation that depends on a return date, which no longer
         // applies once one-way is selected. Other errors remain valid.
         setBookingState((prev) => (
-            isChangingToOneWay && prev.status === 'error' && prev.clearOnOneWay
+            prev.status === 'error' && prev.retryCriteria
+                ? { status: 'idle' }
+                : isChangingToOneWay && prev.status === 'error' && prev.clearOnOneWay
                 ? { status: 'idle' }
                 : prev
         ));
@@ -183,9 +191,13 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
             }
             setSearchResults(results.flights);
             setNearbyDates(results.nearbyDates);
-        } catch (error) {
+        } catch {
             if (requestId === searchRequestIdRef.current) {
-                setBookingState({ status: 'error', message: 'Unable to search for flights right now.' });
+                setBookingState({
+                    status: 'error',
+                    message: 'Unable to search for flights right now.',
+                    retryCriteria: criteria,
+                });
             }
         } finally {
             if (requestId === searchRequestIdRef.current) {
@@ -266,6 +278,11 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
             returnDate: suggestedReturnDate,
             tripType: isOneWay ? 'one-way' : 'round-trip',
         });
+    };
+
+    const handleRetrySearch = () => {
+        if (bookingState.status !== 'error' || !bookingState.retryCriteria) return;
+        void performSearch(bookingState.retryCriteria);
     };
 
     // When the origin changes, keep the destination valid for the new origin.
@@ -425,7 +442,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
 
     const renderSearchForm = () => {
         return (
-            <form onSubmit={handleSearch}>
+            <form onSubmit={handleSearch} aria-busy={isSearching}>
                 <div className="trip">
                     <nav>
                         <ul>
@@ -826,9 +843,48 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                         <span>{bookingState.message}</span>
                     </div>
                 )}
+                {isSearching && (
+                    <div
+                        role="status"
+                        aria-live="polite"
+                        aria-atomic="true"
+                        style={{
+                            marginTop: '2rem',
+                            backgroundColor: 'rgba(192, 132, 252, 0.1)',
+                            border: '1px solid rgba(192, 132, 252, 0.7)',
+                            color: '#e9d5ff',
+                            padding: '12px 16px',
+                            borderRadius: '8px',
+                            width: '100%',
+                            maxWidth: '800px',
+                            textAlign: 'center',
+                        }}
+                    >
+                        Searching for flights…
+                    </div>
+                )}
                 {bookingState.status === 'error' && (
-                    <div style={{ marginTop: '2rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', color: '#ef4444', padding: '12px 16px', borderRadius: '8px', width: '100%', maxWidth: '800px', textAlign: 'center' }} role="alert">
-                        <span>{bookingState.message}</span>
+                    <div style={{ marginTop: '2rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', color: '#fca5a5', padding: '12px 16px', borderRadius: '8px', width: '100%', maxWidth: '800px', textAlign: 'center' }} role="alert">
+                        <p style={{ margin: 0 }}>{bookingState.message}</p>
+                        {bookingState.retryCriteria && (
+                            <button
+                                type="button"
+                                onClick={handleRetrySearch}
+                                disabled={isSearching}
+                                style={{
+                                    marginTop: '12px',
+                                    border: '1px solid #fca5a5',
+                                    borderRadius: '8px',
+                                    background: 'rgba(239, 68, 68, 0.12)',
+                                    color: '#fff',
+                                    padding: '8px 14px',
+                                    cursor: 'pointer',
+                                    fontWeight: 600,
+                                }}
+                            >
+                                Retry search
+                            </button>
+                        )}
                     </div>
                 )}
             </div>
