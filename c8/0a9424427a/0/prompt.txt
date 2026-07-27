@@ -1,0 +1,33 @@
+ok I opened hooks
+
+---
+
+<task-notification>
+<task-id>bt3ef4tqy</task-id>
+<tool-use-id>toolu_01S6wFBGVw3S2vQwhhV6Rw5d</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/396aa3c6-6933-4584-9084-9f5e4f3a6519/tasks/bt3ef4tqy.output</output-file>
+<status>completed</status>
+<summary>Background command "Watch CI on flake fix" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+ok I opened hooks. what is next?
+
+---
+
+<task-notification>
+<task-id>bz14mfdhi</task-id>
+<tool-use-id>toolu_01XQMVffc6g77KqR5fYmXM2A</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/396aa3c6-6933-4584-9084-9f5e4f3a6519/tasks/bz14mfdhi.output</output-file>
+<status>completed</status>
+<summary>Background command "Watch CI on updated PR 57" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+you can do docker componse down on that
+
+---
+
+Since the symlinks for CLAUDE.md and AGENTS.md will fail on windows. lets just have CLAUDE.md to AGENTS.md. Since the '#' will break this, lets add a CI check to make sure only things go into AGENTS.md and not CLAUDE.md
