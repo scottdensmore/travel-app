@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "650ac8d819e2",
+  "strategy": "manual-commit",
+  "branch": "fix/verify-subagent-build-step",
+  "checkpoints_count": 5,
+  "files_touched": [
+    ".agents/agents/verify/agent.json"
+  ],
+  "sessions": [
+    {
+      "metadata": "/65/0ac8d819e2/0/metadata.json",
+      "transcript": "/65/0ac8d819e2/0/full.jsonl",
+      "compact_transcript": "/65/0ac8d819e2/0/transcript.jsonl",
+      "content_hash": "/65/0ac8d819e2/0/content_hash.txt",
+      "prompt": "/65/0ac8d819e2/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 40,
+    "cache_creation_tokens": 10696,
+    "cache_read_tokens": 1958810,
+    "output_tokens": 9073,
+    "api_call_count": 21
+  }
+}
