@@ -32,6 +32,33 @@ function createClassicImageArchive(files: Record<string, string>): {
     return { archive, root };
 }
 
+/**
+ * A `tar` that lists an archive normally but refuses to extract its contents,
+ * so the scanner meets a layer it cannot read rather than one that is clean.
+ */
+function createUnextractableTarShim(root: string): string {
+    const realTar = spawnSync('sh', ['-c', 'command -v tar'], { encoding: 'utf8' }).stdout.trim();
+    expect(realTar).not.toBe('');
+
+    const binDirectory = path.join(root, 'shim-bin');
+    const shim = path.join(binDirectory, 'tar');
+    fs.mkdirSync(binDirectory, { recursive: true });
+    fs.writeFileSync(shim, [
+        '#!/bin/sh',
+        'for arg in "$@"; do',
+        '  if [ "$arg" = "-xOf" ]; then',
+        '    echo "simulated extraction failure" >&2',
+        '    exit 2',
+        '  fi',
+        'done',
+        `exec ${realTar} "$@"`,
+        '',
+    ].join('\n'));
+    fs.chmodSync(shim, 0o755);
+
+    return binDirectory;
+}
+
 describe('image layer archive scanner', () => {
     const temporaryDirectories: string[] = [];
 
@@ -72,6 +99,23 @@ describe('image layer archive scanner', () => {
 
         expect(result.status).not.toBe(0);
         expect(result.stderr).toContain('Secret-scan sentinel found in an image layer.');
+    });
+
+    it('fails closed when a layer cannot be read for sentinel scanning', () => {
+        // A layer whose contents cannot be read has not been shown to be clean.
+        // Reporting success here would let an unscanned layer ship.
+        const sentinel = 'unreadable-layer-sentinel';
+        const fixture = createClassicImageArchive({ 'app/bundle.js': 'console.log("ok");' });
+        temporaryDirectories.push(fixture.root);
+        const binDirectory = createUnextractableTarShim(fixture.root);
+
+        const result = spawnSync('sh', [scanner, fixture.archive, sentinel], {
+            encoding: 'utf8',
+            env: { ...process.env, PATH: `${binDirectory}:${process.env.PATH}` },
+        });
+
+        expect(result.status).not.toBe(0);
+        expect(result.stderr).toContain('Unable to read layer contents');
     });
 
     it('fails closed when an archive contains no readable layers', () => {

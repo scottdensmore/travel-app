@@ -14,6 +14,7 @@ fi
 
 archive="$(mktemp)"
 image_archive="$(mktemp)"
+archive_listing="$(mktemp)"
 container_id=""
 
 cleanup() {
@@ -22,6 +23,7 @@ cleanup() {
   fi
   rm -f "$archive"
   rm -f "$image_archive"
+  rm -f "$archive_listing"
 }
 
 trap cleanup EXIT HUP INT TERM
@@ -46,7 +48,14 @@ fi
 container_id="$($container_runtime create "$image")"
 "$container_runtime" export --output "$archive" "$container_id"
 
-if tar -tf "$archive" | grep -Eq '(^|/)\.env($|\.)'; then
+# Check tar's own status. Piping into grep would report a failed export as
+# "no environment file found", passing the check on an unreadable filesystem.
+if ! tar -tf "$archive" > "$archive_listing"; then
+  echo "Unable to list the exported container filesystem." >&2
+  exit 1
+fi
+
+if grep -Eq '(^|/)\.env($|\.)' "$archive_listing"; then
   echo "Environment file found in final container filesystem." >&2
   exit 1
 fi
@@ -59,7 +68,11 @@ if [ -n "$sentinel" ]; then
     exit 1
   fi
 
-  if "$container_runtime" image inspect "$image" | grep -F -q -- "$sentinel"; then
+  # Capture first so that set -e aborts on an inspect failure. Piped into grep,
+  # a failed inspect would read as "sentinel not found".
+  image_configuration="$("$container_runtime" image inspect "$image")"
+
+  if printf '%s\n' "$image_configuration" | grep -F -q -- "$sentinel"; then
     echo "Secret-scan sentinel found in image configuration." >&2
     exit 1
   fi
