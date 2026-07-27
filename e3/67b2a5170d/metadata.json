@@ -1,0 +1,24 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "e367b2a5170d",
+  "strategy": "manual-commit",
+  "branch": "feat/inventory-horizon-generator",
+  "checkpoints_count": 5,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/e3/67b2a5170d/0/metadata.json",
+      "transcript": "/e3/67b2a5170d/0/full.jsonl",
+      "compact_transcript": "/e3/67b2a5170d/0/transcript.jsonl",
+      "content_hash": "/e3/67b2a5170d/0/content_hash.txt",
+      "prompt": "/e3/67b2a5170d/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1182,
+    "cache_creation_tokens": 565031,
+    "cache_read_tokens": 64736707,
+    "output_tokens": 194470,
+    "api_call_count": 291
+  }
+}
