@@ -38,7 +38,13 @@ describe('passenger data protection', () => {
         const context = { passengerId: 'passenger-1', field: 'passportNumber' as const };
         const encrypted = encryptPassengerData('US123456', context, keys);
         const parts = encrypted.split(':');
-        parts[3] = `${parts[3].slice(0, -1)}${parts[3].endsWith('A') ? 'B' : 'A'}`;
+        // Flip a bit in the decoded ciphertext rather than rewriting the final
+        // base64url character. That character carries unused low bits, so
+        // swapping 'A' for 'B' there can decode to identical bytes and tamper
+        // with nothing, letting the decryption succeed.
+        const ciphertext = Buffer.from(parts[3], 'base64url');
+        ciphertext[0] ^= 0xff;
+        parts[3] = ciphertext.toString('base64url');
 
         expect(() => decryptPassengerData(parts.join(':'), context, keys))
             .toThrow('Unable to decrypt passenger data');
