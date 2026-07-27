@@ -1,0 +1,17 @@
+/claude-md-management:claude-md-improver
+
+---
+
+Ok. so everything you recommended will work for all coding agents?
+
+---
+
+Yes lets do that
+
+---
+
+Yes lets fix that in the source .env. That doesn't seem right to leave it in the agent.json
+
+---
+
+yep lets do that
