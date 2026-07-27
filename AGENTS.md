@@ -169,14 +169,9 @@ Chart and other browser-interactive components need `'use client'`.
   hardening work. The `Phase 1` through `Phase 5` milestones carry the priority
   order; work phases in order unless a later item is an explicit prerequisite
   for current work.
-- Reference the issue number in implementation plans and in the pull request,
-  and let the pull request close the issue once its acceptance criteria are
-  met.
-- Tick a task box only after verification passes. When a pull request delivers
-  part of an issue, comment with the pull request number and what remains,
-  rather than closing it.
-- GitHub CI is the source of truth for build, lint, type-check, test,
-  migration, audit, browser, and container status.
+- Reference the issue number in the pull request. When a pull request delivers
+  only part of an issue, comment with the number and what remains rather than
+  closing it.
 
 ## Containerization Fallback
 
