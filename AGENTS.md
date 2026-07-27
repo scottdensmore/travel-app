@@ -73,12 +73,12 @@ Chart and other browser-interactive components need `'use client'`.
    directly to `main`, and create the branch from the latest appropriate
    `main` state.
 
-3. **Choose a thin vertical slice.** Before implementing a roadmap item or
+3. **Choose a thin vertical slice.** Before implementing a tracked issue or
    feature, define the smallest end-to-end slice that can be reviewed, tested,
    shipped, and merged independently. Prefer one coherent user-visible or
-   operational outcome over a broad horizontal layer. If the next roadmap item
-   is too large for one pull request, split it into ordered slices and complete
-   only the current slice. Keep pull requests small enough for thorough review,
+   operational outcome over a broad horizontal layer. If the next issue is too
+   large for one pull request, split it into ordered slices and complete only
+   the current slice. Keep pull requests small enough for thorough review,
    reliable verification, and quick rollback.
 
 4. **Use test-driven development when behavior or structure is testable.**
@@ -163,18 +163,20 @@ Chart and other browser-interactive components need `'use client'`.
 - Treat warnings, flakes, skipped checks, and environment failures as findings
   that require an explicit resolution.
 
-## Roadmap Tracking
+## Issue Tracking
 
-- Use `REAL_WORLD_ROADMAP.md` as the source of truth for real-world hardening
-  work.
-- Reference the applicable roadmap item ID in implementation plans and pull
-  requests.
-- Check off an item only after its acceptance criteria are met and verification
-  passes.
-- Add the completion date, PR number, and a short note to the roadmap progress
-  log.
-- Include roadmap updates in the same reviewed state as the implementation
-  that completes them.
+- GitHub issues labelled `roadmap` are the source of truth for product
+  hardening work. The `Phase 1` through `Phase 5` milestones carry the priority
+  order; work phases in order unless a later item is an explicit prerequisite
+  for current work.
+- Reference the issue number in implementation plans and in the pull request,
+  and let the pull request close the issue once its acceptance criteria are
+  met.
+- Tick a task box only after verification passes. When a pull request delivers
+  part of an issue, comment with the pull request number and what remains,
+  rather than closing it.
+- GitHub CI is the source of truth for build, lint, type-check, test,
+  migration, audit, browser, and container status.
 
 ## Containerization Fallback
 
