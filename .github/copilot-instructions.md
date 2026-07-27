@@ -29,9 +29,10 @@ Next.js 16 App Router + Prisma/PostgreSQL + NextAuth. TypeScript strict, Tailwin
 
 ## Tracking work
 
-Record progress in `REAL_WORLD_ROADMAP.md` — reference the roadmap item ID in the PR and
-add a progress-log row when an item completes. Update `README.md` only when setup steps
-or user-facing features actually change.
+Product hardening work is tracked in GitHub issues labelled `roadmap`, grouped into
+`Phase 1` through `Phase 5` milestones. Reference the issue number in the PR and let the
+PR close the issue once its acceptance criteria are met. Update `README.md` only when
+setup steps or user-facing features actually change.
 
 Full workflow policy (TDD, review gates, commit and merge rules) is in
 [AGENTS.md](../AGENTS.md).

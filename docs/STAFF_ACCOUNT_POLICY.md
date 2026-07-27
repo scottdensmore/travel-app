@@ -15,7 +15,8 @@ request.
 
 TOTP improves resistance to password theft but is not phishing-resistant.
 Phishing-resistant authenticators, scoped staff permissions, and additional
-confirmation for privileged operations remain part of the P4.3 roadmap item.
+confirmation for privileged operations are tracked in
+[#85](https://github.com/scottdensmore/travel-app/issues/85), P4.3.
 
 ## Enrollment
 

@@ -58,7 +58,7 @@ describe('agent instruction files', () => {
             '## Code Style',
             '## Development Workflow',
             '## Testing Expectations',
-            '## Roadmap Tracking',
+            '## Issue Tracking',
         ]) {
             expect(agents).toContain(section);
         }
