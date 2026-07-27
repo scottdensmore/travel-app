@@ -83,6 +83,40 @@ image is not sufficient. Treat every value in that image as exposed.
    `scripts/verify-container-secrets.sh IMAGE` before promotion.
 7. Record the incident, impact assessment, remediation, and follow-up actions.
 
+## Incident record
+
+### 2026-06-26: a placeholder session secret was committed
+
+A placeholder `NEXTAUTH_SECRET` reached this public repository in `ff161ca`,
+inlined into the verify subagent's Playwright command in
+`.agents/agents/verify/agent.json`. The command was corrected to read
+configuration from `.env` in #55.
+
+**Impact assessment, 2026-07-26: inert.** No rotation was required.
+
+- The committed value is 29 characters. `lib/env.ts` has rejected a
+  `NEXTAUTH_SECRET` shorter than 32 characters since #34 on 2026-07-11, so the
+  value cannot start the application.
+- The repository has no deployments, no deployment environments, and no
+  configured repository secrets. The value never protected a running service.
+- `.dockerignore` excludes the agent directories, so the value never entered a
+  container image.
+- The exposure window was 2026-06-26 to 2026-07-11. The variable is consumed by
+  NextAuth session signing and by `createAuthRateLimitKey`, so a forged session
+  was the theoretical risk, and only within that window and only for an
+  environment that actually used the value. None did.
+
+**On history.** The value remains reachable in `ff161ca`. Rewriting published
+history was considered and declined: the value is unusable, the security
+benefit is nil, and the rewrite would change every later commit identifier for
+anyone holding a clone. Treat the string as a known, assessed, inert artifact
+rather than a live credential.
+
+**Recurrence.** `__tests__/security/committedSecrets.test.ts` fails the build
+when any tracked file assigns one of the secret variables to a literal. It
+covers the escaped quoting that hid the original value inside a JSON string,
+which is why no existing check caught it at the time.
+
 ## Reporting a vulnerability
 
 Do not open a public issue containing credentials, personal data, or exploit
