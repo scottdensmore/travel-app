@@ -1,0 +1,24 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "2b1ad318f4ca",
+  "strategy": "manual-commit",
+  "branch": "docs/trim-issue-tracking-section",
+  "checkpoints_count": 3,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/2b/1ad318f4ca/0/metadata.json",
+      "transcript": "/2b/1ad318f4ca/0/full.jsonl",
+      "compact_transcript": "/2b/1ad318f4ca/0/transcript.jsonl",
+      "content_hash": "/2b/1ad318f4ca/0/content_hash.txt",
+      "prompt": "/2b/1ad318f4ca/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1109,
+    "cache_creation_tokens": 526765,
+    "cache_read_tokens": 50582118,
+    "output_tokens": 166388,
+    "api_call_count": 252
+  }
+}
