@@ -98,6 +98,14 @@
     ]
   },
   "permissions": {
+    "allow": [
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git status:*)",
+      "Bash(git show:*)",
+      "Bash(git merge-base:*)"
+    ],
     "deny": [
       "Read(./.entire/metadata/**)"
     ]
