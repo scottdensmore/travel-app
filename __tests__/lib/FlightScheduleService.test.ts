@@ -188,6 +188,29 @@ describe('FlightScheduleService dynamic generator', () => {
         expect(result[0]).toEqual(concurrentFlight);
     });
 
+    it('reports whether each instance was created or already present', async () => {
+        const date = new Date('2026-06-25T12:00:00Z');
+        const schedule = {
+            id: 2,
+            flightNumber: 'CA202',
+            airline: 'Gemini Airways',
+            from: 'New York, USA',
+            to: 'London, UK',
+            departureTime: '19:30',
+            returnTime: null,
+            daysOfWeek: [4],
+            price: '$850'
+        };
+
+        mockedFlightScheduleFindMany.mockResolvedValue([schedule]);
+        mockedFlightFindFirst.mockResolvedValue(null);
+        mockedFlightCreate.mockImplementation(({ data }: any) => Promise.resolve({ id: 100, ...data }));
+
+        await expect(service.ensureFlightsForDate(date)).resolves.toEqual([
+            { flight: expect.objectContaining({ flightNumber: 'CA202' }), created: true }
+        ]);
+    });
+
     it('throws other errors encountered during flight instance creation', async () => {
         const date = new Date('2026-06-25T12:00:00Z');
         const mockSchedule = {
@@ -209,5 +232,82 @@ describe('FlightScheduleService dynamic generator', () => {
         mockedFlightCreate.mockRejectedValue(standardError);
 
         await expect(service.generateFlightsForDate(date)).rejects.toThrow('Connection failed');
+    });
+});
+
+describe('FlightScheduleService inventory horizon', () => {
+    let service: FlightScheduleService;
+
+    // A schedule that operates every day of the week, so each horizon day
+    // produces exactly one instance.
+    const dailySchedule = {
+        id: 7,
+        flightNumber: 'CA303',
+        airline: 'Gemini Airways',
+        from: 'Seattle, USA',
+        to: 'Detroit, USA',
+        departureTime: '08:00',
+        returnTime: null,
+        daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+        price: '$350'
+    };
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        service = new FlightScheduleService();
+        mockedFlightScheduleFindMany.mockResolvedValue([dailySchedule]);
+    });
+
+    it('fills every day of the requested horizon', async () => {
+        mockedFlightFindFirst.mockResolvedValue(null);
+        mockedFlightCreate.mockImplementation(({ data }: any) => Promise.resolve({ id: 1, ...data }));
+
+        const summary = await service.generateFlightsForHorizon(new Date('2026-06-25T12:00:00Z'), 3);
+
+        expect(mockedFlightScheduleFindMany).toHaveBeenCalledTimes(3);
+        expect(mockedFlightCreate).toHaveBeenCalledTimes(3);
+        expect(mockedFlightCreate.mock.calls.map(([{ data }]: any) => data.departureDate)).toEqual([
+            new Date('2026-06-25T08:00:00Z'),
+            new Date('2026-06-26T08:00:00Z'),
+            new Date('2026-06-27T08:00:00Z'),
+        ]);
+        expect(summary).toEqual({
+            fromDate: '2026-06-25',
+            throughDate: '2026-06-27',
+            days: 3,
+            created: 3,
+            alreadyPresent: 0,
+        });
+    });
+
+    it('creates nothing on a second run over the same horizon', async () => {
+        mockedFlightFindFirst.mockResolvedValue({ id: 1, flightNumber: 'CA303' });
+
+        const summary = await service.generateFlightsForHorizon(new Date('2026-06-25T12:00:00Z'), 3);
+
+        expect(mockedFlightCreate).not.toHaveBeenCalled();
+        expect(summary).toMatchObject({ created: 0, alreadyPresent: 3 });
+    });
+
+    it('anchors the horizon on the UTC day, not the time of day it runs', async () => {
+        mockedFlightFindFirst.mockResolvedValue({ id: 1 });
+
+        // A scheduler firing just before midnight UTC must still cover today.
+        const summary = await service.generateFlightsForHorizon(new Date('2026-06-25T23:59:59Z'), 2);
+
+        expect(summary).toMatchObject({ fromDate: '2026-06-25', throughDate: '2026-06-26' });
+    });
+
+    it('rejects a horizon that is not a positive number of days', async () => {
+        await expect(service.generateFlightsForHorizon(new Date('2026-06-25T12:00:00Z'), 0))
+            .rejects.toThrow('Horizon must cover at least one day.');
+        await expect(service.generateFlightsForHorizon(new Date('2026-06-25T12:00:00Z'), 1.5))
+            .rejects.toThrow('Horizon must cover at least one day.');
+    });
+
+    it('rejects a horizon longer than the bookable window', async () => {
+        await expect(service.generateFlightsForHorizon(new Date('2026-06-25T12:00:00Z'), 367))
+            .rejects.toThrow('Horizon cannot exceed 366 days.');
+        expect(mockedFlightScheduleFindMany).not.toHaveBeenCalled();
     });
 });
