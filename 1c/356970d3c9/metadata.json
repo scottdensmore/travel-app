@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "1c356970d3c9",
+  "strategy": "manual-commit",
+  "branch": "test/block-committed-secret-literals",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "__tests__/security/committedSecrets.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/1c/356970d3c9/0/metadata.json",
+      "transcript": "/1c/356970d3c9/0/full.jsonl",
+      "compact_transcript": "/1c/356970d3c9/0/transcript.jsonl",
+      "content_hash": "/1c/356970d3c9/0/content_hash.txt",
+      "prompt": "/1c/356970d3c9/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 36,
+    "cache_creation_tokens": 26140,
+    "cache_read_tokens": 2150968,
+    "output_tokens": 18983,
+    "api_call_count": 19
+  }
+}

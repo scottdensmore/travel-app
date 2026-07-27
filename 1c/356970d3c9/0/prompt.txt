@@ -1,0 +1,15 @@
+yep
+
+---
+
+<task-notification>
+<task-id>bu133iuzg</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/396aa3c6-6933-4584-9084-9f5e4f3a6519/tasks/bu133iuzg.output</output-file>
+<status>completed</status>
+<summary>Background command "Watch CI checks on PR 55" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+Lets firx that NEXTAUH_SECRET issue. What do you suggest about the CLAUDE.md file? That should also be in the Agents.md file because all coding agents use that.
