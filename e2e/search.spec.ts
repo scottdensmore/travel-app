@@ -211,4 +211,54 @@ test.describe('Flight search', () => {
     await expect(resultsHeading).toBeFocused();
     await expect(page.getByRole('link', { name: 'Book Now' }).first()).toBeVisible();
   });
+
+  test('A failed search can be retried with the same criteria', async ({ page }) => {
+    let releaseFailedSearch: () => void = () => undefined;
+    const holdFailedSearch = new Promise<void>((resolve) => {
+      releaseFailedSearch = resolve;
+    });
+    let hasFailedSearch = false;
+
+    await page.route('**/*', async (route) => {
+      const request = route.request();
+      if (
+        !hasFailedSearch
+        && request.method() === 'POST'
+        && request.headers()['next-action']
+      ) {
+        hasFailedSearch = true;
+        await holdFailedSearch;
+        await route.abort('failed');
+        return;
+      }
+      await route.continue();
+    });
+
+    await openSearchPage(page);
+    const from = await page.getByLabel('From', { exact: true }).inputValue();
+    const to = await page.getByLabel('To', { exact: true }).inputValue();
+    const departure = await page.getByLabel('Depart', { exact: true }).inputValue();
+    const returnDate = await page.getByLabel('Return', { exact: true }).inputValue();
+
+    await page.getByRole('button', { name: 'Find your trip' }).click();
+    await expect(page.getByRole('status')).toContainText('Searching for flights');
+    await expect(page.getByRole('button', { name: 'Searching...' })).toBeDisabled();
+
+    releaseFailedSearch();
+    await expect(page.getByRole('alert').filter({
+      hasText: 'Unable to search for flights right now.',
+    })).toBeVisible();
+    await page.getByRole('button', { name: 'Retry search' }).click();
+
+    await expect(page.getByRole('heading', { name: 'Available Flights' })).toBeVisible();
+    await expect.poll(() => {
+      const params = new URL(page.url()).searchParams;
+      return {
+        from: params.get('from'),
+        to: params.get('to'),
+        departure: params.get('depart'),
+        returnDate: params.get('return'),
+      };
+    }).toEqual({ from, to, departure, returnDate });
+  });
 });

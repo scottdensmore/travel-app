@@ -127,7 +127,11 @@ journey succeeds.
 - [x] Suggest the nearest earlier and later operating dates when no exact match
   exists.
 - [x] Preserve search criteria in URL parameters.
-- [ ] Add loading, empty, failure, retry, and degraded-service states.
+- [x] Add loading, empty, failure, and retry states for search.
+- [ ] Add degraded-service states once search has a dependency that can partially
+  fail (independent outbound/inbound legs in P1.2, airport timezone data in
+  P4.2). A single search either succeeds or fails today, so there is no partial
+  result to degrade to.
 - [ ] Base the earliest selectable date and the past-departure rule on the origin
   airport's local day once airport timezone data exists (interim: UTC via
   `todayIsoDate`; see P4.2). The already-departed filter already compares UTC
@@ -140,6 +144,8 @@ Acceptance criteria:
 - Search validation and nearby-date behavior are covered by unit and end-to-end
   tests.
 - Refreshing or sharing a results URL preserves the search.
+- A search in flight is announced to assistive technology and cannot be
+  submitted twice; a failed search can be retried with the same criteria.
 
 ### P1.2 Model round trips correctly
 
@@ -511,3 +517,4 @@ Add one row when work starts, becomes blocked, or completes.
 | 2026-07-18 | P1.1 | In progress | #47 | Enforced an inclusive same-day through 365-day booking window for departures and returns in the UI and server. Nearby dates, URL state, and service states remain. |
 | 2026-07-18 | P1.1 | In progress | #48 | Suggested the nearest earlier and later operating dates for empty exact-date searches and made each suggestion searchable. URL state and service states remain. |
 | 2026-07-18 | P1.1 | In progress | #49 | Preserved route, dates, and trip type in shareable result URLs, restored results on refresh, and safely ignored invalid shared criteria. Service states remain. |
+| 2026-07-26 | P1.1 | In progress | #53 | Announced in-flight searches to assistive technology, blocked duplicate submissions, and offered retry of a failed search with its original criteria. Degraded-service states and airport-local dates remain. |
