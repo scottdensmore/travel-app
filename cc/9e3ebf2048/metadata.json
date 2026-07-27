@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "cc9e3ebf2048",
+  "strategy": "manual-commit",
+  "branch": "docs/consolidate-agent-context",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "AGENTS.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/cc/9e3ebf2048/0/metadata.json",
+      "transcript": "/cc/9e3ebf2048/0/full.jsonl",
+      "compact_transcript": "/cc/9e3ebf2048/0/transcript.jsonl",
+      "content_hash": "/cc/9e3ebf2048/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 34,
+    "cache_creation_tokens": 25939,
+    "cache_read_tokens": 2694318,
+    "output_tokens": 19432,
+    "api_call_count": 19
+  }
+}
