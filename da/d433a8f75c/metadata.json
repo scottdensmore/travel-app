@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "dad433a8f75c",
+  "strategy": "manual-commit",
+  "branch": "docs/agent-instruction-files",
+  "checkpoints_count": 4,
+  "files_touched": [
+    ".agents/AGENTS.md",
+    "AGENTS.md",
+    "CLAUDE.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/da/d433a8f75c/0/metadata.json",
+      "transcript": "/da/d433a8f75c/0/full.jsonl",
+      "compact_transcript": "/da/d433a8f75c/0/transcript.jsonl",
+      "content_hash": "/da/d433a8f75c/0/content_hash.txt",
+      "prompt": "/da/d433a8f75c/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 700,
+    "cache_creation_tokens": 61699,
+    "cache_read_tokens": 2225125,
+    "output_tokens": 22468,
+    "api_call_count": 34
+  }
+}
