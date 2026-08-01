@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "27ba2b4432a0",
+  "strategy": "manual-commit",
+  "branch": "feat/booking-itinerary-legs",
+  "checkpoints_count": 14,
+  "files_touched": [
+    "__tests__/lib/FlightBookingService.test.ts",
+    "__tests__/lib/itineraryLegs.database.test.ts",
+    "e2e/booking-authority.spec.ts",
+    "lib/FlightBookingService.ts",
+    "prisma/migrations/20260801160000_add_itinerary_legs/migration.sql",
+    "prisma/schema.prisma"
+  ],
+  "sessions": [
+    {
+      "metadata": "/27/ba2b4432a0/0/metadata.json",
+      "transcript": "/27/ba2b4432a0/0/full.jsonl",
+      "compact_transcript": "/27/ba2b4432a0/0/transcript.jsonl",
+      "content_hash": "/27/ba2b4432a0/0/content_hash.txt",
+      "prompt": "/27/ba2b4432a0/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1757,
+    "cache_creation_tokens": 3682883,
+    "cache_read_tokens": 225857182,
+    "output_tokens": 402379,
+    "api_call_count": 598
+  }
+}
