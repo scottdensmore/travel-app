@@ -75,12 +75,13 @@ describe('PointsActivityService dynamic calculations', () => {
         expect(monthly[monthly.length - 1].points).toBe(1600);
     });
 
-    it('uses totalPrice in preference to flight.price and parses correctly', () => {
+    it('uses the booking total in preference to the flight price', () => {
         const mockBookingsWithTotalPrice: any[] = [
             {
                 id: 3,
                 createdAt: new Date('2026-03-10'),
                 totalPrice: '$450',
+                totalPriceCents: 45000,
                 flight: {
                     id: 12,
                     airline: 'Gemini Airways',
@@ -92,7 +93,7 @@ describe('PointsActivityService dynamic calculations', () => {
             }
         ];
         const service = new PointsActivityService(mockBookingsWithTotalPrice, 500);
-        expect(service.getCurrentPoints()).toBe(950); // 500 starting + 450 totalPrice
+        expect(service.getCurrentPoints()).toBe(950); // 500 starting + 450 from the booking total
 
         const activities = service.getPointsActivity();
         expect(activities[0].points).toBe(450);
@@ -104,6 +105,7 @@ describe('PointsActivityService dynamic calculations', () => {
             createdAt: new Date('2026-03-11'),
             status: 'CONFIRMED',
             totalPrice: '$69.97',
+            totalPriceCents: 6997,
             flight: null
         } as any], 500);
 
@@ -118,6 +120,7 @@ describe('PointsActivityService dynamic calculations', () => {
                 createdAt: new Date('2026-01-15'),
                 status: 'CANCELLED',
                 totalPrice: '$350',
+                totalPriceCents: 35000,
                 flight: {
                     id: 10,
                     airline: 'Gemini Airways',

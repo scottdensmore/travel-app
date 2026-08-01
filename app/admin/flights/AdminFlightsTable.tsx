@@ -16,7 +16,7 @@ interface Booking {
     id: number;
     createdAt: Date | string;
     status: string;
-    totalPrice: string;
+    totalPriceCents: number | null;
     passengers: Passenger[];
 }
 

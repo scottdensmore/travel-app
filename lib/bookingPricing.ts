@@ -46,3 +46,30 @@ export function calculateBookingTotal(
     );
     return { cents, formatted: formatPrice(cents) };
 }
+
+/**
+ * The total a booking was actually taken at, in minor units.
+ *
+ * Bookings created before the total was stored as an integer fall back to the
+ * flight's catalogue price, which is what an empty total already did. A stored
+ * zero is a real total — a waived or fully redeemed booking must not silently
+ * re-price against the current catalogue.
+ *
+ * An unparseable catalogue price yields zero rather than throwing: awarding no
+ * points is better than failing a cancellation or a profile page.
+ */
+export function bookingTotalCents(
+    booking: { totalPriceCents: number | null },
+    flight: { price: string } | null | undefined,
+): number {
+    if (booking.totalPriceCents !== null && booking.totalPriceCents !== undefined) {
+        return booking.totalPriceCents;
+    }
+    if (!flight) return 0;
+
+    try {
+        return parsePriceToCents(flight.price);
+    } catch {
+        return 0;
+    }
+}

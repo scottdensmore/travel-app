@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import PointsActivityTable from "@/components/ui/pointsActivityTable";
 import NextStatusChart from "@/components/ui/charts/nextStatusChart";
 import PointsHistoryChart from "@/components/ui/charts/pointsHistoryChart";
+import { formatPrice } from '@/lib/bookingPricing';
 import { cancelBookingAction, deleteReviewAction, toggleFavoriteCityGuideAction, changeBookingSeatsAction, getOccupiedSeatsAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
 import { PointsActivityDisplayData } from '@/lib/types/PointsActivity';
@@ -38,7 +39,7 @@ interface Booking {
     id: number;
     createdAt: Date | string;
     status: string; // "CONFIRMED" or "CANCELLED"
-    totalPrice: string;
+    totalPriceCents: number | null;
     flightId: number | null;
     flight: Flight | null;
     passengers: Passenger[];
@@ -292,7 +293,11 @@ export default function ProfileClient({
                                                 </td>
                                                 <td className="py-2">{flight ? `${flight.from} → ${flight.to}` : '—'}</td>
                                                 <td className="py-2">{flight ? new Date(flight.departureDate).toLocaleDateString() : '—'}</td>
-                                                <td className="py-2">{booking.totalPrice || flight?.price || '—'}</td>
+                                                <td className="py-2">{
+                                                    booking.totalPriceCents !== null && booking.totalPriceCents !== undefined
+                                                        ? formatPrice(booking.totalPriceCents)
+                                                        : flight?.price ?? '—'
+                                                }</td>
                                                 <td className="py-2">
                                                     <span style={{
                                                         color: isCancelled ? '#ef4444' : '#10b981',

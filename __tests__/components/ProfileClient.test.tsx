@@ -34,6 +34,7 @@ const sampleBookings = [
         createdAt: '2026-06-01T10:00:00Z',
         status: 'CONFIRMED',
         totalPrice: '$350',
+        totalPriceCents: 35000,
         flightId: 201,
         flight: {
             id: 201,

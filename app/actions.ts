@@ -12,7 +12,7 @@ import { assertSeatAvailableForCabin, validateSeatingLayout } from '@/lib/seatLa
 import { lockFlightForUpdate } from '@/lib/flightLock';
 import { updateFlightSeatingLayout } from '@/lib/FlightSeatLayoutService';
 import { actionValidationFailure } from '@/lib/actionResult';
-import { parsePriceToCents } from '@/lib/bookingPricing';
+import { bookingTotalCents } from '@/lib/bookingPricing';
 import { buildFlightRoutes, findNearbyOperatingDates } from '@/lib/flightSearch';
 import { airportTimeZoneFor } from '@/lib/airports';
 import { bookingWindowIsoDates } from '@/lib/dates';
@@ -198,7 +198,7 @@ export async function bookFlightAction(bookingData: {
     try {
         const flight = await prisma.flight.findUnique({ where: { id: bookingData.flightId } });
         if (flight && result.wasCreated) {
-            const points = Math.floor(parsePriceToCents(result.totalPrice) / 100);
+            const points = Math.floor(bookingTotalCents(result, flight) / 100);
             await prisma.notification.create({
                 data: {
                     userId,
@@ -323,8 +323,7 @@ export async function cancelBookingAction(bookingId: number) {
     try {
         const flight = booking.flight;
         if (flight && booking.userId) {
-            const rawPrice = booking.totalPrice || flight.price;
-            const points = Math.floor(parsePriceToCents(rawPrice) / 100);
+            const points = Math.floor(bookingTotalCents(booking, flight) / 100);
             await prisma.notification.create({
                 data: {
                     userId: booking.userId,
