@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "826696c6e4c6",
+  "strategy": "manual-commit",
+  "branch": "feat/origin-local-booking-window",
+  "checkpoints_count": 5,
+  "files_touched": [
+    "__tests__/components/flightBookingForm.test.tsx",
+    "__tests__/lib/airports.database.test.ts",
+    "__tests__/lib/airports.test.ts",
+    "__tests__/lib/dates.test.ts",
+    "app/actions.ts",
+    "app/page.tsx",
+    "components/ui/flightBookingForm.tsx",
+    "e2e/search.spec.ts",
+    "lib/airportRepository.ts",
+    "lib/airports.ts",
+    "lib/dates.ts",
+    "lib/flightSearch.ts",
+    "lib/validation.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/82/6696c6e4c6/0/metadata.json",
+      "transcript": "/82/6696c6e4c6/0/full.jsonl",
+      "compact_transcript": "/82/6696c6e4c6/0/transcript.jsonl",
+      "content_hash": "/82/6696c6e4c6/0/content_hash.txt",
+      "prompt": "/82/6696c6e4c6/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1565,
+    "cache_creation_tokens": 1713207,
+    "cache_read_tokens": 163094798,
+    "output_tokens": 331937,
+    "api_call_count": 495
+  }
+}
