@@ -211,17 +211,18 @@ describe('searchFlightsAction', () => {
         expect(mockedFlightScheduleFindMany).not.toHaveBeenCalled();
     });
 
-    it('triggers lazy generation and queries by date when departureDateStr is provided', async () => {
+    it('queries by date without generating inventory', async () => {
         jest.useFakeTimers().setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
         const flights = [
             { id: 1, flightNumber: 'CA101', from: 'Seattle, USA', to: 'Detroit, USA', departureDate: new Date('2026-06-25T08:00:00Z') },
         ];
         mockedFlightFindMany.mockResolvedValue(flights);
-        mockGenerateFlightsForDate.mockResolvedValue([]);
 
         const result = await searchFlightsAction('Seattle, USA', 'Detroit, USA', '2026-06-25');
 
-        expect(mockGenerateFlightsForDate).toHaveBeenCalledWith(new Date('2026-06-25'));
+        // Searching is read-only. Inventory is produced ahead of demand by the
+        // seed and the scheduler, never by a customer request (#71).
+        expect(mockGenerateFlightsForDate).not.toHaveBeenCalled();
         expect(mockedFlightFindMany).toHaveBeenCalledWith({
             where: {
                 from: 'Seattle, USA',

@@ -3,7 +3,6 @@
 import { revalidatePath } from 'next/cache';
 import TravelGuideService from '@/lib/TravelGuideService';
 import FlightBookingService, { PassengerInput } from '@/lib/FlightBookingService';
-import FlightScheduleService from '@/lib/FlightScheduleService';
 import CityGuide from '@/lib/types/CityGuide';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -90,10 +89,10 @@ export async function searchFlightsAction(
         return { flights, nearbyDates: [] };
     }
 
+    // Searching is read-only. Inventory is generated ahead of demand by the
+    // seed and by the scheduler running scripts/generate-inventory.ts, so a
+    // customer request never writes (#71).
     const searchDate = new Date(departureDateStr);
-    const scheduleService = new FlightScheduleService();
-    await scheduleService.generateFlightsForDate(searchDate);
-
     const dateStr = searchDate.toISOString().split('T')[0];
     const startOfDay = new Date(`${dateStr}T00:00:00.000Z`);
     const endOfDay = new Date(`${dateStr}T23:59:59.999Z`);
