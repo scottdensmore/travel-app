@@ -11,6 +11,9 @@ const mockTx = {
         findMany: jest.fn(),
         create: jest.fn(),
     },
+    seatAssignment: {
+        createMany: jest.fn(),
+    },
     flight: {
         findUnique: jest.fn(),
     }
@@ -70,6 +73,7 @@ describe('FlightBookingService', () => {
             totalPrice: '$700',
             totalPriceCents: 70000,
             paymentIntentId: null,
+            legs: [{ id: 55, sequence: 1, flightId: 7 }],
             passengers: [
                 {
                     firstName: 'Alice',
@@ -152,6 +156,18 @@ describe('FlightBookingService', () => {
                 passengers: { select: safePassengerSelect },
                 legs: { orderBy: { sequence: 'asc' } }
             }
+        });
+
+        // The seat is recorded against the leg, from the same passenger array
+        // the booking was created from.
+        expect(mockTx.seatAssignment.createMany).toHaveBeenCalledWith({
+            data: [{
+                passengerId: expect.any(String),
+                legId: 55,
+                flightId: 7,
+                seatNumber: '4C',
+                cabinClass: 'BUSINESS',
+            }],
         });
 
         expect(result).toMatchObject({ id: 2, totalPrice: '$700' });
