@@ -1,0 +1,24 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "8cbfa7d56dfa",
+  "strategy": "manual-commit",
+  "branch": "feat/booking-total-minor-units",
+  "checkpoints_count": 2,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/8c/bfa7d56dfa/0/metadata.json",
+      "transcript": "/8c/bfa7d56dfa/0/full.jsonl",
+      "compact_transcript": "/8c/bfa7d56dfa/0/transcript.jsonl",
+      "content_hash": "/8c/bfa7d56dfa/0/content_hash.txt",
+      "prompt": "/8c/bfa7d56dfa/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1643,
+    "cache_creation_tokens": 1750160,
+    "cache_read_tokens": 188392303,
+    "output_tokens": 356376,
+    "api_call_count": 537
+  }
+}
