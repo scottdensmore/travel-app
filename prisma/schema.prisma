@@ -115,6 +115,7 @@ model Booking {
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   passengers Passenger[]
+  legs       ItineraryLeg[]
 
   @@unique([userId, idempotencyKey])
 }
@@ -158,8 +159,9 @@ model Flight {
   economyRows        Int?
   seatPattern        String?
 
-  bookings   Booking[]
-  passengers Passenger[]
+  bookings      Booking[]
+  passengers    Passenger[]
+  itineraryLegs ItineraryLeg[]
 
   @@unique([flightNumber, departureDate])
 }
@@ -229,4 +231,19 @@ model Airport {
   city     String
   country  String
   timeZone String
+}
+
+/// One flight within a booking. A booking is its own itinerary, so there is no
+/// separate itinerary table: it would be one-to-one with Booking and carry no
+/// columns of its own. `sequence` orders the legs, 1 being the outbound.
+model ItineraryLeg {
+  id        Int     @id @default(autoincrement())
+  bookingId Int
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  sequence  Int
+  flightId  Int
+  flight    Flight  @relation(fields: [flightId], references: [id])
+
+  @@unique([bookingId, sequence])
+  @@index([flightId])
 }

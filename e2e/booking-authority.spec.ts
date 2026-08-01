@@ -73,6 +73,13 @@ test.describe('Authoritative booking persistence', () => {
     expect(persisted).toHaveLength(1);
     // The integer total is authoritative; the string is retained for one release.
     expect(persisted[0]).toMatchObject({ totalPrice: '$123.45', totalPriceCents: 12345, paymentIntentId: null });
+
+    // The booking is its own itinerary, with one outbound leg until round trips
+    // add the inbound.
+    const legs = await prisma.itineraryLeg.findMany({ where: { bookingId: persisted[0].id } });
+    expect(legs).toEqual([
+        expect.objectContaining({ sequence: 1, flightId: flight.id }),
+    ]);
   });
 
   test('returns one booking when the same idempotency key is repeated', async () => {

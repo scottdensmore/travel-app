@@ -125,7 +125,10 @@ describe('FlightBookingService', () => {
                 flightId: 7,
                 userId: 'u1',
                 totalPrice: '$700',
-            totalPriceCents: 70000,
+                totalPriceCents: 70000,
+                legs: {
+                    create: [{ sequence: 1, flightId: 7 }],
+                },
                 paymentIntentId: null,
                 idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
                 passengers: {
@@ -145,7 +148,10 @@ describe('FlightBookingService', () => {
                     ]
                 }
             },
-            include: { passengers: { select: safePassengerSelect } }
+            include: {
+                passengers: { select: safePassengerSelect },
+                legs: { orderBy: { sequence: 'asc' } }
+            }
         });
 
         expect(result).toMatchObject({ id: 2, totalPrice: '$700' });
