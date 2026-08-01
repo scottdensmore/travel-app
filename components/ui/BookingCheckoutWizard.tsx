@@ -90,7 +90,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
     const [serverFieldErrors, setServerFieldErrors] = useState<Record<string, string[]>>({});
     const [bookingResult, setBookingResult] = useState<{
         id: number;
-        totalPrice: string;
+        totalPriceCents: number | null;
         passengers: ConfirmedPassenger[];
     } | null>(null);
     const idempotencyKeyRef = useRef<string | null>(null);
@@ -502,7 +502,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
 
             setBookingResult({
                 id: result.id,
-                totalPrice: result.totalPrice,
+                totalPriceCents: result.totalPriceCents,
                 passengers: result.passengers.map(passenger => ({
                     firstName: passenger.firstName,
                     lastName: passenger.lastName,
@@ -1087,7 +1087,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                         </div>
                         <h2 style={{ fontSize: '2rem', color: '#34d399', fontWeight: 'bold', marginBottom: '0.5rem' }}>Booking Confirmed!</h2>
                         <p style={{ color: 'rgba(255,255,255,0.6)', marginBottom: '0.5rem' }}>Your booking is confirmed. Payment is not collected in this demo.</p>
-                        <p style={{ color: '#34d399', marginBottom: '2rem', fontWeight: 'bold' }}>Confirmed total: {bookingResult.totalPrice}</p>
+                        <p style={{ color: '#34d399', marginBottom: '2rem', fontWeight: 'bold' }}>Confirmed total: {bookingResult.totalPriceCents !== null ? formatPrice(bookingResult.totalPriceCents) : totalPriceDisplay}</p>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', alignItems: 'center', marginBottom: '2.5rem' }}>
                             {bookingResult.passengers.map((p, idx) => (

@@ -68,6 +68,7 @@ describe('FlightBookingService', () => {
             flightId: 7,
             userId: 'u1',
             totalPrice: '$700',
+            totalPriceCents: 70000,
             paymentIntentId: null,
             passengers: [
                 {
@@ -124,6 +125,7 @@ describe('FlightBookingService', () => {
                 flightId: 7,
                 userId: 'u1',
                 totalPrice: '$700',
+            totalPriceCents: 70000,
                 paymentIntentId: null,
                 idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
                 passengers: {
@@ -157,6 +159,7 @@ describe('FlightBookingService', () => {
             flightId: 7,
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
             totalPrice: '$350',
+            totalPriceCents: 35000,
             passengers: [{
                 id: passengerId,
                 firstName: 'Alice', lastName: 'Smith',
@@ -208,6 +211,7 @@ describe('FlightBookingService', () => {
             flightId: 8,
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
             totalPrice: '$350',
+            totalPriceCents: 35000,
             passengers: [{
                 id: passengerId,
                 firstName: 'Alice', lastName: 'Smith',

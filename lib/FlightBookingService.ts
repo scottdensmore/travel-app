@@ -197,7 +197,10 @@ export default class FlightBookingService {
                 data: {
                     flightId,
                     userId,
+                    // totalPrice is retained for one release so a rollback keeps
+                    // a displayable value; totalPriceCents is the source of truth.
                     totalPrice: total.formatted,
+                    totalPriceCents: total.cents,
                     paymentIntentId: null,
                     idempotencyKey,
                     passengers: {

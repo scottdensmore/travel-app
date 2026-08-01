@@ -140,7 +140,7 @@ describe('BookingCheckoutWizard', () => {
     it('confirms a server-priced booking without collecting payment card data', async () => {
         mockBookFlightAction.mockResolvedValue({
             id: 12345,
-            totalPrice: '$100',
+            totalPriceCents: 10000,
             passengers: [{
                 firstName: 'Robert',
                 lastName: 'Jones',
@@ -234,7 +234,7 @@ describe('BookingCheckoutWizard', () => {
     it('announces and visibly disables the confirmation action while booking', async () => {
         let resolveBooking!: (value: {
             id: number;
-            totalPrice: string;
+            totalPriceCents: number | null;
             passengers: Array<{ firstName: string; lastName: string; seatNumber: string; cabinClass: string }>;
         }) => void;
         mockBookFlightAction.mockImplementation(() => new Promise((resolve) => {
@@ -260,7 +260,7 @@ describe('BookingCheckoutWizard', () => {
 
         resolveBooking({
             id: 12345,
-            totalPrice: '$100',
+            totalPriceCents: 10000,
             passengers: [{ firstName: 'Bob', lastName: 'Jones', seatNumber: '11C', cabinClass: 'ECONOMY' }]
         });
         await waitFor(() => expect(screen.getByText('Booking Confirmed!')).toBeInTheDocument());

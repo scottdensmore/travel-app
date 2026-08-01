@@ -1,7 +1,7 @@
 import { PointsActivityData, StartingPoints } from "./data/PointsActivityData";
 import { PointsActivityDisplayData } from "./types/PointsActivity";
 import { Booking, Flight } from "@prisma/client";
-import { parsePriceToCents } from "./bookingPricing";
+import { bookingTotalCents } from "./bookingPricing";
 
 type BookingWithFlight = Booking & { flight: Flight | null };
 
@@ -14,13 +14,9 @@ class PointsActivityService {
     this.startingPoints = startingPoints !== undefined ? startingPoints : StartingPoints;
   }
 
-  private parsePrice(priceStr: string | null | undefined): number {
-    if (!priceStr) return 0;
-    try {
-      return Math.floor(parsePriceToCents(priceStr) / 100);
-    } catch {
-      return 0;
-    }
+  /** Whole status points earned by a booking, from its stored total. */
+  private bookingPoints(booking: BookingWithFlight): number {
+    return Math.floor(bookingTotalCents(booking, booking.flight) / 100);
   }
 
   getCurrentPoints(): number {
@@ -29,9 +25,7 @@ class PointsActivityService {
     }
     return this.bookings.reduce((total, booking) => {
       if (booking.status === 'CANCELLED') return total;
-      const priceStr = booking.totalPrice || booking.flight?.price;
-      const price = this.parsePrice(priceStr);
-      return total + price;
+      return total + this.bookingPoints(booking);
     }, this.startingPoints);
   }
 
@@ -61,8 +55,7 @@ class PointsActivityService {
     const displayData: PointsActivityDisplayData[] = [];
     this.bookings.forEach((booking) => {
       const flight = booking.flight;
-      const priceStr = booking.totalPrice || flight?.price;
-      const points = this.parsePrice(priceStr);
+      const points = this.bookingPoints(booking);
       const baseDesc = flight 
         ? `✈️ ${flight.airline} ${flight.flightNumber} (${flight.from} → ${flight.to})`
         : '✈️ Flight Booking';
@@ -132,8 +125,7 @@ class PointsActivityService {
     this.bookings.forEach((booking) => {
       const date = new Date(booking.createdAt);
       const monthYear = date.toLocaleString('default', { month: 'short', year: 'numeric' });
-      const priceStr = booking.totalPrice || booking.flight?.price;
-      const points = this.parsePrice(priceStr);
+      const points = this.bookingPoints(booking);
       if (booking.status === 'CANCELLED') {
         // Cancellation balances out to 0 net points for this month
         monthlyPointsMap[monthYear] = (monthlyPointsMap[monthYear] || 0) + points - points;
