@@ -1,0 +1,24 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "265c39b9b02f",
+  "strategy": "manual-commit",
+  "branch": "feat/airport-local-dates",
+  "checkpoints_count": 5,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/26/5c39b9b02f/0/metadata.json",
+      "transcript": "/26/5c39b9b02f/0/full.jsonl",
+      "compact_transcript": "/26/5c39b9b02f/0/transcript.jsonl",
+      "content_hash": "/26/5c39b9b02f/0/content_hash.txt",
+      "prompt": "/26/5c39b9b02f/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1460,
+    "cache_creation_tokens": 1098377,
+    "cache_read_tokens": 132674047,
+    "output_tokens": 293202,
+    "api_call_count": 439
+  }
+}
