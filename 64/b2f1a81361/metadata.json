@@ -1,0 +1,24 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "64b2f1a81361",
+  "strategy": "manual-commit",
+  "branch": "feat/inventory-coverage-check",
+  "checkpoints_count": 3,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/64/b2f1a81361/0/metadata.json",
+      "transcript": "/64/b2f1a81361/0/full.jsonl",
+      "compact_transcript": "/64/b2f1a81361/0/transcript.jsonl",
+      "content_hash": "/64/b2f1a81361/0/content_hash.txt",
+      "prompt": "/64/b2f1a81361/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1366,
+    "cache_creation_tokens": 1067714,
+    "cache_read_tokens": 107484374,
+    "output_tokens": 263994,
+    "api_call_count": 389
+  }
+}
