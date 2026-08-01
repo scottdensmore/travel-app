@@ -201,6 +201,11 @@ export default class FlightBookingService {
                     // a displayable value; totalPriceCents is the source of truth.
                     totalPrice: total.formatted,
                     totalPriceCents: total.cents,
+                    // A booking is its own itinerary. Today every booking has a
+                    // single outbound leg; round trips (#69) add the inbound.
+                    legs: {
+                        create: [{ sequence: 1, flightId }],
+                    },
                     paymentIntentId: null,
                     idempotencyKey,
                     passengers: {
@@ -208,7 +213,8 @@ export default class FlightBookingService {
                     }
                 },
                 include: {
-                    passengers: { select: safePassengerSelect }
+                    passengers: { select: safePassengerSelect },
+                    legs: { orderBy: { sequence: 'asc' } }
                 }
             });
             return { ...booking, wasCreated: true };
