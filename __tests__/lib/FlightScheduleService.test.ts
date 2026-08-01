@@ -4,13 +4,14 @@ import { prisma } from '@/lib/prisma';
 jest.mock('@/lib/prisma', () => ({
     prisma: {
         flightSchedule: { findMany: jest.fn() },
-        flight: { findFirst: jest.fn(), create: jest.fn() }
+        flight: { findFirst: jest.fn(), create: jest.fn(), groupBy: jest.fn() }
     }
 }));
 
 const mockedFlightScheduleFindMany = prisma.flightSchedule.findMany as jest.Mock;
 const mockedFlightFindFirst = prisma.flight.findFirst as jest.Mock;
 const mockedFlightCreate = prisma.flight.create as jest.Mock;
+const mockedFlightGroupBy = prisma.flight.groupBy as unknown as jest.Mock;
 
 describe('FlightScheduleService dynamic generator', () => {
     let service: FlightScheduleService;
@@ -309,5 +310,95 @@ describe('FlightScheduleService inventory horizon', () => {
         await expect(service.generateFlightsForHorizon(new Date('2026-06-25T12:00:00Z'), 367))
             .rejects.toThrow('Horizon cannot exceed 366 days.');
         expect(mockedFlightScheduleFindMany).not.toHaveBeenCalled();
+    });
+});
+
+describe('FlightScheduleService inventory coverage', () => {
+    let service: FlightScheduleService;
+
+    const schedules = [
+        { flightNumber: 'CA303', isActive: true },
+        { flightNumber: 'CA404', isActive: true },
+    ];
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        service = new FlightScheduleService();
+        mockedFlightScheduleFindMany.mockResolvedValue(schedules);
+    });
+
+    it('reports how far ahead each active schedule has inventory', async () => {
+        mockedFlightGroupBy.mockResolvedValue([
+            { flightNumber: 'CA303', _max: { departureDate: new Date('2026-08-20T08:00:00Z') } },
+            { flightNumber: 'CA404', _max: { departureDate: new Date('2026-07-11T08:00:00Z') } },
+        ]);
+
+        const coverage = await service.reportInventoryCoverage(30, new Date('2026-06-25T12:00:00Z'));
+
+        expect(coverage).toEqual({
+            asOfDate: '2026-06-25',
+            requiredDays: 30,
+            shortestDaysCovered: 16,
+            isSufficient: false,
+            schedules: [
+                { flightNumber: 'CA303', coveredThroughDate: '2026-08-20', daysCovered: 56 },
+                { flightNumber: 'CA404', coveredThroughDate: '2026-07-11', daysCovered: 16 },
+            ],
+        });
+    });
+
+    it('is sufficient when the shortest covered schedule clears the requirement', async () => {
+        mockedFlightGroupBy.mockResolvedValue([
+            { flightNumber: 'CA303', _max: { departureDate: new Date('2026-07-25T08:00:00Z') } },
+            { flightNumber: 'CA404', _max: { departureDate: new Date('2026-07-30T08:00:00Z') } },
+        ]);
+
+        const coverage = await service.reportInventoryCoverage(30, new Date('2026-06-25T12:00:00Z'));
+
+        expect(coverage.shortestDaysCovered).toBe(30);
+        expect(coverage.isSufficient).toBe(true);
+    });
+
+    it('treats a schedule with no instances at all as zero coverage', async () => {
+        // The scheduler has never run for a newly added schedule.
+        mockedFlightGroupBy.mockResolvedValue([
+            { flightNumber: 'CA303', _max: { departureDate: new Date('2026-08-20T08:00:00Z') } },
+        ]);
+
+        const coverage = await service.reportInventoryCoverage(30, new Date('2026-06-25T12:00:00Z'));
+
+        expect(coverage.schedules).toContainEqual({
+            flightNumber: 'CA404',
+            coveredThroughDate: null,
+            daysCovered: 0,
+        });
+        expect(coverage.shortestDaysCovered).toBe(0);
+        expect(coverage.isSufficient).toBe(false);
+    });
+
+    it('does not count inventory that has already fallen behind today', async () => {
+        mockedFlightGroupBy.mockResolvedValue([
+            { flightNumber: 'CA303', _max: { departureDate: new Date('2026-06-01T08:00:00Z') } },
+            { flightNumber: 'CA404', _max: { departureDate: new Date('2026-08-20T08:00:00Z') } },
+        ]);
+
+        const coverage = await service.reportInventoryCoverage(30, new Date('2026-06-25T12:00:00Z'));
+
+        expect(coverage.schedules[0]).toEqual({
+            flightNumber: 'CA303',
+            coveredThroughDate: '2026-06-01',
+            daysCovered: 0,
+        });
+        expect(coverage.isSufficient).toBe(false);
+    });
+
+    it('reports sufficient coverage when no schedules are active', async () => {
+        mockedFlightScheduleFindMany.mockResolvedValue([]);
+
+        const coverage = await service.reportInventoryCoverage(30, new Date('2026-06-25T12:00:00Z'));
+
+        expect(coverage.schedules).toEqual([]);
+        expect(coverage.isSufficient).toBe(true);
+        expect(mockedFlightGroupBy).not.toHaveBeenCalled();
     });
 });

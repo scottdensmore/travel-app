@@ -55,10 +55,14 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/travel_app
       INVENTORY_HORIZON_DAYS: "${INVENTORY_HORIZON_DAYS:-366}"
+      INVENTORY_REQUIRED_DAYS: "${INVENTORY_REQUIRED_DAYS:-30}"
       INVENTORY_INTERVAL_SECONDS: "${INVENTORY_INTERVAL_SECONDS:-21600}"
+    # Checking after generating means a scheduler that is running but failing to
+    # keep up reports it, rather than looking healthy because it exited zero.
     command: >
       sh -c 'while true; do
         npm run inventory:generate --silent || echo "inventory generation failed" >&2;
+        npm run inventory:check --silent || echo "inventory coverage is short" >&2;
         sleep "$$INVENTORY_INTERVAL_SECONDS";
       done'
     restart: unless-stopped

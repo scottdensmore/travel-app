@@ -24,6 +24,34 @@ export interface InventoryHorizonSummary {
  */
 export const MAX_HORIZON_DAYS = 366;
 
+/** How far ahead one schedule currently has flight instances. */
+export interface ScheduleCoverage {
+    flightNumber: string;
+    /** Furthest date with an instance, or null when the schedule has none. */
+    coveredThroughDate: string | null;
+    /** Whole days from today through that date. Zero once it falls behind today. */
+    daysCovered: number;
+}
+
+export interface InventoryCoverage {
+    asOfDate: string;
+    requiredDays: number;
+    schedules: ScheduleCoverage[];
+    /** The weakest schedule, which is what determines whether searches degrade. */
+    shortestDaysCovered: number;
+    isSufficient: boolean;
+}
+
+function isoDay(date: Date): string {
+    return date.toISOString().slice(0, 10);
+}
+
+function wholeDaysBetween(fromIsoDate: string, toIsoDate: string): number {
+    const from = Date.parse(`${fromIsoDate}T00:00:00.000Z`);
+    const to = Date.parse(`${toIsoDate}T00:00:00.000Z`);
+    return Math.round((to - from) / 86_400_000);
+}
+
 export default class FlightScheduleService {
     async generateFlightsForDate(date: Date) {
         const ensured = await this.ensureFlightsForDate(date);
@@ -160,6 +188,68 @@ export default class FlightScheduleService {
             days,
             created,
             alreadyPresent,
+        };
+    }
+
+    /**
+     * Measure how far ahead inventory actually reaches, per active schedule.
+     *
+     * Searching no longer generates inventory (#71), so a scheduler that has
+     * stopped is invisible until the horizon shrinks into the dates customers
+     * are searching. This turns that silent decay into a value that can be
+     * checked and alerted on.
+     *
+     * Coverage is reported per schedule and reduced to the weakest one, because
+     * a single starved schedule degrades its route even while others are
+     * healthy.
+     */
+    async reportInventoryCoverage(requiredDays: number, from = new Date()): Promise<InventoryCoverage> {
+        const asOfDate = todayIsoDate(from);
+        const activeSchedules = await prisma.flightSchedule.findMany({
+            where: { isActive: true },
+            select: { flightNumber: true },
+        });
+
+        if (activeSchedules.length === 0) {
+            // Nothing is scheduled, so there is no inventory to be short of.
+            return { asOfDate, requiredDays, schedules: [], shortestDaysCovered: 0, isSufficient: true };
+        }
+
+        const flightNumbers = activeSchedules.map(({ flightNumber }) => flightNumber);
+        const furthest = await prisma.flight.groupBy({
+            by: ['flightNumber'],
+            where: { flightNumber: { in: flightNumbers } },
+            _max: { departureDate: true },
+        });
+
+        const furthestByFlightNumber = new Map(
+            furthest.map(entry => [entry.flightNumber, entry._max?.departureDate ?? null])
+        );
+
+        const schedules: ScheduleCoverage[] = flightNumbers.map(flightNumber => {
+            const departureDate = furthestByFlightNumber.get(flightNumber) ?? null;
+
+            if (!departureDate) {
+                return { flightNumber, coveredThroughDate: null, daysCovered: 0 };
+            }
+
+            const coveredThroughDate = isoDay(departureDate);
+            return {
+                flightNumber,
+                coveredThroughDate,
+                // Inventory already behind today covers nothing bookable.
+                daysCovered: Math.max(0, wholeDaysBetween(asOfDate, coveredThroughDate)),
+            };
+        });
+
+        const shortestDaysCovered = Math.min(...schedules.map(({ daysCovered }) => daysCovered));
+
+        return {
+            asOfDate,
+            requiredDays,
+            schedules,
+            shortestDaysCovered,
+            isSufficient: shortestDaysCovered >= requiredDays,
         };
     }
 }

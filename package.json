@@ -11,7 +11,8 @@
     "start": "next start",
     "lint": "eslint app components lib",
     "test": "npx jest",
-    "inventory:generate": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/generate-inventory.ts"
+    "inventory:generate": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/generate-inventory.ts",
+    "inventory:check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/check-inventory.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
