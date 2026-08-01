@@ -107,6 +107,20 @@ describe('container secret protection', () => {
         expect(verificationScript).toContain('STAFF_MFA_ENCRYPTION_KEYS');
     });
 
+    it('checks each scan input on its own status instead of piping it into grep', () => {
+        // A failed producer piped into grep exits 1, which is indistinguishable
+        // from "nothing found" and would pass the check on unreadable input.
+        const verificationScript = readRepositoryFile('scripts/verify-container-secrets.sh');
+        const layerScanner = readRepositoryFile('scripts/scan-image-layers.sh');
+
+        expect(verificationScript).toContain('Unable to list the exported container filesystem.');
+        expect(verificationScript).not.toMatch(/tar -tf "\$archive"\s*\|/);
+        expect(verificationScript).not.toMatch(/image inspect "\$image"\s*\|/);
+
+        expect(layerScanner).toContain('Unable to read layer contents for scanning:');
+        expect(layerScanner).not.toMatch(/tar -[tx]O?f "\$candidate"[^\n]*\|/);
+    });
+
     it('provides safe configuration and secret-rotation guidance', () => {
         const exampleEnvironment = readRepositoryFile('.env.example');
         const securityGuide = readRepositoryFile('SECURITY.md');
