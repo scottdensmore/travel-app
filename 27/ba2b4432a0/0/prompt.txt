@@ -359,3 +359,7 @@ this is what is in the config file on my client machine Host hawkeye hawkeye.loc
 
 Host *
     IdentityAgent "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+
+---
+
+I ahve fixed the agent information and now should be able to sign
