@@ -141,8 +141,10 @@ describe('FlightBookingForm', () => {
         });
     });
 
-    it('refreshes the booking window when the UTC day changes', () => {
-        jest.useFakeTimers().setSystemTime(new Date('2026-07-14T23:59:59.000Z'));
+    it("refreshes the booking window when the origin airport's day changes", () => {
+        // Seattle is the default origin, so the window rolls over at 07:00 UTC
+        // on PDT, not at UTC midnight.
+        jest.useFakeTimers().setSystemTime(new Date('2026-07-15T06:59:59.000Z'));
         renderForm();
 
         expect(screen.getByLabelText('Depart')).toHaveAttribute('min', '2026-07-14');
@@ -155,14 +157,39 @@ describe('FlightBookingForm', () => {
         expect(screen.getByLabelText('Return')).toHaveAttribute('max', '2027-07-15');
     });
 
+    it('does not roll the window over at UTC midnight for an origin behind UTC', () => {
+        // The old UTC-anchored behaviour would have offered 2026-07-15 here,
+        // while it is still the afternoon of the 14th in Seattle.
+        jest.useFakeTimers().setSystemTime(new Date('2026-07-15T00:00:01.000Z'));
+
+        renderForm();
+
+        expect(screen.getByLabelText('Depart')).toHaveAttribute('min', '2026-07-14');
+    });
+
     it('reconciles a stale server booking window during hydration', () => {
-        jest.setSystemTime(new Date('2026-07-15T00:00:01.000Z'));
+        jest.setSystemTime(new Date('2026-07-15T07:00:01.000Z'));
 
         renderForm();
 
         expect(screen.getByLabelText('Depart')).toHaveAttribute('min', '2026-07-15');
         expect(screen.getByLabelText('Depart')).toHaveAttribute('max', '2027-07-15');
         expect(screen.getByLabelText('Return')).toHaveAttribute('max', '2027-07-15');
+    });
+
+    it('moves the window to the newly selected origin airport', async () => {
+        // 05:00 UTC is already the 15th in New York and still the 14th in
+        // Seattle, so the earliest selectable date depends on the origin.
+        jest.useFakeTimers().setSystemTime(new Date('2026-07-15T05:00:00.000Z'));
+        renderForm();
+
+        expect(screen.getByLabelText('Depart')).toHaveAttribute('min', '2026-07-14');
+
+        fireEvent.change(screen.getByLabelText('From'), { target: { value: 'New York, USA' } });
+
+        await waitFor(() => {
+            expect(screen.getByLabelText('Depart')).toHaveAttribute('min', '2026-07-15');
+        });
     });
 
     it('searches using the selected origin and destination', async () => {

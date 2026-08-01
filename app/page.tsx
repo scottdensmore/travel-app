@@ -1,6 +1,7 @@
 import React from "react";
 import FlightBookingForm from "../components/ui/flightBookingForm";
 import { getFlightRoutesAction } from "./actions";
+import { airportTimeZoneFor } from "@/lib/airports";
 import { bookingWindowIsoDates } from "@/lib/dates";
 import {
   parseFlightSearchParams,
@@ -20,7 +21,16 @@ export default async function Home({ searchParams }: HomeProps) {
     getFlightRoutesAction(),
     searchParams,
   ]);
-  const { earliestDate, latestDate } = bookingWindowIsoDates();
+  // Selectable dates are calendar days at the origin airport, so the origin has
+  // to be resolved before the window. A shared link carries its own origin; the
+  // form otherwise opens on the first available one. The client recomputes this
+  // whenever the traveller changes origin.
+  const sharedOrigin = typeof requestedSearch.from === 'string' ? requestedSearch.from : undefined;
+  const initialOrigin = sharedOrigin ?? routes[0]?.from;
+  const { earliestDate, latestDate } = bookingWindowIsoDates(
+    new Date(),
+    initialOrigin ? airportTimeZoneFor(initialOrigin) : null,
+  );
   const initialSearch = parseFlightSearchParams(
     requestedSearch,
     routes,

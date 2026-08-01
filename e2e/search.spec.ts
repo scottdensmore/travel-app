@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { airportLocalDate, airportTimeZoneFor } from '../lib/airports';
 
 async function waitForSearchReady(page: Page) {
   await expect(page.locator('[data-search-ready="true"]')).toBeVisible();
@@ -116,7 +117,10 @@ test.describe('Flight search', () => {
     const departure = page.getByLabel('Depart', { exact: true });
     const returnDate = page.getByLabel('Return', { exact: true });
     const form = page.locator('form');
-    const today = new Date().toISOString().slice(0, 10);
+    // Selectable dates are calendar days at the origin airport, not in UTC, so
+    // the expected window is derived from the origin the form opens on.
+    const origin = await page.locator('#from').inputValue();
+    const today = airportLocalDate(airportTimeZoneFor(origin) ?? 'UTC', new Date());
     const latest = new Date(`${today}T00:00:00.000Z`);
     latest.setUTCDate(latest.getUTCDate() + 365);
     const latestString = latest.toISOString().slice(0, 10);

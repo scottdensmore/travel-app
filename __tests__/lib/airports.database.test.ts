@@ -1,6 +1,6 @@
 /** @jest-environment node */
 import AirportData from '@/lib/data/AirportData';
-import { findAirportTimeZone } from '@/lib/airports';
+import { findAirportTimeZone } from '@/lib/airportRepository';
 import { prisma } from '@/lib/prisma';
 
 describe('airport lookup in PostgreSQL', () => {
