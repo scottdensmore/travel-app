@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import CityGuideData from '../lib/data/CityGuideData'
+import AirportData from '../lib/data/AirportData'
 import { FlightData, FlightScheduleData } from '../lib/data/FlightData'
 import { MAX_BOOKING_LEAD_DAYS } from '../lib/dates'
 import FlightScheduleService from '../lib/FlightScheduleService'
@@ -27,6 +28,17 @@ async function main() {
             console.log(`Created city guide with id: ${guide.id}`)
         }
     }
+
+    // Seed Airports. Upserted rather than skipped when present, because a
+    // corrected timezone has to reach an existing database.
+    for (const airport of AirportData) {
+        await prisma.airport.upsert({
+            where: { iataCode: airport.iataCode },
+            update: airport,
+            create: airport,
+        })
+    }
+    console.log(`Seeded ${AirportData.length} airports`)
 
     // Seed FlightSchedules
     for (const schedule of FlightScheduleData) {
