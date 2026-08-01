@@ -1,6 +1,9 @@
 import { PrismaClient } from '@prisma/client'
 import CityGuideData from '../lib/data/CityGuideData'
 import { FlightData, FlightScheduleData } from '../lib/data/FlightData'
+import { MAX_BOOKING_LEAD_DAYS } from '../lib/dates'
+import FlightScheduleService from '../lib/FlightScheduleService'
+import { prisma as applicationPrisma } from '../lib/prisma'
 
 const prisma = new PrismaClient()
 
@@ -36,54 +39,17 @@ async function main() {
         }
     }
 
-    // Pre-populate Flight instances for the next 30 days from schedules
-    const today = new Date();
-    const utcToday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-    for (let i = 0; i < 30; i++) {
-        const date = new Date(utcToday);
-        date.setUTCDate(utcToday.getUTCDate() + i);
-        const dayOfWeek = date.getUTCDay(); // 0 = Sunday, 1 = Monday, etc.
-
-        for (const schedule of FlightScheduleData) {
-            if (schedule.daysOfWeek.includes(dayOfWeek)) {
-                // Generate flight dates
-                const dateStr = date.toISOString().split('T')[0];
-                const departureDate = new Date(`${dateStr}T${schedule.departureTime}:00Z`);
-                
-                let returnDate = null;
-                if (schedule.returnTime) {
-                    const retDate = new Date(date);
-                    retDate.setUTCDate(date.getUTCDate() + 7); // Return leg departs 7 days later
-                    const retDateStr = retDate.toISOString().split('T')[0];
-                    returnDate = new Date(`${retDateStr}T${schedule.returnTime}:00Z`);
-                }
-
-                // Check if flight instance already exists for this number and departure date
-                const existingInstance = await prisma.flight.findFirst({
-                    where: {
-                        flightNumber: schedule.flightNumber,
-                        departureDate: departureDate
-                    }
-                });
-
-                if (!existingInstance) {
-                    const flight = await prisma.flight.create({
-                        data: {
-                            flightNumber: schedule.flightNumber,
-                            airline: schedule.airline,
-                            from: schedule.from,
-                            to: schedule.to,
-                            departureDate,
-                            returnDate,
-                            price: schedule.price,
-                            status: 'ON_TIME'
-                        }
-                    });
-                    console.log(`Pre-generated flight instance: ${flight.flightNumber} on ${dateStr}`);
-                }
-            }
-        }
-    }
+    // Pre-populate Flight instances across the whole bookable window. Searching
+    // is read-only (#71), so every date a customer may select has to have its
+    // inventory generated before the search runs. This uses the same service the
+    // scheduler and the administrative generator use, rather than a second copy
+    // of the rule (#99).
+    const horizon = await new FlightScheduleService()
+        .generateFlightsForHorizon(new Date(), MAX_BOOKING_LEAD_DAYS + 1);
+    console.log(
+        `Pre-generated flight inventory ${horizon.fromDate} through ${horizon.throughDate}: `
+        + `${horizon.created} created, ${horizon.alreadyPresent} already present`
+    );
 
     // Seed static legacy Flights (if they don't already exist, to prevent breaking old tests/data)
     for (const flightData of FlightData) {
@@ -106,10 +72,14 @@ async function main() {
 
 main()
     .then(async () => {
-        await prisma.$disconnect()
+        // The generation service holds its own client, so disconnect both or the
+        // seed process will not exit.
+        await Promise.all([prisma.$disconnect(), applicationPrisma.$disconnect()])
     })
     .catch(async (e) => {
         console.error(e)
-        await prisma.$disconnect()
+        // The generation service holds its own client, so disconnect both or the
+        // seed process will not exit.
+        await Promise.all([prisma.$disconnect(), applicationPrisma.$disconnect()])
         process.exit(1)
     })

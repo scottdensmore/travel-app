@@ -43,6 +43,29 @@ services:
       db:
         condition: service_healthy
 
+  # Keeps inventory ahead of demand so that searching stays read-only (#71).
+  # Generation is idempotent, so a missed or repeated run needs no recovery and
+  # a restart simply resumes. Deployments that do not use Compose must run
+  # `npm run inventory:generate` on their own schedule.
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/travel_app
+      INVENTORY_HORIZON_DAYS: "${INVENTORY_HORIZON_DAYS:-366}"
+      INVENTORY_INTERVAL_SECONDS: "${INVENTORY_INTERVAL_SECONDS:-21600}"
+    command: >
+      sh -c 'while true; do
+        npm run inventory:generate --silent || echo "inventory generation failed" >&2;
+        sleep "$$INVENTORY_INTERVAL_SECONDS";
+      done'
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
   mailpit:
     image: axllent/mailpit:v1.30.0
     ports:
