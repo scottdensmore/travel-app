@@ -1,4 +1,4 @@
-import { prisma } from './prisma';
+import AirportData from './data/AirportData';
 
 /**
  * The calendar day at an airport for a given instant.
@@ -24,15 +24,19 @@ export function airportLocalDate(timeZone: string, instant: Date = new Date()): 
     }).format(instant);
 }
 
-/**
- * The timezone of the airport a route departs from, or null when the origin has
- * no airport record. Callers fall back to UTC rather than failing a search.
- */
-export async function findAirportTimeZone(label: string): Promise<string | null> {
-    const airport = await prisma.airport.findUnique({
-        where: { label },
-        select: { timeZone: true },
-    });
+const timeZonesByLabel = new Map(AirportData.map(({ label, timeZone }) => [label, timeZone]));
 
-    return airport?.timeZone ?? null;
+/**
+ * The timezone of a place, or null when it has no airport record.
+ *
+ * Deliberately synchronous and backed by compiled reference data rather than
+ * the database, for two reasons: booking rules are validated inside a
+ * synchronous Zod refinement, and the browser has to reach the same answer as
+ * the server. The seed writes this same data into the `Airport` table, so the
+ * two cannot drift.
+ *
+ * Callers fall back to UTC on null rather than failing a customer search.
+ */
+export function airportTimeZoneFor(label: string): string | null {
+    return timeZonesByLabel.get(label) ?? null;
 }

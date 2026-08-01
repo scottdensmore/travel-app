@@ -1,7 +1,7 @@
 /** @jest-environment node */
 import { FlightData, FlightScheduleData } from '@/lib/data/FlightData';
 import AirportData from '@/lib/data/AirportData';
-import { airportLocalDate } from '@/lib/airports';
+import { airportLocalDate, airportTimeZoneFor } from '@/lib/airports';
 
 describe('airport local date', () => {
     it('resolves the calendar day at the airport, not in UTC', () => {
@@ -56,6 +56,23 @@ describe('airport reference data', () => {
         for (const { iataCode, timeZone } of AirportData) {
             expect(() => airportLocalDate(timeZone, new Date())).not.toThrow();
             expect(`${iataCode} ${timeZone}`).toMatch(/^[A-Z]{3} [A-Za-z]+\/[A-Za-z_]+$/);
+        }
+    });
+});
+
+describe('airport timezone lookup', () => {
+    it('resolves the timezone of a place the routes serve', () => {
+        expect(airportTimeZoneFor('Tokyo, Japan')).toBe('Asia/Tokyo');
+        expect(airportTimeZoneFor('Seattle, USA')).toBe('America/Los_Angeles');
+    });
+
+    it('returns null for a place with no airport, so callers can fall back to UTC', () => {
+        expect(airportTimeZoneFor('Atlantis, Nowhere')).toBeNull();
+    });
+
+    it('agrees with the reference data the seed writes to the database', () => {
+        for (const { label, timeZone } of AirportData) {
+            expect(airportTimeZoneFor(label)).toBe(timeZone);
         }
     });
 });

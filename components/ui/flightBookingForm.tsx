@@ -7,6 +7,7 @@ import { searchFlightsAction } from '@/app/actions'
 import { Flight } from '@prisma/client'
 import { isActionValidationFailure } from '@/lib/actionResult'
 import type { FlightRoute } from '@/lib/flightSearch'
+import { airportTimeZoneFor } from '@/lib/airports'
 import {
     buildFlightSearchUrl,
     type FlightSearchCriteria,
@@ -18,6 +19,7 @@ import {
     bookingWindowIsoDates,
     earliestBookableDateIso,
     latestBookableDateIso,
+    millisecondsUntilNextLocalDay,
 } from '@/lib/dates'
 
 interface FlightBookingFormProps {
@@ -40,15 +42,6 @@ const DEPARTURE_REQUIRED_WITH_RETURN_MESSAGE =
 
 function clampToMaximumDate(dateString: string, maximumDate: string): string {
     return dateString && dateString > maximumDate ? maximumDate : dateString;
-}
-
-function millisecondsUntilNextUtcDay(referenceDate = new Date()): number {
-    const nextUtcDay = Date.UTC(
-        referenceDate.getUTCFullYear(),
-        referenceDate.getUTCMonth(),
-        referenceDate.getUTCDate() + 1,
-    );
-    return nextUtcDay - referenceDate.getTime();
 }
 
 function formatSuggestedDate(dateString: string): string {
@@ -308,8 +301,13 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         setDepartureDate(route.nextOperatingDate);
     }, [fromLocation, routes, toLocation]);
 
+    // Selectable dates are calendar days at the origin airport, so the window
+    // is recomputed when the origin changes and rolls over at that airport's
+    // midnight rather than at UTC's.
+    const originTimeZone = useMemo(() => airportTimeZoneFor(fromLocation), [fromLocation]);
+
     useEffect(() => {
-        const currentBookingWindow = bookingWindowIsoDates();
+        const currentBookingWindow = bookingWindowIsoDates(new Date(), originTimeZone);
         if (
             currentBookingWindow.earliestDate !== bookingWindow.earliestDate
             || currentBookingWindow.latestDate !== bookingWindow.latestDate
@@ -319,13 +317,13 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         }
 
         const rolloverTimer = window.setTimeout(() => {
-            const nextBookingWindow = bookingWindowIsoDates();
+            const nextBookingWindow = bookingWindowIsoDates(new Date(), originTimeZone);
             latestBookingDateRef.current = nextBookingWindow.latestDate;
             setBookingWindow(nextBookingWindow);
-        }, millisecondsUntilNextUtcDay() + 1);
+        }, millisecondsUntilNextLocalDay(originTimeZone) + 1);
 
         return () => window.clearTimeout(rolloverTimer);
-    }, [bookingWindow.earliestDate, bookingWindow.latestDate]);
+    }, [bookingWindow.earliestDate, bookingWindow.latestDate, originTimeZone]);
 
     useEffect(() => {
         const previousDefaults = previousReturnDefaultsRef.current;

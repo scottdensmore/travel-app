@@ -14,6 +14,7 @@ import { updateFlightSeatingLayout } from '@/lib/FlightSeatLayoutService';
 import { actionValidationFailure } from '@/lib/actionResult';
 import { parsePriceToCents } from '@/lib/bookingPricing';
 import { buildFlightRoutes, findNearbyOperatingDates } from '@/lib/flightSearch';
+import { airportTimeZoneFor } from '@/lib/airports';
 import { bookingWindowIsoDates } from '@/lib/dates';
 import {
     bookingRequestSchema,
@@ -116,7 +117,8 @@ export async function searchFlightsAction(
 
     if (flights.length > 0) return { flights, nearbyDates: [] };
 
-    const { earliestDate, latestDate } = bookingWindowIsoDates(now);
+    const originTimeZone = airportTimeZoneFor(from);
+    const { earliestDate, latestDate } = bookingWindowIsoDates(now, originTimeZone);
     const [schedules, cancelledFlights] = await Promise.all([
         prisma.flightSchedule.findMany({
             where: {
@@ -154,6 +156,7 @@ export async function searchFlightsAction(
             departureDateStr,
             now,
             cancelledFlights,
+            originTimeZone,
         ),
     };
 }

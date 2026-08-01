@@ -2,6 +2,7 @@ import { z, ZodError, ZodType } from 'zod';
 import { validateSeatingLayout } from '@/lib/seatLayout';
 import { ActionValidationFailure } from '@/lib/actionResult';
 import { isValidAuthToken } from '@/lib/authTokenFormat';
+import { airportTimeZoneFor } from '@/lib/airports';
 import {
     DEPARTURE_AFTER_BOOKING_WINDOW_MESSAGE,
     RETURN_AFTER_BOOKING_WINDOW_MESSAGE,
@@ -108,11 +109,13 @@ export const searchFlightsSchema = z.object({
     to: requiredText('Destination', 120),
     departureDate: isoDateSchema.optional(),
     returnDate: isoDateSchema.optional(),
-}).strict().superRefine(({ departureDate, returnDate }, context) => {
+}).strict().superRefine(({ from, departureDate, returnDate }, context) => {
+    // The window is the origin airport's calendar day, not UTC's. A place with
+    // no airport record falls back to UTC rather than rejecting the search.
     const {
         earliestDate: earliestBookableDate,
         latestDate: latestBookableDate,
-    } = bookingWindowIsoDates();
+    } = bookingWindowIsoDates(new Date(), airportTimeZoneFor(from));
 
     if (departureDate && departureDate < earliestBookableDate) {
         context.addIssue({

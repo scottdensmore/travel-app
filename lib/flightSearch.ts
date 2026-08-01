@@ -105,8 +105,11 @@ export function findNearbyOperatingDates(
     requestedDate: string,
     now = new Date(),
     cancelledFlights: CancelledFlightSummary[] = [],
+    originTimeZone?: string | null,
 ): string[] {
-    const { earliestDate, latestDate } = bookingWindowIsoDates(now);
+    // Suggestions are bounded by the same window the search itself uses, which
+    // is the origin airport's calendar day.
+    const { earliestDate, latestDate } = bookingWindowIsoDates(now, originTimeZone);
     const cancelledDepartureKeys = new Set(cancelledFlights.map((flight) => (
         `${flight.flightNumber}\u0000${flight.departureDate.toISOString()}`
     )));
