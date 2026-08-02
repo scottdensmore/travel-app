@@ -80,7 +80,6 @@ describe('PointsActivityService dynamic calculations', () => {
             {
                 id: 3,
                 createdAt: new Date('2026-03-10'),
-                totalPrice: '$450',
                 totalPriceCents: 45000,
                 legs: [{ sequence: 1, flight: {
                     id: 12,
@@ -104,7 +103,6 @@ describe('PointsActivityService dynamic calculations', () => {
             id: 4,
             createdAt: new Date('2026-03-11'),
             status: 'CONFIRMED',
-            totalPrice: '$69.97',
             totalPriceCents: 6997,
             legs: []
         } as any], 500);
@@ -119,7 +117,6 @@ describe('PointsActivityService dynamic calculations', () => {
                 id: 1,
                 createdAt: new Date('2026-01-15'),
                 status: 'CANCELLED',
-                totalPrice: '$350',
                 totalPriceCents: 35000,
                 legs: [{ sequence: 1, flight: {
                     id: 10,

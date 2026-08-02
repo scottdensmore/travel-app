@@ -145,7 +145,7 @@ test.describe('Flight Booking Journey', () => {
       orderBy: { createdAt: 'desc' }
     });
     const expectedTotal = calculateBookingTotal(targetFlight.price, [{ cabinClass: 'ECONOMY' }]);
-    expect(persistedBooking.totalPrice).toBe(expectedTotal.formatted);
+    expect(persistedBooking.totalPriceCents).toBe(expectedTotal.cents);
     expect(persistedBooking.paymentIntentId).toBeNull();
     expect(persistedBooking.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/i);
     

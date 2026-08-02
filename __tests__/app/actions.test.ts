@@ -490,7 +490,6 @@ describe('bookFlightAction', () => {
             id: 1,
             flightId: 42,
             userId: 'user-123',
-            totalPrice: '$200',
             totalPriceCents: 20000,
             wasCreated: true
         });
@@ -524,7 +523,6 @@ describe('bookFlightAction', () => {
             id: 1,
             flightId: 42,
             userId: 'user-123',
-            totalPrice: '$200',
             totalPriceCents: 20000,
             wasCreated: true
         });
@@ -577,7 +575,6 @@ describe('bookFlightAction', () => {
             flightId: 42,
             passengers: [passenger],
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
-            totalPrice: '$0.01',
             totalPriceCents: 1,
             paymentIntentId: 'forged-payment'
         } as any)).resolves.toMatchObject({
@@ -593,7 +590,6 @@ describe('bookFlightAction', () => {
             id: 1,
             flightId: 42,
             userId: 'user-123',
-            totalPrice: '$200',
             totalPriceCents: 20000,
             wasCreated: false
         });
@@ -721,7 +717,6 @@ describe('cancelBookingAction', () => {
         mockedBookingFindUnique.mockResolvedValue({
             id: 1,
             userId: 'user-123',
-            totalPrice: '$69.97',
             totalPriceCents: 6997,
             flightId: 10,
             legs: [{ sequence: 1, flight: { flightNumber: 'GA101', airline: 'Gemini Airways', price: '$200' } }]
@@ -784,7 +779,6 @@ describe('cancelBookingAction', () => {
         mockedBookingFindUnique.mockResolvedValue({
             id: 1,
             userId: 'some-user',
-            totalPrice: '$200',
             totalPriceCents: 20000,
             flightId: 10,
             legs: [{ sequence: 1, flight: { flightNumber: 'GA101', airline: 'Gemini Airways', price: '$200' } }]

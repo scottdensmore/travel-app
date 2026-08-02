@@ -34,7 +34,6 @@ const mockFlights = [
                 id: 10,
                 createdAt: '2026-06-18T10:00:00.000Z',
                 status: 'CONFIRMED',
-                totalPrice: '$200',
                 totalPriceCents: 20000,
                 passengers: [
                     {
@@ -51,7 +50,6 @@ const mockFlights = [
                 id: 11,
                 createdAt: '2026-06-18T11:00:00.000Z',
                 status: 'CANCELLED',
-                totalPrice: '$200',
                 totalPriceCents: 20000,
                 passengers: [
                     {

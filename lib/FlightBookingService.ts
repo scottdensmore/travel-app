@@ -197,9 +197,6 @@ export default class FlightBookingService {
                 data: {
                     flightId,
                     userId,
-                    // totalPrice is retained for one release so a rollback keeps
-                    // a displayable value; totalPriceCents is the source of truth.
-                    totalPrice: total.formatted,
                     totalPriceCents: total.cents,
                     // A booking is its own itinerary. Today every booking has a
                     // single outbound leg; round trips (#69) add the inbound.

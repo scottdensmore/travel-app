@@ -99,9 +99,6 @@ model Booking {
   createdAt       DateTime @default(now())
   status          String   @default("CONFIRMED")
   paymentIntentId String?
-  /// Deprecated display string, still written for one release so a rollback
-  /// keeps its value. Read totalPriceCents instead.
-  totalPrice      String   @default("")
   /// The booking total in minor units. Null for bookings taken before this
   /// column existed, which fall back to the flight's catalogue price.
   totalPriceCents Int?

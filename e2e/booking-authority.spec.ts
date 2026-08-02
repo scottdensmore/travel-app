@@ -71,8 +71,7 @@ test.describe('Authoritative booking persistence', () => {
     expect(await prisma.passenger.count({ where: { flightId: flight.id, seatNumber: '1A' } })).toBe(1);
     const persisted = await prisma.booking.findMany({ where: { flightId: flight.id } });
     expect(persisted).toHaveLength(1);
-    // The integer total is authoritative; the string is retained for one release.
-    expect(persisted[0]).toMatchObject({ totalPrice: '$123.45', totalPriceCents: 12345, paymentIntentId: null });
+    expect(persisted[0]).toMatchObject({ totalPriceCents: 12345, paymentIntentId: null });
 
     // The booking is its own itinerary, with one outbound leg until round trips
     // add the inbound.
@@ -121,8 +120,8 @@ test.describe('Authoritative booking persistence', () => {
     const retry = await service.bookFlight(request);
 
     expect(retry.id).toBe(first.id);
-    expect(first).toMatchObject({ totalPrice: '$400', totalPriceCents: 40000, paymentIntentId: null, wasCreated: true });
-    expect(retry).toMatchObject({ totalPrice: '$400', totalPriceCents: 40000, paymentIntentId: null, wasCreated: false });
+    expect(first).toMatchObject({ totalPriceCents: 40000, paymentIntentId: null, wasCreated: true });
+    expect(retry).toMatchObject({ totalPriceCents: 40000, paymentIntentId: null, wasCreated: false });
     expect(await prisma.booking.count({
       where: { userId: user.id, idempotencyKey: request.idempotencyKey }
     })).toBe(1);
