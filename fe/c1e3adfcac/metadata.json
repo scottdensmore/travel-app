@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "fec1e3adfcac",
+  "strategy": "manual-commit",
+  "branch": "feat/book-itinerary-server",
+  "checkpoints_count": 5,
+  "files_touched": [
+    "lib/FlightBookingService.ts",
+    "lib/validation.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/fe/c1e3adfcac/0/metadata.json",
+      "transcript": "/fe/c1e3adfcac/0/full.jsonl",
+      "compact_transcript": "/fe/c1e3adfcac/0/transcript.jsonl",
+      "content_hash": "/fe/c1e3adfcac/0/content_hash.txt",
+      "prompt": "/fe/c1e3adfcac/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2434,
+    "cache_creation_tokens": 5503475,
+    "cache_read_tokens": 526652646,
+    "output_tokens": 592567,
+    "api_call_count": 960
+  }
+}

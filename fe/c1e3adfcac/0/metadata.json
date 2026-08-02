@@ -1,0 +1,90 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "fec1e3adfcac",
+  "session_id": "396aa3c6-6933-4584-9084-9f5e4f3a6519",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-02T06:42:01.095247755Z",
+  "branch": "feat/book-itinerary-server",
+  "checkpoints_count": 5,
+  "save_step_count": 2,
+  "files_touched": [
+    "lib/FlightBookingService.ts",
+    "lib/validation.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "1d564fb7bf4d",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 2434,
+    "cache_creation_tokens": 5503475,
+    "cache_read_tokens": 526652646,
+    "output_tokens": 592567,
+    "api_call_count": 960
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "claude-skill-toolu_01JH9VHYsrsGh3Zii7LgCF2x",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "update-config"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "1d564fb7bf4d",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 513,
+        "end": 514,
+        "entry_ids": [
+          "e2160c3d-f447-4a6b-b15a-69bfc1d34a58"
+        ],
+        "tool_use_id": "toolu_01JH9VHYsrsGh3Zii7LgCF2x"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01JH9VHYsrsGh3Zii7LgCF2x"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: update-config",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 88
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-02T06:41:59.520272991Z",
+    "agent_lines": 118,
+    "agent_removed": 65,
+    "human_added": 230,
+    "human_modified": 8,
+    "human_removed": 0,
+    "total_committed": 356,
+    "total_lines_changed": 540,
+    "agent_percentage": 33.88888888888889,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 126,
+      "agent_lines_removed": 65
+    }
+  ]
+}
