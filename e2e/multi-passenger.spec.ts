@@ -140,10 +140,10 @@ test.describe('Multi-Passenger Booking Journey', () => {
       where: { user: { email: uniqueEmail } },
       orderBy: { createdAt: 'desc' }
     });
-    expect(persistedBooking.totalPrice).toBe(calculateBookingTotal(targetFlight.price, [
+    expect(persistedBooking.totalPriceCents).toBe(calculateBookingTotal(targetFlight.price, [
       { cabinClass: 'ECONOMY' },
       { cabinClass: 'ECONOMY' }
-    ]).formatted);
+    ]).cents);
     expect(persistedBooking.paymentIntentId).toBeNull();
   });
 });

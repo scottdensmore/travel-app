@@ -1,0 +1,11 @@
+-- Contract step for the booking total (#107, #108).
+--
+-- "totalPriceCents" has been the source of truth since #107; "totalPrice" was
+-- retained and still written so that a rollback of that change kept a
+-- displayable value. Nothing reads it.
+--
+-- Before dropping: no row has a populated "totalPrice" without a
+-- "totalPriceCents", so no value is lost. Bookings created since #107 populate
+-- the integer directly, which e2e/booking-authority.spec.ts asserts against a
+-- real database.
+ALTER TABLE "Booking" DROP COLUMN "totalPrice";

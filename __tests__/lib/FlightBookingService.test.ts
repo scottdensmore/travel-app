@@ -70,7 +70,6 @@ describe('FlightBookingService', () => {
             id: 2,
             flightId: 7,
             userId: 'u1',
-            totalPrice: '$700',
             totalPriceCents: 70000,
             paymentIntentId: null,
             legs: [{ id: 55, sequence: 1, flightId: 7 }],
@@ -128,7 +127,6 @@ describe('FlightBookingService', () => {
             data: {
                 flightId: 7,
                 userId: 'u1',
-                totalPrice: '$700',
                 totalPriceCents: 70000,
                 legs: {
                     create: [{ sequence: 1, flightId: 7 }],
@@ -170,7 +168,7 @@ describe('FlightBookingService', () => {
             }],
         });
 
-        expect(result).toMatchObject({ id: 2, totalPrice: '$700' });
+        expect(result).toMatchObject({ id: 2, totalPriceCents: 70000 });
     });
 
     it('returns the existing booking when an idempotency key is retried', async () => {
@@ -180,7 +178,6 @@ describe('FlightBookingService', () => {
             userId: 'u1',
             flightId: 7,
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
-            totalPrice: '$350',
             totalPriceCents: 35000,
             passengers: [{
                 id: passengerId,
@@ -232,7 +229,6 @@ describe('FlightBookingService', () => {
             userId: 'u1',
             flightId: 8,
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
-            totalPrice: '$350',
             totalPriceCents: 35000,
             passengers: [{
                 id: passengerId,
@@ -407,7 +403,6 @@ describe('FlightBookingService', () => {
                 cabinClass: 'ECONOMY'
             }],
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
-            totalPrice: '$0.01',
             paymentIntentId: 'forged'
         } as any)).rejects.toThrow('Unrecognized');
 
