@@ -17,6 +17,7 @@ const mockBook = bookFlightAction as jest.Mock;
 const searchSuccess = (flights: unknown[], nearbyDates: string[] = []) => ({
     flights,
     nearbyDates,
+    inbound: null,
 });
 
 const routes = [
@@ -619,5 +620,63 @@ describe('FlightBookingForm', () => {
         expect(flightNames[0]).toBe('UA103');
         expect(flightNames[1]).toBe('AA102');
         expect(flightNames[2]).toBe('GA101');
+    });
+
+    it('lists return flights for a round trip', async () => {
+        mockSearch.mockResolvedValue({
+            flights: mockFlights,
+            nearbyDates: [],
+            inbound: {
+                flights: [{
+                    id: 99,
+                    airline: 'Gemini Airways',
+                    flightNumber: 'GA900',
+                    from: 'Detroit, USA',
+                    to: 'Seattle, USA',
+                    departureDate: '2026-07-22T09:00:00Z',
+                    returnDate: null,
+                    price: '$275',
+                    status: 'ON_TIME',
+                }],
+                nearbyDates: [],
+            },
+        });
+        renderForm();
+
+        fireEvent.click(screen.getByText('Find your trip'));
+
+        await waitFor(() => {
+            expect(screen.getByTestId('inbound-results')).toBeInTheDocument();
+        });
+        expect(screen.getByText('GA900')).toBeInTheDocument();
+        expect(screen.getByText('$275')).toBeInTheDocument();
+    });
+
+    it('shows no return section for a one-way search', async () => {
+        mockSearch.mockResolvedValue({ flights: mockFlights, nearbyDates: [], inbound: null });
+        renderForm();
+
+        fireEvent.click(screen.getByLabelText('One Way'));
+        fireEvent.click(screen.getByText('Find your trip'));
+
+        await waitFor(() => {
+            expect(screen.getByText('CA101')).toBeInTheDocument();
+        });
+        expect(screen.queryByTestId('inbound-results')).not.toBeInTheDocument();
+    });
+
+    it('says so when the return date has no flights', async () => {
+        mockSearch.mockResolvedValue({
+            flights: mockFlights,
+            nearbyDates: [],
+            inbound: { flights: [], nearbyDates: ['2026-07-23'] },
+        });
+        renderForm();
+
+        fireEvent.click(screen.getByText('Find your trip'));
+
+        await waitFor(() => {
+            expect(screen.getByText('No return flights available on this date.')).toBeInTheDocument();
+        });
     });
 });
