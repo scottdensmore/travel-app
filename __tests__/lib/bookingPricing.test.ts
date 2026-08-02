@@ -1,6 +1,6 @@
 /** @jest-environment node */
 import { bookingTotalCents } from '@/lib/bookingPricing';
-import { calculateBookingTotal, parsePriceToCents } from '@/lib/bookingPricing';
+import { calculateBookingTotal, calculateItineraryTotal, parsePriceToCents } from '@/lib/bookingPricing';
 
 describe('authoritative booking pricing', () => {
     it('calculates cabin fares from the stored base price in integer cents', () => {
@@ -45,3 +45,34 @@ describe('bookingTotalCents', () => {
         expect(bookingTotalCents({ totalPriceCents: null }, { price: 'not a price' })).toBe(0);
     });
 });
+
+describe('calculateItineraryTotal', () => {
+    it('charges each leg at its own fare', () => {
+        // A return leg is priced from its own flight, not doubled from the
+        // outbound.
+        const total = calculateItineraryTotal(['$350', '$275'], [{ cabinClass: 'ECONOMY' }]);
+
+        expect(total.cents).toBe(62_500);
+        expect(total.formatted).toBe('$625');
+    });
+
+    it('applies the cabin multiplier per passenger on every leg', () => {
+        const total = calculateItineraryTotal(
+            ['$100', '$100'],
+            [{ cabinClass: 'ECONOMY' }, { cabinClass: 'BUSINESS' }],
+        );
+
+        // Economy 100 + Business 200, twice.
+        expect(total.cents).toBe(60_000);
+    });
+
+    it('matches the single-leg total for a one-way itinerary', () => {
+        expect(calculateItineraryTotal(['$350'], [{ cabinClass: 'FIRST' }]))
+            .toEqual(calculateBookingTotal('$350', [{ cabinClass: 'FIRST' }]));
+    });
+
+    it('rejects an itinerary with no legs', () => {
+        expect(() => calculateItineraryTotal([], [{ cabinClass: 'ECONOMY' }]))
+            .toThrow('An itinerary needs at least one flight.');
+    });
+})

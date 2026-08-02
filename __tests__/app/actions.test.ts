@@ -488,7 +488,7 @@ describe('bookFlightAction', () => {
         mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
         mockBookFlight.mockResolvedValue({
             id: 1,
-            flightId: 42,
+            flightIds: [42],
             userId: 'user-123',
             totalPriceCents: 20000,
             wasCreated: true
@@ -504,24 +504,24 @@ describe('bookFlightAction', () => {
 
         const passengers = [{
             firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
-            passportNumber: 'AB123456', gender: 'Female', seatNumber: '11A',
+            passportNumber: 'AB123456', gender: 'Female', seatNumbers: ['11A'],
             cabinClass: 'ECONOMY'
         }];
         const result = await bookFlightAction({
-            flightId: 42,
+            flightIds: [42],
             passengers,
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
         });
 
         expect(mockBookFlight).toHaveBeenCalledWith(expect.objectContaining({
-            flightId: 42,
+            flightIds: [42],
             userId: 'user-123',
             passengers,
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
         }));
         expect(result).toEqual({
             id: 1,
-            flightId: 42,
+            flightIds: [42],
             userId: 'user-123',
             totalPriceCents: 20000,
             wasCreated: true
@@ -541,12 +541,12 @@ describe('bookFlightAction', () => {
         mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
         const passenger = {
             firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
-            passportNumber: 'AB123456', gender: 'Female', seatNumber: '11A',
+            passportNumber: 'AB123456', gender: 'Female', seatNumbers: ['11A'],
             cabinClass: 'ECONOMY'
         };
 
         await expect(bookFlightAction({
-            flightId: 42,
+            flightIds: [42],
             passengers: Array.from({ length: 10 }, () => passenger),
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
         })).resolves.toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR' } });
@@ -567,12 +567,12 @@ describe('bookFlightAction', () => {
         mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
         const passenger = {
             firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
-            passportNumber: 'AB123456', gender: 'Female', seatNumber: '11A',
+            passportNumber: 'AB123456', gender: 'Female', seatNumbers: ['11A'],
             cabinClass: 'ECONOMY'
         };
 
         await expect(bookFlightAction({
-            flightId: 42,
+            flightIds: [42],
             passengers: [passenger],
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
             totalPriceCents: 1,
@@ -588,7 +588,7 @@ describe('bookFlightAction', () => {
         mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
         mockBookFlight.mockResolvedValue({
             id: 1,
-            flightId: 42,
+            flightIds: [42],
             userId: 'user-123',
             totalPriceCents: 20000,
             wasCreated: false
@@ -596,10 +596,10 @@ describe('bookFlightAction', () => {
         mockedFlightFindUnique.mockResolvedValue({ id: 42, flightNumber: 'GA101' });
 
         await bookFlightAction({
-            flightId: 42,
+            flightIds: [42],
             passengers: [{
                 firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
-                passportNumber: 'AB123456', gender: 'Female', seatNumber: '11A',
+                passportNumber: 'AB123456', gender: 'Female', seatNumbers: ['11A'],
                 cabinClass: 'ECONOMY'
             }],
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'

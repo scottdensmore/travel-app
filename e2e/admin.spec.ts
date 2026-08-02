@@ -129,7 +129,7 @@ test.describe('Admin Control Journey', () => {
     });
     const admin = await prisma.user.findUniqueOrThrow({ where: { email: adminEmail } });
     await new FlightBookingService().bookFlight({
-      flightId: activeOccurrence.id,
+      flightIds: [activeOccurrence.id],
       userId: admin.id,
       passengers: [{
         firstName: 'Manifest',
@@ -137,7 +137,7 @@ test.describe('Admin Control Journey', () => {
         dateOfBirth: '1988-04-12',
         passportNumber: 'E2EMANIFEST123',
         gender: 'Other',
-        seatNumber: '11A',
+        seatNumbers: ['11A'],
         cabinClass: 'ECONOMY'
       }],
       idempotencyKey: 'de45ec8a-4ae2-4ac7-aa64-e8d9588963c2'
@@ -296,7 +296,7 @@ test.describe('Admin Control Journey', () => {
         seatPattern: 'ABC-DEF'
       }),
       new FlightBookingService().bookFlight({
-        flightId: raceFlight.id,
+        flightIds: [raceFlight.id],
         userId: admin.id,
         passengers: [{
           firstName: 'Race',
@@ -304,7 +304,7 @@ test.describe('Admin Control Journey', () => {
           dateOfBirth: '1990-01-01',
           passportNumber: 'E2ERACE123',
           gender: 'Other',
-          seatNumber: '11A',
+          seatNumbers: ['11A'],
           cabinClass: 'ECONOMY'
         }],
         idempotencyKey: '92160e58-74ee-460d-a98f-f58d1ea71477'

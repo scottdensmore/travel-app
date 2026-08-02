@@ -12,6 +12,8 @@ import {
 export const MAX_MUTATION_BYTES = 1_000_000;
 export const MAX_REGISTRATION_BYTES = 16_384;
 export const MAX_PASSENGERS_PER_BOOKING = 9;
+/// Outbound and inbound. Multi-city itineraries raise this once P1.3 lands.
+export const MAX_ITINERARY_LEGS = 2;
 
 const requiredText = (label: string, max: number) => z.string()
     .trim()
@@ -223,6 +225,10 @@ export const scheduleSchema = z.object({
     }
 });
 
+const seatNumberSchema = requiredText('Seat number', 6)
+    .transform(value => value.toUpperCase())
+    .pipe(z.string().regex(/^[1-9]\d{0,2}[A-Z]$/, 'Seat number is invalid.'));
+
 export const passengerSchema = z.object({
     firstName: requiredText('First name', 100),
     lastName: requiredText('Last name', 100),
@@ -231,19 +237,44 @@ export const passengerSchema = z.object({
         .transform(value => value.toUpperCase())
         .pipe(z.string().regex(/^[A-Z0-9-]+$/, 'Passport number contains invalid characters.')),
     gender: z.enum(['Male', 'Female', 'Other']),
-    seatNumber: requiredText('Seat number', 6)
-        .transform(value => value.toUpperCase())
-        .pipe(z.string().regex(/^[1-9]\d{0,2}[A-Z]$/, 'Seat number is invalid.')),
+    /// One seat per leg, in the same order as the itinerary's flights.
+    seatNumbers: z.array(seatNumberSchema, { error: 'A seat is required for each flight.' })
+        .min(1, 'A seat is required for each flight.')
+        .max(MAX_ITINERARY_LEGS),
     cabinClass: z.enum(['ECONOMY', 'PREMIUM_ECONOMY', 'BUSINESS', 'FIRST'])
 }).strict();
 
 export const bookingRequestSchema = z.object({
-    flightId: positiveId('Flight ID'),
+    /// The itinerary, in leg order. One flight for a one-way trip, two for a
+    /// round trip.
+    flightIds: z.array(positiveId('Flight ID'), { error: 'A flight is required.' })
+        .min(1, 'A flight is required.')
+        .max(MAX_ITINERARY_LEGS),
     passengers: z.array(passengerSchema, { error: 'At least one passenger is required.' })
         .min(1, 'At least one passenger is required.')
         .max(MAX_PASSENGERS_PER_BOOKING),
     idempotencyKey: z.uuid('Booking request ID must be a UUID.')
-}).strict();
+}).strict().superRefine(({ flightIds, passengers }, context) => {
+    if (new Set(flightIds).size !== flightIds.length) {
+        context.addIssue({
+            code: 'custom',
+            path: ['flightIds'],
+            message: 'An itinerary cannot repeat a flight.',
+        });
+    }
+
+    // Every traveller needs a seat on every leg, or the itinerary is incomplete
+    // in a way the database would only catch as a missing assignment.
+    passengers.forEach((passenger, index) => {
+        if (passenger.seatNumbers.length !== flightIds.length) {
+            context.addIssue({
+                code: 'custom',
+                path: ['passengers', index, 'seatNumbers'],
+                message: 'A seat is required for each flight.',
+            });
+        }
+    });
+});
 
 export const flightBookingServiceSchema = bookingRequestSchema.extend({
     userId: requiredText('User ID', 128)

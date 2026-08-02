@@ -200,8 +200,8 @@ export async function getFlightRoutesAction() {
     return buildFlightRoutes(schedules);
 }
 
-export async function bookFlightAction(bookingData: { 
-    flightId: number;
+export async function bookFlightAction(bookingData: {
+    flightIds: number[];
     passengers: PassengerInput[];
     idempotencyKey: string;
 }) {
@@ -213,14 +213,17 @@ export async function bookFlightAction(bookingData: {
     bookingData = parsed.data as typeof bookingData;
 
     const result = await flightBookingService.bookFlight({
-        flightId: bookingData.flightId,
+        flightIds: bookingData.flightIds,
         userId,
         passengers: bookingData.passengers,
         idempotencyKey: bookingData.idempotencyKey
     });
 
     try {
-        const flight = await prisma.flight.findUnique({ where: { id: bookingData.flightId } });
+        // The confirmation names the outbound flight; a round trip's inbound
+        // is shown on the itinerary rather than in the notification.
+        const [outboundFlightId] = bookingData.flightIds;
+        const flight = await prisma.flight.findUnique({ where: { id: outboundFlightId } });
         if (flight && result.wasCreated) {
             const points = Math.floor(bookingTotalCents(result, flight) / 100);
             await prisma.notification.create({
@@ -323,10 +326,14 @@ export async function cancelBookingAction(bookingId: number) {
     }
 
     const updated = await prisma.$transaction(async (tx) => {
-        // Lock every flight the itinerary touches, in leg order, so concurrent
-        // cancellations of overlapping itineraries cannot deadlock.
-        for (const flight of bookingFlights(booking)) {
-            await lockFlightForUpdate(tx, flight.id);
+        // Lock in ascending flight order, matching FlightBookingService. Leg
+        // order would deadlock two itineraries that cover the same flights in
+        // opposite directions.
+        const lockOrder = bookingFlights(booking)
+            .map(flight => flight.id)
+            .sort((left, right) => left - right);
+        for (const flightId of lockOrder) {
+            await lockFlightForUpdate(tx, flightId);
         }
         const lockedBooking = await tx.booking.findUnique({
             where: { id: bookingId },

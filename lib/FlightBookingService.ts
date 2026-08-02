@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { outboundFlight } from '@/lib/bookingItinerary';
+import { bookingFlights } from '@/lib/bookingItinerary';
 import { prisma } from '@/lib/prisma';
 import { assertSeatAvailableForCabin } from '@/lib/seatLayout';
 import { lockFlightForUpdate } from '@/lib/flightLock';
 import { flightBookingServiceSchema, parseInput } from '@/lib/validation';
-import { calculateBookingTotal } from '@/lib/bookingPricing';
+import { calculateItineraryTotal } from '@/lib/bookingPricing';
 import { safePassengerSelect } from '@/lib/passengerDataAccess';
 import {
     decryptPassengerData,
@@ -18,7 +18,8 @@ export interface PassengerInput {
   dateOfBirth: Date | string;
   passportNumber: string;
   gender: string;
-  seatNumber: string;
+  /// One seat per leg, in itinerary order.
+  seatNumbers: string[];
   cabinClass: string;
 }
 
@@ -32,23 +33,32 @@ function passengerRequestSignature(passenger: PassengerInput): string {
         dateOfBirth,
         passenger.passportNumber,
         passenger.gender,
-        passenger.seatNumber,
+        passenger.seatNumbers,
         passenger.cabinClass
     ]);
 }
 
-interface ProtectedPassenger extends Omit<PassengerInput, 'dateOfBirth' | 'passportNumber'> {
+interface ProtectedPassenger extends Omit<PassengerInput, 'dateOfBirth' | 'passportNumber' | 'seatNumbers'> {
     id: string;
     dateOfBirthEncrypted: string | null;
     passportNumberEncrypted: string | null;
+    seatAssignments?: Array<{ seatNumber: string; leg: { sequence: number } }>;
 }
 
 function protectedPassengerRequestSignature(passenger: ProtectedPassenger): string {
     if (!passenger.dateOfBirthEncrypted || !passenger.passportNumberEncrypted) {
         throw new Error('Passenger identity data is no longer available.');
     }
+    // Seats come from the assignments, in leg order. Passenger carries only the
+    // outbound seat, so comparing that alone would treat a retry with a
+    // different return seat as the same request.
+    const seatNumbers = [...(passenger.seatAssignments ?? [])]
+        .sort((left, right) => left.leg.sequence - right.leg.sequence)
+        .map(assignment => assignment.seatNumber);
+
     return passengerRequestSignature({
         ...passenger,
+        seatNumbers,
         dateOfBirth: decryptPassengerData(passenger.dateOfBirthEncrypted, {
             passengerId: passenger.id,
             field: 'dateOfBirth',
@@ -61,12 +71,14 @@ function protectedPassengerRequestSignature(passenger: ProtectedPassenger): stri
 }
 
 function matchesPersistedRequest(
-    existingFlightId: number | null,
+    existingFlightIds: number[],
     existingPassengers: ProtectedPassenger[],
-    flightId: number,
+    flightIds: number[],
     passengers: PassengerInput[]
 ): boolean {
-    if (existingFlightId !== flightId || existingPassengers.length !== passengers.length) {
+    const sameItinerary = existingFlightIds.length === flightIds.length
+        && existingFlightIds.every((id, index) => id === flightIds[index]);
+    if (!sameItinerary || existingPassengers.length !== passengers.length) {
         return false;
     }
     const existingSignatures = existingPassengers.map(protectedPassengerRequestSignature).sort();
@@ -75,22 +87,35 @@ function matchesPersistedRequest(
 }
 
 export default class FlightBookingService {
-    async bookFlight(bookingData: { 
-        flightId: number;
+    async bookFlight(bookingData: {
+        flightIds: number[];
         userId: string;
         passengers: PassengerInput[];
         idempotencyKey: string;
     }) {
-        const { flightId, userId, passengers, idempotencyKey } = parseInput(
+        const { flightIds, userId, passengers, idempotencyKey } = parseInput(
             flightBookingServiceSchema,
             bookingData
         );
 
         // Run booking inside a database transaction to ensure atomic execution
         const savedBooking = await prisma.$transaction(async (tx) => {
-            await lockFlightForUpdate(tx, flightId);
-            const flight = await tx.flight.findUnique({ where: { id: flightId } });
-            if (!flight) throw new Error("Flight not found");
+            // Lock in ascending flight order rather than itinerary order. Two
+            // itineraries covering the same flights in opposite directions would
+            // otherwise deadlock against each other.
+            for (const id of [...flightIds].sort((left, right) => left - right)) {
+                await lockFlightForUpdate(tx, id);
+            }
+
+            const flightsById = new Map(
+                (await tx.flight.findMany({ where: { id: { in: flightIds } } }))
+                    .map(flight => [flight.id, flight])
+            );
+            const flights = flightIds.map(id => {
+                const flight = flightsById.get(id);
+                if (!flight) throw new Error("Flight not found");
+                return flight;
+            });
 
             const existingRequest = await tx.booking.findFirst({
                 where: { userId, idempotencyKey },
@@ -104,15 +129,21 @@ export default class FlightBookingService {
                             ...safePassengerSelect,
                             dateOfBirthEncrypted: true,
                             passportNumberEncrypted: true,
+                            seatAssignments: {
+                                select: {
+                                    seatNumber: true,
+                                    leg: { select: { sequence: true } },
+                                },
+                            },
                         }
                     }
                 }
             });
             if (existingRequest) {
                 if (!matchesPersistedRequest(
-                    outboundFlight(existingRequest)?.id ?? null,
+                    bookingFlights(existingRequest).map(flight => flight.id),
                     existingRequest.passengers,
-                    flightId,
+                    flightIds,
                     passengers
                 )) {
                     throw new Error('Booking request ID was already used for a different booking.');
@@ -131,49 +162,60 @@ export default class FlightBookingService {
                 };
             }
 
-            if (flight.status === 'CANCELLED' || flight.departureDate.getTime() <= Date.now()) {
-                throw new Error('Flight is not available for booking.');
-            }
+            // Each leg is checked against its own flight: a seat that exists in
+            // one cabin layout may not exist in the other, and occupancy is per
+            // flight.
+            for (const [legIndex, flight] of flights.entries()) {
+                if (flight.status === 'CANCELLED' || flight.departureDate.getTime() <= Date.now()) {
+                    throw new Error('Flight is not available for booking.');
+                }
 
-            // Check if any seat is already booked on this flight
-            const requestedSeats = passengers.map(p => p.seatNumber);
-            if (new Set(requestedSeats).size !== requestedSeats.length) {
-                throw new Error("Duplicate seats selected in request.");
-            }
+                const requestedSeats = passengers.map(passenger => passenger.seatNumbers[legIndex]);
+                if (new Set(requestedSeats).size !== requestedSeats.length) {
+                    throw new Error("Duplicate seats selected in request.");
+                }
 
-            for (const passenger of passengers) {
-                assertSeatAvailableForCabin(
-                    passenger.seatNumber,
-                    passenger.cabinClass,
-                    flight
+                for (const passenger of passengers) {
+                    assertSeatAvailableForCabin(
+                        passenger.seatNumbers[legIndex],
+                        passenger.cabinClass,
+                        flight
+                    );
+                }
+
+                // Occupancy comes from the seat assignments rather than from
+                // Passenger, which can only describe one leg.
+                const occupied = new Set(
+                    (await tx.seatAssignment.findMany({
+                        where: {
+                            flightId: flight.id,
+                            leg: { booking: { status: { not: "CANCELLED" } } },
+                        },
+                        select: { seatNumber: true },
+                    })).map(assignment => assignment.seatNumber)
                 );
-            }
 
-            const existingBookings = await tx.booking.findMany({
-                where: { legs: { some: { flightId } }, status: { not: "CANCELLED" } },
-                include: { passengers: { select: { seatNumber: true } } }
-            });
-
-            const occupiedSeats = new Set(
-                existingBookings
-                    .flatMap(b => b.passengers)
-                    .map(p => p.seatNumber)
-            );
-
-            for (const seat of requestedSeats) {
-                if (occupiedSeats.has(seat)) {
-                    throw new Error(`Seat ${seat} is already occupied on this flight.`);
+                for (const seat of requestedSeats) {
+                    if (occupied.has(seat)) {
+                        throw new Error(`Seat ${seat} is already occupied on this flight.`);
+                    }
                 }
             }
 
-            const total = calculateBookingTotal(
-                flight.price,
+            const total = calculateItineraryTotal(
+                flights.map(flight => flight.price),
                 passengers.map(passenger => ({
                     cabinClass: passenger.cabinClass as 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST'
                 }))
             );
 
-            const sensitiveDataExpiresAt = getPassengerDataRetentionDeadline(flight.departureDate);
+            // Retain passenger data until the trip ends, which is the last leg.
+            const lastDeparture = flights
+                .map(flight => flight.departureDate)
+                .reduce((latest, date) => (date > latest ? date : latest));
+            const sensitiveDataExpiresAt = getPassengerDataRetentionDeadline(lastDeparture);
+
+            const [outboundFlightId] = flightIds;
             const protectedPassengers = passengers.map(passenger => {
                 const id = randomUUID();
                 const dateOfBirth = passenger.dateOfBirth.slice(0, 10);
@@ -191,21 +233,23 @@ export default class FlightBookingService {
                     }),
                     sensitiveDataExpiresAt,
                     gender: passenger.gender,
-                    seatNumber: passenger.seatNumber,
+                    // Passenger still carries one seat and one flight while those
+                    // columns are being retired; they describe the outbound leg.
+                    seatNumber: passenger.seatNumbers[0],
                     cabinClass: passenger.cabinClass,
-                    flightId,
+                    flightId: outboundFlightId,
                 };
             });
 
-            // Create booking with nested passengers
             const booking = await tx.booking.create({
                 data: {
                     userId,
                     totalPriceCents: total.cents,
-                    // A booking is its own itinerary. Today every booking has a
-                    // single outbound leg; round trips (#69) add the inbound.
                     legs: {
-                        create: [{ sequence: 1, flightId }],
+                        create: flightIds.map((flightId, index) => ({
+                            sequence: index + 1,
+                            flightId,
+                        })),
                     },
                     paymentIntentId: null,
                     idempotencyKey,
@@ -218,18 +262,20 @@ export default class FlightBookingService {
                     legs: { orderBy: { sequence: 'asc' } }
                 }
             });
-            // Seat assignments need the leg's identity, so they follow the
-            // booking rather than nesting inside it. Written from the same array
-            // the passengers came from, so the two cannot disagree.
-            const [outboundLeg] = booking.legs;
+
+            // Seat assignments need each leg's identity, so they follow the
+            // booking. Written from the same arrays the legs and passengers came
+            // from, so the three cannot disagree.
             await tx.seatAssignment.createMany({
-                data: protectedPassengers.map(passenger => ({
-                    passengerId: passenger.id,
-                    legId: outboundLeg.id,
-                    flightId,
-                    seatNumber: passenger.seatNumber,
-                    cabinClass: passenger.cabinClass,
-                })),
+                data: booking.legs.flatMap((leg, legIndex) => (
+                    protectedPassengers.map((passenger, passengerIndex) => ({
+                        passengerId: passenger.id,
+                        legId: leg.id,
+                        flightId: leg.flightId,
+                        seatNumber: passengers[passengerIndex].seatNumbers[legIndex],
+                        cabinClass: passenger.cabinClass,
+                    }))
+                )),
             });
 
             return { ...booking, wasCreated: true };
