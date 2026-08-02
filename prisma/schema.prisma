@@ -105,9 +105,6 @@ model Booking {
   currency        String   @default("USD")
   idempotencyKey  String?
 
-  flightId Int?
-  flight   Flight? @relation(fields: [flightId], references: [id])
-
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
@@ -158,7 +155,6 @@ model Flight {
   economyRows        Int?
   seatPattern        String?
 
-  bookings        Booking[]
   passengers      Passenger[]
   itineraryLegs   ItineraryLeg[]
   seatAssignments SeatAssignment[]

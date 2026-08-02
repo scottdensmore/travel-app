@@ -48,7 +48,6 @@ async function createFlight(suffix: string) {
 async function createLegacyBooking(flightId: number, seatNumber: string) {
     const booking = await prisma.booking.create({
         data: {
-            flightId,
             legs: { create: [{ sequence: 1, flightId }] },
             passengers: {
                 create: [{
@@ -104,7 +103,7 @@ describe('seat assignments in PostgreSQL', () => {
         const flight = await createFlight(`CONTESTED-${Date.now()}`);
         const first = await createLegacyBooking(flight.id, '3C');
         const second = await prisma.booking.create({
-            data: { flightId: flight.id, legs: { create: [{ sequence: 1, flightId: flight.id }] } },
+            data: { legs: { create: [{ sequence: 1, flightId: flight.id }] } },
             include: { legs: true },
         });
         created.bookingIds.push(second.id);

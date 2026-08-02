@@ -69,7 +69,7 @@ test.describe('Authoritative booking persistence', () => {
     expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
     expect(results.filter(result => result.status === 'rejected')).toHaveLength(1);
     expect(await prisma.passenger.count({ where: { flightId: flight.id, seatNumber: '1A' } })).toBe(1);
-    const persisted = await prisma.booking.findMany({ where: { flightId: flight.id } });
+    const persisted = await prisma.booking.findMany({ where: { legs: { some: { flightId: flight.id } } } });
     expect(persisted).toHaveLength(1);
     expect(persisted[0]).toMatchObject({ totalPriceCents: 12345, paymentIntentId: null });
 

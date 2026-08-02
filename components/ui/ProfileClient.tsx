@@ -46,7 +46,6 @@ interface Booking {
     createdAt: Date | string;
     status: string; // "CONFIRMED" or "CANCELLED"
     totalPriceCents: number | null;
-    flightId: number | null;
     // The itinerary. One leg today; a round trip adds the inbound (#69).
     legs: BookingLeg[];
     passengers: Passenger[];
@@ -109,8 +108,9 @@ export default function ProfileClient({
     const [isSavingSeats, setIsSavingSeats] = useState<boolean>(false);
 
     useEffect(() => {
-        if (selectedBooking && selectedBooking.flightId) {
-            getOccupiedSeatsAction(selectedBooking.flightId)
+        const selectedFlightId = selectedBooking ? outboundFlight(selectedBooking)?.id : undefined;
+        if (selectedBooking && selectedFlightId) {
+            getOccupiedSeatsAction(selectedFlightId)
                 .then(seats => {
                     setModalOccupiedSeats(seats);
                 })
