@@ -152,6 +152,17 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
     const getPassengerFieldError = (index: number, field: keyof PassengerFormState) =>
         serverFieldErrors[`passengers.${index}.${field}`]?.[0];
 
+    /**
+     * Seat errors name the leg they belong to, so the path may be either
+     * `passengers.0.seatNumbers` or `passengers.0.seatNumbers.1`.
+     */
+    const getPassengerSeatError = (index: number) => {
+        const prefix = `passengers.${index}.seatNumbers`;
+        const field = Object.keys(serverFieldErrors)
+            .find(key => key === prefix || key.startsWith(`${prefix}.`));
+        return field ? serverFieldErrors[field]?.[0] : undefined;
+    };
+
     const validateStep1 = () => {
         for (let i = 0; i < passengers.length; i++) {
             const p = passengers[i];
@@ -400,7 +411,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
     const handleSeatClick = (seat: string) => {
         const cabinClass = passengers[activePassengerIndex]?.cabinClass || 'ECONOMY';
         setServerFieldErrors(current => Object.fromEntries(
-            Object.entries(current).filter(([field]) => !/^passengers\.\d+\.seatNumber$/.test(field))
+            Object.entries(current).filter(([field]) => !/^passengers\.\d+\.seatNumbers(\.\d+)?$/.test(field))
         ));
 
         if (autoAllocateGroup && passengers.length > 1) {
@@ -470,13 +481,16 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                 dateOfBirth: new Date(p.dateOfBirth).toISOString(),
                 passportNumber: p.passportNumber,
                 gender: p.gender,
-                seatNumber: p.seatNumber,
+                // One seat per leg, in itinerary order. The wizard collects a
+                // single outbound seat today; choosing a seat per leg is the
+                // next slice.
+                seatNumbers: [p.seatNumber],
                 cabinClass: p.cabinClass
             }));
 
             idempotencyKeyRef.current ??= createBookingRequestId();
             const result = await bookFlightAction({
-                flightId: flight.id,
+                flightIds: [flight.id],
                 passengers: formattedPassengers,
                 idempotencyKey: idempotencyKeyRef.current
             });
@@ -485,14 +499,20 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                 setErrorMessage(result.error.message);
                 setServerFieldErrors(result.error.fields);
                 const firstFieldPath = Object.keys(result.error.fields)[0];
-                const passengerMatch = /^passengers\.(\d+)\.(\w+)$/.exec(firstFieldPath || '');
+                const passengerMatch = /^passengers\.(\d+)\.(\w+)(?:\.\d+)?$/.exec(firstFieldPath || '');
                 if (passengerMatch) {
                     const passengerIndex = Number(passengerMatch[1]);
                     setActivePassengerIndex(passengerIndex);
-                    setStep(passengerMatch[2] === 'seatNumber' ? 2 : 1);
+                    setStep(passengerMatch[2] === 'seatNumbers' ? 2 : 1);
                     setTimeout(() => {
+                        // A seat error names its leg, so the path carries a
+                        // trailing index the target element does not.
+                        const targetPath = firstFieldPath.replace(
+                            /^(passengers\.\d+\.seatNumbers)(?:\.\d+)?$/,
+                            'passengers.$#.seatNumber',
+                        ).replace('$#', String(passengerIndex));
                         const field = document.querySelector<HTMLElement>(
-                            `[data-validation-path="${firstFieldPath}"]`
+                            `[data-validation-path="${targetPath}"]`
                         );
                         field?.focus();
                     }, 0);
@@ -764,8 +784,8 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                             data-validation-path={`passengers.${idx}.seatNumber`}
                                             aria-label={`${p.firstName || 'Passenger'} ${p.lastName || `#${idx + 1}`}, Class: ${p.cabinClass}, Seat: ${p.seatNumber || 'Not Chosen'}`}
                                             aria-pressed={activePassengerIndex === idx}
-                                            data-invalid={Boolean(getPassengerFieldError(idx, 'seatNumber')) || undefined}
-                                            aria-describedby={getPassengerFieldError(idx, 'seatNumber') ? `passenger-${idx}-seatNumber-error` : undefined}
+                                            data-invalid={Boolean(getPassengerSeatError(idx)) || undefined}
+                                            aria-describedby={getPassengerSeatError(idx) ? `passenger-${idx}-seatNumber-error` : undefined}
                                             style={{
                                                 width: '100%',
                                                 color: 'inherit',
@@ -782,9 +802,9 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                                 Class: {p.cabinClass} | Seat: <span style={{ color: '#34d399', fontWeight: 'bold' }}>{p.seatNumber || 'Not Chosen'}</span>
                                             </span>
                                         </button>
-                                        {getPassengerFieldError(idx, 'seatNumber') && (
+                                        {getPassengerSeatError(idx) && (
                                             <div id={`passenger-${idx}-seatNumber-error`} style={{ color: '#f87171', fontSize: '0.8rem' }}>
-                                                {getPassengerFieldError(idx, 'seatNumber')}
+                                                {getPassengerSeatError(idx)}
                                             </div>
                                         )}
                                         </React.Fragment>

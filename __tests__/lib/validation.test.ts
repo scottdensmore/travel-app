@@ -106,14 +106,14 @@ describe('shared server validation schemas', () => {
             dateOfBirth: '1990-01-02',
             passportNumber: ' ab123456 ',
             gender: 'Female',
-            seatNumber: '11a',
+            seatNumbers: ['11a'],
             cabinClass: 'ECONOMY'
         };
         expect(passengerSchema.parse(passenger)).toMatchObject({
             firstName: 'Ada',
             lastName: 'Lovelace',
             passportNumber: 'AB123456',
-            seatNumber: '11A'
+            seatNumbers: ['11A']
         });
         expect(passengerSchema.parse({
             ...passenger,
@@ -126,22 +126,22 @@ describe('shared server validation schemas', () => {
         expect(passengerSchema.safeParse({ ...passenger, dateOfBirth: '2999-01-01' }).success)
             .toBe(false);
         expect(bookingRequestSchema.safeParse({
-            flightId: 1,
+            flightIds: [1],
             passengers: Array.from({ length: 9 }, () => passenger),
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
         }).success).toBe(true);
         expect(bookingRequestSchema.safeParse({
-            flightId: 1,
+            flightIds: [1],
             passengers: Array.from({ length: 10 }, () => passenger),
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
         }).success).toBe(false);
         expect(flightBookingServiceSchema.safeParse({
-            flightId: 1,
+            flightIds: [1],
             userId: 'user-1',
             passengers: [passenger],
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
         }).success).toBe(true);
-        expect(flightBookingServiceSchema.safeParse({ flightId: 1, userId: '' }).success)
+        expect(flightBookingServiceSchema.safeParse({ flightIds: [1], userId: '' }).success)
             .toBe(false);
     });
 
@@ -330,7 +330,7 @@ describe('shared server validation schemas', () => {
     it('covers exact passenger, booking, seat-change, occurrence, and enum boundaries', () => {
         const passenger = {
             firstName: 'F'.repeat(100), lastName: 'L'.repeat(100), dateOfBirth: '1900-01-01',
-            passportNumber: 'P'.repeat(32), gender: 'Other', seatNumber: '999A', cabinClass: 'FIRST'
+            passportNumber: 'P'.repeat(32), gender: 'Other', seatNumbers: ['999A'], cabinClass: 'FIRST'
         };
         expect(passengerSchema.safeParse(passenger).success).toBe(true);
         expect(passengerSchema.safeParse({ ...passenger, firstName: 'F'.repeat(101) }).success).toBe(false);
@@ -338,24 +338,24 @@ describe('shared server validation schemas', () => {
         expect(passengerSchema.safeParse({ ...passenger, extra: true }).success).toBe(false);
 
         const passengers = Array.from({ length: 9 }, (_, index) => ({
-            ...passenger, passportNumber: `P${index}`, seatNumber: `${index + 1}A`
+            ...passenger, passportNumber: `P${index}`, seatNumbers: [`${index + 1}A`]
         }));
         const idempotencyKey = '8ea59a65-9251-45b3-95d0-3920c49f5735';
-        expect(bookingRequestSchema.safeParse({ flightId: 1, passengers, idempotencyKey }).success).toBe(true);
-        expect(bookingRequestSchema.safeParse({ flightId: 1, passengers: [], idempotencyKey }).success).toBe(false);
-        expect(bookingRequestSchema.safeParse({ flightId: 1, passengers: [...passengers, passenger], idempotencyKey }).success).toBe(false);
+        expect(bookingRequestSchema.safeParse({ flightIds: [1], passengers, idempotencyKey }).success).toBe(true);
+        expect(bookingRequestSchema.safeParse({ flightIds: [1], passengers: [], idempotencyKey }).success).toBe(false);
+        expect(bookingRequestSchema.safeParse({ flightIds: [1], passengers: [...passengers, passenger], idempotencyKey }).success).toBe(false);
         expect(bookingRequestSchema.safeParse({
-            flightId: 1,
+            flightIds: [1],
             passengers,
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
         }).success).toBe(true);
         expect(bookingRequestSchema.safeParse({
-            flightId: 1,
+            flightIds: [1],
             passengers,
             idempotencyKey: 'not-a-uuid'
         }).success).toBe(false);
         expect(bookingRequestSchema.safeParse({
-            flightId: 1,
+            flightIds: [1],
             passengers,
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
             totalPrice: '$1',

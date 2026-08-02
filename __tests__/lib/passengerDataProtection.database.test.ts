@@ -41,7 +41,7 @@ describe('passenger identity data in PostgreSQL', () => {
 
     it('stores only ciphertext, returns only safe fields, and purges on expiry', async () => {
         const result = await new FlightBookingService().bookFlight({
-            flightId,
+            flightIds: [flightId],
             userId,
             idempotencyKey: crypto.randomUUID(),
             passengers: [{
@@ -50,7 +50,7 @@ describe('passenger identity data in PostgreSQL', () => {
                 dateOfBirth: '1990-01-01',
                 passportNumber: 'SECRET123',
                 gender: 'Female',
-                seatNumber: '11A',
+                seatNumbers: ['11A'],
                 cabinClass: 'ECONOMY',
             }],
         });

@@ -47,19 +47,19 @@ test.describe('Authoritative booking persistence', () => {
     const service = new FlightBookingService();
     const passenger = {
       firstName: 'Race', lastName: 'Traveler', dateOfBirth: '1990-01-01',
-      passportNumber: 'RACE123', gender: 'Other', seatNumber: '1A',
+      passportNumber: 'RACE123', gender: 'Other', seatNumbers: ['1A'],
       cabinClass: 'ECONOMY'
     };
 
     const results = await Promise.allSettled([
       service.bookFlight({
-        flightId: flight.id,
+        flightIds: [flight.id],
         userId: firstUser.id,
         passengers: [passenger],
         idempotencyKey: '770b1f71-d1b3-43ed-886e-4c0ec45c4e8a'
       }),
       service.bookFlight({
-        flightId: flight.id,
+        flightIds: [flight.id],
         userId: secondUser.id,
         passengers: [{ ...passenger, passportNumber: 'RACE456' }],
         idempotencyKey: '62a0767b-2913-4077-88e8-0f9391f13552'
@@ -105,11 +105,11 @@ test.describe('Authoritative booking persistence', () => {
       }
     });
     const request = {
-      flightId: flight.id,
+      flightIds: [flight.id],
       userId: user.id,
       passengers: [{
         firstName: 'Repeat', lastName: 'Traveler', dateOfBirth: '1990-01-01',
-        passportNumber: 'REPEAT123', gender: 'Other', seatNumber: '1A',
+        passportNumber: 'REPEAT123', gender: 'Other', seatNumbers: ['1A'],
         cabinClass: 'BUSINESS'
       }],
       idempotencyKey: 'd9a8ce21-1b61-4e30-8670-cc6ab48534b9'
@@ -128,7 +128,7 @@ test.describe('Authoritative booking persistence', () => {
 
     await expect(service.bookFlight({
       ...request,
-      passengers: [{ ...request.passengers[0], seatNumber: '1B' }]
+      passengers: [{ ...request.passengers[0], seatNumbers: ['1B'] }]
     })).rejects.toThrow('Booking request ID was already used for a different booking.');
 
     const otherFlight = await prisma.flight.create({
@@ -146,7 +146,7 @@ test.describe('Authoritative booking persistence', () => {
         seatPattern: 'AB-CD'
       }
     });
-    await expect(service.bookFlight({ ...request, flightId: otherFlight.id }))
+    await expect(service.bookFlight({ ...request, flightIds: [otherFlight.id] }))
       .rejects.toThrow('Booking request ID was already used for a different booking.');
   });
 });

@@ -183,14 +183,14 @@ describe('BookingCheckoutWizard', () => {
             expect(screen.getByText('Booking Confirmed!')).toBeInTheDocument();
             expect(mockBookFlightAction).toHaveBeenCalledTimes(1);
             expect(mockBookFlightAction).toHaveBeenCalledWith({
-                flightId: 42,
+                flightIds: [42],
                 passengers: [{
                     firstName: 'Bob',
                     lastName: 'Jones',
                     dateOfBirth: new Date('1988-12-01').toISOString(),
                     passportNumber: 'US9876543',
                     gender: 'Male',
-                    seatNumber: '11C',
+                    seatNumbers: ['11C'],
                     cabinClass: 'ECONOMY'
                 }],
                 idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/i)
@@ -319,7 +319,8 @@ describe('BookingCheckoutWizard', () => {
             error: {
                 code: 'VALIDATION_ERROR',
                 message: 'Seat number is invalid.',
-                fields: { 'passengers.0.seatNumber': ['Seat number is invalid.'] },
+                // Zod names the offending leg, so the path carries an index.
+                fields: { 'passengers.0.seatNumbers.0': ['Seat number is invalid.'] },
             },
         });
 

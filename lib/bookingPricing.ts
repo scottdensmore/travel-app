@@ -35,6 +35,29 @@ export function formatPrice(cents: number): string {
     }).format(cents / 100);
 }
 
+/**
+ * The total for an itinerary, in minor units.
+ *
+ * Each leg is charged at its own flight's fare: a return leg costs what that
+ * flight costs, not a repeat of the outbound. The cabin multiplier applies to
+ * every passenger on every leg.
+ */
+export function calculateItineraryTotal(
+    legPrices: string[],
+    passengers: Array<{ cabinClass: CabinClass }>
+): { cents: number; formatted: string } {
+    if (legPrices.length === 0) {
+        throw new Error('An itinerary needs at least one flight.');
+    }
+
+    const cents = legPrices.reduce(
+        (total, price) => total + calculateBookingTotal(price, passengers).cents,
+        0
+    );
+
+    return { cents, formatted: formatPrice(cents) };
+}
+
 export function calculateBookingTotal(
     basePrice: string,
     passengers: Array<{ cabinClass: CabinClass }>
