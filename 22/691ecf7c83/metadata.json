@@ -1,0 +1,24 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "22691ecf7c83",
+  "strategy": "manual-commit",
+  "branch": "refactor/contract-expanded-columns",
+  "checkpoints_count": 1,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/22/691ecf7c83/0/metadata.json",
+      "transcript": "/22/691ecf7c83/0/full.jsonl",
+      "compact_transcript": "/22/691ecf7c83/0/transcript.jsonl",
+      "content_hash": "/22/691ecf7c83/0/content_hash.txt",
+      "prompt": "/22/691ecf7c83/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2159,
+    "cache_creation_tokens": 5393485,
+    "cache_read_tokens": 390755282,
+    "output_tokens": 523609,
+    "api_call_count": 813
+  }
+}
