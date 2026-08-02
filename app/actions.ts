@@ -13,6 +13,7 @@ import { lockFlightForUpdate } from '@/lib/flightLock';
 import { updateFlightSeatingLayout } from '@/lib/FlightSeatLayoutService';
 import { actionValidationFailure } from '@/lib/actionResult';
 import { bookingTotalCents } from '@/lib/bookingPricing';
+import { bookingFlights, outboundFlight } from '@/lib/bookingItinerary';
 import { buildFlightRoutes, findNearbyOperatingDates } from '@/lib/flightSearch';
 import { airportTimeZoneFor } from '@/lib/airports';
 import { bookingWindowIsoDates } from '@/lib/dates';
@@ -285,7 +286,12 @@ export async function cancelBookingAction(bookingId: number) {
     bookingId = parsed.data;
     const booking = await prisma.booking.findUnique({
         where: { id: bookingId },
-        include: { flight: true }
+        include: {
+            legs: {
+                include: { flight: true },
+                orderBy: { sequence: 'asc' },
+            },
+        }
     });
     if (!booking) throw new Error("Booking not found");
 
@@ -294,7 +300,11 @@ export async function cancelBookingAction(bookingId: number) {
     }
 
     const updated = await prisma.$transaction(async (tx) => {
-        if (booking.flightId) await lockFlightForUpdate(tx, booking.flightId);
+        // Lock every flight the itinerary touches, in leg order, so concurrent
+        // cancellations of overlapping itineraries cannot deadlock.
+        for (const flight of bookingFlights(booking)) {
+            await lockFlightForUpdate(tx, flight.id);
+        }
         const lockedBooking = await tx.booking.findUnique({
             where: { id: bookingId },
             select: { status: true }
@@ -331,7 +341,7 @@ export async function cancelBookingAction(bookingId: number) {
     });
 
     try {
-        const flight = booking.flight;
+        const flight = outboundFlight(booking);
         if (flight && booking.userId) {
             const points = Math.floor(bookingTotalCents(booking, flight) / 100);
             await prisma.notification.create({
@@ -366,7 +376,12 @@ export async function changeBookingSeatsAction(
 
     const booking = await prisma.booking.findUnique({
         where: { id: bookingId },
-        include: { flight: true }
+        include: {
+            legs: {
+                include: { flight: true },
+                orderBy: { sequence: 'asc' },
+            },
+        }
     });
     if (!booking) throw new Error("Booking not found");
 
@@ -374,7 +389,9 @@ export async function changeBookingSeatsAction(
         throw new Error("Unauthorized");
     }
 
-    const flightId = booking.flightId;
+    // Seat changes apply to the outbound flight. A round trip will need a leg
+    // to be chosen (#69); today there is only one.
+    const flightId = outboundFlight(booking)?.id;
     if (!flightId) throw new Error("Flight not found on booking");
 
     // Execute inside transaction to prevent concurrent seat collisions

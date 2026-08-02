@@ -6,26 +6,26 @@ describe('PointsActivityService dynamic calculations', () => {
         {
             id: 1,
             createdAt: new Date('2026-01-15'),
-            flight: {
+            legs: [{ sequence: 1, flight: {
                 id: 10,
                 airline: 'Gemini Airways',
                 flightNumber: 'GA101',
                 from: 'Seattle, USA',
                 to: 'Detroit, USA',
                 price: '$350',
-            }
+            } }]
         },
         {
             id: 2,
             createdAt: new Date('2026-02-20'),
-            flight: {
+            legs: [{ sequence: 1, flight: {
                 id: 11,
                 airline: 'Delta',
                 flightNumber: 'DL202',
                 from: 'Detroit, USA',
                 to: 'New York, USA',
                 price: '250',
-            }
+            } }]
         }
     ];
 
@@ -82,14 +82,14 @@ describe('PointsActivityService dynamic calculations', () => {
                 createdAt: new Date('2026-03-10'),
                 totalPrice: '$450',
                 totalPriceCents: 45000,
-                flight: {
+                legs: [{ sequence: 1, flight: {
                     id: 12,
                     airline: 'Gemini Airways',
                     flightNumber: 'GA103',
                     from: 'Detroit, USA',
                     to: 'Seattle, USA',
                     price: '$150',
-                }
+                } }]
             }
         ];
         const service = new PointsActivityService(mockBookingsWithTotalPrice, 500);
@@ -106,7 +106,7 @@ describe('PointsActivityService dynamic calculations', () => {
             status: 'CONFIRMED',
             totalPrice: '$69.97',
             totalPriceCents: 6997,
-            flight: null
+            legs: []
         } as any], 500);
 
         expect(service.getCurrentPoints()).toBe(569);
@@ -121,14 +121,14 @@ describe('PointsActivityService dynamic calculations', () => {
                 status: 'CANCELLED',
                 totalPrice: '$350',
                 totalPriceCents: 35000,
-                flight: {
+                legs: [{ sequence: 1, flight: {
                     id: 10,
                     airline: 'Gemini Airways',
                     flightNumber: 'GA101',
                     from: 'Seattle, USA',
                     to: 'Detroit, USA',
                     price: '$350',
-                }
+                } }]
             }
         ];
         const service = new PointsActivityService(bookingsWithCancelled, 1000);

@@ -681,7 +681,7 @@ describe('cancelBookingAction', () => {
             totalPrice: '$69.97',
             totalPriceCents: 6997,
             flightId: 10,
-            flight: { flightNumber: 'GA101', airline: 'Gemini Airways', price: '$200' }
+            legs: [{ sequence: 1, flight: { flightNumber: 'GA101', airline: 'Gemini Airways', price: '$200' } }]
         });
         mockTx.booking.update.mockResolvedValue({ id: 1 });
 
@@ -689,7 +689,12 @@ describe('cancelBookingAction', () => {
 
         expect(mockedBookingFindUnique).toHaveBeenCalledWith({
             where: { id: 1 },
-            include: { flight: true }
+            include: {
+                legs: {
+                    include: { flight: true },
+                    orderBy: { sequence: 'asc' },
+                },
+            }
         });
         expect(mockTx.booking.update).toHaveBeenCalledWith({
             where: { id: 1 },
@@ -713,7 +718,7 @@ describe('cancelBookingAction', () => {
         // refuse the next booking of that seat.
         mockedGetServerSession.mockResolvedValue({ user: { id: 'u1', role: 'USER' } });
         mockedBookingFindUnique.mockResolvedValue({
-            id: 1, userId: 'u1', status: 'CONFIRMED', flightId: 7, flight: null,
+            id: 1, userId: 'u1', status: 'CONFIRMED', flightId: 7, legs: [],
         });
         mockTx.booking.findUnique.mockResolvedValue({ id: 1, status: 'CONFIRMED', flightId: 7 });
         mockTx.passenger.findMany.mockResolvedValue([{ id: 'p-9', seatNumber: '4A' }]);
@@ -739,7 +744,7 @@ describe('cancelBookingAction', () => {
             totalPrice: '$200',
             totalPriceCents: 20000,
             flightId: 10,
-            flight: { flightNumber: 'GA101', airline: 'Gemini Airways', price: '$200' }
+            legs: [{ sequence: 1, flight: { flightNumber: 'GA101', airline: 'Gemini Airways', price: '$200' } }]
         });
         mockTx.booking.update.mockResolvedValue({ id: 1 });
 
@@ -787,6 +792,7 @@ describe('changeBookingSeatsAction', () => {
             id: 1,
             userId: 'user-123',
             flightId: 10,
+            legs: [{ sequence: 1, flight: { id: 10 } }],
             passengers: [
                 { id: 'p-1', firstName: 'Jane', seatNumber: '12A', cabinClass: 'ECONOMY' }
             ]
@@ -820,6 +826,7 @@ describe('changeBookingSeatsAction', () => {
             id: 1,
             userId: 'user-123',
             flightId: 10,
+            legs: [{ sequence: 1, flight: { id: 10 } }],
             passengers: [
                 { id: 'p-1', firstName: 'Jane', seatNumber: '12A', cabinClass: 'ECONOMY' }
             ]
@@ -843,13 +850,17 @@ describe('changeBookingSeatsAction', () => {
             id: 1,
             userId: 'user-123',
             flightId: 10,
-            flight: {
-                firstClassRows: 1,
-                businessRows: 1,
-                premiumEconomyRows: 1,
-                economyRows: 5,
-                seatPattern: 'AB-CD'
-            },
+            legs: [{
+                sequence: 1,
+                flight: {
+                    id: 10,
+                    firstClassRows: 1,
+                    businessRows: 1,
+                    premiumEconomyRows: 1,
+                    economyRows: 5,
+                    seatPattern: 'AB-CD'
+                },
+            }],
             passengers: [
                 { id: 'p-1', firstName: 'Jane', seatNumber: '4A', cabinClass: 'ECONOMY' }
             ]
@@ -868,6 +879,7 @@ describe('changeBookingSeatsAction', () => {
             id: 1,
             userId: 'user-123',
             flightId: 10,
+            legs: [{ sequence: 1, flight: { id: 10 } }],
             passengers: []
         });
         mockTx.booking.findUnique.mockResolvedValue({ status: 'CANCELLED', passengers: [] });
