@@ -1,0 +1,98 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "136c55e067a9",
+  "session_id": "396aa3c6-6933-4584-9084-9f5e4f3a6519",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-02T02:11:46.068613896Z",
+  "branch": "feat/read-bookings-through-legs",
+  "checkpoints_count": 7,
+  "save_step_count": 2,
+  "files_touched": [
+    "__tests__/app/actions.test.ts",
+    "__tests__/components/ProfileClient.test.tsx",
+    "__tests__/lib/PointsActivityService.test.ts",
+    "__tests__/lib/bookingItinerary.test.ts",
+    "app/actions.ts",
+    "app/admin/page.tsx",
+    "app/profile/page.tsx",
+    "components/ui/ProfileClient.tsx",
+    "lib/PointsActivityService.ts",
+    "lib/bookingItinerary.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "e46805deb640",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 1972,
+    "cache_creation_tokens": 4512410,
+    "cache_read_tokens": 309564717,
+    "output_tokens": 467920,
+    "api_call_count": 713
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "claude-skill-toolu_01JH9VHYsrsGh3Zii7LgCF2x",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "update-config"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "e46805deb640",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 513,
+        "end": 514,
+        "entry_ids": [
+          "e2160c3d-f447-4a6b-b15a-69bfc1d34a58"
+        ],
+        "tool_use_id": "toolu_01JH9VHYsrsGh3Zii7LgCF2x"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01JH9VHYsrsGh3Zii7LgCF2x"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: update-config",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 69
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-02T02:11:45.069795842Z",
+    "agent_lines": 179,
+    "agent_removed": 37,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 179,
+    "total_lines_changed": 216,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 179,
+      "agent_lines_removed": 37
+    }
+  ]
+}

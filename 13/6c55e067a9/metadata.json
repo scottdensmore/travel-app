@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "136c55e067a9",
+  "strategy": "manual-commit",
+  "branch": "feat/read-bookings-through-legs",
+  "checkpoints_count": 7,
+  "files_touched": [
+    "__tests__/app/actions.test.ts",
+    "__tests__/components/ProfileClient.test.tsx",
+    "__tests__/lib/PointsActivityService.test.ts",
+    "__tests__/lib/bookingItinerary.test.ts",
+    "app/actions.ts",
+    "app/admin/page.tsx",
+    "app/profile/page.tsx",
+    "components/ui/ProfileClient.tsx",
+    "lib/PointsActivityService.ts",
+    "lib/bookingItinerary.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/13/6c55e067a9/0/metadata.json",
+      "transcript": "/13/6c55e067a9/0/full.jsonl",
+      "compact_transcript": "/13/6c55e067a9/0/transcript.jsonl",
+      "content_hash": "/13/6c55e067a9/0/content_hash.txt",
+      "prompt": "/13/6c55e067a9/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1972,
+    "cache_creation_tokens": 4512410,
+    "cache_read_tokens": 309564717,
+    "output_tokens": 467920,
+    "api_call_count": 713
+  }
+}
