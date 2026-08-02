@@ -104,6 +104,9 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     const [isSearching, setIsSearching] = useState(false);
     const [isSearchReady, setIsSearchReady] = useState(false);
     const [searchResults, setSearchResults] = useState<Flight[] | null>(null);
+    // Return flights for a round trip, searched on their own route and date
+    // (#112). Null for a one-way search.
+    const [inboundResults, setInboundResults] = useState<Flight[] | null>(null);
     const [nearbyDates, setNearbyDates] = useState<string[]>([]);
     const [bookingState, setBookingState] = useState<BookingState>({ status: 'idle' });
 
@@ -116,6 +119,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         searchRequestIdRef.current += 1;
         setIsSearching(false);
         setNearbyDates([]);
+        setInboundResults(null);
         setSearchResults((currentResults) => (
             currentResults?.length === 0 ? null : currentResults
         ));
@@ -152,6 +156,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         searchRequestIdRef.current = requestId;
         setSearchResults(null);
         setNearbyDates([]);
+        setInboundResults(null);
         setBookingState({ status: 'idle' });
 
         setIsSearching(true);
@@ -184,6 +189,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
             }
             setSearchResults(results.flights);
             setNearbyDates(results.nearbyDates);
+            setInboundResults(results.inbound?.flights ?? null);
         } catch {
             if (requestId === searchRequestIdRef.current) {
                 setBookingState({
@@ -205,6 +211,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         setIsSearching(false);
         setSearchResults(null);
         setNearbyDates([]);
+        setInboundResults(null);
         setBookingState({ status: 'idle' });
 
         if (departureDate && departureDate < bookingWindow.earliestDate) {
@@ -830,6 +837,54 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                     color: 'rgba(255, 255, 255, 0.6)'
                                 }}>
                                     No flights match your filter criteria. Try resetting your filters.
+                                </div>
+                            )}
+
+                            {/*
+                              * Return flights for a round trip, searched on their
+                              * own route and date. Listed without a booking
+                              * action: choosing one is only meaningful once
+                              * checkout can carry an itinerary rather than a
+                              * single flight.
+                              */}
+                            {inboundResults !== null && (
+                                <div style={{ marginTop: '2.5rem' }} data-testid="inbound-results">
+                                    <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#fff', marginBottom: '1rem' }}>
+                                        Return flights
+                                    </h3>
+                                    {inboundResults.filter((flight) => flight.status !== 'CANCELLED').length > 0 ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                            {inboundResults
+                                                .filter((flight) => flight.status !== 'CANCELLED')
+                                                .map((flight) => (
+                                                    <div key={flight.id} className="flight-result-card">
+                                                        <div className="flight-result-airline">
+                                                            <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#c084fc' }}>{flight.airline}</span>
+                                                            <span style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.flightNumber}</span>
+                                                        </div>
+                                                        <div className="flight-result-route">
+                                                            <div className="flight-result-stop">
+                                                                <span suppressHydrationWarning style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#fff' }}>
+                                                                    {new Date(flight.departureDate).toLocaleDateString()}
+                                                                </span>
+                                                                <span style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.from}</span>
+                                                            </div>
+                                                            <span className="flight-result-arrow" aria-hidden="true">------&gt;</span>
+                                                            <div className="flight-result-stop">
+                                                                <span style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.to}</span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flight-result-fare">
+                                                            <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>{flight.price}</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                        </div>
+                                    ) : (
+                                        <p style={{ color: 'rgba(255, 255, 255, 0.6)' }}>
+                                            No return flights available on this date.
+                                        </p>
+                                    )}
                                 </div>
                             )}
                         </div>

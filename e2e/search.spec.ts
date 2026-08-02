@@ -266,3 +266,18 @@ test.describe('Flight search', () => {
     }).toEqual({ from, to, departure, returnDate });
   });
 });
+
+test('A round trip lists return flights for the chosen return date', async ({ page }) => {
+  await openSearchPage(page);
+
+  const returnDate = page.getByLabel('Return', { exact: true });
+  await expect(returnDate).toBeEnabled();
+
+  await page.getByText('Find your trip').click();
+
+  // The return direction is searched on its own route and date (#112), and the
+  // results are listed rather than the return being inferred from the outbound.
+  const inbound = page.getByTestId('inbound-results');
+  await expect(inbound).toBeVisible();
+  await expect(inbound.getByRole('heading', { name: 'Return flights' })).toBeVisible();
+});
