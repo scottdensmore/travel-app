@@ -280,4 +280,9 @@ test('A round trip lists return flights for the chosen return date', async ({ pa
   const inbound = page.getByTestId('inbound-results');
   await expect(inbound).toBeVisible();
   await expect(inbound.getByRole('heading', { name: 'Return flights' })).toBeVisible();
+
+  // Real return inventory exists now that routes operate in both directions
+  // (#113), so the list is populated rather than empty.
+  await expect(inbound.locator('.flight-result-card').first()).toBeVisible();
+  await expect(inbound).not.toContainText('No return flights available');
 });

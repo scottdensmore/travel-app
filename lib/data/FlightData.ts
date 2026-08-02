@@ -101,6 +101,50 @@ export const FlightScheduleData = [
         returnTime: null,
         daysOfWeek: [0, 3, 5], // Sun, Wed, Fri
         price: '$500'
+    },
+    // Return legs. Each mirrors an outbound route and departs at the time that
+    // route's returnTime described, which until now named a flight that did not
+    // exist. They carry no returnTime of their own: a return leg is one
+    // direction, not a round trip.
+    {
+        flightNumber: 'CA102',
+        airline: 'Gemini Airways',
+        from: 'Detroit, USA',
+        to: 'Seattle, USA',
+        departureTime: '18:00',
+        returnTime: null,
+        daysOfWeek: [1, 3, 5], // Mon, Wed, Fri
+        price: '$350'
+    },
+    {
+        flightNumber: 'CA203',
+        airline: 'Gemini Airways',
+        from: 'London, UK',
+        to: 'New York, USA',
+        departureTime: '10:00',
+        returnTime: null,
+        daysOfWeek: [2, 4, 6], // Tue, Thu, Sat
+        price: '$850'
+    },
+    {
+        flightNumber: 'CA304',
+        airline: 'Gemini Airways',
+        from: 'Tokyo, Japan',
+        to: 'San Francisco, USA',
+        departureTime: '15:00',
+        returnTime: null,
+        daysOfWeek: [0, 2, 4], // Sun, Tue, Thu
+        price: '$1200'
+    },
+    {
+        flightNumber: 'CA405',
+        airline: 'Gemini Airways',
+        from: 'Paris, France',
+        to: 'Chicago, USA',
+        departureTime: '09:30',
+        returnTime: null,
+        daysOfWeek: [1, 3, 5], // Mon, Wed, Fri
+        price: '$950'
     }
 ];
 
