@@ -24,7 +24,12 @@ export default async function ProfilePage() {
     where: { userId },
     orderBy: { createdAt: "desc" },
     include: {
-      flight: true,
+      // Read the itinerary through its legs, so a round trip needs no change
+      // here beyond rendering more than one (#69).
+      legs: {
+        include: { flight: true },
+        orderBy: { sequence: 'asc' },
+      },
       passengers: { select: safePassengerSelect },
     },
   });

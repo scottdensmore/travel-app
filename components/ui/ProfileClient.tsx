@@ -6,6 +6,7 @@ import PointsActivityTable from "@/components/ui/pointsActivityTable";
 import NextStatusChart from "@/components/ui/charts/nextStatusChart";
 import PointsHistoryChart from "@/components/ui/charts/pointsHistoryChart";
 import { formatPrice } from '@/lib/bookingPricing';
+import { outboundFlight } from '@/lib/bookingItinerary';
 import { cancelBookingAction, deleteReviewAction, toggleFavoriteCityGuideAction, changeBookingSeatsAction, getOccupiedSeatsAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
 import { PointsActivityDisplayData } from '@/lib/types/PointsActivity';
@@ -35,13 +36,19 @@ interface Passenger {
     cabinClass: string;
 }
 
+interface BookingLeg {
+    sequence: number;
+    flight: Flight | null;
+}
+
 interface Booking {
     id: number;
     createdAt: Date | string;
     status: string; // "CONFIRMED" or "CANCELLED"
     totalPriceCents: number | null;
     flightId: number | null;
-    flight: Flight | null;
+    // The itinerary. One leg today; a round trip adds the inbound (#69).
+    legs: BookingLeg[];
     passengers: Passenger[];
 }
 
@@ -196,7 +203,7 @@ export default function ProfileClient({
     };
 
     const getRowsForClass = (cabinClass: string) => {
-        const flight = selectedBooking?.flight;
+        const flight = selectedBooking ? outboundFlight(selectedBooking) : null;
         const firstClassCount = flight?.firstClassRows !== undefined && flight?.firstClassRows !== null ? Number(flight.firstClassRows) : 3;
         const businessCount = flight?.businessRows !== undefined && flight?.businessRows !== null ? Number(flight.businessRows) : 3;
         const premiumEconomyCount = flight?.premiumEconomyRows !== undefined && flight?.premiumEconomyRows !== null ? Number(flight.premiumEconomyRows) : 4;
@@ -279,7 +286,7 @@ export default function ProfileClient({
                                 </thead>
                                 <tbody>
                                     {bookings.map((booking) => {
-                                        const flight = booking.flight;
+                                        const flight = outboundFlight(booking);
                                         const isCancelled = booking.status === 'CANCELLED';
                                         return (
                                             <tr key={booking.id} className="border-b">
@@ -521,7 +528,7 @@ export default function ProfileClient({
 
                             {/* Right panel: Seat selector map */}
                             {(() => {
-                                const parsedPattern = selectedBooking.flight?.seatPattern || "ABC-DEF";
+                                const parsedPattern = outboundFlight(selectedBooking)?.seatPattern || "ABC-DEF";
                                 const activeCabinRows = getRowsForClass(
                                     selectedBooking.passengers[activePassengerIdx]?.cabinClass || 'ECONOMY'
                                 );

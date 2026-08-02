@@ -36,7 +36,7 @@ const sampleBookings = [
         totalPrice: '$350',
         totalPriceCents: 35000,
         flightId: 201,
-        flight: {
+        legs: [{ sequence: 1, flight: {
             id: 201,
             flightNumber: 'GA101',
             airline: 'Gemini Airways',
@@ -45,7 +45,7 @@ const sampleBookings = [
             departureDate: '2026-06-15T08:00:00Z',
             returnDate: null,
             price: '$350',
-        },
+        } }],
         passengers: [
             {
                 id: 'p-1',

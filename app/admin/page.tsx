@@ -1,6 +1,7 @@
 import React from 'react';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
+import { outboundFlight } from '@/lib/bookingItinerary';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +21,10 @@ export default async function AdminDashboard() {
                     email: true,
                 },
             },
-            flight: true,
+            legs: {
+                include: { flight: true },
+                orderBy: { sequence: 'asc' },
+            },
         },
     });
 
@@ -97,7 +101,7 @@ export default async function AdminDashboard() {
                         </thead>
                         <tbody>
                             {recentBookings.map((booking) => {
-                                const flight = booking.flight;
+                                const flight = outboundFlight(booking);
                                 return (
                                     <tr key={booking.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
                                         <td style={{ padding: '12px', fontSize: '0.9rem', color: '#fff' }}>

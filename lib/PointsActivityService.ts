@@ -2,8 +2,10 @@ import { PointsActivityData, StartingPoints } from "./data/PointsActivityData";
 import { PointsActivityDisplayData } from "./types/PointsActivity";
 import { Booking, Flight } from "@prisma/client";
 import { bookingTotalCents } from "./bookingPricing";
+import { outboundFlight } from "./bookingItinerary";
 
-type BookingWithFlight = Booking & { flight: Flight | null };
+type BookingLeg = { sequence: number; flight: Flight | null };
+type BookingWithFlight = Booking & { flight?: Flight | null; legs: BookingLeg[] };
 
 class PointsActivityService {
   private bookings: BookingWithFlight[] | null;
@@ -16,7 +18,7 @@ class PointsActivityService {
 
   /** Whole status points earned by a booking, from its stored total. */
   private bookingPoints(booking: BookingWithFlight): number {
-    return Math.floor(bookingTotalCents(booking, booking.flight) / 100);
+    return Math.floor(bookingTotalCents(booking, outboundFlight(booking)) / 100);
   }
 
   getCurrentPoints(): number {
@@ -54,7 +56,7 @@ class PointsActivityService {
 
     const displayData: PointsActivityDisplayData[] = [];
     this.bookings.forEach((booking) => {
-      const flight = booking.flight;
+      const flight = outboundFlight(booking);
       const points = this.bookingPoints(booking);
       const baseDesc = flight 
         ? `✈️ ${flight.airline} ${flight.flightNumber} (${flight.from} → ${flight.to})`
