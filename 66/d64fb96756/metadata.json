@@ -1,0 +1,24 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "66d64fb96756",
+  "strategy": "manual-commit",
+  "branch": "feat/book-round-trip-ui",
+  "checkpoints_count": 3,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/66/d64fb96756/0/metadata.json",
+      "transcript": "/66/d64fb96756/0/full.jsonl",
+      "compact_transcript": "/66/d64fb96756/0/transcript.jsonl",
+      "content_hash": "/66/d64fb96756/0/content_hash.txt",
+      "prompt": "/66/d64fb96756/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2703,
+    "cache_creation_tokens": 6615685,
+    "cache_read_tokens": 564497199,
+    "output_tokens": 658852,
+    "api_call_count": 1104
+  }
+}
