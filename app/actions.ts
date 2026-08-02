@@ -7,6 +7,7 @@ import CityGuide from '@/lib/types/CityGuide';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { hasVerifiedStaffAccess } from '@/lib/staffAuthorization';
+import type { Flight } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { assertSeatAvailableForCabin, validateSeatingLayout } from '@/lib/seatLayout';
 import { lockFlightForUpdate } from '@/lib/flightLock';
@@ -79,26 +80,48 @@ export async function searchFlightsAction(
             : returnDateStr,
     });
     if (!parsed.ok) return parsed;
-    // returnDate is validated by the schema (ordering vs. departure) but does
-    // not yet constrain the query, so it is intentionally not destructured here.
-    ({ from, to, departureDate: departureDateStr } = parsed.data);
+    ({ from, to, departureDate: departureDateStr, returnDate: returnDateStr } = parsed.data);
 
     if (!departureDateStr) {
         const flights = await prisma.flight.findMany({
             where: { from, to },
             orderBy: { departureDate: 'asc' },
         });
-        return { flights, nearbyDates: [] };
+        return { flights, nearbyDates: [], inbound: null };
     }
 
-    // Searching is read-only. Inventory is generated ahead of demand by the
-    // seed and by the scheduler running scripts/generate-inventory.ts, so a
-    // customer request never writes (#71).
-    const searchDate = new Date(departureDateStr);
-    const dateStr = searchDate.toISOString().split('T')[0];
-    const startOfDay = new Date(`${dateStr}T00:00:00.000Z`);
-    const endOfDay = new Date(`${dateStr}T23:59:59.999Z`);
     const now = new Date();
+    const outbound = await searchOneDirection(from, to, departureDateStr, now);
+
+    // A round trip is two independent searches. The inbound is a real flight
+    // the customer chooses, not a fixed offset from the outbound (#69).
+    const inbound = returnDateStr
+        ? await searchOneDirection(to, from, returnDateStr, now)
+        : null;
+
+    return { ...outbound, inbound };
+}
+
+/**
+ * Flights leaving `from` for `to` on one date, with nearby operating dates when
+ * that date has none.
+ *
+ * Each direction of a round trip runs this separately, so the inbound is
+ * searched on its own date and route rather than derived from the outbound.
+ *
+ * Read-only: inventory is generated ahead of demand by the seed and the
+ * scheduler, so a customer request never writes (#71).
+ */
+async function searchOneDirection(
+    from: string,
+    to: string,
+    isoDate: string,
+    now: Date,
+): Promise<{ flights: Flight[]; nearbyDates: string[] }> {
+    const startOfDay = new Date(`${isoDate}T00:00:00.000Z`);
+    const endOfDay = new Date(`${isoDate}T23:59:59.999Z`);
+    // A flight that has already left today is not bookable, but one later today
+    // still is.
     const departureLowerBound = startOfDay <= now
         ? { gt: now }
         : { gte: startOfDay };
@@ -154,7 +177,7 @@ export async function searchFlightsAction(
         flights,
         nearbyDates: findNearbyOperatingDates(
             schedules,
-            departureDateStr,
+            isoDate,
             now,
             cancelledFlights,
             originTimeZone,

@@ -210,7 +210,7 @@ describe('searchFlightsAction', () => {
         expect(mockedFlightFindMany).toHaveBeenCalledWith(
             expect.objectContaining({ where: { from: 'Seattle, USA', to: 'Detroit, USA' } })
         );
-        expect(result).toEqual({ flights, nearbyDates: [] });
+        expect(result).toEqual({ flights, nearbyDates: [], inbound: null });
         expect(mockedFlightScheduleFindMany).not.toHaveBeenCalled();
     });
 
@@ -238,7 +238,49 @@ describe('searchFlightsAction', () => {
             },
             orderBy: { departureDate: 'asc' }
         });
-        expect(result).toEqual({ flights, nearbyDates: [] });
+        expect(result).toEqual({ flights, nearbyDates: [], inbound: null });
+    });
+
+    it('searches the inbound direction on its own route and date', async () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
+        const outbound = [{ id: 1, from: 'Seattle, USA', to: 'Detroit, USA' }];
+        const inbound = [{ id: 2, from: 'Detroit, USA', to: 'Seattle, USA' }];
+        mockedFlightFindMany
+            .mockResolvedValueOnce(outbound)
+            .mockResolvedValueOnce(inbound);
+
+        const result = await searchFlightsAction(
+            'Seattle, USA', 'Detroit, USA', '2026-06-25', '2026-07-02',
+        );
+
+        // The inbound is a real search of the reversed route on the return
+        // date, not a fixed offset from the outbound (#69).
+        expect(mockedFlightFindMany).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            where: expect.objectContaining({
+                from: 'Detroit, USA',
+                to: 'Seattle, USA',
+                departureDate: {
+                    gte: new Date('2026-07-02T00:00:00.000Z'),
+                    lte: new Date('2026-07-02T23:59:59.999Z'),
+                },
+            }),
+        }));
+        expect(result).toMatchObject({
+            flights: outbound,
+            inbound: { flights: inbound, nearbyDates: [] },
+        });
+        jest.useRealTimers();
+    });
+
+    it('reports no inbound for a one-way search', async () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
+        mockedFlightFindMany.mockResolvedValue([{ id: 1 }]);
+
+        const result = await searchFlightsAction('Seattle, USA', 'Detroit, USA', '2026-06-25');
+
+        expect(result).toMatchObject({ inbound: null });
+        expect(mockedFlightFindMany).toHaveBeenCalledTimes(1);
+        jest.useRealTimers();
     });
 
     it('suggests the nearest operating dates when the exact date has no flights', async () => {
@@ -292,6 +334,7 @@ describe('searchFlightsAction', () => {
         expect(result).toEqual({
             flights: [],
             nearbyDates: ['2026-07-17'],
+            inbound: null,
         });
     });
 
