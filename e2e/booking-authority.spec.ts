@@ -80,6 +80,12 @@ test.describe('Authoritative booking persistence', () => {
     expect(legs).toEqual([
         expect.objectContaining({ sequence: 1, flightId: flight.id }),
     ]);
+
+    // Exactly one seat assignment for the contested seat, on the winner's leg.
+    const seats = await prisma.seatAssignment.findMany({ where: { flightId: flight.id } });
+    expect(seats).toEqual([
+        expect.objectContaining({ seatNumber: '1A', legId: legs[0].id, cabinClass: 'ECONOMY' }),
+    ]);
   });
 
   test('returns one booking when the same idempotency key is repeated', async () => {

@@ -308,9 +308,19 @@ export async function cancelBookingAction(bookingId: number) {
         });
         
         for (const passenger of passengers) {
+            // The seat is released by renaming it, so the unique constraint stops
+            // holding it. Both tables carry that constraint during the expand
+            // phase, so both have to be released or the seat is stranded:
+            // occupancy checks read Passenger and would see it free, while
+            // SeatAssignment would still refuse the next booking of it.
+            const releasedSeat = `CANCELLED-${passenger.id}`;
             await tx.passenger.update({
                 where: { id: passenger.id },
-                data: { seatNumber: `CANCELLED-${passenger.id}` }
+                data: { seatNumber: releasedSeat }
+            });
+            await tx.seatAssignment.updateMany({
+                where: { passengerId: passenger.id },
+                data: { seatNumber: releasedSeat }
             });
         }
 
@@ -421,8 +431,15 @@ export async function changeBookingSeatsAction(
 
         // Apply changes
         for (const change of seatChanges) {
+            // Both tables hold the seat during the expand phase, so a move that
+            // updated only one would leave the old seat locked and the new one
+            // held twice.
             await tx.passenger.update({
                 where: { id: change.passengerId },
+                data: { seatNumber: change.seatNumber }
+            });
+            await tx.seatAssignment.updateMany({
+                where: { passengerId: change.passengerId },
                 data: { seatNumber: change.seatNumber }
             });
         }

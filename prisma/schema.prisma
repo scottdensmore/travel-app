@@ -138,6 +138,8 @@ model Passenger {
   flightId Int
   flight   Flight @relation(fields: [flightId], references: [id], onDelete: Cascade)
 
+  seatAssignments SeatAssignment[]
+
   @@unique([flightId, seatNumber])
   @@index([sensitiveDataExpiresAt])
 }
@@ -159,9 +161,10 @@ model Flight {
   economyRows        Int?
   seatPattern        String?
 
-  bookings      Booking[]
-  passengers    Passenger[]
-  itineraryLegs ItineraryLeg[]
+  bookings        Booking[]
+  passengers      Passenger[]
+  itineraryLegs   ItineraryLeg[]
+  seatAssignments SeatAssignment[]
 
   @@unique([flightNumber, departureDate])
 }
@@ -244,6 +247,36 @@ model ItineraryLeg {
   flightId  Int
   flight    Flight  @relation(fields: [flightId], references: [id])
 
+  seatAssignments SeatAssignment[]
+
   @@unique([bookingId, sequence])
+  /// Lets a seat assignment reference (legId, flightId) together, so its
+  /// denormalised flightId can never disagree with the leg's flight.
+  @@unique([id, flightId])
   @@index([flightId])
+}
+
+/// Where one traveller sits on one leg. Separated from Passenger because a
+/// traveller is one person per booking while a seat is one per leg: a round trip
+/// would otherwise need a second Passenger row, duplicating that person's
+/// encrypted passport and date of birth along with their retention deadlines.
+///
+/// flightId is denormalised from the leg so that the seat-uniqueness constraint
+/// can be expressed directly. A composite foreign key onto (id, flightId) of the
+/// leg keeps the two in agreement.
+model SeatAssignment {
+  id          String       @id @default(cuid())
+  passengerId String
+  passenger   Passenger    @relation(fields: [passengerId], references: [id], onDelete: Cascade)
+  legId       Int
+  flightId    Int
+  leg         ItineraryLeg @relation(fields: [legId, flightId], references: [id, flightId], onDelete: Cascade)
+  flight      Flight       @relation(fields: [flightId], references: [id])
+  seatNumber  String
+  cabinClass  String
+
+  /// The guard against two customers acquiring the same seat.
+  @@unique([flightId, seatNumber])
+  /// A traveller sits in exactly one seat on any given leg.
+  @@unique([passengerId, legId])
 }

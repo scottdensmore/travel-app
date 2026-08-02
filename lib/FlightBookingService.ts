@@ -217,6 +217,20 @@ export default class FlightBookingService {
                     legs: { orderBy: { sequence: 'asc' } }
                 }
             });
+            // Seat assignments need the leg's identity, so they follow the
+            // booking rather than nesting inside it. Written from the same array
+            // the passengers came from, so the two cannot disagree.
+            const [outboundLeg] = booking.legs;
+            await tx.seatAssignment.createMany({
+                data: protectedPassengers.map(passenger => ({
+                    passengerId: passenger.id,
+                    legId: outboundLeg.id,
+                    flightId,
+                    seatNumber: passenger.seatNumber,
+                    cabinClass: passenger.cabinClass,
+                })),
+            });
+
             return { ...booking, wasCreated: true };
         });
 

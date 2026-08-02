@@ -56,6 +56,9 @@ const mockTx = {
     flight: {
         findUnique: jest.fn(),
         update: jest.fn(),
+    },
+    seatAssignment: {
+        updateMany: jest.fn(),
     }
 };
 
@@ -694,7 +697,6 @@ describe('cancelBookingAction', () => {
         });
         expect(result).toEqual({ id: 1 });
         expect(mockTx.$queryRaw).toHaveBeenCalled();
-
         expect(mockedNotificationCreate).toHaveBeenCalledWith({
             data: {
                 userId: 'user-123',
@@ -702,6 +704,30 @@ describe('cancelBookingAction', () => {
                 message: 'Booking for flight GA101 has been cancelled. Deducted -69 status points.',
                 type: 'POINTS'
             }
+        });
+    });
+
+    it('releases the seat in both tables so it can be booked again', async () => {
+        // Releasing on Passenger alone strands the seat: occupancy checks read
+        // Passenger and would see it free, while the assignment would still
+        // refuse the next booking of that seat.
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'u1', role: 'USER' } });
+        mockedBookingFindUnique.mockResolvedValue({
+            id: 1, userId: 'u1', status: 'CONFIRMED', flightId: 7, flight: null,
+        });
+        mockTx.booking.findUnique.mockResolvedValue({ id: 1, status: 'CONFIRMED', flightId: 7 });
+        mockTx.passenger.findMany.mockResolvedValue([{ id: 'p-9', seatNumber: '4A' }]);
+        mockTx.booking.update.mockResolvedValue({ id: 1 });
+
+        await cancelBookingAction(1);
+
+        expect(mockTx.passenger.update).toHaveBeenCalledWith({
+            where: { id: 'p-9' },
+            data: { seatNumber: 'CANCELLED-p-9' }
+        });
+        expect(mockTx.seatAssignment.updateMany).toHaveBeenCalledWith({
+            where: { passengerId: 'p-9' },
+            data: { seatNumber: 'CANCELLED-p-9' }
         });
     });
 
@@ -778,6 +804,12 @@ describe('changeBookingSeatsAction', () => {
         expect(mockTx.passenger.findMany).toHaveBeenCalled();
         expect(mockTx.passenger.update).toHaveBeenCalledWith({
             where: { id: 'p-1' },
+            data: { seatNumber: '12B' }
+        });
+        // Both tables hold the seat during the expand phase. Moving only one
+        // would leave the old seat locked and the new one held twice.
+        expect(mockTx.seatAssignment.updateMany).toHaveBeenCalledWith({
+            where: { passengerId: 'p-1' },
             data: { seatNumber: '12B' }
         });
     });

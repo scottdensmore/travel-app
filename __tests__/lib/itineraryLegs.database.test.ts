@@ -8,8 +8,12 @@ const migrationPath = path.resolve(
     'prisma/migrations/20260801160000_add_itinerary_legs/migration.sql'
 );
 
-/** The backfill statement, taken from the migration rather than restated here. */
-function backfillStatement(): string {
+/**
+ * The backfill statement, taken from the migration rather than restated here,
+ * scoped to one booking. Unscoped it would race other database test files that
+ * create bookings concurrently.
+ */
+function backfillStatement(bookingId: number): string {
     const migration = fs.readFileSync(migrationPath, 'utf8');
     const statement = migration
         .split(';')
@@ -22,7 +26,7 @@ function backfillStatement(): string {
         .find(part => part.startsWith('INSERT INTO "ItineraryLeg"'));
 
     if (!statement) throw new Error('Backfill statement not found in the migration.');
-    return statement;
+    return `${statement} AND "id" = ${bookingId}`;
 }
 
 async function createFlight(flightNumber: string) {
@@ -57,7 +61,7 @@ describe('itinerary legs in PostgreSQL', () => {
         created.bookingIds.push(booking.id);
         await prisma.itineraryLeg.deleteMany({ where: { bookingId: booking.id } });
 
-        await prisma.$executeRawUnsafe(backfillStatement());
+        await prisma.$executeRawUnsafe(backfillStatement(booking.id));
 
         const legs = await prisma.itineraryLeg.findMany({ where: { bookingId: booking.id } });
         expect(legs).toEqual([
@@ -73,7 +77,7 @@ describe('itinerary legs in PostgreSQL', () => {
         });
         created.bookingIds.push(booking.id);
 
-        await expect(prisma.$executeRawUnsafe(backfillStatement())).rejects.toThrow();
+        await expect(prisma.$executeRawUnsafe(backfillStatement(booking.id))).rejects.toThrow();
 
         const legs = await prisma.itineraryLeg.findMany({ where: { bookingId: booking.id } });
         expect(legs).toHaveLength(1);
