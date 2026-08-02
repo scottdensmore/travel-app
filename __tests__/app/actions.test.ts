@@ -1162,7 +1162,7 @@ describe('admin flight schedule actions', () => {
             expect(result).toEqual(expect.objectContaining({ id: 99, status: 'DELAYED' }));
 
             expect(mockedBookingFindMany).toHaveBeenCalledWith({
-                where: { flightId: 99, status: 'CONFIRMED' },
+                where: { legs: { some: { flightId: 99 } }, status: 'CONFIRMED' },
                 select: { userId: true }
             });
 

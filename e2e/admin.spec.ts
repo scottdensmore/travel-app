@@ -21,7 +21,7 @@ test.describe('Admin Control Journey', () => {
     // Clean up test users
     try {
       await prisma.booking.deleteMany({
-        where: { flight: { flightNumber: 'E2E606' } }
+        where: { legs: { some: { flight: { flightNumber: 'E2E606' } } } }
       });
       await prisma.user.deleteMany({
         where: {
@@ -144,7 +144,7 @@ test.describe('Admin Control Journey', () => {
     });
     const protectedPassenger = await prisma.passenger.findFirstOrThrow({
       where: {
-        booking: { userId: admin.id, flightId: activeOccurrence.id }
+        booking: { userId: admin.id, legs: { some: { flightId: activeOccurrence.id } } }
       }
     });
     const restrictedValues = [

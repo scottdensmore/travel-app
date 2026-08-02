@@ -27,9 +27,13 @@ export default async function AdminFlightsPage() {
             }
         },
         include: {
-            bookings: {
+            itineraryLegs: {
                 include: {
-                    passengers: { select: safePassengerSelect }
+                    booking: {
+                        include: {
+                            passengers: { select: safePassengerSelect }
+                        }
+                    }
                 }
             }
         },
@@ -40,6 +44,11 @@ export default async function AdminFlightsPage() {
         const labels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         return days.map(d => labels[d]).join(', ');
     };
+
+    const flightsWithBookings = flights.map(({ itineraryLegs, ...flight }) => ({
+        ...flight,
+        bookings: itineraryLegs.map((leg) => leg.booking),
+    }));
 
     return (
         <div className="page-container admin p-8" style={{ marginTop: '100px', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -104,7 +113,7 @@ export default async function AdminFlightsPage() {
                 </div>
             </div>
 
-            <AdminFlightsTable initialFlights={flights} />
+            <AdminFlightsTable initialFlights={flightsWithBookings} />
         </div>
     );
 }

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { outboundFlight } from '@/lib/bookingItinerary';
 import { prisma } from '@/lib/prisma';
 import { assertSeatAvailableForCabin } from '@/lib/seatLayout';
 import { lockFlightForUpdate } from '@/lib/flightLock';
@@ -94,6 +95,10 @@ export default class FlightBookingService {
             const existingRequest = await tx.booking.findFirst({
                 where: { userId, idempotencyKey },
                 include: {
+                    legs: {
+                        include: { flight: true },
+                        orderBy: { sequence: 'asc' },
+                    },
                     passengers: {
                         select: {
                             ...safePassengerSelect,
@@ -105,7 +110,7 @@ export default class FlightBookingService {
             });
             if (existingRequest) {
                 if (!matchesPersistedRequest(
-                    existingRequest.flightId,
+                    outboundFlight(existingRequest)?.id ?? null,
                     existingRequest.passengers,
                     flightId,
                     passengers
@@ -145,7 +150,7 @@ export default class FlightBookingService {
             }
 
             const existingBookings = await tx.booking.findMany({
-                where: { flightId, status: { not: "CANCELLED" } },
+                where: { legs: { some: { flightId } }, status: { not: "CANCELLED" } },
                 include: { passengers: { select: { seatNumber: true } } }
             });
 
@@ -195,7 +200,6 @@ export default class FlightBookingService {
             // Create booking with nested passengers
             const booking = await tx.booking.create({
                 data: {
-                    flightId,
                     userId,
                     totalPriceCents: total.cents,
                     // A booking is its own itinerary. Today every booking has a

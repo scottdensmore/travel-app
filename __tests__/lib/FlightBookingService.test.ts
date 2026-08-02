@@ -108,6 +108,10 @@ describe('FlightBookingService', () => {
                 idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
             },
             include: {
+                legs: {
+                    include: { flight: true },
+                    orderBy: { sequence: 'asc' },
+                },
                 passengers: {
                     select: {
                         ...safePassengerSelect,
@@ -119,13 +123,12 @@ describe('FlightBookingService', () => {
         });
 
         expect(mockTx.booking.findMany).toHaveBeenCalledWith({
-            where: { flightId: 7, status: { not: "CANCELLED" } },
+            where: { legs: { some: { flightId: 7 } }, status: { not: "CANCELLED" } },
             include: { passengers: { select: { seatNumber: true } } }
         });
 
         expect(mockTx.booking.create).toHaveBeenCalledWith({
             data: {
-                flightId: 7,
                 userId: 'u1',
                 totalPriceCents: 70000,
                 legs: {
@@ -176,7 +179,7 @@ describe('FlightBookingService', () => {
         const existing = {
             id: 12,
             userId: 'u1',
-            flightId: 7,
+            legs: [{ sequence: 1, flight: { id: 7 } }],
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
             totalPriceCents: 35000,
             passengers: [{
@@ -227,7 +230,7 @@ describe('FlightBookingService', () => {
         const existing = {
             id: 12,
             userId: 'u1',
-            flightId: 8,
+            legs: [{ sequence: 1, flight: { id: 8 } }],
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
             totalPriceCents: 35000,
             passengers: [{
@@ -255,7 +258,8 @@ describe('FlightBookingService', () => {
         await expect(new FlightBookingService().bookFlight(request))
             .rejects.toThrow('Booking request ID was already used for a different booking.');
 
-        existing.flightId = 7;
+        // Match the requested flight so only the passenger difference remains.
+        existing.legs[0].flight.id = 7;
         request.passengers[0].seatNumber = '11B';
         await expect(new FlightBookingService().bookFlight(request))
             .rejects.toThrow('Booking request ID was already used for a different booking.');

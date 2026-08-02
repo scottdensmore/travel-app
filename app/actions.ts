@@ -245,7 +245,7 @@ export async function getOccupiedSeatsAction(flightId: number) {
     const passengers = await prisma.passenger.findMany({
         where: {
             booking: {
-                flightId,
+                legs: { some: { flightId } },
                 status: { not: "CANCELLED" }
             }
         },
@@ -446,7 +446,7 @@ export async function changeBookingSeatsAction(
         const occupiedPassengers = await tx.passenger.findMany({
             where: {
                 booking: {
-                    flightId,
+                    legs: { some: { flightId } },
                     status: { not: "CANCELLED" }
                 },
                 bookingId: { not: bookingId }
@@ -889,7 +889,7 @@ export async function updateFlightStatusAction(flightId: number, status: 'ON_TIM
 
     try {
         const bookings = await prisma.booking.findMany({
-            where: { flightId, status: "CONFIRMED" },
+            where: { legs: { some: { flightId } }, status: "CONFIRMED" },
             select: { userId: true }
         });
 
