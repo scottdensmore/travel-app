@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { PassengerInput } from '@/lib/FlightBookingService';
 import { bookFlightAction } from '@/app/actions';
@@ -23,8 +23,10 @@ interface Flight {
 }
 
 interface BookingCheckoutWizardProps {
-    flight: Flight;
-    occupiedSeats: string[];
+    /// The itinerary, in leg order: one flight one-way, two for a round trip.
+    flights: Flight[];
+    /// Seats already taken on each leg, in the same order as `flights`.
+    occupiedSeats: string[][];
 }
 
 interface PassengerFormState {
@@ -34,7 +36,8 @@ interface PassengerFormState {
     passportNumber: string;
     gender: string;
     cabinClass: 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST';
-    seatNumber: string;
+    /// One seat per leg, in the same order as the itinerary's flights.
+    seatNumbers: string[];
 }
 
 interface ConfirmedPassenger {
@@ -60,8 +63,40 @@ function createBookingRequestId(): string {
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOccupiedSeats }: BookingCheckoutWizardProps) {
-    const basePriceCents = parsePriceToCents(flight.price);
+export default function BookingCheckoutWizard({ flights, occupiedSeats: initialOccupiedSeats }: BookingCheckoutWizardProps) {
+    // Seats are chosen one leg at a time: each flight has its own cabin layout,
+    // its own seat pattern, and its own occupancy.
+    const [activeLegIndex, setActiveLegIndex] = useState<number>(0);
+    const flight = flights[activeLegIndex];
+    const activeLegTabRef = useRef<HTMLButtonElement | null>(null);
+    // Only an arrow key should pull focus onto the tab; clicking a tab or being
+    // sent to a leg by validation must leave focus where the user put it.
+    const legTabFocusPendingRef = useRef(false);
+
+    /** Arrow/Home/End move between legs, as the tab pattern expects. */
+    const handleLegTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+        const lastIndex = flights.length - 1;
+        let nextIndex: number | null = null;
+        if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+            nextIndex = activeLegIndex === lastIndex ? 0 : activeLegIndex + 1;
+        } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+            nextIndex = activeLegIndex === 0 ? lastIndex : activeLegIndex - 1;
+        } else if (event.key === 'Home') {
+            nextIndex = 0;
+        } else if (event.key === 'End') {
+            nextIndex = lastIndex;
+        }
+        if (nextIndex === null) return;
+        event.preventDefault();
+        legTabFocusPendingRef.current = true;
+        setActiveLegIndex(nextIndex);
+    };
+
+    useEffect(() => {
+        if (!legTabFocusPendingRef.current) return;
+        legTabFocusPendingRef.current = false;
+        activeLegTabRef.current?.focus();
+    }, [activeLegIndex]);
     const cabinRowCounts: Record<PassengerFormState['cabinClass'], number> = {
         ECONOMY: flight.economyRows ?? 20,
         PREMIUM_ECONOMY: flight.premiumEconomyRows ?? 4,
@@ -81,7 +116,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
             passportNumber: '',
             gender: 'Male',
             cabinClass: defaultCabin,
-            seatNumber: ''
+            seatNumbers: flights.map(() => '')
         }
     ]);
     const [activePassengerIndex, setActivePassengerIndex] = useState<number>(0);
@@ -98,9 +133,11 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
     const [hoveredSuggestedSeats, setHoveredSuggestedSeats] = useState<string[]>([]);
 
     // Calculate total price
-    const calculatePassengerPrice = (cabin: 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST') => {
-        return calculatePassengerFareCents(basePriceCents, cabin);
-    };
+    const calculatePassengerPrice = (cabin: 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST') =>
+        flights.reduce(
+            (total, leg) => total + calculatePassengerFareCents(parsePriceToCents(leg.price), cabin),
+            0
+        );
 
     const totalPriceCents = passengers.reduce((sum, p) => sum + calculatePassengerPrice(p.cabinClass), 0);
     const totalPriceDisplay = formatPrice(totalPriceCents);
@@ -115,7 +152,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                 passportNumber: '',
                 gender: 'Male',
                 cabinClass: defaultCabin,
-                seatNumber: ''
+                seatNumbers: flights.map(() => '')
             }
         ]);
     };
@@ -132,12 +169,13 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
         field: K,
         value: PassengerFormState[K]
     ) => {
-        const updated = [...passengers];
+        const updated = passengers.map(passenger => ({ ...passenger, seatNumbers: [...passenger.seatNumbers] }));
         updated[index] = { ...updated[index], [field]: value };
 
-        // Reset seat if cabin class changes, to ensure correct row selection
+        // Reset every leg's seat if the cabin changes: the row ranges differ per
+        // cabin, so a seat chosen for the old one may not exist in the new.
         if (field === 'cabinClass') {
-            updated[index].seatNumber = '';
+            updated[index].seatNumbers = flights.map(() => '');
         }
         setPassengers(updated);
         const fieldPath = `passengers.${index}.${field}`;
@@ -177,8 +215,12 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
 
     const validateStep2 = () => {
         for (let i = 0; i < passengers.length; i++) {
-            if (!passengers[i].seatNumber) {
-                setErrorMessage(`Please select a seat for Passenger ${i + 1}.`);
+            const missingLeg = passengers[i].seatNumbers.findIndex(seat => !seat);
+            if (missingLeg !== -1) {
+                setActiveLegIndex(missingLeg);
+                setErrorMessage(flights.length > 1
+                    ? `Please select a ${missingLeg === 0 ? 'departing' : 'returning'} seat for Passenger ${i + 1}.`
+                    : `Please select a seat for Passenger ${i + 1}.`);
                 return false;
             }
         }
@@ -231,11 +273,11 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
     const activeRows = getRowsForClass(passengers[activePassengerIndex]?.cabinClass || 'ECONOMY');
 
     const isSeatOccupied = (seat: string) => {
-        return initialOccupiedSeats.includes(seat);
+        return (initialOccupiedSeats[activeLegIndex] ?? []).includes(seat);
     };
 
     const getGroupPassengerForSeat = (seat: string) => {
-        return passengers.findIndex(p => p.seatNumber === seat);
+        return passengers.findIndex(p => p.seatNumbers[activeLegIndex] === seat);
     };
 
     const getAdjacentSuggestedSeats = (startSeatId: string, count: number): string[] => {
@@ -246,7 +288,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
         const cabinClass = passengers[activePassengerIndex]?.cabinClass || 'ECONOMY';
         const rows = getRowsForClass(cabinClass);
 
-        const currentOccupied = new Set(initialOccupiedSeats);
+        const currentOccupied = new Set(initialOccupiedSeats[activeLegIndex] ?? []);
         const suggested: string[] = [startSeatId];
 
         const startIdx = seatLetters.indexOf(letter);
@@ -312,7 +354,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
 
     const autoAssignAdjacentSeats = () => {
         const updatedPassengers = [...passengers];
-        const currentOccupied = new Set(initialOccupiedSeats);
+        const currentOccupied = new Set(initialOccupiedSeats[activeLegIndex] ?? []);
         const classes: PassengerFormState['cabinClass'][] = ['FIRST', 'BUSINESS', 'PREMIUM_ECONOMY', 'ECONOMY'];
 
         for (const cabinClass of classes) {
@@ -379,7 +421,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
             if (bestAssignment && bestAssignment.length === count) {
                 for (let i = 0; i < count; i++) {
                     const pIdx = passengerIndicesToAssign[i];
-                    updatedPassengers[pIdx].seatNumber = bestAssignment[i];
+                    updatedPassengers[pIdx].seatNumbers[activeLegIndex] = bestAssignment[i];
                     currentOccupied.add(bestAssignment[i]);
                 }
             } else {
@@ -396,7 +438,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                 for (let i = 0; i < count; i++) {
                     const pIdx = passengerIndicesToAssign[i];
                     if (seatIdx < allFree.length) {
-                        updatedPassengers[pIdx].seatNumber = allFree[seatIdx];
+                        updatedPassengers[pIdx].seatNumbers[activeLegIndex] = allFree[seatIdx];
                         currentOccupied.add(allFree[seatIdx]);
                         seatIdx++;
                     }
@@ -425,13 +467,13 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
             const updated = [...passengers];
             let suggestionIdx = 0;
 
-            updated[activePassengerIndex].seatNumber = suggestions[0] || seat;
+            updated[activePassengerIndex].seatNumbers[activeLegIndex] = suggestions[0] || seat;
             suggestionIdx++;
 
             for (const pIdx of sameClassPassengerIndices) {
                 if (pIdx === activePassengerIndex) continue;
                 if (suggestionIdx < suggestions.length) {
-                    updated[pIdx].seatNumber = suggestions[suggestionIdx];
+                    updated[pIdx].seatNumbers[activeLegIndex] = suggestions[suggestionIdx];
                     suggestionIdx++;
                 }
             }
@@ -439,15 +481,15 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
             setPassengers(updated);
             setErrorMessage(null);
         } else {
-            const passengerIndexAtSeat = passengers.findIndex(p => p.seatNumber === seat);
+            const passengerIndexAtSeat = passengers.findIndex(p => p.seatNumbers[activeLegIndex] === seat);
             const updated = [...passengers];
 
             if (passengerIndexAtSeat >= 0 && passengerIndexAtSeat !== activePassengerIndex) {
-                const prevActiveSeat = updated[activePassengerIndex].seatNumber;
-                updated[activePassengerIndex].seatNumber = seat;
-                updated[passengerIndexAtSeat].seatNumber = prevActiveSeat;
+                const prevActiveSeat = updated[activePassengerIndex].seatNumbers[activeLegIndex];
+                updated[activePassengerIndex].seatNumbers[activeLegIndex] = seat;
+                updated[passengerIndexAtSeat].seatNumbers[activeLegIndex] = prevActiveSeat;
             } else {
-                updated[activePassengerIndex].seatNumber = seat;
+                updated[activePassengerIndex].seatNumbers[activeLegIndex] = seat;
             }
             setPassengers(updated);
             setErrorMessage(null);
@@ -481,16 +523,14 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                 dateOfBirth: new Date(p.dateOfBirth).toISOString(),
                 passportNumber: p.passportNumber,
                 gender: p.gender,
-                // One seat per leg, in itinerary order. The wizard collects a
-                // single outbound seat today; choosing a seat per leg is the
-                // next slice.
-                seatNumbers: [p.seatNumber],
+                // One seat per leg, in itinerary order.
+                seatNumbers: p.seatNumbers,
                 cabinClass: p.cabinClass
             }));
 
             idempotencyKeyRef.current ??= createBookingRequestId();
             const result = await bookFlightAction({
-                flightIds: [flight.id],
+                flightIds: flights.map(leg => leg.id),
                 passengers: formattedPassengers,
                 idempotencyKey: idempotencyKeyRef.current
             });
@@ -504,6 +544,12 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                     const passengerIndex = Number(passengerMatch[1]);
                     setActivePassengerIndex(passengerIndex);
                     setStep(passengerMatch[2] === 'seatNumbers' ? 2 : 1);
+                    // The trailing index names the leg, so show the map the
+                    // error is about rather than whichever leg was open.
+                    const legMatch = /^passengers\.\d+\.seatNumbers\.(\d+)$/.exec(firstFieldPath);
+                    if (legMatch) {
+                        setActiveLegIndex(Number(legMatch[1]));
+                    }
                     setTimeout(() => {
                         // A seat error names its leg, so the path carries a
                         // trailing index the target element does not.
@@ -723,6 +769,57 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                         <h2 style={{ fontSize: '1.8rem', color: '#c084fc', marginBottom: '0.5rem', fontWeight: 'bold' }}>Select Your Seats</h2>
                         <p style={{ color: 'rgba(255,255,255,0.5)', marginBottom: '2rem' }}>Choose seats for each traveler. Highlighted rows correspond to each passenger&apos;s cabin class.</p>
 
+                        {/*
+                          * Each leg has its own cabin layout and occupancy, so
+                          * seats are chosen one leg at a time.
+                          */}
+                        {flights.length > 1 && (
+                            <div role="tablist" aria-label="Itinerary leg" data-testid="leg-switcher" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.5rem' }}>
+                                {flights.map((leg, legIndex) => {
+                                    const isActive = legIndex === activeLegIndex;
+                                    const unseated = passengers.some(passenger => !passenger.seatNumbers[legIndex]);
+                                    return (
+                                        <button
+                                            key={leg.id}
+                                            type="button"
+                                            role="tab"
+                                            id={`leg-tab-${legIndex}`}
+                                            aria-selected={isActive}
+                                            aria-controls={`leg-panel-${legIndex}`}
+                                            // Roving tabindex: the tablist is one
+                                            // tab stop and arrows move within it.
+                                            tabIndex={isActive ? 0 : -1}
+                                            ref={isActive ? activeLegTabRef : undefined}
+                                            onKeyDown={handleLegTabKeyDown}
+                                            onClick={() => setActiveLegIndex(legIndex)}
+                                            style={{
+                                                // globals.css pins every button to
+                                                // 52px and full width; a two-line
+                                                // label needs to grow instead.
+                                                height: 'auto',
+                                                minHeight: '52px',
+                                                width: 'auto',
+                                                flex: '1 1 14rem',
+                                                padding: '10px 16px',
+                                                borderRadius: '8px',
+                                                border: `2px solid ${isActive ? '#8b5cf6' : 'rgba(255,255,255,0.15)'}`,
+                                                background: isActive ? 'rgba(139, 92, 246, 0.12)' : 'transparent',
+                                                color: '#fff',
+                                                cursor: 'pointer',
+                                            }}
+                                        >
+                                            <span style={{ display: 'block', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                                                {legIndex === 0 ? 'Departing' : 'Returning'}
+                                            </span>
+                                            <span style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
+                                                {leg.from} → {leg.to}{unseated ? ' · seat needed' : ''}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+
                         {passengers.length > 1 && (
                             <div style={{
                                 display: 'flex',
@@ -771,7 +868,16 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                             </div>
                         )}
 
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2.5rem' }}>
+                        <div
+                            {...(flights.length > 1
+                                ? {
+                                    role: 'tabpanel',
+                                    id: `leg-panel-${activeLegIndex}`,
+                                    'aria-labelledby': `leg-tab-${activeLegIndex}`,
+                                }
+                                : {})}
+                            style={{ display: 'flex', flexWrap: 'wrap', gap: '2.5rem' }}
+                        >
                             {/* Left panel: Passenger selector */}
                             <div style={{ flex: '1 1 250px' }}>
                                 <h3 style={{ fontSize: '1rem', color: '#a78bfa', marginBottom: '1rem' }}>Passengers</h3>
@@ -782,12 +888,17 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                             type="button"
                                             onClick={() => setActivePassengerIndex(idx)}
                                             data-validation-path={`passengers.${idx}.seatNumber`}
-                                            aria-label={`${p.firstName || 'Passenger'} ${p.lastName || `#${idx + 1}`}, Class: ${p.cabinClass}, Seat: ${p.seatNumber || 'Not Chosen'}`}
+                                            aria-label={`${p.firstName || 'Passenger'} ${p.lastName || `#${idx + 1}`}, Class: ${p.cabinClass}, Seat: ${p.seatNumbers[activeLegIndex] || 'Not Chosen'}`}
                                             aria-pressed={activePassengerIndex === idx}
                                             data-invalid={Boolean(getPassengerSeatError(idx)) || undefined}
                                             aria-describedby={getPassengerSeatError(idx) ? `passenger-${idx}-seatNumber-error` : undefined}
                                             style={{
                                                 width: '100%',
+                                                // Two lines, and "Seats: 11A, 12C"
+                                                // on a round trip, do not fit the
+                                                // global 52px button height.
+                                                height: 'auto',
+                                                minHeight: '52px',
                                                 color: 'inherit',
                                                 textAlign: 'left',
                                                 padding: '12px',
@@ -799,7 +910,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                             }}>
                                             <span style={{ display: 'block', fontWeight: 'bold', fontSize: '0.9rem' }}>{p.firstName || 'Passenger'} {p.lastName || `#${idx + 1}`}</span>
                                             <span style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>
-                                                Class: {p.cabinClass} | Seat: <span style={{ color: '#34d399', fontWeight: 'bold' }}>{p.seatNumber || 'Not Chosen'}</span>
+                                                Class: {p.cabinClass} | Seat: <span style={{ color: '#34d399', fontWeight: 'bold' }}>{p.seatNumbers[activeLegIndex] || 'Not Chosen'}</span>
                                             </span>
                                         </button>
                                         {getPassengerSeatError(idx) && (
@@ -888,7 +999,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                                     const letter = char;
                                                     const seatId = `${row}${letter}`;
                                                     const occupied = isSeatOccupied(seatId);
-                                                    const selected = passengers[activePassengerIndex]?.seatNumber === seatId;
+                                                    const selected = passengers[activePassengerIndex]?.seatNumbers[activeLegIndex] === seatId;
                                                     const groupPassengerIdx = getGroupPassengerForSeat(seatId);
                                                     const selectedByGroupMember = groupPassengerIdx >= 0 && groupPassengerIdx !== activePassengerIndex;
                                                     const isSuggested = hoveredSuggestedSeats.includes(seatId);
@@ -1045,7 +1156,7 @@ export default function BookingCheckoutWizard({ flight, occupiedSeats: initialOc
                                         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
                                             <div>
                                                 <strong>{p.firstName} {p.lastName}</strong>
-                                                <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)' }}>Class: {p.cabinClass} | Seat: {p.seatNumber}</div>
+                                                <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)' }}>Class: {p.cabinClass} | Seat{p.seatNumbers.length > 1 ? 's' : ''}: {p.seatNumbers.join(', ')}</div>
                                             </div>
                                             <span style={{ fontWeight: 'bold' }}>{formatPrice(calculatePassengerPrice(p.cabinClass))}</span>
                                         </div>

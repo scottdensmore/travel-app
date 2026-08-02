@@ -259,7 +259,7 @@ test.describe('Admin Control Journey', () => {
     });
 
     // Checkout must render only the persisted Economy rows and seat letters.
-    await page.goto(`/book/${persistedOccurrence.id}`);
+    await page.goto(`/checkout?outbound=${persistedOccurrence.id}`);
     await page.fill('input[placeholder="John"]', 'Layout');
     await page.fill('input[placeholder="Doe"]', 'Traveler');
     await page.fill('input[type="date"]', '1990-01-01');

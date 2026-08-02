@@ -524,7 +524,7 @@ describe('FlightBookingForm', () => {
 
         const bookLink = screen.getByRole('link', { name: 'Book Now' });
         expect(bookLink).toBeInTheDocument();
-        expect(bookLink).toHaveAttribute('href', '/book/1');
+        expect(bookLink).toHaveAttribute('href', '/checkout?outbound=1');
     });
 
     it('handles toggling trip type to one-way, input changes, and error handling', async () => {

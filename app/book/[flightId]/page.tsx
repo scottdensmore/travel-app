@@ -1,10 +1,4 @@
-import React from 'react';
-import { notFound, redirect } from 'next/navigation';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
-import { getOccupiedSeatsAction } from '@/app/actions';
-import BookingCheckoutWizard from '@/components/ui/BookingCheckoutWizard';
+import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,48 +8,12 @@ interface PageProps {
     }>;
 }
 
-export default async function BookingCheckoutPage({ params }: PageProps) {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-        redirect('/login');
-    }
-
-    const { flightId: flightIdParam } = await params;
-    const flightId = parseInt(flightIdParam, 10);
-    if (isNaN(flightId)) {
-        notFound();
-    }
-
-    const flight = await prisma.flight.findUnique({
-        where: { id: flightId }
-    });
-
-    if (!flight) {
-        notFound();
-    }
-
-    const occupiedSeats = await getOccupiedSeatsAction(flightId);
-
-    // Format flight dates and props to pass cleanly
-    const formattedFlight = {
-        id: flight.id,
-        flightNumber: flight.flightNumber,
-        airline: flight.airline,
-        from: flight.from,
-        to: flight.to,
-        departureDate: flight.departureDate.toISOString(),
-        price: flight.price,
-        firstClassRows: flight.firstClassRows,
-        businessRows: flight.businessRows,
-        premiumEconomyRows: flight.premiumEconomyRows,
-        economyRows: flight.economyRows,
-        seatPattern: flight.seatPattern
-    };
-
-    return (
-        <BookingCheckoutWizard 
-            flight={formattedFlight} 
-            occupiedSeats={occupiedSeats} 
-        />
-    );
+/**
+ * Checkout moved to /checkout, which addresses a whole itinerary rather than a
+ * single flight. This keeps older one-way links working; /checkout does the
+ * auth check and validates the id.
+ */
+export default async function LegacyBookingCheckoutPage({ params }: PageProps) {
+    const { flightId } = await params;
+    redirect(`/checkout?outbound=${encodeURIComponent(flightId)}`);
 }

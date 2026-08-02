@@ -27,7 +27,7 @@ describe('BookingCheckoutWizard', () => {
     });
 
     it('renders Step 1 (Travelers) and calculates prices correctly based on cabin class and additions', async () => {
-        const { container } = render(<BookingCheckoutWizard flight={sampleFlight} occupiedSeats={[]} />);
+        const { container } = render(<BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />);
 
         // Header and Step 1 indicator
         expect(screen.getByText('Traveler Information')).toBeInTheDocument();
@@ -67,7 +67,7 @@ describe('BookingCheckoutWizard', () => {
     });
 
     it('shows validation errors in Step 1 if fields are missing', async () => {
-        render(<BookingCheckoutWizard flight={sampleFlight} occupiedSeats={[]} />);
+        render(<BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />);
 
         // Try to proceed without entering details
         fireEvent.click(screen.getByText('Select Seats →'));
@@ -77,11 +77,11 @@ describe('BookingCheckoutWizard', () => {
     });
 
     it('defaults to an available cabin and hides cabins with zero rows', () => {
-        render(<BookingCheckoutWizard flight={{
+        render(<BookingCheckoutWizard flights={[{
             ...sampleFlight,
             economyRows: 0,
             premiumEconomyRows: 2
-        }} occupiedSeats={[]} />);
+        }]} occupiedSeats={[[]]} />);
 
         const cabinSelect = screen.getAllByRole('combobox')[1];
         expect(cabinSelect).toHaveValue('PREMIUM_ECONOMY');
@@ -89,7 +89,7 @@ describe('BookingCheckoutWizard', () => {
     });
 
     it('transitions to Step 2 (Seats) and lets passengers select seats, respecting occupied seats', async () => {
-        const { container } = render(<BookingCheckoutWizard flight={sampleFlight} occupiedSeats={['4B']} />);
+        const { container } = render(<BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[['4B']]} />);
 
         // Step 1 traveler details
         fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Alice' } });
@@ -149,7 +149,7 @@ describe('BookingCheckoutWizard', () => {
             }]
         });
 
-        const { container } = render(<BookingCheckoutWizard flight={sampleFlight} occupiedSeats={[]} />);
+        const { container } = render(<BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />);
 
         // Fill Passenger 1 details
         fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Bob' } });
@@ -207,7 +207,7 @@ describe('BookingCheckoutWizard', () => {
     it('shows action booking submission error on API failure', async () => {
         mockBookFlightAction.mockRejectedValue(new Error('Seats already taken!'));
 
-        const { container } = render(<BookingCheckoutWizard flight={sampleFlight} occupiedSeats={[]} />);
+        const { container } = render(<BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />);
 
         // Fill passenger details
         fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'John' } });
@@ -241,7 +241,7 @@ describe('BookingCheckoutWizard', () => {
             resolveBooking = resolve;
         }));
 
-        const { container } = render(<BookingCheckoutWizard flight={sampleFlight} occupiedSeats={[]} />);
+        const { container } = render(<BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />);
         fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Bob' } });
         fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Jones' } });
         fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1988-12-01' } });
@@ -269,7 +269,7 @@ describe('BookingCheckoutWizard', () => {
     it('uses booking-specific copy for an unknown submission failure', async () => {
         mockBookFlightAction.mockRejectedValue('network failure');
 
-        const { container } = render(<BookingCheckoutWizard flight={sampleFlight} occupiedSeats={[]} />);
+        const { container } = render(<BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />);
         fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Bob' } });
         fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Jones' } });
         fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1988-12-01' } });
@@ -294,7 +294,7 @@ describe('BookingCheckoutWizard', () => {
             },
         });
 
-        const { container } = render(<BookingCheckoutWizard flight={sampleFlight} occupiedSeats={[]} />);
+        const { container } = render(<BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />);
         const firstName = screen.getByPlaceholderText('John');
         fireEvent.change(firstName, { target: { value: 'Bob' } });
         fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Jones' } });
@@ -324,7 +324,7 @@ describe('BookingCheckoutWizard', () => {
             },
         });
 
-        const { container } = render(<BookingCheckoutWizard flight={sampleFlight} occupiedSeats={[]} />);
+        const { container } = render(<BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />);
         fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Bob' } });
         fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Jones' } });
         fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1988-12-01' } });
@@ -349,9 +349,9 @@ describe('BookingCheckoutWizard', () => {
 
         const setupStep2WithTwoPassengers = (
             occupied: string[] = [],
-            flight: React.ComponentProps<typeof BookingCheckoutWizard>['flight'] = twoPassengersFlight
+            flight: React.ComponentProps<typeof BookingCheckoutWizard>['flights'][number] = twoPassengersFlight
         ) => {
-            const { container } = render(<BookingCheckoutWizard flight={flight} occupiedSeats={occupied} />);
+            const { container } = render(<BookingCheckoutWizard flights={[flight]} occupiedSeats={[occupied]} />);
             
             // Passenger 1 details
             fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Alice' } });
@@ -383,7 +383,7 @@ describe('BookingCheckoutWizard', () => {
         });
 
         it('does not render auto-allocation controls when there is only one traveler', () => {
-            render(<BookingCheckoutWizard flight={twoPassengersFlight} occupiedSeats={[]} />);
+            render(<BookingCheckoutWizard flights={[twoPassengersFlight]} occupiedSeats={[[]]} />);
             // Fill single passenger details
             fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Alice' } });
             fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Smith' } });
@@ -484,6 +484,202 @@ describe('BookingCheckoutWizard', () => {
             cards = screen.getAllByText(/Class:/);
             expect(cards[0].textContent).toContain('Seat: 11C');
             expect(cards[1].textContent).toContain('Seat: 11A');
+        });
+    });
+
+    describe('Round-trip itineraries', () => {
+        const inboundFlight = {
+            ...sampleFlight,
+            id: 43,
+            flightNumber: 'GA405',
+            from: 'Detroit, USA',
+            to: 'Seattle, USA',
+            departureDate: '2026-07-07T10:00:00Z',
+            price: '$150'
+        };
+
+        const renderRoundTrip = (occupied: string[][] = [[], []]) =>
+            render(<BookingCheckoutWizard flights={[sampleFlight, inboundFlight]} occupiedSeats={occupied} />);
+
+        const fillTraveler = (container: HTMLElement) => {
+            fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Ada' } });
+            fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Lovelace' } });
+            fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1990-01-01' } });
+            fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US5550000' } });
+        };
+
+        it('prices every leg at its own fare', () => {
+            renderRoundTrip();
+
+            // $100 outbound + $150 return, not the outbound fare twice.
+            expect(screen.getByText('Estimated total: $250')).toBeInTheDocument();
+        });
+
+        it('offers a leg switcher only when the itinerary has more than one leg', () => {
+            const { unmount } = renderRoundTrip();
+            fillTraveler(document.body);
+            fireEvent.click(screen.getByText('Select Seats →'));
+
+            const tabs = screen.getAllByRole('tab');
+            expect(tabs).toHaveLength(2);
+            expect(tabs[0]).toHaveTextContent('Departing');
+            expect(tabs[0]).toHaveTextContent('Seattle, USA → Detroit, USA');
+            expect(tabs[1]).toHaveTextContent('Returning');
+            expect(tabs[1]).toHaveTextContent('Detroit, USA → Seattle, USA');
+            expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
+
+            unmount();
+
+            const { container } = render(
+                <BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />
+            );
+            fillTraveler(container);
+            fireEvent.click(screen.getByText('Select Seats →'));
+            expect(screen.queryByTestId('leg-switcher')).not.toBeInTheDocument();
+        });
+
+        it('moves between legs with the arrow keys and keeps one tab stop', () => {
+            const { container } = renderRoundTrip();
+            fillTraveler(container);
+            fireEvent.click(screen.getByText('Select Seats →'));
+
+            const [departing, returning] = screen.getAllByRole('tab');
+            expect(departing).toHaveAttribute('tabindex', '0');
+            expect(returning).toHaveAttribute('tabindex', '-1');
+            expect(departing).toHaveAttribute('aria-controls', 'leg-panel-0');
+            expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'leg-tab-0');
+
+            departing.focus();
+            fireEvent.keyDown(departing, { key: 'ArrowRight' });
+
+            expect(returning).toHaveAttribute('aria-selected', 'true');
+            expect(returning).toHaveAttribute('tabindex', '0');
+            expect(returning).toHaveFocus();
+            expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'leg-tab-1');
+
+            // Wraps around at the end.
+            fireEvent.keyDown(returning, { key: 'ArrowRight' });
+            expect(screen.getAllByRole('tab')[0]).toHaveAttribute('aria-selected', 'true');
+        });
+
+        it('sends a server-side seat error to the leg it names', async () => {
+            mockBookFlightAction.mockResolvedValue({
+                ok: false,
+                error: {
+                    code: 'VALIDATION_ERROR',
+                    message: 'That seat was just taken.',
+                    fields: { 'passengers.0.seatNumbers.1': ['That seat was just taken.'] }
+                }
+            });
+
+            const { container } = renderRoundTrip();
+            fillTraveler(container);
+            fireEvent.click(screen.getByText('Select Seats →'));
+            fireEvent.click(screen.getByTitle('Select Seat 11A'));
+            fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
+            fireEvent.click(screen.getByTitle('Select Seat 12C'));
+            fireEvent.click(screen.getByText('Review Booking →'));
+
+            // Go back to the departing leg so the error has a leg to correct.
+            fireEvent.click(screen.getByText('← Back'));
+            fireEvent.click(screen.getByRole('tab', { name: /Departing/ }));
+            fireEvent.click(screen.getByText('Review Booking →'));
+            fireEvent.click(screen.getByRole('button', { name: /Confirm \$250 booking/i }));
+
+            // The error names leg 1, so the returning map must be the one shown.
+            await waitFor(() =>
+                expect(screen.getByRole('tab', { name: /Returning/ })).toHaveAttribute('aria-selected', 'true')
+            );
+            expect(screen.getByText('Select Your Seats')).toBeInTheDocument();
+        });
+
+        it('shows each leg its own occupancy', () => {
+            const { container } = renderRoundTrip([['11A'], ['11B']]);
+            fillTraveler(container);
+            fireEvent.click(screen.getByText('Select Seats →'));
+
+            // Outbound: 11A is taken, 11B is free.
+            expect(screen.getByTitle('Seat 11A Occupied')).toBeInTheDocument();
+            expect(screen.getByTitle('Select Seat 11B')).toBeInTheDocument();
+
+            fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
+
+            // Return: the reverse. A leg-blind seat map would keep showing 11A taken.
+            expect(screen.getByTitle('Seat 11B Occupied')).toBeInTheDocument();
+            expect(screen.getByTitle('Select Seat 11A')).toBeInTheDocument();
+        });
+
+        it('will not advance while a leg is unseated, and points at the leg that needs one', async () => {
+            const { container } = renderRoundTrip();
+            fillTraveler(container);
+            fireEvent.click(screen.getByText('Select Seats →'));
+
+            // Seat the outbound only, then try to move on.
+            fireEvent.click(screen.getByTitle('Select Seat 11A'));
+            fireEvent.click(screen.getByText('Review Booking →'));
+
+            expect(screen.getByText('Select Your Seats')).toBeInTheDocument();
+            expect(screen.getByRole('alert')).toHaveTextContent(/returning seat for Passenger 1/i);
+            await waitFor(() =>
+                expect(screen.getByRole('tab', { name: /Returning/ })).toHaveAttribute('aria-selected', 'true')
+            );
+
+            // Seating the return unblocks the step.
+            fireEvent.click(screen.getByTitle('Select Seat 12C'));
+            fireEvent.click(screen.getByText('Review Booking →'));
+            expect(screen.getByRole('heading', { name: 'Review Booking' })).toBeInTheDocument();
+        });
+
+        it('books both legs with the seat chosen for each', async () => {
+            mockBookFlightAction.mockResolvedValue({ id: 900, bookingReference: 'RT12345' });
+
+            const { container } = renderRoundTrip();
+            fillTraveler(container);
+            fireEvent.click(screen.getByText('Select Seats →'));
+
+            fireEvent.click(screen.getByTitle('Select Seat 11A'));
+            fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
+            fireEvent.click(screen.getByTitle('Select Seat 12C'));
+
+            fireEvent.click(screen.getByText('Review Booking →'));
+            expect(screen.getByText(/Class:/).textContent).toContain('Seats: 11A, 12C');
+
+            fireEvent.click(screen.getByRole('button', { name: /Confirm \$250 booking/i }));
+
+            await waitFor(() => {
+                expect(mockBookFlightAction).toHaveBeenCalledWith({
+                    flightIds: [42, 43],
+                    passengers: [{
+                        firstName: 'Ada',
+                        lastName: 'Lovelace',
+                        dateOfBirth: new Date('1990-01-01').toISOString(),
+                        passportNumber: 'US5550000',
+                        gender: 'Male',
+                        seatNumbers: ['11A', '12C'],
+                        cabinClass: 'ECONOMY'
+                    }],
+                    idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/i)
+                });
+            });
+        });
+
+        it('clears every leg when the cabin changes, not just the visible one', () => {
+            const { container } = renderRoundTrip();
+            fillTraveler(container);
+            fireEvent.click(screen.getByText('Select Seats →'));
+
+            fireEvent.click(screen.getByTitle('Select Seat 11A'));
+            fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
+            fireEvent.click(screen.getByTitle('Select Seat 12C'));
+
+            // Back to travellers, upgrade the cabin: seats from the old cabin no
+            // longer exist on either leg's map.
+            fireEvent.click(screen.getByText('← Back'));
+            fireEvent.change(container.querySelectorAll('select')[1], { target: { value: 'BUSINESS' } });
+            fireEvent.click(screen.getByText('Select Seats →'));
+
+            expect(screen.getAllByRole('tab')[0]).toHaveTextContent('seat needed');
+            expect(screen.getAllByRole('tab')[1]).toHaveTextContent('seat needed');
         });
     });
 });

@@ -817,7 +817,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                                 <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>{flight.price}</span>
                                                 <Link
                                                     className="flight-result-book"
-                                                    href={`/book/${flight.id}`}
+                                                    href={`/checkout?outbound=${flight.id}`}
                                                 >
                                                     Book Now
                                                 </Link>
