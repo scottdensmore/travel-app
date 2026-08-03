@@ -37,6 +37,39 @@ export function bookingFlights<TFlight>(booking: BookingLegs<TFlight>): TFlight[
         .filter((flight): flight is TFlight => flight !== null && flight !== undefined);
 }
 
+interface HeldSeat {
+    passengerId: string;
+    seatNumber: string;
+    cabinClass: string;
+}
+
+/**
+ * Travellers described by where they sit on one particular leg.
+ *
+ * A traveller belongs to a booking, but a seat belongs to a flight, so any view
+ * of a single flight -- a manifest, a seat map -- has to take the seat from that
+ * leg's assignment. `Passenger.seatNumber` answers with the outbound seat
+ * whichever leg is being looked at, which is wrong for every leg but the first.
+ *
+ * Falls back to the passenger's own seat for bookings taken before seats were
+ * held per leg, whose only record is that column.
+ */
+export function passengersSeatedOnLeg<
+    TPassenger extends { id: string; seatNumber: string; cabinClass: string }
+>(
+    leg: { seatAssignments: HeldSeat[] },
+    passengers: TPassenger[]
+): TPassenger[] {
+    return passengers.map((passenger) => {
+        const held = leg.seatAssignments.find((seat) => seat.passengerId === passenger.id);
+        return {
+            ...passenger,
+            seatNumber: held?.seatNumber ?? passenger.seatNumber,
+            cabinClass: held?.cabinClass ?? passenger.cabinClass,
+        };
+    });
+}
+
 /**
  * How a seat reads to the customer. A cancellation parks the seat under a
  * placeholder so the unique index stays satisfied; that marker is bookkeeping,

@@ -814,7 +814,15 @@ describe('changeBookingSeatsAction', () => {
         mockTx.flight.findUnique.mockResolvedValue({ id: 10 });
         // The action loads every leg's flight at once now.
         mockTx.flight.findMany.mockResolvedValue([{ id: 10 }]);
-        mockTx.seatAssignment.findMany.mockResolvedValue([]);
+        // seatAssignment.findMany serves two queries: the cabin held on each
+        // leg, then the seats occupied on each flight.
+        mockTx.seatAssignment.findMany.mockImplementation(({ where }: any) =>
+            Promise.resolve(
+                where?.legId
+                    ? [{ passengerId: 'p-1', legId: 50, cabinClass: 'ECONOMY' }]
+                    : []
+            )
+        );
         mockTx.booking.findUnique.mockResolvedValue({
             status: 'CONFIRMED',
             passengers: [
@@ -840,10 +848,13 @@ describe('changeBookingSeatsAction', () => {
             ]
         });
 
-        mockTx.seatAssignment.findMany.mockResolvedValue([
-            { flightId: 10, seatNumber: '11A' },
-            { flightId: 10, seatNumber: '11B' }
-        ]);
+        mockTx.seatAssignment.findMany.mockImplementation(({ where }: any) =>
+            Promise.resolve(
+                where?.legId
+                    ? [{ passengerId: 'p-1', legId: 50, cabinClass: 'ECONOMY' }]
+                    : [{ flightId: 10, seatNumber: '11A' }, { flightId: 10, seatNumber: '11B' }]
+            )
+        );
 
         await changeBookingSeatsAction(1, [
             { passengerId: 'p-1', legId: 50, seatNumber: '12B' }
@@ -875,9 +886,13 @@ describe('changeBookingSeatsAction', () => {
         });
 
         // 12B is occupied
-        mockTx.seatAssignment.findMany.mockResolvedValue([
-            { flightId: 10, seatNumber: '12B' }
-        ]);
+        mockTx.seatAssignment.findMany.mockImplementation(({ where }: any) =>
+            Promise.resolve(
+                where?.legId
+                    ? [{ passengerId: 'p-1', legId: 50, cabinClass: 'ECONOMY' }]
+                    : [{ flightId: 10, seatNumber: '12B' }]
+            )
+        );
 
         await expect(changeBookingSeatsAction(1, [
             { passengerId: 'p-1', legId: 50, seatNumber: '12B' }
@@ -1423,7 +1438,7 @@ describe('admin flight schedule actions', () => {
                     price: '$500',
                 });
                 mockedFlightFindFirst.mockResolvedValue({ id: 42 });
-                mockTx.flight.findUnique.mockResolvedValue({ id: 42, passengers: [] });
+                mockTx.flight.findUnique.mockResolvedValue({ id: 42, seatAssignments: [] });
                 mockTx.flight.update.mockResolvedValue({ id: 42 });
 
                 const result = await generateFlightOccurrencesAction(
@@ -1458,7 +1473,7 @@ describe('admin flight schedule actions', () => {
                     .mockResolvedValueOnce({ id: 99 });
                 const duplicateError = Object.assign(new Error('duplicate'), { code: 'P2002' });
                 mockedFlightCreate.mockRejectedValueOnce(duplicateError);
-                mockTx.flight.findUnique.mockResolvedValue({ id: 99, passengers: [] });
+                mockTx.flight.findUnique.mockResolvedValue({ id: 99, seatAssignments: [] });
                 mockTx.flight.update.mockResolvedValue({ id: 99 });
 
                 const result = await generateFlightOccurrencesAction(1, '2026-07-06', '2026-07-06', {
@@ -1509,11 +1524,11 @@ describe('admin flight schedule actions', () => {
                 });
                 mockedFlightFindFirst.mockResolvedValue({
                     id: 42,
-                    passengers: [{ seatNumber: '30F', cabinClass: 'ECONOMY' }]
+                    seatAssignments: [{ seatNumber: '30F', cabinClass: 'ECONOMY' }]
                 });
                 mockTx.flight.findUnique.mockResolvedValue({
                     id: 42,
-                    passengers: [{ seatNumber: '30F', cabinClass: 'ECONOMY' }]
+                    seatAssignments: [{ seatNumber: '30F', cabinClass: 'ECONOMY' }]
                 });
 
                 await expect(generateFlightOccurrencesAction(1, '2026-07-06', '2026-07-06', {
@@ -1525,11 +1540,13 @@ describe('admin flight schedule actions', () => {
                 })).rejects.toThrow('Occupied seat 30F is not available for ECONOMY in the requested layout.');
 
                 expect(mockTx.flight.update).not.toHaveBeenCalled();
+                // Seats held on the flight, from whichever leg holds them, so a
+                // return leg's seats are seen too.
                 expect(mockTx.flight.findUnique).toHaveBeenCalledWith({
                     where: { id: 42 },
                     include: {
-                        passengers: {
-                            where: { booking: { status: { not: 'CANCELLED' } } },
+                        seatAssignments: {
+                            where: { leg: { booking: { status: { not: 'CANCELLED' } } } },
                             select: { seatNumber: true, cabinClass: true }
                         }
                     }
@@ -1552,7 +1569,7 @@ describe('admin flight schedule actions', () => {
                 mockedFlightFindFirst.mockResolvedValue({ id: 42 });
                 mockTx.flight.findUnique.mockResolvedValue({
                     id: 42,
-                    passengers: [{ seatNumber: '11A', cabinClass: 'ECONOMY' }]
+                    seatAssignments: [{ seatNumber: '11A', cabinClass: 'ECONOMY' }]
                 });
 
                 await expect(generateFlightOccurrencesAction(1, '2026-07-06', '2026-07-06', {
