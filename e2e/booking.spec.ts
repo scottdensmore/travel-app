@@ -356,5 +356,30 @@ test.describe('Flight Booking Journey', () => {
     await expect(legRows).toHaveCount(2);
     await expect(legRows.nth(0)).toContainText(outboundSeatName);
     await expect(legRows.nth(1)).toContainText(inboundSeatName);
+
+    // --- Changing the return seat leaves the outbound one alone ---
+    await row.getByRole('button', { name: 'Change Seats' }).click();
+    await expect(page.getByRole('heading', { name: 'Change Seats' })).toBeVisible();
+
+    const modalLegs = page.getByTestId('seat-change-legs').getByRole('tab');
+    await expect(modalLegs).toHaveCount(2);
+    await modalLegs.nth(1).click();
+
+    // A free seat on the inbound that is not the one already held there.
+    const replacement = page
+      .locator(`button[title^="Select Seat"]:not([title="Select Seat ${inboundSeatName}"])`)
+      .first();
+    const replacementName = (await replacement.getAttribute('title'))!.replace('Select Seat ', '');
+    await replacement.click();
+    await page.getByRole('button', { name: 'Save New Seats' }).click();
+    await expect(page.getByRole('heading', { name: 'Change Seats' })).not.toBeVisible();
+
+    const changed = await prisma.itineraryLeg.findMany({
+      where: { bookingId: booking.id },
+      orderBy: { sequence: 'asc' },
+      include: { seatAssignments: true },
+    });
+    expect(changed[0].seatAssignments.map(s => s.seatNumber)).toEqual([outboundSeatName]);
+    expect(changed[1].seatAssignments.map(s => s.seatNumber)).toEqual([replacementName]);
   });
 });

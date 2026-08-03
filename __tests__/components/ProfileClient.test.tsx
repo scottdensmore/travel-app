@@ -35,7 +35,7 @@ const sampleBookings = [
         status: 'CONFIRMED',
         totalPriceCents: 35000,
         flightId: 201,
-        legs: [{ sequence: 1, flight: {
+        legs: [{ id: 501, sequence: 1, flight: {
             id: 201,
             flightNumber: 'GA101',
             airline: 'Gemini Airways',
@@ -236,8 +236,9 @@ describe('ProfileClient interactive dashboard', () => {
         // Using findByTitle waits for the state update from mockGetOccupiedSeats to apply
         const seat11A = await screen.findByTitle('Select Seat 11A');
         
-        // 11B should be occupied (red / disabled)
-        const seat11B = screen.getByTitle('Seat 11B Occupied');
+        // 11B should be occupied (red / disabled). Awaited because occupancy for
+        // every leg is loaded together and lands a tick after the map renders.
+        const seat11B = await screen.findByTitle('Seat 11B Occupied');
         expect(seat11B).toBeDisabled();
 
         fireEvent.click(seat11A);
@@ -248,7 +249,7 @@ describe('ProfileClient interactive dashboard', () => {
 
         await waitFor(() => {
             expect(mockChangeBookingSeats).toHaveBeenCalledWith(101, [
-                { passengerId: 'p-1', seatNumber: '11A' }
+                { passengerId: 'p-1', legId: 501, seatNumber: '11A' }
             ]);
             expect(mockRefresh).toHaveBeenCalled();
         });
@@ -294,6 +295,7 @@ describe('ProfileClient interactive dashboard', () => {
             totalPriceCents: 66000,
             legs: [
                 {
+                    id: 501,
                     sequence: 1,
                     flight: {
                         id: 201,
@@ -308,6 +310,7 @@ describe('ProfileClient interactive dashboard', () => {
                     seatAssignments: [{ passengerId: 'p-1', seatNumber: '12A' }],
                 },
                 {
+                    id: 502,
                     sequence: 2,
                     flight: {
                         id: 202,
@@ -370,6 +373,32 @@ describe('ProfileClient interactive dashboard', () => {
             cleanup();
             renderBookings([sampleBookings[0]]);
             expect(screen.getByTestId('booking-row-101')).toHaveTextContent(/one way/i);
+        });
+
+        it('changes the seat on the chosen leg and leaves the other alone', async () => {
+            mockGetOccupiedSeats.mockResolvedValue([]);
+            mockChangeBookingSeats.mockResolvedValue({ id: 202 });
+            renderBookings([roundTripBooking]);
+
+            fireEvent.click(screen.getAllByRole('button', { name: 'Change Seats' })[0]);
+            const tabs = screen.getByTestId('seat-change-legs').querySelectorAll('[role="tab"]');
+            expect(tabs).toHaveLength(2);
+
+            // The card shows the seat held on the leg being looked at.
+            expect(await screen.findByRole('button', { name: /Jane Doe.*Seat: 12A/i })).toBeInTheDocument();
+            fireEvent.click(tabs[1]);
+            expect(screen.getByRole('button', { name: /Jane Doe.*Seat: 4C/i })).toBeInTheDocument();
+
+            // Move only the return seat.
+            fireEvent.click(await screen.findByTitle('Select Seat 13D'));
+            fireEvent.click(screen.getByRole('button', { name: 'Save New Seats' }));
+
+            await waitFor(() => {
+                expect(mockChangeBookingSeats).toHaveBeenCalledWith(202, [
+                    { passengerId: 'p-1', legId: 501, seatNumber: '12A' },
+                    { passengerId: 'p-1', legId: 502, seatNumber: '13D' },
+                ]);
+            });
         });
 
         it('falls back to the passenger seat when a leg has no assignment', () => {

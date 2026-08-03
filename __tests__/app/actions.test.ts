@@ -55,10 +55,12 @@ const mockTx = {
     },
     flight: {
         findUnique: jest.fn(),
+        findMany: jest.fn(),
         update: jest.fn(),
     },
     seatAssignment: {
         updateMany: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
     }
 };
 
@@ -810,6 +812,9 @@ describe('changeBookingSeatsAction', () => {
         mockTx.passenger.findMany.mockReset();
         mockTx.passenger.update.mockReset();
         mockTx.flight.findUnique.mockResolvedValue({ id: 10 });
+        // The action loads every leg's flight at once now.
+        mockTx.flight.findMany.mockResolvedValue([{ id: 10 }]);
+        mockTx.seatAssignment.findMany.mockResolvedValue([]);
         mockTx.booking.findUnique.mockResolvedValue({
             status: 'CONFIRMED',
             passengers: [
@@ -829,30 +834,30 @@ describe('changeBookingSeatsAction', () => {
             id: 1,
             userId: 'user-123',
             flightId: 10,
-            legs: [{ sequence: 1, flight: { id: 10 } }],
+            legs: [{ id: 50, sequence: 1, flightId: 10, flight: { id: 10 } }],
             passengers: [
                 { id: 'p-1', firstName: 'Jane', seatNumber: '12A', cabinClass: 'ECONOMY' }
             ]
         });
 
-        mockTx.passenger.findMany.mockResolvedValue([
-            { seatNumber: '11A' },
-            { seatNumber: '11B' }
+        mockTx.seatAssignment.findMany.mockResolvedValue([
+            { flightId: 10, seatNumber: '11A' },
+            { flightId: 10, seatNumber: '11B' }
         ]);
 
         await changeBookingSeatsAction(1, [
-            { passengerId: 'p-1', seatNumber: '12B' }
+            { passengerId: 'p-1', legId: 50, seatNumber: '12B' }
         ]);
 
-        expect(mockTx.passenger.findMany).toHaveBeenCalled();
+        expect(mockTx.seatAssignment.findMany).toHaveBeenCalled();
         expect(mockTx.passenger.update).toHaveBeenCalledWith({
             where: { id: 'p-1' },
             data: { seatNumber: '12B' }
         });
-        // Both tables hold the seat during the expand phase. Moving only one
-        // would leave the old seat locked and the new one held twice.
+        // Scoped to the leg: a passenger on a round trip holds an assignment
+        // per leg, so updating by passenger alone would overwrite the other.
         expect(mockTx.seatAssignment.updateMany).toHaveBeenCalledWith({
-            where: { passengerId: 'p-1' },
+            where: { passengerId: 'p-1', legId: 50 },
             data: { seatNumber: '12B' }
         });
     });
@@ -863,19 +868,19 @@ describe('changeBookingSeatsAction', () => {
             id: 1,
             userId: 'user-123',
             flightId: 10,
-            legs: [{ sequence: 1, flight: { id: 10 } }],
+            legs: [{ id: 50, sequence: 1, flightId: 10, flight: { id: 10 } }],
             passengers: [
                 { id: 'p-1', firstName: 'Jane', seatNumber: '12A', cabinClass: 'ECONOMY' }
             ]
         });
 
         // 12B is occupied
-        mockTx.passenger.findMany.mockResolvedValue([
-            { seatNumber: '12B' }
+        mockTx.seatAssignment.findMany.mockResolvedValue([
+            { flightId: 10, seatNumber: '12B' }
         ]);
 
         await expect(changeBookingSeatsAction(1, [
-            { passengerId: 'p-1', seatNumber: '12B' }
+            { passengerId: 'p-1', legId: 50, seatNumber: '12B' }
         ])).rejects.toThrow('Seat 12B is already occupied by another passenger.');
 
         expect(mockTx.passenger.update).not.toHaveBeenCalled();
@@ -888,7 +893,9 @@ describe('changeBookingSeatsAction', () => {
             userId: 'user-123',
             flightId: 10,
             legs: [{
+                id: 50,
                 sequence: 1,
+                flightId: 10,
                 flight: {
                     id: 10,
                     firstClassRows: 1,
@@ -904,7 +911,7 @@ describe('changeBookingSeatsAction', () => {
         });
 
         await expect(changeBookingSeatsAction(1, [
-            { passengerId: 'p-1', seatNumber: '1A' }
+            { passengerId: 'p-1', legId: 50, seatNumber: '1A' }
         ])).rejects.toThrow('Seat 1A is not available for ECONOMY on this flight.');
 
         expect(mockTx.passenger.update).not.toHaveBeenCalled();
@@ -916,13 +923,13 @@ describe('changeBookingSeatsAction', () => {
             id: 1,
             userId: 'user-123',
             flightId: 10,
-            legs: [{ sequence: 1, flight: { id: 10 } }],
+            legs: [{ id: 50, sequence: 1, flightId: 10, flight: { id: 10 } }],
             passengers: []
         });
         mockTx.booking.findUnique.mockResolvedValue({ status: 'CANCELLED', passengers: [] });
 
         await expect(changeBookingSeatsAction(1, [
-            { passengerId: 'p-1', seatNumber: '12A' }
+            { passengerId: 'p-1', legId: 50, seatNumber: '12A' }
         ])).rejects.toThrow(
             'Seats cannot be changed on a cancelled booking'
         );
@@ -933,7 +940,7 @@ describe('changeBookingSeatsAction', () => {
         mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
 
         await expect(changeBookingSeatsAction(-1, [
-            { passengerId: '', seatNumber: 'not-a-seat' }
+            { passengerId: '', legId: 0, seatNumber: 'not-a-seat' }
         ])).resolves.toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR' } });
         expect((prisma as any).$transaction).not.toHaveBeenCalled();
     });

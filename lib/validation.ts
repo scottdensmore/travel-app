@@ -282,6 +282,10 @@ export const flightBookingServiceSchema = bookingRequestSchema.extend({
 
 const seatChangeSchema = z.object({
     passengerId: requiredText('Passenger ID', 128),
+    /// The leg the seat is held on. A seat belongs to one flight, so a change
+    /// has to name which one; without it a round trip has no way to say which
+    /// of its seats is moving.
+    legId: positiveId('Leg ID'),
     seatNumber: requiredText('Seat number', 6)
         .transform(value => value.toUpperCase())
         .pipe(z.string().regex(/^[1-9]\d{0,2}[A-Z]$/, 'Seat number is invalid.'))
@@ -289,14 +293,19 @@ const seatChangeSchema = z.object({
 
 export const seatChangesSchema = z.object({
     bookingId: positiveId('Booking ID'),
-    seatChanges: z.array(seatChangeSchema).min(1).max(MAX_PASSENGERS_PER_BOOKING)
+    seatChanges: z.array(seatChangeSchema)
+        .min(1)
+        .max(MAX_PASSENGERS_PER_BOOKING * MAX_ITINERARY_LEGS)
 }).strict().superRefine(({ seatChanges }, context) => {
-    const passengerIds = seatChanges.map(change => change.passengerId);
-    const seats = seatChanges.map(change => change.seatNumber);
-    if (new Set(passengerIds).size !== passengerIds.length) {
+    // Both rules are per leg. A traveller holds one seat on each leg, so the
+    // same passenger appears once per leg; and two legs are two flights, so the
+    // same seat number on each of them is not a clash.
+    const seatsPerLeg = seatChanges.map(change => `${change.legId}:${change.seatNumber}`);
+    const passengersPerLeg = seatChanges.map(change => `${change.legId}:${change.passengerId}`);
+    if (new Set(passengersPerLeg).size !== passengersPerLeg.length) {
         context.addIssue({ code: 'custom', path: ['seatChanges'], message: 'Passengers must be unique.' });
     }
-    if (new Set(seats).size !== seats.length) {
+    if (new Set(seatsPerLeg).size !== seatsPerLeg.length) {
         context.addIssue({ code: 'custom', path: ['seatChanges'], message: 'Seats must be unique.' });
     }
 });
