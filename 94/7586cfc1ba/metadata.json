@@ -1,0 +1,24 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "947586cfc1ba",
+  "strategy": "manual-commit",
+  "branch": "feat/cabin-class-search",
+  "checkpoints_count": 2,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/94/7586cfc1ba/0/metadata.json",
+      "transcript": "/94/7586cfc1ba/0/full.jsonl",
+      "compact_transcript": "/94/7586cfc1ba/0/transcript.jsonl",
+      "content_hash": "/94/7586cfc1ba/0/content_hash.txt",
+      "prompt": "/94/7586cfc1ba/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3758,
+    "cache_creation_tokens": 7757451,
+    "cache_read_tokens": 781554576,
+    "output_tokens": 927394,
+    "api_call_count": 1672
+  }
+}
