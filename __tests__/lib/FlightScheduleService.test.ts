@@ -87,7 +87,6 @@ describe('FlightScheduleService dynamic generator', () => {
                 from: 'New York, USA',
                 to: 'London, UK',
                 departureDate: new Date('2026-06-25T19:30:00Z'),
-                returnDate: null,
                 price: '$850',
                 firstClassRows: 1,
                 businessRows: 2,
@@ -100,6 +99,33 @@ describe('FlightScheduleService dynamic generator', () => {
 
         expect(result).toHaveLength(1);
         expect(result[0]).toHaveProperty('flightNumber', 'CA202');
+    });
+
+    it('records no return date for a schedule that carries a return time', async () => {
+        // A returnTime used to write departure + 7 days onto the flight, which
+        // described no real return. A return is its own flight now (#69), so a
+        // schedule's return time must not put a date back on the outbound.
+        const date = new Date('2026-06-22T00:00:00Z'); // Monday
+        mockedFlightScheduleFindMany.mockResolvedValue([{
+            id: 1,
+            flightNumber: 'CA101',
+            airline: 'Gemini Airways',
+            from: 'Seattle, USA',
+            to: 'Detroit, USA',
+            departureTime: '08:00',
+            returnTime: '18:00',
+            daysOfWeek: [1, 3, 5],
+            price: '$350',
+        }]);
+        mockedFlightFindFirst.mockResolvedValue(null);
+        mockedFlightCreate.mockImplementation(({ data }: any) => Promise.resolve({ id: 101, ...data }));
+
+        await service.generateFlightsForDate(date);
+
+        expect(mockedFlightCreate).toHaveBeenCalledTimes(1);
+        const created = mockedFlightCreate.mock.calls[0][0].data;
+        expect(created).not.toHaveProperty('returnDate');
+        expect(created.departureDate).toEqual(new Date('2026-06-22T08:00:00Z'));
     });
 
     it('does not create a flight instance if it already exists in the database', async () => {

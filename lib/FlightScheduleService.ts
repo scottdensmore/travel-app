@@ -85,17 +85,6 @@ export default class FlightScheduleService {
             const dateStr = date.toISOString().split('T')[0];
             const departureDate = new Date(`${dateStr}T${schedule.departureTime}:00Z`);
 
-            let returnDate = null;
-            if (schedule.returnTime) {
-                const retDate = new Date(date);
-                // Use UTC methods for return leg date calculations.
-                // The fixed seven-day offset is the round-trip modelling gap
-                // tracked in #69; this generator preserves existing behaviour.
-                retDate.setUTCDate(date.getUTCDate() + 7);
-                const retDateStr = retDate.toISOString().split('T')[0];
-                returnDate = new Date(`${retDateStr}T${schedule.returnTime}:00Z`);
-            }
-
             // Check if flight instance already exists
             let flight = await prisma.flight.findFirst({
                 where: {
@@ -114,7 +103,6 @@ export default class FlightScheduleService {
                             from: schedule.from,
                             to: schedule.to,
                             departureDate,
-                            returnDate,
                             price: schedule.price,
                             status: 'ON_TIME',
                             firstClassRows: schedule.firstClassRows ?? 3,
