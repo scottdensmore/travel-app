@@ -41,6 +41,7 @@ interface SeatAssignment {
 }
 
 interface BookingLeg {
+    id: number;
     sequence: number;
     flight: Flight | null;
     seatAssignments?: SeatAssignment[];
@@ -106,31 +107,52 @@ export default function ProfileClient({
 
     // Modal state
     const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
-    const [modalOccupiedSeats, setModalOccupiedSeats] = useState<string[]>([]);
-    const [passengerSeats, setPassengerSeats] = useState<{ [passengerId: string]: string }>({});
+    // Occupancy and seat choices are both per leg: a seat belongs to one
+    // flight, so a round trip holds a different one on each.
+    const [modalOccupiedSeats, setModalOccupiedSeats] = useState<{ [legId: number]: string[] }>({});
+    const [passengerSeats, setPassengerSeats] = useState<{ [legAndPassenger: string]: string }>({});
     const [activePassengerIdx, setActivePassengerIdx] = useState<number>(0);
+    const [activeLegIdx, setActiveLegIdx] = useState<number>(0);
     const [modalError, setModalError] = useState<string | null>(null);
     const [isSavingSeats, setIsSavingSeats] = useState<boolean>(false);
 
-    useEffect(() => {
-        const selectedFlightId = selectedBooking ? outboundFlight(selectedBooking)?.id : undefined;
-        if (selectedBooking && selectedFlightId) {
-            getOccupiedSeatsAction(selectedFlightId)
-                .then(seats => {
-                    setModalOccupiedSeats(seats);
-                })
-                .catch(() => {
-                    setModalOccupiedSeats([]);
-                });
+    const modalLegs = selectedBooking
+        ? orderedLegs(selectedBooking).filter(leg => leg.flight)
+        : [];
+    const activeLeg = modalLegs[activeLegIdx] ?? null;
+    /** Seat state is keyed by leg and passenger together. */
+    const seatKey = (legId: number, passengerId: string) => `${legId}:${passengerId}`;
+    const seatFor = (passengerId: string) =>
+        activeLeg ? passengerSeats[seatKey(activeLeg.id, passengerId)] ?? '' : '';
 
-            const initial: { [key: string]: string } = {};
-            selectedBooking.passengers.forEach(p => {
-                initial[p.id] = p.seatNumber;
-            });
-            setPassengerSeats(initial);
-            setActivePassengerIdx(0);
-            setModalError(null);
+    useEffect(() => {
+        if (!selectedBooking) return;
+        const legs = orderedLegs(selectedBooking).filter(leg => leg.flight);
+        if (legs.length === 0) return;
+
+        // Each leg's own flight, so a seat taken on the outbound does not read
+        // as taken on the return.
+        Promise.all(legs.map(leg =>
+            getOccupiedSeatsAction(leg.flight!.id)
+                .then(seats => [leg.id, seats] as const)
+                .catch(() => [leg.id, [] as string[]] as const)
+        )).then(entries => {
+            setModalOccupiedSeats(Object.fromEntries(entries));
+        });
+
+        const initial: { [key: string]: string } = {};
+        for (const leg of legs) {
+            for (const passenger of selectedBooking.passengers) {
+                const held = leg.seatAssignments?.find(seat => seat.passengerId === passenger.id)?.seatNumber;
+                // Bookings taken before seats were held per leg only have the
+                // passenger's own seat, which described the outbound.
+                initial[`${leg.id}:${passenger.id}`] = held ?? (leg.id === legs[0].id ? passenger.seatNumber : '');
+            }
         }
+        setPassengerSeats(initial);
+        setActivePassengerIdx(0);
+        setActiveLegIdx(0);
+        setModalError(null);
     }, [selectedBooking]);
 
     const handleCancelBooking = (bookingId: number, flightNumber: string) => {
@@ -176,10 +198,16 @@ export default function ProfileClient({
     const handleSaveSeats = async () => {
         if (!selectedBooking) return;
 
-        for (const p of selectedBooking.passengers) {
-            if (!passengerSeats[p.id]) {
-                setModalError(`Please select a seat for ${p.firstName} ${p.lastName}`);
-                return;
+        for (const leg of modalLegs) {
+            for (const p of selectedBooking.passengers) {
+                if (!passengerSeats[seatKey(leg.id, p.id)]) {
+                    const which = modalLegs.length > 1
+                        ? ` on the ${leg.id === modalLegs[0].id ? 'departing' : 'returning'} flight`
+                        : '';
+                    setModalError(`Please select a seat for ${p.firstName} ${p.lastName}${which}`);
+                    setActiveLegIdx(modalLegs.indexOf(leg));
+                    return;
+                }
             }
         }
 
@@ -187,10 +215,13 @@ export default function ProfileClient({
         setModalError(null);
 
         try {
-            const seatChanges = Object.keys(passengerSeats).map(pid => ({
-                passengerId: pid,
-                seatNumber: passengerSeats[pid]
-            }));
+            const seatChanges = modalLegs.flatMap(leg =>
+                selectedBooking.passengers.map(p => ({
+                    passengerId: p.id,
+                    legId: leg.id,
+                    seatNumber: passengerSeats[seatKey(leg.id, p.id)]
+                }))
+            );
 
             const result = await changeBookingSeatsAction(selectedBooking.id, seatChanges);
             if (isActionValidationFailure(result)) {
@@ -208,7 +239,7 @@ export default function ProfileClient({
     };
 
     const getRowsForClass = (cabinClass: string) => {
-        const flight = selectedBooking ? outboundFlight(selectedBooking) : null;
+        const flight = activeLeg?.flight ?? null;
         const firstClassCount = flight?.firstClassRows !== undefined && flight?.firstClassRows !== null ? Number(flight.firstClassRows) : 3;
         const businessCount = flight?.businessRows !== undefined && flight?.businessRows !== null ? Number(flight.businessRows) : 3;
         const premiumEconomyCount = flight?.premiumEconomyRows !== undefined && flight?.premiumEconomyRows !== null ? Number(flight.premiumEconomyRows) : 4;
@@ -238,17 +269,20 @@ export default function ProfileClient({
     };
 
     const isSeatOccupied = (seat: string) => {
-        if (!selectedBooking) return false;
+        if (!selectedBooking || !activeLeg) return false;
         const activePassenger = selectedBooking.passengers[activePassengerIdx];
 
-        // Find seats currently selected by OTHER passengers in this booking in the modal
-        const selectedByOthers = Object.keys(passengerSeats)
-            .filter(pid => pid !== activePassenger?.id)
-            .map(pid => passengerSeats[pid]);
+        // Seats the other travellers on this booking hold on this leg.
+        const selectedByOthers = selectedBooking.passengers
+            .filter(p => p.id !== activePassenger?.id)
+            .map(p => seatFor(p.id));
 
-        // Exclude current booking's passengers' original seats from the general occupied list
-        const occupiedByOthersOnFlight = modalOccupiedSeats.filter(
-            s => !selectedBooking.passengers.some(p => p.seatNumber === s)
+        // This booking's own seats on this leg are not obstacles to itself.
+        const ownSeatsOnLeg = selectedBooking.passengers.map(p =>
+            activeLeg.seatAssignments?.find(s => s.passengerId === p.id)?.seatNumber
+        );
+        const occupiedByOthersOnFlight = (modalOccupiedSeats[activeLeg.id] ?? []).filter(
+            s => !ownSeatsOnLeg.includes(s)
         );
 
         return occupiedByOthersOnFlight.includes(seat) || selectedByOthers.includes(seat);
@@ -527,6 +561,48 @@ export default function ProfileClient({
                             </div>
                         )}
 
+                        {modalLegs.length > 1 && (
+                            <div
+                                role="tablist"
+                                aria-label="Itinerary leg"
+                                data-testid="seat-change-legs"
+                                style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.5rem' }}
+                            >
+                                {modalLegs.map((leg, index) => {
+                                    const isActive = index === activeLegIdx;
+                                    return (
+                                        <button
+                                            key={leg.id}
+                                            type="button"
+                                            role="tab"
+                                            aria-selected={isActive}
+                                            onClick={() => setActiveLegIdx(index)}
+                                            style={{
+                                                // globals.css pins buttons to 52px.
+                                                height: 'auto',
+                                                minHeight: '52px',
+                                                width: 'auto',
+                                                flex: '1 1 12rem',
+                                                padding: '10px 16px',
+                                                borderRadius: '8px',
+                                                border: `2px solid ${isActive ? '#8b5cf6' : 'rgba(255,255,255,0.15)'}`,
+                                                background: isActive ? 'rgba(139, 92, 246, 0.12)' : 'transparent',
+                                                color: '#fff',
+                                                cursor: 'pointer',
+                                            }}
+                                        >
+                                            <span style={{ display: 'block', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                                                {index === 0 ? 'Departing' : 'Returning'}
+                                            </span>
+                                            <span style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
+                                                {leg.flight!.from} → {leg.flight!.to}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2rem' }}>
                             {/* Left panel: Passengers list */}
                             <div style={{ flex: '1 1 200px' }}>
@@ -538,7 +614,7 @@ export default function ProfileClient({
                                             key={p.id}
                                             onClick={() => setActivePassengerIdx(idx)}
                                             aria-pressed={activePassengerIdx === idx}
-                                            aria-label={`${p.firstName} ${p.lastName}, Seat: ${passengerSeats[p.id] || 'None'}, ${p.cabinClass}`}
+                                            aria-label={`${p.firstName} ${p.lastName}, Seat: ${seatFor(p.id) || 'None'}, ${p.cabinClass}`}
                                             style={{
                                                 width: '100%',
                                                 color: 'inherit',
@@ -552,7 +628,7 @@ export default function ProfileClient({
                                         >
                                             <div style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{p.firstName} {p.lastName}</div>
                                             <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>
-                                                Seat: <span style={{ color: '#34d399', fontWeight: 'bold' }}>{passengerSeats[p.id] || 'None'}</span> ({p.cabinClass})
+                                                Seat: <span style={{ color: '#34d399', fontWeight: 'bold' }}>{seatFor(p.id) || 'None'}</span> ({p.cabinClass})
                                             </div>
                                         </button>
                                     ))}
@@ -647,7 +723,7 @@ export default function ProfileClient({
                                                             const letter = char;
                                                             const seatId = `${row}${letter}`;
                                                             const occupied = isSeatOccupied(seatId);
-                                                            const selected = passengerSeats[selectedBooking.passengers[activePassengerIdx]?.id] === seatId;
+                                                            const selected = seatFor(selectedBooking.passengers[activePassengerIdx]?.id) === seatId;
                                                             return (
                                                                 <button
                                                                     key={letter}
@@ -655,7 +731,8 @@ export default function ProfileClient({
                                                                     disabled={occupied}
                                                                     onClick={() => {
                                                                         const pid = selectedBooking.passengers[activePassengerIdx].id;
-                                                                        setPassengerSeats({ ...passengerSeats, [pid]: seatId });
+                                                                        if (!activeLeg) return;
+                                                                        setPassengerSeats({ ...passengerSeats, [seatKey(activeLeg.id, pid)]: seatId });
                                                                         setModalError(null);
                                                                     }}
                                                                     style={{

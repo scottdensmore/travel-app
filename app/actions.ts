@@ -14,7 +14,7 @@ import { lockFlightForUpdate } from '@/lib/flightLock';
 import { updateFlightSeatingLayout } from '@/lib/FlightSeatLayoutService';
 import { actionValidationFailure } from '@/lib/actionResult';
 import { bookingTotalCents } from '@/lib/bookingPricing';
-import { bookingFlights, outboundFlight } from '@/lib/bookingItinerary';
+import { bookingFlights, outboundFlight, outboundLeg } from '@/lib/bookingItinerary';
 import { buildFlightRoutes, findNearbyOperatingDates } from '@/lib/flightSearch';
 import { airportTimeZoneFor } from '@/lib/airports';
 import { bookingWindowIsoDates } from '@/lib/dates';
@@ -394,7 +394,7 @@ export async function cancelBookingAction(bookingId: number) {
 
 export async function changeBookingSeatsAction(
     bookingId: number,
-    seatChanges: { passengerId: string, seatNumber: string }[]
+    seatChanges: { passengerId: string, legId: number, seatNumber: string }[]
 ) {
     const session = await getServerSession(authOptions);
     const userId = session?.user?.id;
@@ -419,14 +419,27 @@ export async function changeBookingSeatsAction(
         throw new Error("Unauthorized");
     }
 
-    // Seat changes apply to the outbound flight. A round trip will need a leg
-    // to be chosen (#69); today there is only one.
-    const flightId = outboundFlight(booking)?.id;
-    if (!flightId) throw new Error("Flight not found on booking");
+    // A seat belongs to a leg, so each change names one. Legs are resolved from
+    // the booking rather than trusted from the client: a leg id from another
+    // booking would otherwise move a stranger's seat.
+    const legsById = new Map(booking.legs.map(leg => [leg.id, leg]));
+    for (const change of seatChanges) {
+        if (!legsById.has(change.legId)) {
+            throw new Error(`Leg ${change.legId} does not belong to booking ${bookingId}`);
+        }
+    }
+
+    // Lock in ascending flight id, matching FlightBookingService, so two
+    // requests touching the same pair of flights cannot deadlock.
+    const flightIds = [...new Set(
+        seatChanges.map(change => legsById.get(change.legId)!.flightId)
+    )].sort((left, right) => left - right);
 
     // Execute inside transaction to prevent concurrent seat collisions
     await prisma.$transaction(async (tx) => {
-        await lockFlightForUpdate(tx, flightId);
+        for (const flightId of flightIds) {
+            await lockFlightForUpdate(tx, flightId);
+        }
         const lockedBooking = await tx.booking.findUnique({
             where: { id: bookingId },
             select: {
@@ -438,55 +451,59 @@ export async function changeBookingSeatsAction(
         if (lockedBooking.status === "CANCELLED") {
             throw new Error("Seats cannot be changed on a cancelled booking");
         }
-        const lockedFlight = await tx.flight.findUnique({ where: { id: flightId } });
-        if (!lockedFlight) throw new Error("Flight not found");
+
+        const lockedFlights = new Map(
+            (await tx.flight.findMany({ where: { id: { in: flightIds } } }))
+                .map(flight => [flight.id, flight])
+        );
+        if (lockedFlights.size !== flightIds.length) throw new Error("Flight not found");
 
         for (const change of seatChanges) {
             const passenger = lockedBooking.passengers.find(p => p.id === change.passengerId);
             if (!passenger) {
                 throw new Error(`Passenger ${change.passengerId} does not belong to booking ${bookingId}`);
             }
-            assertSeatAvailableForCabin(change.seatNumber, passenger.cabinClass, lockedFlight);
+            const flightId = legsById.get(change.legId)!.flightId;
+            assertSeatAvailableForCabin(change.seatNumber, passenger.cabinClass, lockedFlights.get(flightId)!);
         }
 
-        // Fetch all occupied seats on the flight (excluding the current booking's passengers)
-        const occupiedPassengers = await tx.passenger.findMany({
+        // Occupancy comes from the seat assignments, which record a seat per
+        // leg. Reading Passenger.seatNumber would report the outbound seat for
+        // every leg of a round trip.
+        const occupied = await tx.seatAssignment.findMany({
             where: {
-                booking: {
-                    legs: { some: { flightId } },
-                    status: { not: "CANCELLED" }
-                },
-                bookingId: { not: bookingId }
+                flightId: { in: flightIds },
+                leg: { booking: { status: { not: "CANCELLED" } } },
+                NOT: { leg: { bookingId } },
             },
-            select: { seatNumber: true }
+            select: { flightId: true, seatNumber: true },
         });
-        const occupiedSeats = new Set(occupiedPassengers.map(p => p.seatNumber));
+        const occupiedSeats = new Set(occupied.map(seat => `${seat.flightId}:${seat.seatNumber}`));
 
-        // Validate seat change conflicts
-        const newSeats = seatChanges.map(change => change.seatNumber);
-        
-        // Also check duplicates within the changes themselves
-        if (new Set(newSeats).size !== newSeats.length) {
-            throw new Error("Duplicate seats selected in request.");
-        }
-
-        for (const seat of newSeats) {
-            if (occupiedSeats.has(seat)) {
-                throw new Error(`Seat ${seat} is already occupied by another passenger.`);
+        for (const change of seatChanges) {
+            const flightId = legsById.get(change.legId)!.flightId;
+            if (occupiedSeats.has(`${flightId}:${change.seatNumber}`)) {
+                throw new Error(`Seat ${change.seatNumber} is already occupied by another passenger.`);
             }
         }
 
-        // Apply changes
+        // Apply changes. Scoped to the named leg: a passenger on a round trip
+        // has an assignment per leg, so updating by passenger alone would
+        // overwrite the seat they still hold on the other one.
         for (const change of seatChanges) {
-            // Both tables hold the seat during the expand phase, so a move that
-            // updated only one would leave the old seat locked and the new one
-            // held twice.
-            await tx.passenger.update({
-                where: { id: change.passengerId },
+            await tx.seatAssignment.updateMany({
+                where: { passengerId: change.passengerId, legId: change.legId },
                 data: { seatNumber: change.seatNumber }
             });
-            await tx.seatAssignment.updateMany({
-                where: { passengerId: change.passengerId },
+        }
+
+        // Passenger.seatNumber still describes the outbound seat while the
+        // column is written, so only an outbound change updates it.
+        const outboundLegId = outboundLeg(booking)?.id;
+        for (const change of seatChanges) {
+            if (change.legId !== outboundLegId) continue;
+            await tx.passenger.update({
+                where: { id: change.passengerId },
                 data: { seatNumber: change.seatNumber }
             });
         }

@@ -163,17 +163,40 @@ describe('shared server validation schemas', () => {
     it('validates seat changes and rejects duplicate passengers or seats', () => {
         expect(seatChangesSchema.parse({
             bookingId: 2,
-            seatChanges: [{ passengerId: ' passenger-1 ', seatNumber: '12b' }]
+            seatChanges: [{ passengerId: ' passenger-1 ', legId: 7, seatNumber: '12b' }]
         })).toEqual({
             bookingId: 2,
-            seatChanges: [{ passengerId: 'passenger-1', seatNumber: '12B' }]
+            seatChanges: [{ passengerId: 'passenger-1', legId: 7, seatNumber: '12B' }]
         });
+        // Two travellers cannot share a seat on the same leg.
         expect(seatChangesSchema.safeParse({
             bookingId: 2,
             seatChanges: [
-                { passengerId: 'p1', seatNumber: '12A' },
-                { passengerId: 'p2', seatNumber: '12A' }
+                { passengerId: 'p1', legId: 7, seatNumber: '12A' },
+                { passengerId: 'p2', legId: 7, seatNumber: '12A' }
             ]
+        }).success).toBe(false);
+        // Nor can one traveller be given two seats on the same leg.
+        expect(seatChangesSchema.safeParse({
+            bookingId: 2,
+            seatChanges: [
+                { passengerId: 'p1', legId: 7, seatNumber: '12A' },
+                { passengerId: 'p1', legId: 7, seatNumber: '12B' }
+            ]
+        }).success).toBe(false);
+        // The same seat number on two legs is two different flights, so it is
+        // not a clash and must be accepted.
+        expect(seatChangesSchema.safeParse({
+            bookingId: 2,
+            seatChanges: [
+                { passengerId: 'p1', legId: 7, seatNumber: '12A' },
+                { passengerId: 'p1', legId: 8, seatNumber: '12A' }
+            ]
+        }).success).toBe(true);
+        // A change must say which leg it applies to.
+        expect(seatChangesSchema.safeParse({
+            bookingId: 2,
+            seatChanges: [{ passengerId: 'p1', seatNumber: '12A' }]
         }).success).toBe(false);
     });
 
@@ -362,9 +385,21 @@ describe('shared server validation schemas', () => {
             paymentIntentId: 'forged'
         }).success).toBe(false);
 
-        const seatChanges = Array.from({ length: 9 }, (_, index) => ({ passengerId: `p${index}`, seatNumber: `${index + 1}A` }));
+        // A full booking changing every seat on every leg: 9 travellers on each
+        // of 2 legs is the largest legitimate request.
+        const seatChanges = [1, 2].flatMap(legId =>
+            Array.from({ length: 9 }, (_, index) => ({
+                passengerId: `p${index}`,
+                legId,
+                seatNumber: `${index + 1}A`,
+            }))
+        );
+        expect(seatChanges).toHaveLength(18);
         expect(seatChangesSchema.safeParse({ bookingId: 1, seatChanges }).success).toBe(true);
-        expect(seatChangesSchema.safeParse({ bookingId: 1, seatChanges: [...seatChanges, { passengerId: 'p9', seatNumber: '10A' }] }).success).toBe(false);
+        expect(seatChangesSchema.safeParse({
+            bookingId: 1,
+            seatChanges: [...seatChanges, { passengerId: 'p9', legId: 1, seatNumber: '10A' }]
+        }).success).toBe(false);
         expect(seatChangesSchema.safeParse({ bookingId: '1', seatChanges }).success).toBe(false);
 
         expect(occurrenceRequestSchema.safeParse({ scheduleId: 1, startDate: '2026-01-01', endDate: '2027-01-02' }).success).toBe(true);
