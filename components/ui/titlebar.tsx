@@ -28,7 +28,6 @@ const TitleBar: React.FC = () => {
 
     const pageTitles: { [key: string]: string } = {
         '/book': 'Book Flight',
-        '/checkin': 'Check-In',
         '/travelguide': 'Travel Guide',
         '/profile': 'Profile',
         '/flights': 'Flight Status',
@@ -113,9 +112,6 @@ const TitleBar: React.FC = () => {
                         <>
                             <li className={pathname === '/book' ? 'selected' : ''}>
                                 <Link href="/book">Book Flight</Link>
-                            </li>
-                            <li className={pathname === '/checkin' ? 'selected' : ''}>
-                                <Link href="#">Check-In</Link>
                             </li>
                             <li className={pathname === '/travelguide' ? 'selected' : ''}>
                                 <Link href="/travelguide">Travel Guide</Link>

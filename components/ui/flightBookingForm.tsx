@@ -578,7 +578,6 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                 </label>
                             </li>
 
-                            <li><Link href="#">Multicity</Link></li>
                         </ul>
                     </nav>
                 </div>
@@ -652,11 +651,6 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                         <option value="business">Business</option>
                         <option value="first">First</option>
                     </select>
-                </div>
-
-                <div className="checkbox-container">
-                    <input type="checkbox" id="rewards" name="rewards" />
-                    <label htmlFor="rewards">Search reward flights</label>
                 </div>
 
                 <button type="submit" disabled={isSearching}>

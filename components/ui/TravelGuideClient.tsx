@@ -151,7 +151,16 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
                     <div key={city.city} className={"sticky-sidebar guide-extra " + (city.city === selectedCityName ? 'highlight' : '')}>
                         <div className={city.city === selectedCityName ? 'highlight' : ''}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <strong><a href="#" onClick={(e) => { e.preventDefault(); handleMarkerClick(''); }}>← Back</a></strong>
+                                {/* A control, not a destination: an anchor here
+                                    announced itself as a link and would have
+                                    jumped to the top of the page without JS. */}
+                                <button
+                                    type="button"
+                                    onClick={() => handleMarkerClick('')}
+                                    className="guide-back"
+                                >
+                                    ← Back
+                                </button>
                                 <button
                                     onClick={() => toggleFavorite(city.id)}
                                     disabled={isPending}

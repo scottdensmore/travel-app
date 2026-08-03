@@ -342,6 +342,28 @@ header nav ul li.selected a {
   outline-offset: 2px;
 }
 
+/* The travel guide's back control. A button, but it reads as the inline link
+   it replaced rather than as a call to action. */
+.guide-back {
+  height: auto;
+  width: auto;
+  padding: 0;
+  background: none;
+  background-image: none;
+  border: 0;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  font-weight: bold;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.guide-back:hover {
+  transform: none;
+  box-shadow: none;
+}
+
 /* Glowing Buttons */
 button, button[type="submit"] {
   background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%);

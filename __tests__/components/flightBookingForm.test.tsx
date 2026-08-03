@@ -120,6 +120,16 @@ describe('FlightBookingForm', () => {
         expect(screen.queryByRole('option', { name: 'London, UK' })).not.toBeInTheDocument();
     });
 
+    it('offers no control that does nothing', () => {
+        // A reward checkbox with no redemption behind it, and a Multicity link
+        // pointing at "#", both promised a search the app cannot run (#70).
+        const { container } = renderForm();
+
+        expect(screen.queryByLabelText(/reward flights/i)).not.toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: /multicity/i })).not.toBeInTheDocument();
+        expect(container.querySelectorAll('a[href="#"]')).toHaveLength(0);
+    });
+
     it('updates the destination options when the origin changes', () => {
         renderForm();
         fireEvent.change(screen.getByLabelText('From'), { target: { value: 'New York, USA' } });
