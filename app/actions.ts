@@ -16,6 +16,7 @@ import { actionValidationFailure } from '@/lib/actionResult';
 import {
     bookingTotalCents,
     calculatePassengerFareCents,
+    flightFareCents,
     formatPrice,
     parsePriceToCents,
     type CabinClass,
@@ -168,7 +169,7 @@ function flightsForCabin(flights: Flight[], cabin: CabinClass): SearchResultFlig
                 ...flight,
                 cabinAvailable: true,
                 price: formatPrice(
-                    calculatePassengerFareCents(parsePriceToCents(flight.price), cabin)
+                    calculatePassengerFareCents(flightFareCents(flight), cabin)
                 ),
             };
         } catch {
@@ -703,6 +704,7 @@ export async function saveFlightScheduleAction(data: {
                 departureTime: data.departureTime,
                 daysOfWeek: data.daysOfWeek,
                 price: data.price,
+                priceCents: parsePriceToCents(data.price),
                 firstClassRows,
                 businessRows,
                 premiumEconomyRows,
@@ -720,6 +722,7 @@ export async function saveFlightScheduleAction(data: {
                 departureTime: data.departureTime,
                 daysOfWeek: data.daysOfWeek,
                 price: data.price,
+                priceCents: parsePriceToCents(data.price),
                 firstClassRows,
                 businessRows,
                 premiumEconomyRows,
@@ -759,6 +762,7 @@ export async function saveFlightScheduleAction(data: {
                             to: savedSchedule.to,
                             departureDate,
                             price: savedSchedule.price,
+                            priceCents: savedSchedule.priceCents,
                             status: 'ON_TIME',
                             firstClassRows,
                             businessRows,
@@ -889,6 +893,7 @@ export async function generateFlightOccurrencesAction(
                             to: schedule.to,
                             departureDate,
                             price: schedule.price,
+                            priceCents: schedule.priceCents,
                             status: 'ON_TIME',
                             firstClassRows,
                             businessRows,

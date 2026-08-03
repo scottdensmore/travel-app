@@ -145,6 +145,9 @@ model Flight {
   from          String
   to            String
   departureDate DateTime
+  /// The fare in minor units. Authoritative; `price` is the retained string
+  /// during the expand phase and is still written (#70).
+  priceCents    Int?
   price         String
   status        String    @default("ON_TIME")
 
@@ -193,6 +196,8 @@ model FlightSchedule {
   to            String
   departureTime String
   daysOfWeek    Int[]
+  /// The fare in minor units. Authoritative; `price` is retained and written.
+  priceCents    Int?
   price         String
   isActive      Boolean @default(true)
 

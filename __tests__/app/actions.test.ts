@@ -1157,6 +1157,9 @@ describe('admin flight schedule actions', () => {
             mockedFlightScheduleCreate.mockResolvedValue({
                 id: 1,
                 ...sampleScheduleInput,
+                // The persisted schedule carries the fare the generator copies
+                // onto each occurrence.
+                priceCents: 85000,
             });
             mockedFlightFindFirst.mockResolvedValue(null); // No existing flight instance
             mockedFlightCreate.mockResolvedValue({});
@@ -1166,6 +1169,8 @@ describe('admin flight schedule actions', () => {
             expect(mockedFlightScheduleCreate).toHaveBeenCalledWith({
                 data: {
                     ...sampleScheduleInput,
+                    // The fare is recorded in minor units alongside the string.
+                    priceCents: 85000,
                     firstClassRows: 3,
                     businessRows: 3,
                     premiumEconomyRows: 4,
@@ -1185,6 +1190,7 @@ describe('admin flight schedule actions', () => {
                     to: 'London',
                     departureDate: new Date('2026-06-29T08:00:00Z'),
                     price: '$850',
+                    priceCents: 85000,
                     status: 'ON_TIME',
                     firstClassRows: 3,
                     businessRows: 3,
@@ -1222,6 +1228,8 @@ describe('admin flight schedule actions', () => {
                 where: { id: 5 },
                 data: {
                     ...sampleScheduleInput,
+                    // The fare is recorded in minor units alongside the string.
+                    priceCents: 85000,
                     firstClassRows: 3,
                     businessRows: 3,
                     premiumEconomyRows: 4,
