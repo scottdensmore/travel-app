@@ -1,0 +1,24 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "b4a8ac085ced",
+  "strategy": "manual-commit",
+  "branch": "feat/server-authoritative-sorting",
+  "checkpoints_count": 2,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/b4/a8ac085ced/0/metadata.json",
+      "transcript": "/b4/a8ac085ced/0/full.jsonl",
+      "compact_transcript": "/b4/a8ac085ced/0/transcript.jsonl",
+      "content_hash": "/b4/a8ac085ced/0/content_hash.txt",
+      "prompt": "/b4/a8ac085ced/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3903,
+    "cache_creation_tokens": 7806684,
+    "cache_read_tokens": 830145662,
+    "output_tokens": 962843,
+    "api_call_count": 1749
+  }
+}
