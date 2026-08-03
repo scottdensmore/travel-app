@@ -45,6 +45,19 @@ describe('TitleBar', () => {
         expect(screen.getByAltText('Mona Airways')).toBeInTheDocument();
     });
 
+    it('offers no navigation that goes nowhere', () => {
+        // Check-In pointed at "#" with nothing behind it. It comes back when
+        // check-in exists (#77); until then the nav only offers what works.
+        (usePathname as jest.Mock).mockReturnValue('/book');
+
+        render(<TitleBar />);
+
+        expect(screen.queryByRole('link', { name: 'Check-In' })).not.toBeInTheDocument();
+        for (const link of screen.getAllByRole('link')) {
+            expect(link).not.toHaveAttribute('href', '#');
+        }
+    });
+
     it('renders the correct title and nav link when pathname is /flights', () => {
         (usePathname as jest.Mock).mockReturnValue('/flights');
 
