@@ -39,6 +39,7 @@ const mockFlights = [
         departureDate: '2026-05-15T12:00:00Z',
         returnDate: null,
         price: '$350',
+        priceCents: 35000,
         status: 'ON_TIME',
         cabinAvailable: true,
     },
@@ -54,6 +55,7 @@ const mockEnhancedFlights = [
         departureDate: '2026-05-15T08:00:00Z',
         returnDate: null,
         price: '$200',
+        priceCents: 20000,
         status: 'ON_TIME',
         cabinAvailable: true,
     },
@@ -66,6 +68,7 @@ const mockEnhancedFlights = [
         departureDate: '2026-05-15T12:00:00Z',
         returnDate: null,
         price: '$500',
+        priceCents: 50000,
         status: 'ON_TIME',
         cabinAvailable: true,
     },
@@ -78,6 +81,7 @@ const mockEnhancedFlights = [
         departureDate: '2026-05-15T18:00:00Z',
         returnDate: null,
         price: '$100',
+        priceCents: 10000,
         status: 'ON_TIME',
         cabinAvailable: true,
     },
@@ -90,6 +94,7 @@ const mockEnhancedFlights = [
         departureDate: '2026-05-15T10:00:00Z',
         returnDate: null,
         price: '$300',
+        priceCents: 30000,
         status: 'CANCELLED',
         cabinAvailable: true,
     }
@@ -607,9 +612,13 @@ describe('FlightBookingForm', () => {
         expect(screen.getByText('AA102')).toBeInTheDocument();
         expect(screen.getByText('UA103')).toBeInTheDocument();
 
-        // 3. Price slider filter: Max price is 500, min is 100. Slide to 300
+        // 3. Price slider filter, in minor units: max $500, min $100. Slide to
+        // $300. The control works in the same units the server stores, so no
+        // step of this depends on how a price was formatted for display.
         const priceSlider = screen.getByLabelText(/Max Price/i);
-        fireEvent.change(priceSlider, { target: { value: '300' } });
+        expect(priceSlider).toHaveAttribute('min', '10000');
+        expect(priceSlider).toHaveAttribute('max', '50000');
+        fireEvent.change(priceSlider, { target: { value: '30000' } });
 
         // UA103 ($100) and GA101 ($200) remain, AA102 ($500) disappears
         expect(screen.getByText('UA103')).toBeInTheDocument();
@@ -662,6 +671,7 @@ describe('FlightBookingForm', () => {
                     departureDate: '2026-07-22T09:00:00Z',
                     returnDate: null,
                     price: '$275',
+                    priceCents: 27500,
                     status: 'ON_TIME',
                     cabinAvailable: true,
                 }],
@@ -751,6 +761,62 @@ describe('FlightBookingForm', () => {
         });
     });
 
+    describe('Sorting and filtering on server values', () => {
+        it('orders by the stored fare, not by the formatted label', async () => {
+            // The labels sort the wrong way as text: "$1,200" precedes "$900"
+            // alphabetically, and stripping non-digits from "$1,200" once gave
+            // 1200 while "$900" gave 900 -- the old parser's exact failure.
+            mockSearch.mockResolvedValue(searchSuccess([
+                { ...mockFlights[0], id: 1, flightNumber: 'EXPENSIVE', price: '$1,200', priceCents: 120_000 },
+                { ...mockFlights[0], id: 2, flightNumber: 'CHEAP', price: '$900', priceCents: 90_000 },
+            ]));
+            renderForm();
+
+            fireEvent.click(screen.getByText('Find your trip'));
+            await waitFor(() => expect(screen.getByText('CHEAP')).toBeInTheDocument());
+
+            fireEvent.change(screen.getByLabelText('Sort:'), { target: { value: 'price-asc' } });
+            let order = screen.getAllByText(/(CHEAP|EXPENSIVE)/).map(el => el.textContent);
+            expect(order).toEqual(['CHEAP', 'EXPENSIVE']);
+
+            fireEvent.change(screen.getByLabelText('Sort:'), { target: { value: 'price-desc' } });
+            order = screen.getAllByText(/(CHEAP|EXPENSIVE)/).map(el => el.textContent);
+            expect(order).toEqual(['EXPENSIVE', 'CHEAP']);
+        });
+
+        it('labels the price filter with the same formatter the results use', async () => {
+            mockSearch.mockResolvedValue(searchSuccess([
+                { ...mockFlights[0], id: 1, price: '$900', priceCents: 90_000 },
+                { ...mockFlights[0], id: 2, flightNumber: 'CA999', price: '$1,200', priceCents: 120_000 },
+            ]));
+            renderForm();
+
+            fireEvent.click(screen.getByText('Find your trip'));
+            await waitFor(() => expect(screen.getByText('CA999')).toBeInTheDocument());
+
+            expect(screen.getByLabelText(/Max Price/i)).toHaveValue('120000');
+            expect(screen.getByText(/Max Price: \$1,200/)).toBeInTheDocument();
+        });
+
+        it('keeps a result whose fare cannot be read rather than dropping it', async () => {
+            // A row the backfill could not read still has to be bookable; it
+            // simply sorts last.
+            mockSearch.mockResolvedValue(searchSuccess([
+                { ...mockFlights[0], id: 1, flightNumber: 'PRICED', price: '$900', priceCents: 90_000 },
+                { ...mockFlights[0], id: 2, flightNumber: 'UNPRICED', price: 'on request', priceCents: null },
+            ]));
+            renderForm();
+
+            fireEvent.click(screen.getByText('Find your trip'));
+            await waitFor(() => expect(screen.getByText('PRICED')).toBeInTheDocument());
+            expect(screen.getByText('UNPRICED')).toBeInTheDocument();
+
+            fireEvent.change(screen.getByLabelText('Sort:'), { target: { value: 'price-asc' } });
+            const order = screen.getAllByText(/(PRICED|UNPRICED)/).map(el => el.textContent);
+            expect(order).toEqual(['PRICED', 'UNPRICED']);
+        });
+    });
+
     it('shows no return date on an outbound card', async () => {
         // Flight.returnDate was a fixed seven days after departure and never
         // described a real return; the return is its own flight now (#112).
@@ -798,6 +864,7 @@ describe('FlightBookingForm', () => {
                         departureDate: '2026-07-22T09:00:00Z',
                         returnDate: null,
                         price: '$275',
+                        priceCents: 27500,
                         status: 'ON_TIME',
                         cabinAvailable: true,
                     },
@@ -810,6 +877,7 @@ describe('FlightBookingForm', () => {
                         departureDate: '2026-07-22T17:00:00Z',
                         returnDate: null,
                         price: '$310',
+                        priceCents: 31000,
                         status: 'ON_TIME',
                         cabinAvailable: true,
                     },
@@ -979,6 +1047,7 @@ describe('FlightBookingForm', () => {
                     departureDate: '2026-07-22T09:00:00Z',
                     returnDate: null,
                     price: '$275',
+                    priceCents: 27500,
                     status: 'ON_TIME',
                     cabinAvailable: true,
                 }]),

@@ -319,7 +319,7 @@ describe('searchFlightsAction', () => {
     it('prices results at the cabin that was searched', async () => {
         jest.useFakeTimers().setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
         mockedFlightFindMany.mockResolvedValue([
-            { id: 1, price: '$350', economyRows: 20, businessRows: 3 },
+            { id: 1, price: '$350', priceCents: 35_000, economyRows: 20, businessRows: 3 },
         ]);
 
         const result = await searchFlightsAction(
@@ -329,8 +329,10 @@ describe('searchFlightsAction', () => {
         // Business is 200% of the base fare. Showing the Economy price against
         // a Business search is a different number from the one checkout will
         // charge (#70).
+        // The integer moves with the string. Sorting or filtering on a base
+        // fare while the screen shows a cabin fare would disagree with itself.
         expect(result).toMatchObject({
-            flights: [{ price: '$700', cabinAvailable: true }],
+            flights: [{ price: '$700', priceCents: 70_000, cabinAvailable: true }],
         });
         jest.useRealTimers();
     });
@@ -338,8 +340,8 @@ describe('searchFlightsAction', () => {
     it('marks flights the searched cabin does not operate, and keeps them', async () => {
         jest.useFakeTimers().setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
         mockedFlightFindMany.mockResolvedValue([
-            { id: 1, price: '$350', economyRows: 20, businessRows: 0 },
-            { id: 2, price: '$400', economyRows: 20, businessRows: 3 },
+            { id: 1, price: '$350', priceCents: 35_000, economyRows: 20, businessRows: 0 },
+            { id: 2, price: '$400', priceCents: 40_000, economyRows: 20, businessRows: 3 },
         ]);
 
         const result = await searchFlightsAction(
@@ -351,8 +353,8 @@ describe('searchFlightsAction', () => {
         expect(result).toMatchObject({
             flights: [
                 // Quoted at the fare it can actually be booked at.
-                { id: 1, cabinAvailable: false, price: '$350' },
-                { id: 2, cabinAvailable: true, price: '$800' },
+                { id: 1, cabinAvailable: false, price: '$350', priceCents: 35_000 },
+                { id: 2, cabinAvailable: true, price: '$800', priceCents: 80_000 },
             ],
         });
         jest.useRealTimers();
@@ -361,7 +363,7 @@ describe('searchFlightsAction', () => {
     it('defaults to economy when no cabin is given', async () => {
         jest.useFakeTimers().setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
         mockedFlightFindMany.mockResolvedValue([
-            { id: 1, price: '$350', economyRows: 20, businessRows: 0 },
+            { id: 1, price: '$350', priceCents: 35_000, economyRows: 20, businessRows: 0 },
         ]);
 
         const result = await searchFlightsAction('Seattle, USA', 'Detroit, USA', '2026-06-25');
