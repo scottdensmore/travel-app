@@ -47,12 +47,21 @@ test.describe('Admin Control Journey', () => {
     // Attempt to access admin page
     await page.goto('/admin');
 
-    // Should be redirected away or blocked by middleware
-    // Next-auth default redirects unauthorized to signin page
-    await expect(page.url()).toContain('/login');
+    // Should be redirected away or blocked by middleware.
+    //
+    // toHaveURL rather than expect(page.url()): the latter asserts on a string
+    // read the instant goto() resolves, so it cannot retry and fails whenever
+    // the middleware redirect has not settled yet. That was this test's flake.
+    await expect(page).toHaveURL(/\/login/);
   });
 
   test('Admin user can access dashboard, create schedule, and change live status', async ({ page }) => {
+    // This journey enrols MFA, creates a schedule, generates occurrences,
+    // checks a manifest and changes live status. It legitimately does several
+    // tests' worth of work, and waitForStableTotpWindow can spend seven of the
+    // default thirty seconds before it starts.
+    test.slow();
+
     // Register admin user
     await createVerifiedAccount(page, { name: 'Admin User', email: adminEmail, password });
 
