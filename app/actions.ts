@@ -245,18 +245,19 @@ export async function bookFlightAction(bookingData: {
 
 export async function getOccupiedSeatsAction(flightId: number) {
     flightId = parseInput(numericIdSchema, flightId);
-    const passengers = await prisma.passenger.findMany({
+    // Seats are held per leg. Reading Passenger.seatNumber answered with the
+    // outbound seat whichever flight was asked about, so on a round trip it
+    // reported a free seat as taken and the taken one as free.
+    const assignments = await prisma.seatAssignment.findMany({
         where: {
-            booking: {
-                legs: { some: { flightId } },
-                status: { not: "CANCELLED" }
-            }
+            flightId,
+            leg: { booking: { status: { not: "CANCELLED" } } }
         },
         select: {
             seatNumber: true
         }
     });
-    return passengers.map(p => p.seatNumber);
+    return assignments.map(seat => seat.seatNumber);
 }
 
 export async function toggleFavoriteCityGuideAction(cityGuideId: number) {
@@ -444,13 +445,24 @@ export async function changeBookingSeatsAction(
             where: { id: bookingId },
             select: {
                 status: true,
-                passengers: { select: { id: true, cabinClass: true } },
+                passengers: { select: { id: true } },
             }
         });
         if (!lockedBooking) throw new Error("Booking not found");
         if (lockedBooking.status === "CANCELLED") {
             throw new Error("Seats cannot be changed on a cancelled booking");
         }
+
+        // The cabin a seat has to fit is the one held on that leg, which is
+        // recorded with the assignment. Passenger.cabinClass describes the
+        // outbound, so a leg booked in a different cabin was checked against
+        // the wrong one.
+        const heldCabins = new Map(
+            (await tx.seatAssignment.findMany({
+                where: { legId: { in: seatChanges.map(change => change.legId) } },
+                select: { passengerId: true, legId: true, cabinClass: true },
+            })).map(seat => [`${seat.legId}:${seat.passengerId}`, seat.cabinClass])
+        );
 
         const lockedFlights = new Map(
             (await tx.flight.findMany({ where: { id: { in: flightIds } } }))
@@ -463,8 +475,12 @@ export async function changeBookingSeatsAction(
             if (!passenger) {
                 throw new Error(`Passenger ${change.passengerId} does not belong to booking ${bookingId}`);
             }
+            const cabinClass = heldCabins.get(`${change.legId}:${change.passengerId}`);
+            if (!cabinClass) {
+                throw new Error(`Passenger ${change.passengerId} holds no seat on leg ${change.legId}`);
+            }
             const flightId = legsById.get(change.legId)!.flightId;
-            assertSeatAvailableForCabin(change.seatNumber, passenger.cabinClass, lockedFlights.get(flightId)!);
+            assertSeatAvailableForCabin(change.seatNumber, cabinClass, lockedFlights.get(flightId)!);
         }
 
         // Occupancy comes from the seat assignments, which record a seat per
@@ -787,12 +803,9 @@ export async function generateFlightOccurrencesAction(
                 where: {
                     flightNumber: schedule.flightNumber,
                     departureDate: departureDate
-                },
-                include: {
-                    passengers: {
-                        select: { seatNumber: true }
-                    }
                 }
+                // Only the id is used: updateFlightSeatingLayout does its own
+                // check of the seats already held on the flight.
             });
 
             if (!existingInstance) {

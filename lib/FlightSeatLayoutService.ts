@@ -33,25 +33,29 @@ export async function updateFlightSeatingLayout(
         const flight = await tx.flight.findUnique({
             where: { id: flightId },
             include: {
-                passengers: {
-                    where: { booking: { status: { not: 'CANCELLED' } } },
+                // Seats held on this flight, whichever leg of whichever
+                // itinerary they belong to. Passenger.flightId points at the
+                // outbound flight, so a return leg's seats were invisible here
+                // and a layout change could strand them.
+                seatAssignments: {
+                    where: { leg: { booking: { status: { not: 'CANCELLED' } } } },
                     select: { seatNumber: true, cabinClass: true }
                 }
             }
         });
         if (!flight) throw new Error('Flight not found');
 
-        for (const passenger of flight.passengers) {
+        for (const held of flight.seatAssignments) {
             try {
                 assertSeatAvailableForCabin(
-                    passenger.seatNumber,
-                    passenger.cabinClass,
+                    held.seatNumber,
+                    held.cabinClass,
                     normalizedLayout
                 );
             } catch {
                 throw new Error(
-                    `Occupied seat ${passenger.seatNumber} is not available for ` +
-                    `${passenger.cabinClass} in the requested layout.`
+                    `Occupied seat ${held.seatNumber} is not available for ` +
+                    `${held.cabinClass} in the requested layout.`
                 );
             }
         }

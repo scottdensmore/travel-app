@@ -6,6 +6,7 @@ import DeleteScheduleButton from './DeleteScheduleButton';
 import AdminFlightsTable from './AdminFlightsTable';
 import ManualOccurrenceBuilder from '@/components/ui/ManualOccurrenceBuilder';
 import { safePassengerSelect } from '@/lib/passengerDataAccess';
+import { passengersSeatedOnLeg } from '@/lib/bookingItinerary';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +30,12 @@ export default async function AdminFlightsPage() {
         include: {
             itineraryLegs: {
                 include: {
+                    // The seats held on this flight. A traveller on a round trip
+                    // sits somewhere else on the other leg, so the manifest has
+                    // to read the assignment rather than Passenger.seatNumber.
+                    seatAssignments: {
+                        select: { passengerId: true, seatNumber: true, cabinClass: true }
+                    },
                     booking: {
                         include: {
                             passengers: { select: safePassengerSelect }
@@ -47,7 +54,10 @@ export default async function AdminFlightsPage() {
 
     const flightsWithBookings = flights.map(({ itineraryLegs, ...flight }) => ({
         ...flight,
-        bookings: itineraryLegs.map((leg) => leg.booking),
+        bookings: itineraryLegs.map((leg) => ({
+            ...leg.booking,
+            passengers: passengersSeatedOnLeg(leg, leg.booking.passengers),
+        })),
     }));
 
     return (
