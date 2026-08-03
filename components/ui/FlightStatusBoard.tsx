@@ -9,7 +9,6 @@ interface Flight {
     from: string;
     to: string;
     departureDate: Date | string;
-    returnDate: Date | string | null;
     price: string;
     status: string;
 }

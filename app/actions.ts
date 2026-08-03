@@ -637,14 +637,6 @@ export async function saveFlightScheduleAction(data: {
             const dateStr = date.toISOString().split('T')[0];
             const departureDate = new Date(`${dateStr}T${savedSchedule.departureTime}:00Z`);
             
-            let returnDate = null;
-            if (savedSchedule.returnTime) {
-                const retDate = new Date(date);
-                retDate.setUTCDate(date.getUTCDate() + 7);
-                const retDateStr = retDate.toISOString().split('T')[0];
-                returnDate = new Date(`${retDateStr}T${savedSchedule.returnTime}:00Z`);
-            }
-
             // Check if flight instance already exists
             const existingInstance = await prisma.flight.findFirst({
                 where: {
@@ -662,7 +654,6 @@ export async function saveFlightScheduleAction(data: {
                             from: savedSchedule.from,
                             to: savedSchedule.to,
                             departureDate,
-                            returnDate,
                             price: savedSchedule.price,
                             status: 'ON_TIME',
                             firstClassRows,
@@ -775,14 +766,6 @@ export async function generateFlightOccurrencesAction(
             const dateStr = current.toISOString().split('T')[0];
             const departureDate = new Date(`${dateStr}T${schedule.departureTime}:00Z`);
 
-            let returnDate = null;
-            if (schedule.returnTime) {
-                const retDate = new Date(current);
-                retDate.setUTCDate(current.getUTCDate() + 7);
-                const retDateStr = retDate.toISOString().split('T')[0];
-                returnDate = new Date(`${retDateStr}T${schedule.returnTime}:00Z`);
-            }
-
             const existingInstance = await prisma.flight.findFirst({
                 where: {
                     flightNumber: schedule.flightNumber,
@@ -804,7 +787,6 @@ export async function generateFlightOccurrencesAction(
                             from: schedule.from,
                             to: schedule.to,
                             departureDate,
-                            returnDate,
                             price: schedule.price,
                             status: 'ON_TIME',
                             firstClassRows,

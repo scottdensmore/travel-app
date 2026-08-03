@@ -1,0 +1,25 @@
+-- Contract step for the flight return date (#69).
+--
+-- "returnDate" never described a return the customer could hold. Every flight
+-- the application generates wrote it as exactly seven days after departure
+-- whenever the schedule carried a "returnTime", so it was a fixed offset rather
+-- than an inbound flight, and nothing a customer chose could change it.
+--
+-- A round trip is now two flights: #112 searches the return direction on its own
+-- route and date, #113 made routes operate in both directions so that inventory
+-- exists, and #118/#119 book both legs as one itinerary. The return someone
+-- holds is a row in "ItineraryLeg", not a column on the outbound flight.
+--
+-- The last reader was removed in #122, where the search result card stopped
+-- rendering this as the arrival-side date -- by then it sat directly above the
+-- real return flight's own card showing the same date. The three writers, two
+-- schedule occurrence generators in app/actions.ts and one in
+-- FlightScheduleService, are removed in this change.
+--
+-- What is lost. No booking references this column, and nothing reads it, so
+-- dropping it changes no behaviour. The generated values are reproducible
+-- (departure + 7 days), but five hand-written seed rows are not: their gaps are
+-- 7, 10, 10 and 14 days, and one is NULL. Those dates were fixtures, invented to
+-- populate a demo, and no itinerary was ever built from them -- but they are not
+-- reconstructible, so this is recorded rather than implied.
+ALTER TABLE "Flight" DROP COLUMN "returnDate";

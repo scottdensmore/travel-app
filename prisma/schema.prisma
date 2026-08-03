@@ -145,7 +145,6 @@ model Flight {
   from          String
   to            String
   departureDate DateTime
-  returnDate    DateTime?
   price         String
   status        String    @default("ON_TIME")
 
