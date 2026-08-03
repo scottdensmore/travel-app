@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import React from "react";
 import PointsActivityService from "@/lib/PointsActivityService";
 import { getServerSession } from "next-auth";
@@ -5,6 +6,11 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import ProfileClient from "@/components/ui/ProfileClient";
 import { safePassengerSelect } from "@/lib/passengerDataAccess";
+
+export const metadata: Metadata = {
+    title: 'Your profile',
+    description: 'Your bookings, seats, status points and saved travel guides.',
+};
 
 export const dynamic = 'force-dynamic';
 

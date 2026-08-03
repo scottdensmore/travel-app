@@ -1,10 +1,11 @@
+import { BRAND } from '@/lib/brand';
 import { Metadata } from "next";
 import Link from "next/link";
 import UserAuthForm from "@/app/login/components/user-auth-form";
 
 export const metadata: Metadata = {
-    title: "Authentication",
-    description: "Authentication forms built using the components.",
+    title: 'Create an account',
+    description: 'Create a Mona Airways account to book and manage flights.',
 };
 
 export default function AuthenticationPage() {
@@ -32,7 +33,7 @@ export default function AuthenticationPage() {
                         >
                             <path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3" />
                         </svg>
-                        Mona Airways
+                        {BRAND.name}
                     </div>
                     <div className="relative z-20 mt-auto">
                         <blockquote className="space-y-2">

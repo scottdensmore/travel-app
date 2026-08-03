@@ -3,8 +3,8 @@ import Link from "next/link";
 import UserAuthForm from "./components/user-auth-form";
 
 export const metadata: Metadata = {
-    title: "Authentication",
-    description: "Authentication forms built using the components.",
+    title: 'Sign in',
+    description: 'Sign in to manage your Mona Airways bookings.',
 };
 
 export default function AuthenticationPage() {

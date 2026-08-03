@@ -1,7 +1,11 @@
+// Relative, not the '@/' alias: the seed runs this through ts-node, which does
+// not resolve path aliases.
+import { BRAND } from '../brand';
+
 export const FlightData = [
     {
-        flightNumber: 'CA101',
-        airline: 'Gemini Airways',
+        flightNumber: `${BRAND.airlineCode}101`,
+        airline: BRAND.name,
         from: 'Seattle, USA',
         to: 'Detroit, USA',
         departureDate: new Date('2026-05-15T08:00:00Z'),
@@ -10,8 +14,8 @@ export const FlightData = [
         status: 'ON_TIME'
     },
     {
-        flightNumber: 'CA202',
-        airline: 'Gemini Airways',
+        flightNumber: `${BRAND.airlineCode}202`,
+        airline: BRAND.name,
         from: 'New York, USA',
         to: 'London, UK',
         departureDate: new Date('2026-06-10T19:30:00Z'),
@@ -20,8 +24,8 @@ export const FlightData = [
         status: 'DELAYED'
     },
     {
-        flightNumber: 'CA303',
-        airline: 'Gemini Airways',
+        flightNumber: `${BRAND.airlineCode}303`,
+        airline: BRAND.name,
         from: 'San Francisco, USA',
         to: 'Tokyo, Japan',
         departureDate: new Date('2026-07-05T11:00:00Z'),
@@ -30,8 +34,8 @@ export const FlightData = [
         status: 'CANCELLED'
     },
     {
-        flightNumber: 'CA404',
-        airline: 'Gemini Airways',
+        flightNumber: `${BRAND.airlineCode}404`,
+        airline: BRAND.name,
         from: 'Chicago, USA',
         to: 'Paris, France',
         departureDate: new Date('2026-08-12T17:45:00Z'),
@@ -40,8 +44,8 @@ export const FlightData = [
         status: 'ON_TIME'
     },
     {
-        flightNumber: 'CA505',
-        airline: 'Gemini Airways',
+        flightNumber: `${BRAND.airlineCode}505`,
+        airline: BRAND.name,
         from: 'Miami, USA',
         to: 'Rio de Janeiro, Brazil',
         departureDate: new Date('2026-09-18T22:00:00Z'),
@@ -53,8 +57,8 @@ export const FlightData = [
 
 export const FlightScheduleData = [
     {
-        flightNumber: 'CA101',
-        airline: 'Gemini Airways',
+        flightNumber: `${BRAND.airlineCode}101`,
+        airline: BRAND.name,
         from: 'Seattle, USA',
         to: 'Detroit, USA',
         departureTime: '08:00',
@@ -63,8 +67,8 @@ export const FlightScheduleData = [
         priceCents: 35000
     },
     {
-        flightNumber: 'CA202',
-        airline: 'Gemini Airways',
+        flightNumber: `${BRAND.airlineCode}202`,
+        airline: BRAND.name,
         from: 'New York, USA',
         to: 'London, UK',
         departureTime: '19:30',
@@ -73,8 +77,8 @@ export const FlightScheduleData = [
         priceCents: 85000
     },
     {
-        flightNumber: 'CA303',
-        airline: 'Gemini Airways',
+        flightNumber: `${BRAND.airlineCode}303`,
+        airline: BRAND.name,
         from: 'San Francisco, USA',
         to: 'Tokyo, Japan',
         departureTime: '11:00',
@@ -83,8 +87,8 @@ export const FlightScheduleData = [
         priceCents: 120000
     },
     {
-        flightNumber: 'CA404',
-        airline: 'Gemini Airways',
+        flightNumber: `${BRAND.airlineCode}404`,
+        airline: BRAND.name,
         from: 'Chicago, USA',
         to: 'Paris, France',
         departureTime: '17:45',
@@ -93,8 +97,8 @@ export const FlightScheduleData = [
         priceCents: 95000
     },
     {
-        flightNumber: 'CA505',
-        airline: 'Gemini Airways',
+        flightNumber: `${BRAND.airlineCode}505`,
+        airline: BRAND.name,
         from: 'Miami, USA',
         to: 'Rio de Janeiro, Brazil',
         departureTime: '22:00',
@@ -106,8 +110,8 @@ export const FlightScheduleData = [
     // with its own departure time. This is what a return is: another flight,
     // not a second time on the outbound's row.
     {
-        flightNumber: 'CA102',
-        airline: 'Gemini Airways',
+        flightNumber: `${BRAND.airlineCode}102`,
+        airline: BRAND.name,
         from: 'Detroit, USA',
         to: 'Seattle, USA',
         departureTime: '18:00',
@@ -116,8 +120,8 @@ export const FlightScheduleData = [
         priceCents: 35000
     },
     {
-        flightNumber: 'CA203',
-        airline: 'Gemini Airways',
+        flightNumber: `${BRAND.airlineCode}203`,
+        airline: BRAND.name,
         from: 'London, UK',
         to: 'New York, USA',
         departureTime: '10:00',
@@ -126,8 +130,8 @@ export const FlightScheduleData = [
         priceCents: 85000
     },
     {
-        flightNumber: 'CA304',
-        airline: 'Gemini Airways',
+        flightNumber: `${BRAND.airlineCode}304`,
+        airline: BRAND.name,
         from: 'Tokyo, Japan',
         to: 'San Francisco, USA',
         departureTime: '15:00',
@@ -136,8 +140,8 @@ export const FlightScheduleData = [
         priceCents: 120000
     },
     {
-        flightNumber: 'CA405',
-        airline: 'Gemini Airways',
+        flightNumber: `${BRAND.airlineCode}405`,
+        airline: BRAND.name,
         from: 'Paris, France',
         to: 'Chicago, USA',
         departureTime: '09:30',

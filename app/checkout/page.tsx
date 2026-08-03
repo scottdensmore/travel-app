@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import React from 'react';
 import { notFound, redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
@@ -6,6 +7,11 @@ import { prisma } from '@/lib/prisma';
 import { getOccupiedSeatsAction } from '@/app/actions';
 import BookingCheckoutWizard from '@/components/ui/BookingCheckoutWizard';
 import { MAX_ITINERARY_LEGS } from '@/lib/validation';
+
+export const metadata: Metadata = {
+    title: 'Checkout',
+    description: 'Enter traveller details and choose a seat on every leg of your itinerary.',
+};
 
 export const dynamic = 'force-dynamic';
 

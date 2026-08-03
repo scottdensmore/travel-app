@@ -379,6 +379,12 @@ header nav ul li.selected a {
   white-space: nowrap;
 }
 
+/* Footer detail that qualifies a value rather than stating it. */
+.footer-note {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.45);
+}
+
 /* Glowing Buttons */
 button, button[type="submit"] {
   background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%);
@@ -743,6 +749,17 @@ footer {
   height: auto;
 }
 
+/* .footer-columns had no rule at all, so the footer had always been one
+   stacked column flush against the viewport edge despite the class name. */
+.footer-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
 footer .title {
   color: #fff;
   font-weight: 700;
@@ -759,6 +776,8 @@ footer a:hover {
 
 .footer-column ul {
   margin-left: 0;
+  padding-left: 0;
+  list-style: none;
 }
 
 .footer-column ul li {

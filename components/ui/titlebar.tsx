@@ -1,4 +1,6 @@
 "use client"
+
+import { BRAND } from '@/lib/brand';
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -101,8 +103,8 @@ const TitleBar: React.FC = () => {
         <header className={pathname?.startsWith('/admin') ? 'admin-header' : ''}>
             <div className="logo">
                 <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}>
-                    <img src="/img/logo.svg" alt="Mona Airways" width="32" height="32" />
-                    <span style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>Mona Airways</span>
+                    <img src="/img/logo.svg" alt={BRAND.name} width="32" height="32" />
+                    <span style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>{BRAND.name}</span>
                 </Link>
                 <span>{pageTitle}</span>
             </div>

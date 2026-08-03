@@ -1,8 +1,14 @@
+import type { Metadata } from 'next';
 import React from 'react';
 import { getServerSession } from 'next-auth';
 import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
 import StaffMfaEnrollment from './StaffMfaEnrollment';
+
+export const metadata: Metadata = {
+    title: 'Staff verification',
+    description: 'Set up or confirm the authenticator required for staff access.',
+};
 
 export const dynamic = 'force-dynamic';
 
