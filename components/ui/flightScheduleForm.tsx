@@ -13,7 +13,6 @@ interface FlightSchedule {
     from: string;
     to: string;
     departureTime: string;
-    returnTime: string | null;
     daysOfWeek: number[];
     price: string;
     firstClassRows?: number | null;
@@ -32,7 +31,6 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
     const [from, setFrom] = useState(initialSchedule?.from ?? '');
     const [to, setTo] = useState(initialSchedule?.to ?? '');
     const [departureTime, setDepartureTime] = useState(initialSchedule?.departureTime ?? '');
-    const [returnTime, setReturnTime] = useState(initialSchedule?.returnTime ?? '');
     const [price, setPrice] = useState(initialSchedule?.price ?? '');
     const [daysOfWeek, setDaysOfWeek] = useState<number[]>(initialSchedule?.daysOfWeek ?? []);
 
@@ -81,11 +79,6 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
             return;
         }
 
-        if (returnTime && !timeRegex.test(returnTime)) {
-            setError('Return time must be in HH:MM format (24-hour) or left empty.');
-            return;
-        }
-
         if (daysOfWeek.length === 0) {
             setError('Please select at least one day of the week.');
             return;
@@ -117,7 +110,6 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                     from,
                     to,
                     departureTime,
-                    returnTime: returnTime || null,
                     daysOfWeek,
                     price: formattedPrice,
                     firstClassRows: fRows,
@@ -138,7 +130,6 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                     setFrom('');
                     setTo('');
                     setDepartureTime('');
-                    setReturnTime('');
                     setPrice('');
                     setDaysOfWeek([]);
                     setFirstClassRows('3');
@@ -239,17 +230,6 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                         placeholder="e.g. 08:00"
                         disabled={isPending}
                         required
-                    />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label htmlFor="returnTime" style={{ fontSize: '0.85rem', color: '#a78bfa', fontWeight: 'bold' }}>Return Time (HH:MM)</label>
-                    <input 
-                        id="returnTime"
-                        type="text" 
-                        value={returnTime} 
-                        onChange={e => setReturnTime(e.target.value)} 
-                        placeholder="Leave blank if One-Way"
-                        disabled={isPending}
                     />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>

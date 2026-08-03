@@ -87,6 +87,10 @@ test.describe('Admin Control Journey', () => {
     await expect(page).toHaveURL('/admin/flights');
 
     // Create a new repeating flight schedule
+    // A schedule is one direction. A return time here promised inventory it
+    // could not create; the reverse direction has its own schedule (#124).
+    await expect(page.locator('#returnTime')).toHaveCount(0);
+
     await page.fill('#flightNumber', 'E2E606');
     await page.fill('#airline', 'Playwright Air');
     await page.fill('#from', 'Seattle, USA');
@@ -106,7 +110,11 @@ test.describe('Admin Control Journey', () => {
     await expect(page.locator('.admin-card').locator('text=New schedule created successfully!')).toBeVisible();
 
     // Verify schedule is in the repeating templates list
-    await expect(page.locator('table').first().locator('text=Playwright Air')).toBeVisible();
+    const templates = page.locator('table').first();
+    await expect(templates.locator('text=Playwright Air')).toBeVisible();
+    await expect(templates).toContainText('Departs: 10:00');
+    await expect(templates).not.toContainText('Returns:');
+    await expect(templates).not.toContainText('One-Way');
 
     // Verify active occurrence generated
     const activeTable = page.locator('table').nth(1);

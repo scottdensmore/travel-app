@@ -1,0 +1,17 @@
+-- Contract step for the schedule return time (#69, #124).
+--
+-- "returnTime" existed for one purpose: computing "Flight"."returnDate" as
+-- departure + 7 days. That column was dropped in #125, leaving this one
+-- collected from administrators, validated, stored, and shown on the schedule
+-- list as "Departs: 08:00 | Returns: 18:00" -- while driving nothing.
+--
+-- Worse than unused, it invited a mistake. An administrator filling it in
+-- reasonably expects return inventory, and got none: since #113 a route
+-- operates in both directions by having its own schedule each way, which is
+-- where a return's departure time actually lives.
+--
+-- No value is lost. The seed's outbound schedules paired a "returnTime" with a
+-- reverse-direction schedule departing at exactly that time -- CA101 carried
+-- 18:00 and CA102 departs 18:00 -- so the data this column held is already
+-- recorded as the departure time of a real flight.
+ALTER TABLE "FlightSchedule" DROP COLUMN "returnTime";

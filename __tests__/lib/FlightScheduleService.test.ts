@@ -33,7 +33,6 @@ describe('FlightScheduleService dynamic generator', () => {
                 from: 'Seattle, USA',
                 to: 'Detroit, USA',
                 departureTime: '08:00',
-                returnTime: '18:00',
                 daysOfWeek: [1, 3, 5],
                 price: '$350'
             },
@@ -44,7 +43,6 @@ describe('FlightScheduleService dynamic generator', () => {
                 from: 'New York, USA',
                 to: 'London, UK',
                 departureTime: '19:30',
-                returnTime: null, // one-way
                 daysOfWeek: [2, 4, 6],
                 price: '$850',
                 firstClassRows: 1,
@@ -101,33 +99,6 @@ describe('FlightScheduleService dynamic generator', () => {
         expect(result[0]).toHaveProperty('flightNumber', 'CA202');
     });
 
-    it('records no return date for a schedule that carries a return time', async () => {
-        // A returnTime used to write departure + 7 days onto the flight, which
-        // described no real return. A return is its own flight now (#69), so a
-        // schedule's return time must not put a date back on the outbound.
-        const date = new Date('2026-06-22T00:00:00Z'); // Monday
-        mockedFlightScheduleFindMany.mockResolvedValue([{
-            id: 1,
-            flightNumber: 'CA101',
-            airline: 'Gemini Airways',
-            from: 'Seattle, USA',
-            to: 'Detroit, USA',
-            departureTime: '08:00',
-            returnTime: '18:00',
-            daysOfWeek: [1, 3, 5],
-            price: '$350',
-        }]);
-        mockedFlightFindFirst.mockResolvedValue(null);
-        mockedFlightCreate.mockImplementation(({ data }: any) => Promise.resolve({ id: 101, ...data }));
-
-        await service.generateFlightsForDate(date);
-
-        expect(mockedFlightCreate).toHaveBeenCalledTimes(1);
-        const created = mockedFlightCreate.mock.calls[0][0].data;
-        expect(created).not.toHaveProperty('returnDate');
-        expect(created.departureDate).toEqual(new Date('2026-06-22T08:00:00Z'));
-    });
-
     it('does not create a flight instance if it already exists in the database', async () => {
         const date = new Date('2026-06-25T12:00:00Z');
         const mockSchedule = {
@@ -137,7 +108,6 @@ describe('FlightScheduleService dynamic generator', () => {
             from: 'New York, USA',
             to: 'London, UK',
             departureTime: '19:30',
-            returnTime: null,
             daysOfWeek: [4],
             price: '$850'
         };
@@ -175,7 +145,6 @@ describe('FlightScheduleService dynamic generator', () => {
             from: 'New York, USA',
             to: 'London, UK',
             departureTime: '19:30',
-            returnTime: null,
             daysOfWeek: [4],
             price: '$850'
         };
@@ -224,7 +193,6 @@ describe('FlightScheduleService dynamic generator', () => {
             from: 'New York, USA',
             to: 'London, UK',
             departureTime: '19:30',
-            returnTime: null,
             daysOfWeek: [4],
             price: '$850'
         };
@@ -247,7 +215,6 @@ describe('FlightScheduleService dynamic generator', () => {
             from: 'New York, USA',
             to: 'London, UK',
             departureTime: '19:30',
-            returnTime: null,
             daysOfWeek: [4],
             price: '$850'
         };
@@ -274,7 +241,6 @@ describe('FlightScheduleService inventory horizon', () => {
         from: 'Seattle, USA',
         to: 'Detroit, USA',
         departureTime: '08:00',
-        returnTime: null,
         daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
         price: '$350'
     };

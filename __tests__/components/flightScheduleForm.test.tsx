@@ -34,7 +34,6 @@ describe('FlightScheduleForm', () => {
         expect(screen.getByLabelText(/From \(Origin\) \*/i)).toBeInTheDocument();
         expect(screen.getByLabelText(/To \(Destination\) \*/i)).toBeInTheDocument();
         expect(screen.getByLabelText(/Departure \(HH:MM\) \*/i)).toBeInTheDocument();
-        expect(screen.getByLabelText(/Return Time \(HH:MM\)/i)).toBeInTheDocument();
         expect(screen.getByLabelText(/Price \(\$\) \*/i)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Create Schedule' })).toBeInTheDocument();
 
@@ -45,6 +44,15 @@ describe('FlightScheduleForm', () => {
         });
     });
 
+    it('offers no return time, because a return is a schedule of its own', () => {
+        // A return time here promised inventory it could not create: since #113
+        // a route operates in both directions by having a schedule each way.
+        render(<FlightScheduleForm />);
+
+        expect(screen.queryByLabelText(/Return Time/i)).not.toBeInTheDocument();
+        expect(screen.queryByPlaceholderText(/One-Way/i)).not.toBeInTheDocument();
+    });
+
     it('pre-populates the form when initialSchedule is provided', () => {
         const initialSchedule = {
             id: 42,
@@ -53,7 +61,6 @@ describe('FlightScheduleForm', () => {
             from: 'New York',
             to: 'London',
             departureTime: '14:30',
-            returnTime: '23:15',
             daysOfWeek: [1, 3, 5],
             price: '$850',
         };
@@ -66,7 +73,6 @@ describe('FlightScheduleForm', () => {
         expect(screen.getByLabelText(/From \(Origin\) \*/i)).toHaveValue('New York');
         expect(screen.getByLabelText(/To \(Destination\) \*/i)).toHaveValue('London');
         expect(screen.getByLabelText(/Departure \(HH:MM\) \*/i)).toHaveValue('14:30');
-        expect(screen.getByLabelText(/Return Time \(HH:MM\)/i)).toHaveValue('23:15');
         expect(screen.getByLabelText(/Price \(\$\) \*/i)).toHaveValue('$850');
 
         // Check if checkboxes are checked
@@ -88,7 +94,7 @@ describe('FlightScheduleForm', () => {
         expect(mockSaveFlightScheduleAction).not.toHaveBeenCalled();
     });
 
-    it('shows validation error if departure or return time has invalid format', async () => {
+    it('shows validation error if departure time has invalid format', async () => {
         render(<FlightScheduleForm />);
 
         // Fill required fields
@@ -103,14 +109,6 @@ describe('FlightScheduleForm', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Create Schedule' }));
         await waitFor(() => {
             expect(screen.getByText(/Departure time must be in HH:MM format/i)).toBeInTheDocument();
-        });
-
-        // Fix departure, use invalid return format
-        fireEvent.change(screen.getByLabelText(/Departure \(HH:MM\) \*/i), { target: { value: '08:00' } });
-        fireEvent.change(screen.getByLabelText(/Return Time \(HH:MM\)/i), { target: { value: '99:99' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Create Schedule' }));
-        await waitFor(() => {
-            expect(screen.getByText(/Return time must be in HH:MM format/i)).toBeInTheDocument();
         });
 
         expect(mockSaveFlightScheduleAction).not.toHaveBeenCalled();
@@ -160,7 +158,6 @@ describe('FlightScheduleForm', () => {
                 from: 'New York',
                 to: 'London',
                 departureTime: '08:00',
-                returnTime: null,
                 daysOfWeek: [1, 3],
                 price: '$850', // automatically formats with $ if missing
                 firstClassRows: 3,
@@ -194,7 +191,6 @@ describe('FlightScheduleForm', () => {
             from: 'New York',
             to: 'London',
             departureTime: '14:30',
-            returnTime: '23:15',
             daysOfWeek: [1],
             price: '$850',
         };
@@ -215,7 +211,6 @@ describe('FlightScheduleForm', () => {
                 from: 'New York',
                 to: 'London',
                 departureTime: '14:30',
-                returnTime: '23:15',
                 daysOfWeek: [6],
                 price: '$850',
                 firstClassRows: 3,
@@ -288,7 +283,6 @@ describe('FlightScheduleForm', () => {
                 from: 'New York',
                 to: 'London',
                 departureTime: '08:00',
-                returnTime: null,
                 daysOfWeek: [1],
                 price: '$850',
                 firstClassRows: 3,
