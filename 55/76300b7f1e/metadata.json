@@ -1,0 +1,24 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "5576300b7f1e",
+  "strategy": "manual-commit",
+  "branch": "refactor/drop-schedule-return-time",
+  "checkpoints_count": 2,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/55/76300b7f1e/0/metadata.json",
+      "transcript": "/55/76300b7f1e/0/full.jsonl",
+      "compact_transcript": "/55/76300b7f1e/0/transcript.jsonl",
+      "content_hash": "/55/76300b7f1e/0/content_hash.txt",
+      "prompt": "/55/76300b7f1e/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3461,
+    "cache_creation_tokens": 7636027,
+    "cache_read_tokens": 695033398,
+    "output_tokens": 845143,
+    "api_call_count": 1513
+  }
+}
