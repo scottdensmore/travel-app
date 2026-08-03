@@ -298,6 +298,50 @@ header nav ul li.selected a {
   margin-top: 0;
 }
 
+/* Degraded search result: one leg of a round trip could not be loaded.
+   Opaque on purpose -- the page has a photographic background, and a
+   translucent panel would make the warning's contrast depend on whatever
+   happens to be behind it. */
+.search-degraded {
+  background: #2a2412;
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  border-radius: 12px;
+  padding: 1rem 1.5rem;
+  margin-top: 2.5rem;
+  color: #fde68a;
+}
+
+.search-degraded h3 {
+  color: #fbbf24;
+  font-size: 1.1rem;
+  font-weight: bold;
+  margin: 0 0 0.5rem;
+}
+
+.search-degraded p {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+}
+
+.search-degraded button {
+  height: auto;
+  min-height: 44px;
+  width: auto;
+  padding: 10px 20px;
+  background: #4a3d14;
+  background-image: none;
+  border: 1px solid rgba(251, 191, 36, 0.6);
+  color: #fde68a;
+  box-shadow: none;
+}
+
+/* This app sets no focus style of its own, so the control added here brings
+   its own rather than inheriting a suppressed browser default (#80). */
+.search-degraded button:focus-visible {
+  outline: 3px solid #fbbf24;
+  outline-offset: 2px;
+}
+
 /* Glowing Buttons */
 button, button[type="submit"] {
   background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%);

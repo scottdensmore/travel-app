@@ -91,16 +91,37 @@ export async function searchFlightsAction(
     }
 
     const now = new Date();
-    const outbound = await searchOneDirection(from, to, departureDateStr, now);
 
-    // A round trip is two independent searches. The inbound is a real flight
-    // the customer chooses, not a fixed offset from the outbound (#69).
-    const inbound = returnDateStr
-        ? await searchOneDirection(to, from, returnDateStr, now)
-        : null;
+    // A round trip is two independent searches (#69), so they run together and
+    // fail apart. The outbound is the trip: if it fails there is nothing to
+    // show and the error stands. The return is a second dependency, and losing
+    // it degrades the result rather than discarding the outbound too (#68).
+    const [outboundResult, inboundResult] = await Promise.allSettled([
+        searchOneDirection(from, to, departureDateStr, now),
+        returnDateStr
+            ? searchOneDirection(to, from, returnDateStr, now)
+            : Promise.resolve(null),
+    ]);
 
-    return { ...outbound, inbound };
+    if (outboundResult.status === 'rejected') throw outboundResult.reason;
+
+    const inbound: InboundSearch | null = inboundResult.status === 'rejected'
+        ? { status: 'unavailable' }
+        : inboundResult.value === null
+            ? null
+            : { status: 'ok', ...inboundResult.value };
+
+    return { ...outboundResult.value, inbound };
 }
+
+/**
+ * The return leg of a round-trip search. Null for a one-way search, and
+ * `unavailable` when that leg's search failed while the outbound succeeded --
+ * which is a different thing from a return date with no flights on it.
+ */
+export type InboundSearch =
+    | { status: 'ok'; flights: Flight[]; nearbyDates: string[] }
+    | { status: 'unavailable' };
 
 /**
  * Flights leaving `from` for `to` on one date, with nearby operating dates when

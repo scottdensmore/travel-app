@@ -133,6 +133,9 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     // Return flights for a round trip, searched on their own route and date
     // (#112). Null for a one-way search.
     const [inboundResults, setInboundResults] = useState<Flight[] | null>(null);
+    // Distinct from an empty inbound list: that return date genuinely has no
+    // flights, this means we could not find out (#68).
+    const [inboundUnavailable, setInboundUnavailable] = useState(false);
     // A round trip is booked as one itinerary, so both legs are chosen here
     // before checkout rather than one card at a time (#69).
     const [selectedOutboundId, setSelectedOutboundId] = useState<number | null>(null);
@@ -150,6 +153,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         setIsSearching(false);
         setNearbyDates([]);
         setInboundResults(null);
+        setInboundUnavailable(false);
         setSelectedOutboundId(null);
         setSelectedInboundId(null);
         setSearchResults((currentResults) => (
@@ -189,6 +193,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         setSearchResults(null);
         setNearbyDates([]);
         setInboundResults(null);
+        setInboundUnavailable(false);
         // New results, fresh choices: a leg picked before may not be on offer.
         setSelectedOutboundId(null);
         setSelectedInboundId(null);
@@ -224,7 +229,9 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
             }
             setSearchResults(results.flights);
             setNearbyDates(results.nearbyDates);
-            setInboundResults(results.inbound?.flights ?? null);
+            const inbound = results.inbound;
+            setInboundUnavailable(inbound?.status === 'unavailable');
+            setInboundResults(inbound?.status === 'ok' ? inbound.flights : null);
         } catch {
             if (requestId === searchRequestIdRef.current) {
                 setBookingState({
@@ -249,6 +256,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         setSearchResults(null);
         setNearbyDates([]);
         setInboundResults(null);
+        setInboundUnavailable(false);
         // New results, fresh choices: a leg picked before may not be on offer.
         setSelectedOutboundId(null);
         setSelectedInboundId(null);
@@ -316,6 +324,21 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
             to: toLocation,
             departureDate: suggestedDate,
             returnDate: suggestedReturnDate,
+            tripType: isOneWay ? 'one-way' : 'round-trip',
+        });
+    };
+
+    /**
+     * Re-runs the whole search after the return leg failed. Both legs go again:
+     * the action has no way to search one in isolation, and repeating the
+     * outbound is cheap next to leaving the customer with half a trip.
+     */
+    const handleRetryReturnSearch = () => {
+        void performSearch({
+            from: fromLocation,
+            to: toLocation,
+            departureDate,
+            returnDate: isOneWay ? '' : returnDate,
             tripType: isOneWay ? 'one-way' : 'round-trip',
         });
     };
@@ -935,6 +958,27 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                               * checkout can carry an itinerary rather than a
                               * single flight.
                               */}
+                            {inboundUnavailable && (
+                                <div
+                                    className="search-degraded"
+                                    data-testid="inbound-unavailable"
+                                    role="status"
+                                >
+                                    <h3>Return flights unavailable</h3>
+                                    <p>
+                                        We could not load return flights just now. Your outbound
+                                        results above are up to date.
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={handleRetryReturnSearch}
+                                        disabled={isSearching}
+                                    >
+                                        Retry return flights
+                                    </button>
+                                </div>
+                            )}
+
                             {inboundResults !== null && (
                                 <div style={{ marginTop: '2.5rem' }} data-testid="inbound-results">
                                     <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#fff', marginBottom: '1rem' }}>

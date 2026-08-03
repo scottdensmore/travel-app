@@ -20,6 +20,9 @@ const searchSuccess = (flights: unknown[], nearbyDates: string[] = []) => ({
     inbound: null,
 });
 
+const inboundOk = (flights: unknown[], nearbyDates: string[] = []) =>
+    ({ status: 'ok', flights, nearbyDates });
+
 const routes = [
     { from: 'Seattle, USA', to: 'Detroit, USA', nextOperatingDate: '2026-07-15' },
     { from: 'Seattle, USA', to: 'Tokyo, Japan', nextOperatingDate: '2026-07-16' },
@@ -627,6 +630,7 @@ describe('FlightBookingForm', () => {
             flights: mockFlights,
             nearbyDates: [],
             inbound: {
+                status: 'ok',
                 flights: [{
                     id: 99,
                     airline: 'Gemini Airways',
@@ -688,6 +692,7 @@ describe('FlightBookingForm', () => {
             flights: mockFlights,
             nearbyDates: [],
             inbound: {
+                status: 'ok',
                 flights: [
                     {
                         id: 99,
@@ -784,7 +789,7 @@ describe('FlightBookingForm', () => {
             // not survive into the checkout link.
             mockSearch.mockResolvedValue({
                 ...roundTripResults,
-                inbound: { flights: [roundTripResults.inbound.flights[1]], nearbyDates: [] },
+                inbound: { status: 'ok', flights: [roundTripResults.inbound.flights[1]], nearbyDates: [] },
             });
             fireEvent.click(screen.getByText('Find your trip'));
 
@@ -816,7 +821,7 @@ describe('FlightBookingForm', () => {
         });
 
         it('still books one leg at a time when the return date has no flights', async () => {
-            await search({ ...roundTripResults, inbound: { flights: [], nearbyDates: [] } });
+            await search({ ...roundTripResults, inbound: { status: 'ok', flights: [], nearbyDates: [] } });
 
             // Requiring a return that does not exist would be a dead end.
             expect(screen.getByText('No return flights available on this date.')).toBeInTheDocument();
@@ -825,11 +830,84 @@ describe('FlightBookingForm', () => {
         });
     });
 
+    describe('When only the return leg fails', () => {
+        const degraded = {
+            flights: mockFlights,
+            nearbyDates: [],
+            inbound: { status: 'unavailable' },
+        };
+
+        it('keeps the outbound results and says the return could not be loaded', async () => {
+            mockSearch.mockResolvedValue(degraded);
+            renderForm();
+
+            fireEvent.click(screen.getByText('Find your trip'));
+
+            await waitFor(() => expect(screen.getByTestId('inbound-unavailable')).toBeInTheDocument());
+            // The outbound half of the trip is still usable.
+            expect(screen.getByText('CA101')).toBeInTheDocument();
+            expect(screen.getByTestId('inbound-unavailable')).toHaveTextContent(/could not load return flights/i);
+            // Not the same message as a return date that genuinely has none.
+            expect(screen.queryByText('No return flights available on this date.')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('inbound-results')).not.toBeInTheDocument();
+        });
+
+        it('offers the outbound one leg at a time, since no return can be chosen', async () => {
+            mockSearch.mockResolvedValue(degraded);
+            renderForm();
+
+            fireEvent.click(screen.getByText('Find your trip'));
+
+            await waitFor(() => expect(screen.getByTestId('inbound-unavailable')).toBeInTheDocument());
+            expect(screen.queryByTestId('round-trip-book')).not.toBeInTheDocument();
+            expect(screen.getByRole('link', { name: 'Book Now' })).toHaveAttribute('href', '/checkout?outbound=1');
+        });
+
+        it('clears the warning when a retry succeeds', async () => {
+            mockSearch.mockResolvedValueOnce(degraded);
+            renderForm();
+
+            fireEvent.click(screen.getByText('Find your trip'));
+            await waitFor(() => expect(screen.getByTestId('inbound-unavailable')).toBeInTheDocument());
+
+            mockSearch.mockResolvedValueOnce({
+                flights: mockFlights,
+                nearbyDates: [],
+                inbound: inboundOk([{
+                    id: 99,
+                    flightNumber: 'GA900',
+                    airline: 'Gemini Airways',
+                    from: 'Detroit, USA',
+                    to: 'Seattle, USA',
+                    departureDate: '2026-07-22T09:00:00Z',
+                    returnDate: null,
+                    price: '$275',
+                    status: 'ON_TIME',
+                }]),
+            });
+            fireEvent.click(screen.getByRole('button', { name: 'Retry return flights' }));
+
+            await waitFor(() => expect(screen.getByTestId('inbound-results')).toBeInTheDocument());
+            expect(screen.queryByTestId('inbound-unavailable')).not.toBeInTheDocument();
+            expect(screen.getByText('GA900')).toBeInTheDocument();
+        });
+
+        it('announces the warning to assistive technology', async () => {
+            mockSearch.mockResolvedValue(degraded);
+            renderForm();
+
+            fireEvent.click(screen.getByText('Find your trip'));
+
+            await waitFor(() => expect(screen.getByTestId('inbound-unavailable')).toBeInTheDocument());
+            expect(screen.getByTestId('inbound-unavailable')).toHaveAttribute('role', 'status');
+        });
+    });
+
     it('says so when the return date has no flights', async () => {
         mockSearch.mockResolvedValue({
             flights: mockFlights,
             nearbyDates: [],
-            inbound: { flights: [], nearbyDates: ['2026-07-23'] },
+            inbound: { status: 'ok', flights: [], nearbyDates: ['2026-07-23'] },
         });
         renderForm();
 
