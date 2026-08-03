@@ -290,3 +290,46 @@ test('A round trip lists return flights for the chosen return date', async ({ pa
   await expect(inbound.locator('.flight-result-card').first()).toBeVisible();
   await expect(inbound).not.toContainText('No return flights available');
 });
+
+test('Shopping a cabin prices results for it and marks flights without it', async ({ page }) => {
+  await openSearchPage(page);
+
+  await page.getByLabel('Cabin class').selectOption('ECONOMY');
+  await page.getByRole('button', { name: 'Find your trip' }).click();
+  await expect(page.getByRole('heading', { name: 'Available Flights' })).toBeVisible();
+  const economyFare = (await page.locator('.flight-result-fare span').first().textContent())!.trim();
+
+  // Business is 200% of the economy fare, so the quoted price has to change.
+  await page.getByLabel('Cabin class').selectOption('BUSINESS');
+  await page.getByRole('button', { name: 'Find your trip' }).click();
+  await expect(page.getByRole('heading', { name: 'Available Flights' })).toBeVisible();
+  const businessFare = (await page.locator('.flight-result-fare span').first().textContent())!.trim();
+  expect(businessFare).not.toBe(economyFare);
+
+  const toCents = (fare: string) => Math.round(Number(fare.replace(/[$,]/g, '')) * 100);
+  expect(toCents(businessFare)).toBe(toCents(economyFare) * 2);
+
+  // The cabin survives a refresh, so a shared link describes the same trip.
+  await page.reload();
+  await expect(page.getByLabel('Cabin class')).toHaveValue('BUSINESS');
+  expect(new URL(page.url()).searchParams.get('cabin')).toBe('BUSINESS');
+});
+
+test('A cabin the flight does not operate is marked, not hidden', async ({ page }) => {
+  await openSearchPage(page);
+
+  await page.getByLabel('Cabin class').selectOption('ECONOMY');
+  await page.getByRole('button', { name: 'Find your trip' }).click();
+  await expect(page.getByRole('heading', { name: 'Available Flights' })).toBeVisible();
+  await expect(page.locator('.flight-result-card').first()).toBeVisible();
+  const economyCount = await page.locator('.flight-result-card').count();
+  expect(economyCount).toBeGreaterThan(0);
+
+  await page.getByLabel('Cabin class').selectOption('FIRST');
+  await page.getByRole('button', { name: 'Find your trip' }).click();
+  await expect(page.getByRole('heading', { name: 'Available Flights' })).toBeVisible();
+
+  // Every flight is still offered. A cabin it does not run is marked on the
+  // card rather than removing the flight from a route that has seats.
+  expect(await page.locator('.flight-result-card').count()).toBe(economyCount);
+});

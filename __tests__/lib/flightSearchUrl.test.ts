@@ -27,6 +27,7 @@ describe('parseFlightSearchParams', () => {
             departureDate: '2026-07-18',
             returnDate: '2026-07-25',
             tripType: 'round-trip',
+            cabinClass: 'ECONOMY' as const,
         });
     });
 
@@ -77,6 +78,7 @@ describe('parseFlightSearchParams', () => {
             departureDate: '2026-07-20',
             returnDate: '',
             tripType: 'round-trip',
+            cabinClass: 'ECONOMY' as const,
         });
     });
 
@@ -91,6 +93,7 @@ describe('parseFlightSearchParams', () => {
             departureDate: '',
             returnDate: '',
             tripType: 'round-trip',
+            cabinClass: 'ECONOMY' as const,
         });
     });
 });
@@ -103,6 +106,7 @@ describe('buildFlightSearchUrl', () => {
             departureDate: '2026-07-18',
             returnDate: '2026-07-25',
             tripType: 'round-trip',
+            cabinClass: 'ECONOMY' as const,
         }, '/')).toBe(
             '/?from=New+York%2C+USA&to=London%2C+UK&depart=2026-07-18&return=2026-07-25&trip=round-trip'
         );
@@ -115,6 +119,7 @@ describe('buildFlightSearchUrl', () => {
             departureDate: '2026-07-20',
             returnDate: '',
             tripType: 'one-way',
+            cabinClass: 'ECONOMY' as const,
         }, '/')).toBe(
             '/?from=Seattle%2C+USA&to=Detroit%2C+USA&depart=2026-07-20&trip=one-way'
         );
@@ -127,8 +132,66 @@ describe('buildFlightSearchUrl', () => {
             departureDate: '',
             returnDate: '',
             tripType: 'round-trip',
+            cabinClass: 'ECONOMY' as const,
         }, '/')).toBe(
             '/?from=Seattle%2C+USA&to=Detroit%2C+USA&trip=round-trip'
         );
+    });
+
+    describe('cabin', () => {
+        const routes = [{ from: 'Seattle, USA', to: 'Detroit, USA', nextOperatingDate: '2026-07-15' }];
+        const window = { earliestDate: '2026-07-14', latestDate: '2027-07-14' };
+
+        it('keeps economy out of the URL, since it is the default', () => {
+            const url = buildFlightSearchUrl({
+                from: 'Seattle, USA',
+                to: 'Detroit, USA',
+                departureDate: '2026-07-15',
+                returnDate: '',
+                tripType: 'one-way',
+                cabinClass: 'ECONOMY',
+            }, '/');
+            expect(url).not.toContain('cabin=');
+        });
+
+        it('round-trips a non-default cabin through the URL', () => {
+            const criteria = {
+                from: 'Seattle, USA',
+                to: 'Detroit, USA',
+                departureDate: '2026-07-15',
+                returnDate: '',
+                tripType: 'one-way' as const,
+                cabinClass: 'BUSINESS' as const,
+            };
+            const url = buildFlightSearchUrl(criteria, '/');
+            expect(url).toContain('cabin=BUSINESS');
+
+            const params = Object.fromEntries(new URL(url, 'http://x').searchParams);
+            expect(parseFlightSearchParams(params, routes, window)).toEqual(criteria);
+        });
+
+        it('defaults a link that predates the parameter', () => {
+            const parsed = parseFlightSearchParams(
+                { from: 'Seattle, USA', to: 'Detroit, USA', depart: '2026-07-15', trip: 'one-way' },
+                routes,
+                window,
+            );
+            expect(parsed?.cabinClass).toBe('ECONOMY');
+        });
+
+        it('rejects a cabin it does not sell rather than showing another', () => {
+            // Falling back to economy would show a different trip from the one
+            // the link described.
+            expect(parseFlightSearchParams(
+                { from: 'Seattle, USA', to: 'Detroit, USA', depart: '2026-07-15', trip: 'one-way', cabin: 'SLEEPER' },
+                routes,
+                window,
+            )).toBeUndefined();
+            expect(parseFlightSearchParams(
+                { from: 'Seattle, USA', to: 'Detroit, USA', depart: '2026-07-15', trip: 'one-way', cabin: ['BUSINESS', 'FIRST'] },
+                routes,
+                window,
+            )).toBeUndefined();
+        });
     });
 });

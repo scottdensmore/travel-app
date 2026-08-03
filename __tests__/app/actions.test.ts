@@ -212,7 +212,11 @@ describe('searchFlightsAction', () => {
         expect(mockedFlightFindMany).toHaveBeenCalledWith(
             expect.objectContaining({ where: { from: 'Seattle, USA', to: 'Detroit, USA' } })
         );
-        expect(result).toEqual({ flights, nearbyDates: [], inbound: null });
+        expect(result).toEqual({
+            flights: flights.map(flight => ({ ...flight, cabinAvailable: true })),
+            nearbyDates: [],
+            inbound: null,
+        });
         expect(mockedFlightScheduleFindMany).not.toHaveBeenCalled();
     });
 
@@ -240,7 +244,11 @@ describe('searchFlightsAction', () => {
             },
             orderBy: { departureDate: 'asc' }
         });
-        expect(result).toEqual({ flights, nearbyDates: [], inbound: null });
+        expect(result).toEqual({
+            flights: flights.map(flight => ({ ...flight, cabinAvailable: true })),
+            nearbyDates: [],
+            inbound: null,
+        });
     });
 
     it('searches the inbound direction on its own route and date', async () => {
@@ -306,6 +314,66 @@ describe('searchFlightsAction', () => {
             'Seattle, USA', 'Detroit, USA', '2026-06-25', '2026-07-02',
         )).rejects.toThrow('connection reset');
         jest.useRealTimers();
+    });
+
+    it('prices results at the cabin that was searched', async () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
+        mockedFlightFindMany.mockResolvedValue([
+            { id: 1, price: '$350', economyRows: 20, businessRows: 3 },
+        ]);
+
+        const result = await searchFlightsAction(
+            'Seattle, USA', 'Detroit, USA', '2026-06-25', undefined, 'BUSINESS',
+        );
+
+        // Business is 200% of the base fare. Showing the Economy price against
+        // a Business search is a different number from the one checkout will
+        // charge (#70).
+        expect(result).toMatchObject({
+            flights: [{ price: '$700', cabinAvailable: true }],
+        });
+        jest.useRealTimers();
+    });
+
+    it('marks flights the searched cabin does not operate, and keeps them', async () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
+        mockedFlightFindMany.mockResolvedValue([
+            { id: 1, price: '$350', economyRows: 20, businessRows: 0 },
+            { id: 2, price: '$400', economyRows: 20, businessRows: 3 },
+        ]);
+
+        const result = await searchFlightsAction(
+            'Seattle, USA', 'Detroit, USA', '2026-06-25', undefined, 'BUSINESS',
+        );
+
+        // Hiding the first would report no flights on a route that has plenty
+        // of seats, which reads as "we do not fly there".
+        expect(result).toMatchObject({
+            flights: [
+                // Quoted at the fare it can actually be booked at.
+                { id: 1, cabinAvailable: false, price: '$350' },
+                { id: 2, cabinAvailable: true, price: '$800' },
+            ],
+        });
+        jest.useRealTimers();
+    });
+
+    it('defaults to economy when no cabin is given', async () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
+        mockedFlightFindMany.mockResolvedValue([
+            { id: 1, price: '$350', economyRows: 20, businessRows: 0 },
+        ]);
+
+        const result = await searchFlightsAction('Seattle, USA', 'Detroit, USA', '2026-06-25');
+
+        expect(result).toMatchObject({ flights: [expect.objectContaining({ price: '$350' })] });
+        jest.useRealTimers();
+    });
+
+    it('rejects a cabin it does not sell', async () => {
+        await expect(searchFlightsAction(
+            'Seattle, USA', 'Detroit, USA', '2026-06-25', undefined, 'SLEEPER' as never,
+        )).resolves.toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR' } });
     });
 
     it('reports no inbound for a one-way search', async () => {

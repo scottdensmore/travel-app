@@ -364,6 +364,21 @@ header nav ul li.selected a {
   box-shadow: none;
 }
 
+/* A flight that does not operate the cabin being shopped. Amber rather than
+   red: the flight is still bookable, just not in that cabin. Opaque because the
+   page background is photographic. */
+.cabin-unavailable {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #3a3018;
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  color: #fde68a;
+  font-size: 0.7rem;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
 /* Glowing Buttons */
 button, button[type="submit"] {
   background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%);

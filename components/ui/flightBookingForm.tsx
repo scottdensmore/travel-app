@@ -5,6 +5,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { searchFlightsAction } from '@/app/actions'
 import { Flight } from '@prisma/client'
+import type { SearchResultFlight } from '@/app/actions'
 import { isActionValidationFailure } from '@/lib/actionResult'
 import type { FlightRoute } from '@/lib/flightSearch'
 import { airportTimeZoneFor } from '@/lib/airports'
@@ -12,6 +13,7 @@ import { formatPrice, parsePriceToCents } from '@/lib/bookingPricing'
 import {
     buildFlightSearchUrl,
     type FlightSearchCriteria,
+    type SearchCabin,
 } from '@/lib/flightSearchUrl'
 import {
     DEPARTURE_AFTER_BOOKING_WINDOW_MESSAGE,
@@ -53,6 +55,26 @@ function formatSuggestedDate(dateString: string): string {
         timeZone: 'UTC',
     }).format(new Date(`${dateString}T00:00:00.000Z`));
 }
+
+const CABIN_LABEL: Record<SearchCabin, string> = {
+    ECONOMY: 'Economy',
+    PREMIUM_ECONOMY: 'Premium Economy',
+    BUSINESS: 'Business',
+    FIRST: 'First',
+};
+
+/**
+ * Says a flight does not operate the cabin that was searched, and that the fare
+ * shown is the one it can be booked at instead.
+ */
+const CabinUnavailableNote: React.FC<{ cabin: SearchCabin }> = ({ cabin }) => (
+    <span
+        className="cabin-unavailable"
+        data-testid="cabin-unavailable"
+    >
+        No {CABIN_LABEL[cabin]} cabin · Economy fare shown
+    </span>
+);
 
 /**
  * Picks one flight for a leg of a round trip. A toggle rather than a link:
@@ -121,7 +143,9 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
             )
             : '')
     );
-    const [flightClass, setFlightClass] = useState('economy');
+    const [cabinClass, setCabinClass] = useState<SearchCabin>(
+        initialSearch?.cabinClass ?? 'ECONOMY'
+    );
     const [isOneWay, setIsOneWay] = useState(
         initialSearch?.tripType === 'one-way'
     );
@@ -129,10 +153,10 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     const previousReturnDefaultsRef = useRef({ departureDate, isOneWay });
     const [isSearching, setIsSearching] = useState(false);
     const [isSearchReady, setIsSearchReady] = useState(false);
-    const [searchResults, setSearchResults] = useState<Flight[] | null>(null);
+    const [searchResults, setSearchResults] = useState<SearchResultFlight[] | null>(null);
     // Return flights for a round trip, searched on their own route and date
     // (#112). Null for a one-way search.
-    const [inboundResults, setInboundResults] = useState<Flight[] | null>(null);
+    const [inboundResults, setInboundResults] = useState<SearchResultFlight[] | null>(null);
     // Distinct from an empty inbound list: that return date genuinely has no
     // flights, this means we could not find out (#68).
     const [inboundUnavailable, setInboundUnavailable] = useState(false);
@@ -164,6 +188,25 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                 ? { status: 'idle' }
                 : currentState
         ));
+    };
+
+    /**
+     * Every result on screen was priced and marked for the previous cabin, and
+     * the checkout link switches to the new one the moment this changes. Unlike
+     * a route or date edit, there is nothing here that re-runs the search, so
+     * the whole list goes rather than only an already-empty one.
+     */
+    const handleCabinChange = (nextCabin: SearchCabin) => {
+        searchRequestIdRef.current += 1;
+        setIsSearching(false);
+        setNearbyDates([]);
+        setSearchResults(null);
+        setInboundResults(null);
+        setInboundUnavailable(false);
+        setSelectedOutboundId(null);
+        setSelectedInboundId(null);
+        setBookingState({ status: 'idle' });
+        setCabinClass(nextCabin);
     };
 
     const handleTripTypeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -206,6 +249,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                 criteria.to,
                 criteria.departureDate,
                 criteria.tripType === 'one-way' ? undefined : criteria.returnDate,
+                criteria.cabinClass,
             );
             if (requestId !== searchRequestIdRef.current) return;
             if (isActionValidationFailure(results)) {
@@ -307,6 +351,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
             departureDate,
             returnDate: isOneWay ? '' : returnDate,
             tripType: isOneWay ? 'one-way' : 'round-trip',
+            cabinClass,
         });
     };
 
@@ -325,6 +370,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
             departureDate: suggestedDate,
             returnDate: suggestedReturnDate,
             tripType: isOneWay ? 'one-way' : 'round-trip',
+            cabinClass,
         });
     };
 
@@ -340,6 +386,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
             departureDate,
             returnDate: isOneWay ? '' : returnDate,
             tripType: isOneWay ? 'one-way' : 'round-trip',
+            cabinClass,
         });
     };
 
@@ -538,6 +585,9 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         }
     }, [selectedOutbound, selectedInbound]);
 
+    // Carried into checkout so the fare quoted there is the one that was shown.
+    const cabinParam = cabinClass === 'ECONOMY' ? '' : `&cabin=${cabinClass}`;
+
     const itineraryPrompt = !selectedOutbound
         ? 'Choose a departing flight.'
         : !selectedInbound
@@ -645,11 +695,16 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
 
                 <div className="fields-container">
                     <label htmlFor="class">Cabin class</label>
-                    <select id="class" name="class" value={flightClass} onChange={e => setFlightClass(e.target.value)}>
-                        <option value="economy">Economy</option>
-                        <option value="premium-economy">Premium Economy</option>
-                        <option value="business">Business</option>
-                        <option value="first">First</option>
+                    <select
+                        id="class"
+                        name="class"
+                        value={cabinClass}
+                        onChange={e => handleCabinChange(e.target.value as SearchCabin)}
+                    >
+                        <option value="ECONOMY">Economy</option>
+                        <option value="PREMIUM_ECONOMY">Premium Economy</option>
+                        <option value="BUSINESS">Business</option>
+                        <option value="FIRST">First</option>
                     </select>
                 </div>
 
@@ -911,6 +966,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                             </div>
                                             <div className="flight-result-fare">
                                                 <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>{flight.price}</span>
+                                                {!flight.cabinAvailable && <CabinUnavailableNote cabin={cabinClass} />}
                                                 {isChoosingItinerary ? (
                                                     <LegSelectButton
                                                         flight={flight}
@@ -921,7 +977,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                                 ) : (
                                                     <Link
                                                         className="flight-result-book"
-                                                        href={`/checkout?outbound=${flight.id}`}
+                                                        href={`/checkout?outbound=${flight.id}${cabinParam}`}
                                                     >
                                                         Book Now
                                                     </Link>
@@ -1002,6 +1058,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                                         </div>
                                                         <div className="flight-result-fare">
                                                             <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>{flight.price}</span>
+                                                            {!flight.cabinAvailable && <CabinUnavailableNote cabin={cabinClass} />}
                                                             <LegSelectButton
                                                                 flight={flight}
                                                                 leg="return"
@@ -1050,7 +1107,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                         <Link
                                             data-testid="round-trip-book"
                                             className="flight-result-book"
-                                            href={`/checkout?outbound=${selectedOutbound.id}&inbound=${selectedInbound.id}`}
+                                            href={`/checkout?outbound=${selectedOutbound.id}&inbound=${selectedInbound.id}${cabinParam}`}
                                         >
                                             Book round trip
                                         </Link>

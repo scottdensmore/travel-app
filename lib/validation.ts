@@ -106,11 +106,16 @@ export const reviewSchema = z.object({
     content: requiredText('Review', 2_000)
 }).strict();
 
+export const cabinClassSchema = z.enum(['ECONOMY', 'PREMIUM_ECONOMY', 'BUSINESS', 'FIRST']);
+
 export const searchFlightsSchema = z.object({
     from: requiredText('Origin', 120),
     to: requiredText('Destination', 120),
     departureDate: isoDateSchema.optional(),
     returnDate: isoDateSchema.optional(),
+    /// The cabin being shopped. Results are priced and filtered for it, so an
+    /// unknown value is rejected rather than quietly treated as economy.
+    cabinClass: cabinClassSchema.default('ECONOMY'),
 }).strict().superRefine(({ from, departureDate, returnDate }, context) => {
     // The window is the origin airport's calendar day, not UTC's. A place with
     // no airport record falls back to UTC rather than rejecting the search.

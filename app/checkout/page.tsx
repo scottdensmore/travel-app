@@ -10,8 +10,15 @@ import { MAX_ITINERARY_LEGS } from '@/lib/validation';
 export const dynamic = 'force-dynamic';
 
 interface PageProps {
-    searchParams: Promise<{ outbound?: string | string[]; inbound?: string | string[] }>;
+    searchParams: Promise<{
+        outbound?: string | string[];
+        inbound?: string | string[];
+        cabin?: string | string[];
+    }>;
 }
+
+const CABINS = ['ECONOMY', 'PREMIUM_ECONOMY', 'BUSINESS', 'FIRST'] as const;
+type Cabin = (typeof CABINS)[number];
 
 /** A single positive integer id, or null for anything else including a repeat. */
 function flightIdParam(value: string | string[] | undefined): number | null {
@@ -26,7 +33,12 @@ export default async function CheckoutPage({ searchParams }: PageProps) {
         redirect('/login');
     }
 
-    const { outbound, inbound } = await searchParams;
+    const { outbound, inbound, cabin } = await searchParams;
+    // An unrecognised cabin is ignored rather than rejected: the itinerary is
+    // still valid, and the wizard falls back to what the legs actually offer.
+    const searchedCabin = typeof cabin === 'string' && CABINS.includes(cabin as Cabin)
+        ? (cabin as Cabin)
+        : undefined;
     const outboundId = flightIdParam(outbound);
     if (!outboundId) {
         notFound();
@@ -78,6 +90,7 @@ export default async function CheckoutPage({ searchParams }: PageProps) {
         <BookingCheckoutWizard
             flights={flights}
             occupiedSeats={occupiedSeats}
+            cabinClass={searchedCabin}
         />
     );
 }
