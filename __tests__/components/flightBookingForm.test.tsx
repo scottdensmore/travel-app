@@ -665,6 +665,148 @@ describe('FlightBookingForm', () => {
         expect(screen.queryByTestId('inbound-results')).not.toBeInTheDocument();
     });
 
+    describe('Choosing both legs of a round trip', () => {
+        const roundTripResults = {
+            flights: mockFlights,
+            nearbyDates: [],
+            inbound: {
+                flights: [
+                    {
+                        id: 99,
+                        airline: 'Gemini Airways',
+                        flightNumber: 'GA900',
+                        from: 'Detroit, USA',
+                        to: 'Seattle, USA',
+                        departureDate: '2026-07-22T09:00:00Z',
+                        returnDate: null,
+                        price: '$275',
+                        status: 'ON_TIME',
+                    },
+                    {
+                        id: 100,
+                        airline: 'United Airlines',
+                        flightNumber: 'UA901',
+                        from: 'Detroit, USA',
+                        to: 'Seattle, USA',
+                        departureDate: '2026-07-22T17:00:00Z',
+                        returnDate: null,
+                        price: '$310',
+                        status: 'ON_TIME',
+                    },
+                ],
+                nearbyDates: [],
+            },
+        };
+
+        const search = async (results: unknown = roundTripResults) => {
+            mockSearch.mockResolvedValue(results);
+            renderForm();
+            fireEvent.click(screen.getByText('Find your trip'));
+            await waitFor(() => expect(screen.getByTestId('inbound-results')).toBeInTheDocument());
+        };
+
+        it('replaces the per-flight book link with a selection for a round trip', async () => {
+            await search();
+
+            // A round trip cannot be booked one card at a time.
+            expect(screen.queryByRole('link', { name: 'Book Now' })).not.toBeInTheDocument();
+            expect(screen.getAllByRole('button', { name: /Select flight/ }).length).toBeGreaterThan(1);
+        });
+
+        it('books nothing until both legs are chosen', async () => {
+            await search();
+
+            const cta = screen.getByTestId('round-trip-book');
+            expect(cta).toHaveAttribute('aria-disabled', 'true');
+            expect(cta).not.toHaveAttribute('href');
+            expect(screen.getByTestId('round-trip-summary')).toHaveTextContent(/choose a departing flight/i);
+
+            fireEvent.click(screen.getByRole('button', { name: /Select flight CA101/ }));
+            expect(screen.getByTestId('round-trip-book')).toHaveAttribute('aria-disabled', 'true');
+            expect(screen.getByTestId('round-trip-summary')).toHaveTextContent(/choose a return flight/i);
+
+            fireEvent.click(screen.getByRole('button', { name: /Select flight GA900/ }));
+
+            const ready = screen.getByTestId('round-trip-book');
+            expect(ready).not.toHaveAttribute('aria-disabled');
+            expect(ready).toHaveAttribute('href', '/checkout?outbound=1&inbound=99');
+        });
+
+        it('marks the chosen flight on each leg and lets it be changed', async () => {
+            await search();
+
+            fireEvent.click(screen.getByRole('button', { name: /Select flight CA101/ }));
+            fireEvent.click(screen.getByRole('button', { name: /Select flight GA900/ }));
+            expect(screen.getByRole('button', { name: /Select flight GA900/ })).toHaveAttribute('aria-pressed', 'true');
+            expect(screen.getByRole('button', { name: /Select flight UA901/ })).toHaveAttribute('aria-pressed', 'false');
+
+            // Switching the return leg replaces it rather than adding a second.
+            fireEvent.click(screen.getByRole('button', { name: /Select flight UA901/ }));
+            expect(screen.getByRole('button', { name: /Select flight GA900/ })).toHaveAttribute('aria-pressed', 'false');
+            expect(screen.getByTestId('round-trip-book')).toHaveAttribute('href', '/checkout?outbound=1&inbound=100');
+        });
+
+        it('totals the two selected fares', async () => {
+            await search();
+
+            fireEvent.click(screen.getByRole('button', { name: /Select flight CA101/ }));
+            fireEvent.click(screen.getByRole('button', { name: /Select flight UA901/ }));
+
+            // $350 outbound + $310 return.
+            expect(screen.getByTestId('round-trip-summary')).toHaveTextContent('$660');
+        });
+
+        it('drops a selection that a new search no longer offers', async () => {
+            await search();
+            fireEvent.click(screen.getByRole('button', { name: /Select flight CA101/ }));
+            fireEvent.click(screen.getByRole('button', { name: /Select flight GA900/ }));
+            expect(screen.getByTestId('round-trip-book')).toHaveAttribute('href', '/checkout?outbound=1&inbound=99');
+
+            // A second search returns a different return leg; the stale id must
+            // not survive into the checkout link.
+            mockSearch.mockResolvedValue({
+                ...roundTripResults,
+                inbound: { flights: [roundTripResults.inbound.flights[1]], nearbyDates: [] },
+            });
+            fireEvent.click(screen.getByText('Find your trip'));
+
+            // Wait for the second set of results, not merely for the first to go.
+            await waitFor(() =>
+                expect(screen.getByRole('button', { name: /Select flight UA901/ })).toBeInTheDocument()
+            );
+            expect(screen.queryByRole('button', { name: /Select flight GA900/ })).not.toBeInTheDocument();
+            expect(screen.getByTestId('round-trip-book')).toHaveAttribute('aria-disabled', 'true');
+        });
+
+        it('stops offering an outbound that the filters have hidden', async () => {
+            await search({
+                ...roundTripResults,
+                flights: mockEnhancedFlights,
+            });
+
+            // GA101 is $200, UA103 is $100.
+            fireEvent.click(screen.getByRole('button', { name: /Select flight GA101/ }));
+            fireEvent.click(screen.getByRole('button', { name: /Select flight GA900/ }));
+            expect(screen.getByTestId('round-trip-book')).toHaveAttribute('href', '/checkout?outbound=1&inbound=99');
+
+            // Filter the chosen flight out of the results by price.
+            fireEvent.change(screen.getByLabelText(/Max Price/i), { target: { value: '150' } });
+
+            expect(screen.queryByRole('button', { name: /Select flight GA101/ })).not.toBeInTheDocument();
+            expect(screen.getByTestId('round-trip-book')).toHaveAttribute('aria-disabled', 'true');
+            expect(screen.getByTestId('round-trip-summary')).toHaveTextContent(/choose a departing flight/i);
+        });
+
+        it('still books one leg at a time when the return date has no flights', async () => {
+            await search({ ...roundTripResults, inbound: { flights: [], nearbyDates: [] } });
+
+            // Requiring a return that does not exist would be a dead end.
+            expect(screen.getByText('No return flights available on this date.')).toBeInTheDocument();
+            expect(screen.queryByTestId('round-trip-book')).not.toBeInTheDocument();
+            expect(screen.getAllByRole('link', { name: 'Book Now' })[0]).toHaveAttribute('href', '/checkout?outbound=1');
+        });
+    });
+
     it('says so when the return date has no flights', async () => {
         mockSearch.mockResolvedValue({
             flights: mockFlights,

@@ -64,6 +64,10 @@ test.describe('Flight Booking Journey', () => {
       throw new Error('No upcoming flights found in the seeded database');
     }
 
+    // This journey books a single flight, so search one way: a round trip is
+    // chosen a leg at a time and booked as one itinerary instead (#69).
+    await page.getByLabel('One Way').click();
+
     // Fill origin & destination dynamically based on the database flight
     await page.selectOption('#from', targetFlight.from);
     await page.selectOption('#to', targetFlight.to);
@@ -216,6 +220,46 @@ test.describe('Flight Booking Journey', () => {
 
     await expect(page).toHaveURL(`/checkout?outbound=${flight.id}`);
     await expect(page.locator('h2:has-text("Traveler Information")')).toBeVisible();
+  });
+
+  test('User chooses both legs in search and carries them into checkout', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('[data-search-ready="true"]')).toBeVisible();
+
+    // The default route operates in both directions (#113), so a round-trip
+    // search returns real return inventory to choose from.
+    await page.getByRole('button', { name: 'Find your trip' }).click();
+    const inbound = page.getByTestId('inbound-results');
+    await expect(inbound).toBeVisible();
+    await expect(inbound.locator('.flight-result-card').first()).toBeVisible();
+
+    // A round trip is not bookable one card at a time.
+    await expect(page.getByRole('link', { name: 'Book Now' })).toHaveCount(0);
+
+    const cta = page.getByTestId('round-trip-book');
+    await expect(cta).toHaveAttribute('aria-disabled', 'true');
+    await expect(page.getByTestId('round-trip-summary')).toContainText(/choose a departing flight/i);
+
+    await page.getByRole('button', { name: /as the departing leg/ }).first().click();
+    await expect(page.getByTestId('round-trip-summary')).toContainText(/choose a return flight/i);
+
+    await page.getByRole('button', { name: /as the return leg/ }).first().click();
+    await expect(page.getByTestId('round-trip-summary')).toContainText(/total/i);
+
+    const href = await page.getByTestId('round-trip-book').getAttribute('href');
+    expect(href).toMatch(/^\/checkout\?outbound=\d+&inbound=\d+$/);
+
+    await page.getByTestId('round-trip-book').click();
+
+    // Checkout receives both legs, so the wizard offers a seat for each.
+    await expect(page).toHaveURL(href!);
+    await expect(page.locator('h2:has-text("Traveler Information")')).toBeVisible();
+    await page.fill('input[placeholder="John"]', 'Ada');
+    await page.fill('input[placeholder="Doe"]', 'Lovelace');
+    await page.fill('input[type="date"]', '1980-12-10');
+    await page.fill('input[placeholder="A00000000"]', 'US4443333');
+    await page.click('button:has-text("Select Seats →")');
+    await expect(page.getByRole('tab')).toHaveCount(2);
   });
 
   test('User can book a round trip and both legs are seated and persisted', async ({ page }) => {

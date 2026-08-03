@@ -8,6 +8,7 @@ import { Flight } from '@prisma/client'
 import { isActionValidationFailure } from '@/lib/actionResult'
 import type { FlightRoute } from '@/lib/flightSearch'
 import { airportTimeZoneFor } from '@/lib/airports'
+import { formatPrice, parsePriceToCents } from '@/lib/bookingPricing'
 import {
     buildFlightSearchUrl,
     type FlightSearchCriteria,
@@ -52,6 +53,31 @@ function formatSuggestedDate(dateString: string): string {
         timeZone: 'UTC',
     }).format(new Date(`${dateString}T00:00:00.000Z`));
 }
+
+/**
+ * Picks one flight for a leg of a round trip. A toggle rather than a link:
+ * nothing is booked until both legs are chosen.
+ */
+const LegSelectButton: React.FC<{
+    flight: Flight;
+    leg: 'departing' | 'return';
+    isSelected: boolean;
+    onSelect: () => void;
+}> = ({ flight, leg, isSelected, onSelect }) => (
+    <button
+        type="button"
+        onClick={onSelect}
+        aria-pressed={isSelected}
+        aria-label={`Select flight ${flight.flightNumber} as the ${leg} leg`}
+        className="flight-result-book"
+        style={{
+            background: isSelected ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : undefined,
+            border: isSelected ? '2px solid #34d399' : '2px solid transparent',
+        }}
+    >
+        {isSelected ? '✓ Selected' : 'Select'}
+    </button>
+);
 
 const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     routes = [],
@@ -107,6 +133,10 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     // Return flights for a round trip, searched on their own route and date
     // (#112). Null for a one-way search.
     const [inboundResults, setInboundResults] = useState<Flight[] | null>(null);
+    // A round trip is booked as one itinerary, so both legs are chosen here
+    // before checkout rather than one card at a time (#69).
+    const [selectedOutboundId, setSelectedOutboundId] = useState<number | null>(null);
+    const [selectedInboundId, setSelectedInboundId] = useState<number | null>(null);
     const [nearbyDates, setNearbyDates] = useState<string[]>([]);
     const [bookingState, setBookingState] = useState<BookingState>({ status: 'idle' });
 
@@ -120,6 +150,8 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         setIsSearching(false);
         setNearbyDates([]);
         setInboundResults(null);
+        setSelectedOutboundId(null);
+        setSelectedInboundId(null);
         setSearchResults((currentResults) => (
             currentResults?.length === 0 ? null : currentResults
         ));
@@ -157,6 +189,9 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         setSearchResults(null);
         setNearbyDates([]);
         setInboundResults(null);
+        // New results, fresh choices: a leg picked before may not be on offer.
+        setSelectedOutboundId(null);
+        setSelectedInboundId(null);
         setBookingState({ status: 'idle' });
 
         setIsSearching(true);
@@ -203,7 +238,9 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                 setIsSearching(false);
             }
         }
-    }, []);
+        // Setters are stable, but the React Compiler infers them as
+        // dependencies and skips the component unless they are declared.
+    }, [setSelectedOutboundId, setSelectedInboundId]);
 
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -212,6 +249,9 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         setSearchResults(null);
         setNearbyDates([]);
         setInboundResults(null);
+        // New results, fresh choices: a leg picked before may not be on offer.
+        setSelectedOutboundId(null);
+        setSelectedInboundId(null);
         setBookingState({ status: 'idle' });
 
         if (departureDate && departureDate < bookingWindow.earliestDate) {
@@ -444,6 +484,42 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         setSelectedAirlines([]);
         setSortBy('price-asc');
     };
+
+    const bookableInbound = useMemo(
+        () => (inboundResults ?? []).filter((flight) => flight.status !== 'CANCELLED'),
+        [inboundResults]
+    );
+    // Only ask for two legs when there is a second leg to choose. A round trip
+    // whose return date sold out still books its outbound one card at a time.
+    const isChoosingItinerary = inboundResults !== null && bookableInbound.length > 0;
+
+    // Resolved against the flights on offer now, so a selection that a later
+    // search dropped can never reach the checkout URL.
+    const selectedOutbound = isChoosingItinerary
+        ? filteredAndSortedResults.find((flight) => flight.id === selectedOutboundId) ?? null
+        : null;
+    const selectedInbound = isChoosingItinerary
+        ? bookableInbound.find((flight) => flight.id === selectedInboundId) ?? null
+        : null;
+
+    const itineraryTotal = useMemo(() => {
+        if (!selectedOutbound || !selectedInbound) return null;
+        try {
+            return formatPrice(
+                parsePriceToCents(selectedOutbound.price) + parsePriceToCents(selectedInbound.price)
+            );
+        } catch {
+            // A malformed stored fare should not take the search page down; the
+            // server prices the booking authoritatively at checkout anyway.
+            return null;
+        }
+    }, [selectedOutbound, selectedInbound]);
+
+    const itineraryPrompt = !selectedOutbound
+        ? 'Choose a departing flight.'
+        : !selectedInbound
+        ? 'Choose a return flight.'
+        : `${selectedOutbound.flightNumber} and ${selectedInbound.flightNumber}${itineraryTotal ? ` · ${itineraryTotal} total` : ''}`;
 
     const renderSearchForm = () => {
         return (
@@ -815,12 +891,21 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                             </div>
                                             <div className="flight-result-fare">
                                                 <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>{flight.price}</span>
-                                                <Link
-                                                    className="flight-result-book"
-                                                    href={`/checkout?outbound=${flight.id}`}
-                                                >
-                                                    Book Now
-                                                </Link>
+                                                {isChoosingItinerary ? (
+                                                    <LegSelectButton
+                                                        flight={flight}
+                                                        leg="departing"
+                                                        isSelected={selectedOutboundId === flight.id}
+                                                        onSelect={() => setSelectedOutboundId(flight.id)}
+                                                    />
+                                                ) : (
+                                                    <Link
+                                                        className="flight-result-book"
+                                                        href={`/checkout?outbound=${flight.id}`}
+                                                    >
+                                                        Book Now
+                                                    </Link>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
@@ -876,6 +961,12 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                                         </div>
                                                         <div className="flight-result-fare">
                                                             <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>{flight.price}</span>
+                                                            <LegSelectButton
+                                                                flight={flight}
+                                                                leg="return"
+                                                                isSelected={selectedInboundId === flight.id}
+                                                                onSelect={() => setSelectedInboundId(flight.id)}
+                                                            />
                                                         </div>
                                                     </div>
                                                 ))}
@@ -884,6 +975,72 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                         <p style={{ color: 'rgba(255, 255, 255, 0.6)' }}>
                                             No return flights available on this date.
                                         </p>
+                                    )}
+                                </div>
+                            )}
+
+                            {isChoosingItinerary && (
+                                <div
+                                    className="round-trip-bar"
+                                    style={{
+                                        marginTop: '2rem',
+                                        padding: '1rem 1.5rem',
+                                        borderRadius: '12px',
+                                        background: 'rgba(255, 255, 255, 0.03)',
+                                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                                    }}
+                                >
+                                    <p
+                                        data-testid="round-trip-summary"
+                                        role="status"
+                                        aria-live="polite"
+                                        style={{ color: 'rgba(255,255,255,0.85)', margin: 0 }}
+                                    >
+                                        {itineraryPrompt}
+                                    </p>
+                                    {/*
+                                      * A link once there is somewhere to go, and a
+                                      * button until then. `href=""` would still be a
+                                      * link to this page, and `disabled` would hide
+                                      * the control from the reader who most needs the
+                                      * summary above to explain what is missing.
+                                      */}
+                                    {selectedOutbound && selectedInbound ? (
+                                        <Link
+                                            data-testid="round-trip-book"
+                                            className="flight-result-book"
+                                            href={`/checkout?outbound=${selectedOutbound.id}&inbound=${selectedInbound.id}`}
+                                        >
+                                            Book round trip
+                                        </Link>
+                                    ) : (
+                                        <button
+                                            data-testid="round-trip-book"
+                                            type="button"
+                                            aria-disabled="true"
+                                            onClick={(event) => event.preventDefault()}
+                                            className="flight-result-book"
+                                            // Dimming the gradient to 0.5 put the
+                                            // label at 2.9:1. This control is
+                                            // aria-disabled, not disabled, so it is
+                                            // still in the a11y tree and still has to
+                                            // be readable.
+                                            style={{
+                                                // Opaque on purpose: the page has a
+                                                // photographic background, so a
+                                                // translucent fill would make the
+                                                // label's contrast depend on whatever
+                                                // happens to be behind it.
+                                                background: '#2b2938',
+                                                backgroundImage: 'none',
+                                                color: 'rgba(255, 255, 255, 0.92)',
+                                                border: '1px solid rgba(255, 255, 255, 0.25)',
+                                                boxShadow: 'none',
+                                                cursor: 'not-allowed',
+                                            }}
+                                        >
+                                            Book round trip
+                                        </button>
                                     )}
                                 </div>
                             )}

@@ -70,6 +70,10 @@ test.describe('User Notifications & Alerts Journey', () => {
       throw new Error('No upcoming flights found in the database');
     }
 
+    // This journey books a single flight, so search one way: a round trip
+    // is chosen a leg at a time and booked as one itinerary (#69).
+    await page.getByLabel('One Way').click();
+
     await page.selectOption('#from', targetFlight.from);
     await page.selectOption('#to', targetFlight.to);
     const formattedDate = targetFlight.departureDate.toISOString().split('T')[0];

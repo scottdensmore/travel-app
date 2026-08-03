@@ -22,7 +22,9 @@ test.describe('Flight search', () => {
     const resultsHeading = page.getByRole('heading', { name: 'Available Flights' });
     await expect(resultsHeading).toBeVisible();
     await expect(resultsHeading).toBeFocused();
-    await expect(page.getByRole('link', { name: 'Book Now' }).first()).toBeVisible();
+    // The default search is a round trip, so each result offers a leg
+    // selection rather than a link that would book it on its own (#69).
+    await expect(page.getByRole('button', { name: /as the departing leg/ }).first()).toBeVisible();
   });
 
   test('Search criteria and results survive a refresh', async ({ page }) => {
@@ -213,7 +215,9 @@ test.describe('Flight search', () => {
     const resultsHeading = page.getByRole('heading', { name: 'Available Flights' });
     await expect(resultsHeading).toBeVisible();
     await expect(resultsHeading).toBeFocused();
-    await expect(page.getByRole('link', { name: 'Book Now' }).first()).toBeVisible();
+    // The default search is a round trip, so each result offers a leg
+    // selection rather than a link that would book it on its own (#69).
+    await expect(page.getByRole('button', { name: /as the departing leg/ }).first()).toBeVisible();
   });
 
   test('A failed search can be retried with the same criteria', async ({ page }) => {
