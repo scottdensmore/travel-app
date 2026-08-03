@@ -333,3 +333,31 @@ test('A cabin the flight does not operate is marked, not hidden', async ({ page 
   // card rather than removing the flight from a route that has seats.
   expect(await page.locator('.flight-result-card').count()).toBe(economyCount);
 });
+
+test('Sorting and the price filter work on server-stored fares', async ({ page }) => {
+  await openSearchPage(page);
+  await page.getByRole('button', { name: 'Find your trip' }).click();
+  await expect(page.getByRole('heading', { name: 'Available Flights' })).toBeVisible();
+
+  const fares = async () => (await page.locator('.flight-result-fare > span:first-child').allTextContents())
+    .map(text => Math.round(Number(text.replace(/[$,]/g, '')) * 100));
+
+  await page.getByLabel('Sort:').selectOption('price-asc');
+  const ascending = await fares();
+  expect(ascending).toEqual([...ascending].sort((a, b) => a - b));
+
+  await page.getByLabel('Sort:').selectOption('price-desc');
+  const descending = await fares();
+  expect(descending).toEqual([...descending].sort((a, b) => b - a));
+
+  // The slider is denominated in the units the database stores, so its bounds
+  // are the real fares rather than numbers recovered from display text.
+  const slider = page.getByLabel(/Max Price/i);
+  if (await slider.count()) {
+    const max = Number(await slider.getAttribute('max'));
+    const min = Number(await slider.getAttribute('min'));
+    expect(max).toBeGreaterThanOrEqual(min);
+    expect(Number.isInteger(max)).toBe(true);
+    expect(max).toBe(Math.max(...descending));
+  }
+});

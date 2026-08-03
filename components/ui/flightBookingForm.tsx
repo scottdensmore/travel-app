@@ -9,7 +9,7 @@ import type { SearchResultFlight } from '@/app/actions'
 import { isActionValidationFailure } from '@/lib/actionResult'
 import type { FlightRoute } from '@/lib/flightSearch'
 import { airportTimeZoneFor } from '@/lib/airports'
-import { formatPrice, parsePriceToCents } from '@/lib/bookingPricing'
+import { flightFareCents, formatPrice, parsePriceToCents } from '@/lib/bookingPricing'
 import {
     buildFlightSearchUrl,
     type FlightSearchCriteria,
@@ -477,9 +477,22 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     }, [searchResults]);
 
     // Helper to parse price string to number safely (handles $ and commas)
-    const parsePrice = (priceStr?: string): number => {
-        if (!priceStr) return 0;
-        return parseFloat(priceStr.replace(/[^0-9.]/g, '')) || 0;
+    /**
+     * A result's fare in minor units.
+     *
+     * Sorting and filtering read the value the server stores, not a number
+     * recovered from the text it formatted for display. Parsing the label back
+     * into a number meant the ordering silently depended on how prices happened
+     * to be formatted (#70).
+     */
+    const fareCents = (flight: { priceCents?: number | null; price: string }): number => {
+        try {
+            return flightFareCents(flight);
+        } catch {
+            // A fare neither stored nor parseable sorts to the bottom rather
+            // than taking the results down.
+            return Number.POSITIVE_INFINITY;
+        }
     };
 
     // Filter out cancelled flights from active search results
@@ -496,14 +509,14 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     // Dynamic price boundaries
     const maxPriceBoundary = useMemo(() => {
         if (activeResults.length === 0) return 0;
-        const prices = activeResults.map(f => parsePrice(f.price));
-        return Math.max(...prices);
+        const fares = activeResults.map(fareCents).filter(Number.isFinite);
+        return fares.length === 0 ? 0 : Math.max(...fares);
     }, [activeResults]);
 
     const minPriceBoundary = useMemo(() => {
         if (activeResults.length === 0) return 0;
-        const prices = activeResults.map(f => parsePrice(f.price));
-        return Math.min(...prices);
+        const fares = activeResults.map(fareCents).filter(Number.isFinite);
+        return fares.length === 0 ? 0 : Math.min(...fares);
     }, [activeResults]);
 
     // Initialize/reset price range filter when boundary changes
@@ -519,7 +532,13 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
 
         // Filter by Price
         if (maxPrice > 0) {
-            results = results.filter(f => parsePrice(f.price) <= maxPrice);
+            // A fare that cannot be read cannot be compared, so the price
+            // filter leaves it alone rather than making it disappear by
+            // default -- the slider starts at the highest known fare.
+            results = results.filter(f => {
+                const fare = fareCents(f);
+                return !Number.isFinite(fare) || fare <= maxPrice;
+            });
         }
 
         // Filter by Airline
@@ -529,8 +548,8 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
 
         // Sort results
         results.sort((a, b) => {
-            const priceA = parsePrice(a.price);
-            const priceB = parsePrice(b.price);
+            const priceA = fareCents(a);
+            const priceB = fareCents(b);
             const timeA = new Date(a.departureDate).getTime();
             const timeB = new Date(b.departureDate).getTime();
 
@@ -832,7 +851,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                 {maxPriceBoundary > minPriceBoundary && (
                                     <div style={{ marginBottom: '1.5rem' }}>
                                         <label htmlFor="price-slider" style={{ display: 'block', fontSize: '0.85rem', color: '#a78bfa', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '8px' }}>
-                                            Max Price: ${maxPrice.toFixed(0)}
+                                            Max Price: {formatPrice(maxPrice)}
                                         </label>
                                         <input 
                                             type="range"
@@ -840,12 +859,13 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                             min={minPriceBoundary} 
                                             max={maxPriceBoundary} 
                                             value={maxPrice} 
-                                            onChange={e => setMaxPrice(parseFloat(e.target.value))}
+                                            step={100}
+                                            onChange={e => setMaxPrice(Number(e.target.value))}
                                             style={{ width: '100%', cursor: 'pointer', accentColor: '#8b5cf6' }}
                                         />
                                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
-                                            <span>${minPriceBoundary.toFixed(0)}</span>
-                                            <span>${maxPriceBoundary.toFixed(0)}</span>
+                                            <span>{formatPrice(minPriceBoundary)}</span>
+                                            <span>{formatPrice(maxPriceBoundary)}</span>
                                         </div>
                                     </div>
                                 )}

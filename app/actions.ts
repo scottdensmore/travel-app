@@ -165,12 +165,14 @@ function flightsForCabin(flights: Flight[], cabin: CabinClass): SearchResultFlig
             return { ...flight, cabinAvailable: available };
         }
         try {
+            // Both forms of the fare move together, so anything that sorts or
+            // filters on the integer agrees with the price on screen.
+            const fareCents = calculatePassengerFareCents(flightFareCents(flight), cabin);
             return {
                 ...flight,
                 cabinAvailable: true,
-                price: formatPrice(
-                    calculatePassengerFareCents(flightFareCents(flight), cabin)
-                ),
+                priceCents: fareCents,
+                price: formatPrice(fareCents),
             };
         } catch {
             // A stored fare that cannot be parsed cannot be quoted in another
