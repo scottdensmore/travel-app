@@ -1,0 +1,24 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "d40b93ea1694",
+  "strategy": "manual-commit",
+  "branch": "refactor/drop-flight-return-date",
+  "checkpoints_count": 1,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/d4/0b93ea1694/0/metadata.json",
+      "transcript": "/d4/0b93ea1694/0/full.jsonl",
+      "compact_transcript": "/d4/0b93ea1694/0/transcript.jsonl",
+      "content_hash": "/d4/0b93ea1694/0/content_hash.txt",
+      "prompt": "/d4/0b93ea1694/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3086,
+    "cache_creation_tokens": 7168003,
+    "cache_read_tokens": 613921897,
+    "output_tokens": 750566,
+    "api_call_count": 1310
+  }
+}
