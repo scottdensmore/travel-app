@@ -1,8 +1,14 @@
+import type { Metadata } from 'next';
 import React from 'react';
 import { prisma } from '@/lib/prisma';
 import TravelGuideClient from '@/components/ui/TravelGuideClient';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+
+export const metadata: Metadata = {
+    title: 'Travel guides',
+    description: 'City guides for the places Mona Airways flies, with reviews from travellers.',
+};
 
 export default async function TravelGuidePage() {
     const session = await getServerSession(authOptions);

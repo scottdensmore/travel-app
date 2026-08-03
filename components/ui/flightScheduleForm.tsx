@@ -1,5 +1,7 @@
 "use client"
 
+import { BRAND } from '@/lib/brand';
+
 import React, { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { saveFlightScheduleAction } from '@/app/actions';
@@ -185,7 +187,7 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                         type="text" 
                         value={airline} 
                         onChange={e => setAirline(e.target.value)} 
-                        placeholder="e.g. Gemini Airways"
+                        placeholder={`e.g. ${BRAND.name}`}
                         disabled={isPending}
                         required
                     />

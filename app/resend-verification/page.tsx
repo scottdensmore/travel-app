@@ -2,7 +2,10 @@ import { Metadata } from 'next';
 import AuthEmailRequestForm from '@/components/auth/AuthEmailRequestForm';
 import AuthFlowShell from '@/components/auth/AuthFlowShell';
 
-export const metadata: Metadata = { title: 'Resend verification | Mona Airways' };
+export const metadata: Metadata = {
+    title: 'Resend verification',
+    description: 'Send the account verification email again.',
+};
 
 export default function ResendVerificationPage() {
     return (

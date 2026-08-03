@@ -2,7 +2,10 @@ import { Metadata } from 'next';
 import AuthEmailRequestForm from '@/components/auth/AuthEmailRequestForm';
 import AuthFlowShell from '@/components/auth/AuthFlowShell';
 
-export const metadata: Metadata = { title: 'Forgot password | Mona Airways' };
+export const metadata: Metadata = {
+    title: 'Forgot password',
+    description: 'Request a link to reset your Mona Airways password.',
+};
 
 export default function ForgotPasswordPage() {
     return (

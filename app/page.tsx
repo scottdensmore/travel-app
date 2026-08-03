@@ -1,3 +1,5 @@
+import type { Metadata } from 'next';
+import { pageTitle } from '@/lib/brand';
 import React from "react";
 import FlightBookingForm from "../components/ui/flightBookingForm";
 import { getFlightRoutesAction } from "./actions";
@@ -10,6 +12,13 @@ import {
 
 // Reads live flight inventory from the DB, so render per-request rather than
 // statically prerendering at build time (which would need a database).
+export const metadata: Metadata = {
+    // Spelled out rather than relying on the template: Next applies that to
+    // child segments, and this page shares a segment with the root layout.
+    title: pageTitle('Book flights'),
+    description: 'Search flights by route, date and cabin, and book your trip with Mona Airways.',
+};
+
 export const dynamic = 'force-dynamic';
 
 interface HomeProps {

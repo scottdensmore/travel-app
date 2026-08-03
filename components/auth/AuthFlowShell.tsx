@@ -1,3 +1,4 @@
+import { BRAND } from '@/lib/brand';
 import Link from 'next/link';
 import { ReactNode } from 'react';
 
@@ -15,7 +16,7 @@ export default function AuthFlowShell({
             <section className="grid w-full max-w-md gap-6 rounded-xl border border-zinc-800 bg-zinc-950 p-6 text-white shadow-xl sm:p-8"
                 aria-labelledby="auth-flow-title">
                 <div className="grid gap-2 text-center">
-                    <Link href="/" className="text-sm font-semibold text-zinc-300">Mona Airways</Link>
+                    <Link href="/" className="text-sm font-semibold text-zinc-300">{BRAND.name}</Link>
                     <h1 id="auth-flow-title" className="text-2xl font-semibold tracking-tight">{title}</h1>
                     <p className="text-sm text-zinc-300">{description}</p>
                 </div>
