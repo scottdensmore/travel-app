@@ -1,0 +1,24 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "d7344bcb0471",
+  "strategy": "manual-commit",
+  "branch": "test/stabilise-admin-journey",
+  "checkpoints_count": 2,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/d7/344bcb0471/0/metadata.json",
+      "transcript": "/d7/344bcb0471/0/full.jsonl",
+      "compact_transcript": "/d7/344bcb0471/0/transcript.jsonl",
+      "content_hash": "/d7/344bcb0471/0/content_hash.txt",
+      "prompt": "/d7/344bcb0471/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 4034,
+    "cache_creation_tokens": 7854617,
+    "cache_read_tokens": 877704029,
+    "output_tokens": 997067,
+    "api_call_count": 1819
+  }
+}
