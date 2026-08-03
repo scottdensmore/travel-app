@@ -652,6 +652,24 @@ describe('FlightBookingForm', () => {
         expect(screen.getByText('$275')).toBeInTheDocument();
     });
 
+    it('shows no return date on an outbound card', async () => {
+        // Flight.returnDate was a fixed seven days after departure and never
+        // described a real return; the return is its own flight now (#112).
+        mockSearch.mockResolvedValue(searchSuccess([
+            { ...mockFlights[0], returnDate: '2026-05-22T12:00:00Z' },
+        ]));
+        renderForm();
+
+        fireEvent.click(screen.getByText('Find your trip'));
+
+        await waitFor(() => expect(screen.getByText('CA101')).toBeInTheDocument());
+        const card = screen.getByText('CA101').closest('.flight-result-card')!;
+        expect(card).toHaveTextContent('Seattle, USA');
+        expect(card).toHaveTextContent('Detroit, USA');
+        expect(card).not.toHaveTextContent('One Way');
+        expect(card).not.toHaveTextContent(new Date('2026-05-22T12:00:00Z').toLocaleDateString());
+    });
+
     it('shows no return section for a one-way search', async () => {
         mockSearch.mockResolvedValue({ flights: mockFlights, nearbyDates: [], inbound: null });
         renderForm();

@@ -339,5 +339,22 @@ test.describe('Flight Booking Journey', () => {
       calculateBookingTotal(outbound.price, [{ cabinClass: 'ECONOMY' }]).cents +
       calculateBookingTotal(inbound.price, [{ cabinClass: 'ECONOMY' }]).cents;
     expect(booking.totalPriceCents).toBe(expectedTotal);
+
+    // --- The profile shows the whole itinerary, not just the outbound ---
+    await page.goto('/profile');
+    await expect(page.locator('h2:has-text("My Bookings")')).toBeVisible();
+
+    const row = page.getByTestId(`booking-row-${booking.id}`);
+    await expect(row).toContainText('Round trip');
+    await expect(row).toContainText(outbound.flightNumber);
+    await expect(row).toContainText(inbound.flightNumber);
+    await expect(row).toContainText(`${outbound.from} → ${outbound.to}`);
+    await expect(row).toContainText(`${inbound.from} → ${inbound.to}`);
+
+    // The seat held on each leg, read from that leg's own assignment.
+    const legRows = row.getByTestId(/^booking-leg-/);
+    await expect(legRows).toHaveCount(2);
+    await expect(legRows.nth(0)).toContainText(outboundSeatName);
+    await expect(legRows.nth(1)).toContainText(inboundSeatName);
   });
 });

@@ -1,10 +1,9 @@
 /**
  * Reading a booking's flights through its legs.
  *
- * A booking is its own itinerary (#109). Today every booking has one leg, so
- * these return exactly what `booking.flight` used to; they exist so that the
- * read path already goes through the legs when round trips add a second one
- * (#69), rather than being rewritten at that point.
+ * A booking is its own itinerary (#109), and since #118 it can hold more than
+ * one leg. Every read of a booking's flights goes through here so that ordering
+ * is applied in one place.
  *
  * The Prisma include has to load the legs and their flights:
  *
@@ -17,18 +16,35 @@ export interface BookingLegs<TFlight> {
 }
 
 /**
- * The flights of a booking, in leg order.
+ * The legs of a booking in itinerary order.
  *
  * Sorted here rather than trusting the query, because a caller that forgets
- * `orderBy` would otherwise get an itinerary in whatever order the database
- * returned. A leg whose flight was not loaded is skipped rather than yielding a
- * hole in the itinerary.
+ * `orderBy` would otherwise render the return leg first.
+ */
+export function orderedLegs<TLeg extends { sequence: number }>(
+    booking: { legs: TLeg[] }
+): TLeg[] {
+    return [...booking.legs].sort((left, right) => left.sequence - right.sequence);
+}
+
+/**
+ * The flights of a booking, in leg order. A leg whose flight was not loaded is
+ * skipped rather than yielding a hole in the itinerary.
  */
 export function bookingFlights<TFlight>(booking: BookingLegs<TFlight>): TFlight[] {
-    return [...booking.legs]
-        .sort((left, right) => left.sequence - right.sequence)
+    return orderedLegs(booking)
         .map(({ flight }) => flight)
         .filter((flight): flight is TFlight => flight !== null && flight !== undefined);
+}
+
+/**
+ * How a seat reads to the customer. A cancellation parks the seat under a
+ * placeholder so the unique index stays satisfied; that marker is bookkeeping,
+ * not something to print on someone's booking.
+ */
+export function seatLabel(seatNumber: string | null | undefined): string {
+    if (!seatNumber) return 'Not assigned';
+    return seatNumber.startsWith('CANCELLED') ? 'Released' : seatNumber;
 }
 
 /**

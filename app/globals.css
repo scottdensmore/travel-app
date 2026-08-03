@@ -499,6 +499,8 @@ button:active, button[type="submit"]:active {
   color: #a78bfa;
   font-weight: 600;
   padding-bottom: 12px;
+  /* Headings need the same gutter as the cells or they run together. */
+  padding-right: 1.5rem;
   text-transform: uppercase;
   font-size: 0.85rem;
   letter-spacing: 0.05em;
@@ -506,8 +508,22 @@ button:active, button[type="submit"]:active {
 
 .profile td {
   border-top: 1px solid rgba(255, 255, 255, 0.06);
-  padding: 16px 0;
+  /* Gutter between columns. Set here rather than with a utility class,
+     because this rule outranks one and would otherwise erase it. */
+  padding: 16px 1.5rem 16px 0;
   font-size: 0.95rem;
+}
+
+.profile th:last-child,
+.profile td:last-child {
+  padding-right: 0;
+}
+
+/* A booking's later legs continue the same row group, so they get no rule
+   above them; the separator belongs between bookings, not inside one. */
+.profile tr[data-continues-booking] td {
+  border-top: 0;
+  padding-top: 0;
 }
 
 .admin-card form {
