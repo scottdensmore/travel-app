@@ -22,6 +22,23 @@ export function parsePriceToCents(price: string): number {
     return cents;
 }
 
+/**
+ * A flight's fare in minor units.
+ *
+ * Prefers the integer column, which is authoritative, and falls back to parsing
+ * the retained string for rows the backfill could not read. Every caller goes
+ * through here so that the fallback lives in one place and disappears in one
+ * place when the string column goes (#70).
+ */
+export function flightFareCents(
+    flight: { priceCents?: number | null; price: string }
+): number {
+    if (flight.priceCents !== null && flight.priceCents !== undefined) {
+        return flight.priceCents;
+    }
+    return parsePriceToCents(flight.price);
+}
+
 export function calculatePassengerFareCents(basePriceCents: number, cabinClass: CabinClass): number {
     return Math.round(basePriceCents * CABIN_FARE_PERCENT[cabinClass] / 100);
 }
@@ -43,15 +60,21 @@ export function formatPrice(cents: number): string {
  * every passenger on every leg.
  */
 export function calculateItineraryTotal(
-    legPrices: string[],
+    legFareCents: number[],
     passengers: Array<{ cabinClass: CabinClass }>
 ): { cents: number; formatted: string } {
-    if (legPrices.length === 0) {
+    if (legFareCents.length === 0) {
         throw new Error('An itinerary needs at least one flight.');
     }
 
-    const cents = legPrices.reduce(
-        (total, price) => total + calculateBookingTotal(price, passengers).cents,
+    // Fares arrive as minor units rather than formatted strings, so the total
+    // no longer depends on parsing text the application itself formatted (#70).
+    const cents = legFareCents.reduce(
+        (total, fare) => total + passengers.reduce(
+            (legTotal, passenger) =>
+                legTotal + calculatePassengerFareCents(fare, passenger.cabinClass),
+            0
+        ),
         0
     );
 

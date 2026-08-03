@@ -104,6 +104,7 @@ export default class FlightScheduleService {
                             to: schedule.to,
                             departureDate,
                             price: schedule.price,
+                            priceCents: schedule.priceCents,
                             status: 'ON_TIME',
                             firstClassRows: schedule.firstClassRows ?? 3,
                             businessRows: schedule.businessRows ?? 3,

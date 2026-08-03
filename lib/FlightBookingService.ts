@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { assertSeatAvailableForCabin } from '@/lib/seatLayout';
 import { lockFlightForUpdate } from '@/lib/flightLock';
 import { flightBookingServiceSchema, parseInput } from '@/lib/validation';
-import { calculateItineraryTotal } from '@/lib/bookingPricing';
+import { calculateItineraryTotal, flightFareCents } from '@/lib/bookingPricing';
 import { safePassengerSelect } from '@/lib/passengerDataAccess';
 import {
     decryptPassengerData,
@@ -203,7 +203,7 @@ export default class FlightBookingService {
             }
 
             const total = calculateItineraryTotal(
-                flights.map(flight => flight.price),
+                flights.map(flightFareCents),
                 passengers.map(passenger => ({
                     cabinClass: passenger.cabinClass as 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST'
                 }))
