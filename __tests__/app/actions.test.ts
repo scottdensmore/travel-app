@@ -274,6 +274,40 @@ describe('searchFlightsAction', () => {
         jest.useRealTimers();
     });
 
+    it('keeps the outbound results when the return search fails', async () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
+        const outbound = [{ id: 1, from: 'Seattle, USA', to: 'Detroit, USA' }];
+        mockedFlightFindMany
+            .mockResolvedValueOnce(outbound)
+            .mockRejectedValueOnce(new Error('connection reset'));
+
+        const result = await searchFlightsAction(
+            'Seattle, USA', 'Detroit, USA', '2026-06-25', '2026-07-02',
+        );
+
+        // Two legs are two dependencies. Losing one is not losing the search:
+        // the outbound results still stand, and the return says so (#68).
+        expect(result).toMatchObject({
+            flights: outbound,
+            inbound: { status: 'unavailable' },
+        });
+        jest.useRealTimers();
+    });
+
+    it('fails the whole search when the outbound fails', async () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
+        mockedFlightFindMany
+            .mockRejectedValueOnce(new Error('connection reset'))
+            .mockResolvedValueOnce([{ id: 2 }]);
+
+        // There is nothing to degrade to: a return leg on its own is not a
+        // trip anyone can book.
+        await expect(searchFlightsAction(
+            'Seattle, USA', 'Detroit, USA', '2026-06-25', '2026-07-02',
+        )).rejects.toThrow('connection reset');
+        jest.useRealTimers();
+    });
+
     it('reports no inbound for a one-way search', async () => {
         jest.useFakeTimers().setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
         mockedFlightFindMany.mockResolvedValue([{ id: 1 }]);
