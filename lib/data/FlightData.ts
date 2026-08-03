@@ -53,7 +53,6 @@ export const FlightScheduleData = [
         from: 'Seattle, USA',
         to: 'Detroit, USA',
         departureTime: '08:00',
-        returnTime: '18:00',
         daysOfWeek: [1, 3, 5], // Mon, Wed, Fri
         price: '$350'
     },
@@ -63,7 +62,6 @@ export const FlightScheduleData = [
         from: 'New York, USA',
         to: 'London, UK',
         departureTime: '19:30',
-        returnTime: '10:00',
         daysOfWeek: [2, 4, 6], // Tue, Thu, Sat
         price: '$850'
     },
@@ -73,7 +71,6 @@ export const FlightScheduleData = [
         from: 'San Francisco, USA',
         to: 'Tokyo, Japan',
         departureTime: '11:00',
-        returnTime: '15:00',
         daysOfWeek: [0, 2, 4], // Sun, Tue, Thu
         price: '$1200'
     },
@@ -83,7 +80,6 @@ export const FlightScheduleData = [
         from: 'Chicago, USA',
         to: 'Paris, France',
         departureTime: '17:45',
-        returnTime: '09:30',
         daysOfWeek: [1, 3, 5], // Mon, Wed, Fri
         price: '$950'
     },
@@ -93,21 +89,18 @@ export const FlightScheduleData = [
         from: 'Miami, USA',
         to: 'Rio de Janeiro, Brazil',
         departureTime: '22:00',
-        returnTime: null,
         daysOfWeek: [0, 3, 5], // Sun, Wed, Fri
         price: '$500'
     },
-    // Return legs. Each mirrors an outbound route and departs at the time that
-    // route's returnTime described, which until now named a flight that did not
-    // exist. They carry no returnTime of their own: a return leg is one
-    // direction, not a round trip.
+    // Return legs. Each mirrors an outbound route in the opposite direction,
+    // with its own departure time. This is what a return is: another flight,
+    // not a second time on the outbound's row.
     {
         flightNumber: 'CA102',
         airline: 'Gemini Airways',
         from: 'Detroit, USA',
         to: 'Seattle, USA',
         departureTime: '18:00',
-        returnTime: null,
         daysOfWeek: [1, 3, 5], // Mon, Wed, Fri
         price: '$350'
     },
@@ -117,7 +110,6 @@ export const FlightScheduleData = [
         from: 'London, UK',
         to: 'New York, USA',
         departureTime: '10:00',
-        returnTime: null,
         daysOfWeek: [2, 4, 6], // Tue, Thu, Sat
         price: '$850'
     },
@@ -127,7 +119,6 @@ export const FlightScheduleData = [
         from: 'Tokyo, Japan',
         to: 'San Francisco, USA',
         departureTime: '15:00',
-        returnTime: null,
         daysOfWeek: [0, 2, 4], // Sun, Tue, Thu
         price: '$1200'
     },
@@ -137,7 +128,6 @@ export const FlightScheduleData = [
         from: 'Paris, France',
         to: 'Chicago, USA',
         departureTime: '09:30',
-        returnTime: null,
         daysOfWeek: [1, 3, 5], // Mon, Wed, Fri
         price: '$950'
     }

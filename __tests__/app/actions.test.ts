@@ -1019,7 +1019,6 @@ describe('admin flight schedule actions', () => {
             from: 'New York',
             to: 'London',
             departureTime: '08:00',
-            returnTime: null,
             daysOfWeek: [1], // Mondays
             price: '$850',
         };
@@ -1409,7 +1408,6 @@ describe('admin flight schedule actions', () => {
                     from: 'JFK',
                     to: 'LAX',
                     departureTime: '08:00',
-                    returnTime: null,
                     daysOfWeek: [1],
                     price: '$500',
                 });
@@ -1433,7 +1431,6 @@ describe('admin flight schedule actions', () => {
                     from: 'JFK',
                     to: 'LAX',
                     departureTime: '08:00',
-                    returnTime: null,
                     daysOfWeek: [1],
                     price: '$500',
                 });
@@ -1464,7 +1461,6 @@ describe('admin flight schedule actions', () => {
                     from: 'JFK',
                     to: 'LAX',
                     departureTime: '08:00',
-                    returnTime: null,
                     daysOfWeek: [1],
                     price: '$500',
                 });
@@ -1518,7 +1514,6 @@ describe('admin flight schedule actions', () => {
                     from: 'JFK',
                     to: 'LAX',
                     departureTime: '08:00',
-                    returnTime: null,
                     daysOfWeek: [1],
                     price: '$500',
                 });
@@ -1562,7 +1557,6 @@ describe('admin flight schedule actions', () => {
                     from: 'JFK',
                     to: 'LAX',
                     departureTime: '08:00',
-                    returnTime: null,
                     daysOfWeek: [1],
                     price: '$500',
                 });

@@ -191,7 +191,6 @@ export const scheduleSchema = z.object({
     from: requiredText('Origin', 120),
     to: requiredText('Destination', 120),
     departureTime: timeSchema,
-    returnTime: z.union([timeSchema, z.null()]),
     daysOfWeek: z.array(z.number().int().min(0).max(6))
         .min(1)
         .max(7)

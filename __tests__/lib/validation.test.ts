@@ -79,7 +79,6 @@ describe('shared server validation schemas', () => {
             from: ' Seattle, USA ',
             to: ' Detroit, USA ',
             departureTime: '08:00',
-            returnTime: null,
             daysOfWeek: [5, 1],
             price: '$350',
             firstClassRows: 3,
@@ -95,7 +94,7 @@ describe('shared server validation schemas', () => {
         });
         expect(scheduleSchema.safeParse({
             flightNumber: 'AA101', airline: 'Air', from: 'A', to: 'B',
-            departureTime: '08:00', returnTime: null, daysOfWeek: [1, 1], price: '$1'
+            departureTime: '08:00', daysOfWeek: [1, 1], price: '$1'
         }).success).toBe(false);
     });
 
@@ -339,7 +338,7 @@ describe('shared server validation schemas', () => {
 
         const boundarySchedule = {
             flightNumber: 'AB12345678', airline: 'A'.repeat(120), from: 'F'.repeat(120), to: 'T'.repeat(120),
-            departureTime: '23:59', returnTime: '00:00', daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+            departureTime: '23:59', daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
             price: '$999999.99', firstClassRows: 0, businessRows: 0,
             premiumEconomyRows: 0, economyRows: 1, seatPattern: 'ABCDEFGHIJKL'
         };

@@ -563,7 +563,6 @@ export async function saveFlightScheduleAction(data: {
     from: string;
     to: string;
     departureTime: string;
-    returnTime: string | null;
     daysOfWeek: number[];
     price: string;
     firstClassRows?: number | null;
@@ -586,10 +585,6 @@ export async function saveFlightScheduleAction(data: {
     const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
     if (!timeRegex.test(data.departureTime)) {
         throw new Error("Departure time must be in HH:MM format (24-hour).");
-    }
-
-    if (data.returnTime && !timeRegex.test(data.returnTime)) {
-        throw new Error("Return time must be in HH:MM format (24-hour) or left empty.");
     }
 
     if (!Array.isArray(data.daysOfWeek) || data.daysOfWeek.length === 0) {
@@ -628,7 +623,6 @@ export async function saveFlightScheduleAction(data: {
                 from: data.from,
                 to: data.to,
                 departureTime: data.departureTime,
-                returnTime: data.returnTime,
                 daysOfWeek: data.daysOfWeek,
                 price: data.price,
                 firstClassRows,
@@ -646,7 +640,6 @@ export async function saveFlightScheduleAction(data: {
                 from: data.from,
                 to: data.to,
                 departureTime: data.departureTime,
-                returnTime: data.returnTime,
                 daysOfWeek: data.daysOfWeek,
                 price: data.price,
                 firstClassRows,

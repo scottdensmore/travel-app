@@ -97,7 +97,7 @@ export default async function AdminFlightsPage() {
                                         </td>
                                         <td style={{ padding: '12px', fontSize: '0.9rem', color: '#fff' }}>
                                             {schedule.from} → {schedule.to}
-                                            <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)' }}>Departs: {schedule.departureTime} {schedule.returnTime ? `| Returns: ${schedule.returnTime}` : '(One-Way)'}</div>
+                                            <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)' }}>Departs: {schedule.departureTime}</div>
                                         </td>
                                         <td style={{ padding: '12px', fontSize: '0.85rem', color: '#e5e7eb' }}>
                                             {getDaysLabel(schedule.daysOfWeek)}
