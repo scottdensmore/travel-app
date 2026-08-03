@@ -6,7 +6,7 @@ import PointsActivityTable from "@/components/ui/pointsActivityTable";
 import NextStatusChart from "@/components/ui/charts/nextStatusChart";
 import PointsHistoryChart from "@/components/ui/charts/pointsHistoryChart";
 import { formatPrice } from '@/lib/bookingPricing';
-import { outboundFlight } from '@/lib/bookingItinerary';
+import { orderedLegs, outboundFlight, seatLabel } from '@/lib/bookingItinerary';
 import { cancelBookingAction, deleteReviewAction, toggleFavoriteCityGuideAction, changeBookingSeatsAction, getOccupiedSeatsAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
 import { PointsActivityDisplayData } from '@/lib/types/PointsActivity';
@@ -36,9 +36,15 @@ interface Passenger {
     cabinClass: string;
 }
 
+interface SeatAssignment {
+    passengerId: string;
+    seatNumber: string;
+}
+
 interface BookingLeg {
     sequence: number;
     flight: Flight | null;
+    seatAssignments?: SeatAssignment[];
 }
 
 interface Booking {
@@ -284,78 +290,106 @@ export default function ProfileClient({
                                         <th className="pb-2 text-right">Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody>
-                                    {bookings.map((booking) => {
-                                        const flight = outboundFlight(booking);
-                                        const isCancelled = booking.status === 'CANCELLED';
-                                        return (
-                                            <tr key={booking.id} className="border-b">
-                                                <td className="py-2">
-                                                    <div>{flight ? `${flight.airline} ${flight.flightNumber}` : '—'}</div>
-                                                    {booking.passengers && booking.passengers.length > 0 && (
-                                                        <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
-                                                            {booking.passengers.map(p => `${p.firstName} (${p.seatNumber.startsWith('CANCELLED') ? 'Released' : p.seatNumber})`).join(', ')}
-                                                        </div>
-                                                    )}
-                                                </td>
-                                                <td className="py-2">{flight ? `${flight.from} → ${flight.to}` : '—'}</td>
-                                                <td className="py-2">{flight ? new Date(flight.departureDate).toLocaleDateString() : '—'}</td>
-                                                <td className="py-2">{
-                                                    booking.totalPriceCents !== null && booking.totalPriceCents !== undefined
-                                                        ? formatPrice(booking.totalPriceCents)
-                                                        : flight?.price ?? '—'
-                                                }</td>
-                                                <td className="py-2">
-                                                    <span style={{
-                                                        color: isCancelled ? '#ef4444' : '#10b981',
-                                                        fontWeight: 'bold',
-                                                        fontSize: '0.85rem'
-                                                    }}>
-                                                        {isCancelled ? 'Cancelled' : 'Confirmed'}
-                                                    </span>
-                                                </td>
-                                                <td className="py-2 text-right">
-                                                    {!isCancelled && (
-                                                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                                                            <button
-                                                                onClick={() => setSelectedBooking(booking)}
-                                                                disabled={isPending}
-                                                                style={{
-                                                                    backgroundColor: '#8b5cf6',
-                                                                    color: 'white',
-                                                                    padding: '4px 8px',
-                                                                    borderRadius: '4px',
-                                                                    fontSize: '12px',
-                                                                    height: 'auto',
-                                                                    width: 'auto',
-                                                                    cursor: 'pointer'
-                                                                }}
-                                                            >
-                                                                Change Seats
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleCancelBooking(booking.id, flight?.flightNumber || '')}
-                                                                disabled={isPending}
-                                                                style={{
-                                                                    backgroundColor: '#ef4444',
-                                                                    color: 'white',
-                                                                    padding: '4px 8px',
-                                                                    borderRadius: '4px',
-                                                                    fontSize: '12px',
-                                                                    height: 'auto',
-                                                                    width: 'auto',
-                                                                    cursor: 'pointer'
-                                                                }}
-                                                            >
-                                                                Cancel
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                </td>
-                                            </tr>
+                                {bookings.map((booking) => {
+                                    const legs = orderedLegs(booking).filter(leg => leg.flight);
+                                    const isCancelled = booking.status === 'CANCELLED';
+                                    // Every leg is a row of its own, so the browser
+                                    // keeps each flight aligned with its route and
+                                    // date at any width. Booking-level cells span
+                                    // them. One tbody per booking groups the legs.
+                                    const legRows = legs.length > 0 ? legs : [null];
+                                    const seatFor = (leg: BookingLeg | null, passengerId: string, fallback: string) =>
+                                        seatLabel(
+                                            leg?.seatAssignments?.find(seat => seat.passengerId === passengerId)?.seatNumber
+                                            ?? fallback
                                         );
-                                    })}
-                                </tbody>
+                                    return (
+                                        <tbody key={booking.id} data-testid={`booking-row-${booking.id}`} className="border-b">
+                                            {legRows.map((leg, index) => (
+                                                <tr
+                                                    key={leg?.flight?.id ?? index}
+                                                    data-testid={`booking-leg-${booking.id}-${index}`}
+                                                    data-continues-booking={index > 0 ? '' : undefined}
+                                                >
+                                                    <td className="py-2">
+                                                        {index === 0 && (
+                                                            <div style={{ fontSize: '0.7rem', color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                                                {legs.length > 1 ? 'Round trip' : 'One way'}
+                                                            </div>
+                                                        )}
+                                                        <div>{leg?.flight ? `${leg.flight.airline} ${leg.flight.flightNumber}` : '\u2014'}</div>
+                                                        {booking.passengers && booking.passengers.length > 0 && (
+                                                            <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
+                                                                {booking.passengers
+                                                                    .map(p => `${p.firstName} (${seatFor(leg, p.id, p.seatNumber)})`)
+                                                                    .join(', ')}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td className="py-2">{leg?.flight ? `${leg.flight.from} \u2192 ${leg.flight.to}` : '\u2014'}</td>
+                                                    <td className="py-2 whitespace-nowrap">{leg?.flight ? new Date(leg.flight.departureDate).toLocaleDateString() : '\u2014'}</td>
+                                                    {index === 0 && (
+                                                        <>
+                                                            <td className="py-2 whitespace-nowrap align-top" rowSpan={legRows.length}>{
+                                                                booking.totalPriceCents !== null && booking.totalPriceCents !== undefined
+                                                                    ? formatPrice(booking.totalPriceCents)
+                                                                    : legs[0]?.flight?.price ?? '\u2014'
+                                                            }</td>
+                                                            <td className="py-2 align-top" rowSpan={legRows.length}>
+                                                                <span style={{
+                                                                    color: isCancelled ? '#ef4444' : '#10b981',
+                                                                    fontWeight: 'bold',
+                                                                    fontSize: '0.85rem'
+                                                                }}>
+                                                                    {isCancelled ? 'Cancelled' : 'Confirmed'}
+                                                                </span>
+                                                            </td>
+                                                            <td className="py-2 text-right align-top" rowSpan={legRows.length}>
+                                                                {!isCancelled && (
+                                                                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                                                        <button
+                                                                            onClick={() => setSelectedBooking(booking)}
+                                                                            disabled={isPending}
+                                                                            style={{
+                                                                                backgroundColor: '#8b5cf6',
+                                                                                color: 'white',
+                                                                                padding: '4px 8px',
+                                                                                borderRadius: '4px',
+                                                                                fontSize: '12px',
+                                                                                height: 'auto',
+                                                                                width: 'auto',
+                                                                                cursor: 'pointer',
+                                                                                whiteSpace: 'nowrap'
+                                                                            }}
+                                                                        >
+                                                                            Change Seats
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => handleCancelBooking(booking.id, legs[0]?.flight?.flightNumber || '')}
+                                                                            disabled={isPending}
+                                                                            style={{
+                                                                                backgroundColor: '#ef4444',
+                                                                                color: 'white',
+                                                                                padding: '4px 8px',
+                                                                                borderRadius: '4px',
+                                                                                fontSize: '12px',
+                                                                                height: 'auto',
+                                                                                width: 'auto',
+                                                                                cursor: 'pointer'
+                                                                            }}
+                                                                        >
+                                                                            Cancel
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                            </td>
+                                                        </>
+                                                    )}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    );
+                                })}
                             </table>
                         </div>
                     ) : (

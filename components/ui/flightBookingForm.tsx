@@ -882,10 +882,13 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                                     <span style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.from}</span>
                                                 </div>
                                                 <span className="flight-result-arrow" aria-hidden="true">------&gt;</span>
+                                                {/*
+                                                  * No date on the arrival side: a flight is one leg, and
+                                                  * the return is now a flight of its own with its own
+                                                  * card (#112). Flight.returnDate was a fixed seven days
+                                                  * after departure and never described a real return.
+                                                  */}
                                                 <div className="flight-result-stop">
-                                                    <span suppressHydrationWarning style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#fff' }}>
-                                                        {flight.returnDate ? new Date(flight.returnDate).toLocaleDateString() : 'One Way'}
-                                                    </span>
                                                     <span style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.to}</span>
                                                 </div>
                                             </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import ProfileClient from '@/components/ui/ProfileClient';
 import { cancelBookingAction, deleteReviewAction, toggleFavoriteCityGuideAction, changeBookingSeatsAction, getOccupiedSeatsAction } from '@/app/actions';
@@ -285,5 +285,122 @@ describe('ProfileClient interactive dashboard', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Save New Seats' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Choose a valid seat.');
+    });
+
+    describe('Round-trip bookings', () => {
+        const roundTripBooking = {
+            ...sampleBookings[0],
+            id: 202,
+            totalPriceCents: 66000,
+            legs: [
+                {
+                    sequence: 1,
+                    flight: {
+                        id: 201,
+                        flightNumber: 'GA101',
+                        airline: 'Gemini Airways',
+                        from: 'Seattle, USA',
+                        to: 'Detroit, USA',
+                        departureDate: '2026-06-15T08:00:00Z',
+                        returnDate: null,
+                        price: '$350',
+                    },
+                    seatAssignments: [{ passengerId: 'p-1', seatNumber: '12A' }],
+                },
+                {
+                    sequence: 2,
+                    flight: {
+                        id: 202,
+                        flightNumber: 'GA900',
+                        airline: 'Gemini Airways',
+                        from: 'Detroit, USA',
+                        to: 'Seattle, USA',
+                        departureDate: '2026-06-22T17:00:00Z',
+                        returnDate: null,
+                        price: '$310',
+                    },
+                    seatAssignments: [{ passengerId: 'p-1', seatNumber: '4C' }],
+                },
+            ],
+        };
+
+        const renderBookings = (bookings: unknown[]) =>
+            render(
+                <ProfileClient
+                    userName="Jane Doe"
+                    userAvatar="avatar.png"
+                    currentStatus="Gold"
+                    currentPoints={4200}
+                    bookings={bookings as never}
+                    favorites={[]}
+                    reviews={[]}
+                    activityData={[]}
+                    monthlyHistory={[]}
+                />
+            );
+
+        it('lists every leg of the itinerary, in order', () => {
+            renderBookings([roundTripBooking]);
+
+            const row = screen.getByTestId('booking-row-202');
+            expect(row).toHaveTextContent('Gemini Airways GA101');
+            expect(row).toHaveTextContent('Gemini Airways GA900');
+            expect(row).toHaveTextContent('Seattle, USA → Detroit, USA');
+            expect(row).toHaveTextContent('Detroit, USA → Seattle, USA');
+
+            // Order follows the itinerary, not the order rows happen to arrive.
+            const legs = within(row).getAllByTestId(/^booking-leg-/);
+            expect(legs).toHaveLength(2);
+            expect(legs[0]).toHaveTextContent('GA101');
+            expect(legs[1]).toHaveTextContent('GA900');
+        });
+
+        it('shows the seat held on each leg rather than one seat for the trip', () => {
+            renderBookings([roundTripBooking]);
+
+            const legs = within(screen.getByTestId('booking-row-202')).getAllByTestId(/^booking-leg-/);
+            expect(legs[0]).toHaveTextContent('Jane (12A)');
+            expect(legs[1]).toHaveTextContent('Jane (4C)');
+        });
+
+        it('labels a two-leg trip as a round trip and a single leg as one way', () => {
+            renderBookings([roundTripBooking]);
+            expect(screen.getByTestId('booking-row-202')).toHaveTextContent(/round trip/i);
+
+            cleanup();
+            renderBookings([sampleBookings[0]]);
+            expect(screen.getByTestId('booking-row-101')).toHaveTextContent(/one way/i);
+        });
+
+        it('falls back to the passenger seat when a leg has no assignment', () => {
+            // Bookings taken before seats were recorded per leg still render.
+            renderBookings([
+                {
+                    ...roundTripBooking,
+                    legs: roundTripBooking.legs.map(leg => ({ ...leg, seatAssignments: [] })),
+                },
+            ]);
+
+            const legs = within(screen.getByTestId('booking-row-202')).getAllByTestId(/^booking-leg-/);
+            expect(legs[0]).toHaveTextContent('Jane (12A)');
+        });
+
+        it('marks a released seat rather than printing the cancellation marker', () => {
+            renderBookings([
+                {
+                    ...roundTripBooking,
+                    legs: roundTripBooking.legs.map((leg, index) => ({
+                        ...leg,
+                        seatAssignments: index === 0
+                            ? [{ passengerId: 'p-1', seatNumber: 'CANCELLED-202-1' }]
+                            : leg.seatAssignments,
+                    })),
+                },
+            ]);
+
+            const legs = within(screen.getByTestId('booking-row-202')).getAllByTestId(/^booking-leg-/);
+            expect(legs[0]).toHaveTextContent('Jane (Released)');
+            expect(legs[0]).not.toHaveTextContent('CANCELLED-202-1');
+        });
     });
 });

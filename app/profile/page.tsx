@@ -27,7 +27,12 @@ export default async function ProfilePage() {
       // Read the itinerary through its legs, so a round trip needs no change
       // here beyond rendering more than one (#69).
       legs: {
-        include: { flight: true },
+        include: {
+          flight: true,
+          // The seat is held per leg, so a round trip has a different one on
+          // each; Passenger.seatNumber only ever described the outbound.
+          seatAssignments: { select: { passengerId: true, seatNumber: true } },
+        },
         orderBy: { sequence: 'asc' },
       },
       passengers: { select: safePassengerSelect },
