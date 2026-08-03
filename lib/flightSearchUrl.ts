@@ -2,12 +2,19 @@ import type { FlightRoute } from '@/lib/flightSearch';
 
 export type FlightSearchTripType = 'one-way' | 'round-trip';
 
+export const SEARCH_CABINS = ['ECONOMY', 'PREMIUM_ECONOMY', 'BUSINESS', 'FIRST'] as const;
+
+export type SearchCabin = (typeof SEARCH_CABINS)[number];
+
 export interface FlightSearchCriteria {
     from: string;
     to: string;
     departureDate: string;
     returnDate: string;
     tripType: FlightSearchTripType;
+    /// Results are priced and filtered for this cabin, so a shared link that
+    /// omitted it would show a different trip from the one it described.
+    cabinClass: SearchCabin;
 }
 
 export type FlightSearchParamRecord = Record<
@@ -42,7 +49,7 @@ export function parseFlightSearchParams(
     routes: FlightRoute[],
     bookingWindow: BookingWindow,
 ): FlightSearchCriteria | undefined {
-    if (['from', 'to', 'depart', 'return', 'trip'].some(
+    if (['from', 'to', 'depart', 'return', 'trip', 'cabin'].some(
         (name) => Array.isArray(params[name])
     )) {
         return undefined;
@@ -53,6 +60,14 @@ export function parseFlightSearchParams(
     const departureDate = singleParam(params, 'depart') ?? '';
     const returnDate = singleParam(params, 'return') ?? '';
     const tripType = singleParam(params, 'trip');
+    // An absent cabin is the default, not an invalid link: older shared URLs
+    // predate the parameter. An unrecognised one is invalid, because it would
+    // silently show a different cabin from the one the link named.
+    const cabinParam = singleParam(params, 'cabin');
+    if (cabinParam !== undefined && !SEARCH_CABINS.includes(cabinParam as SearchCabin)) {
+        return undefined;
+    }
+    const cabinClass = (cabinParam ?? 'ECONOMY') as SearchCabin;
 
     if (
         !from
@@ -75,6 +90,7 @@ export function parseFlightSearchParams(
             departureDate,
             returnDate: '',
             tripType,
+            cabinClass,
         };
     }
 
@@ -93,6 +109,7 @@ export function parseFlightSearchParams(
         departureDate,
         returnDate,
         tripType,
+        cabinClass,
     };
 }
 
@@ -112,6 +129,11 @@ export function buildFlightSearchUrl(
         params.set('return', criteria.returnDate);
     }
     params.set('trip', criteria.tripType);
+    // Economy is the default, so leaving it out keeps the common link short and
+    // keeps existing shared URLs identical to the ones this produces.
+    if (criteria.cabinClass !== 'ECONOMY') {
+        params.set('cabin', criteria.cabinClass);
+    }
 
     return `${pathname}?${params.toString()}`;
 }

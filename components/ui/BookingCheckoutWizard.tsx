@@ -27,6 +27,9 @@ interface BookingCheckoutWizardProps {
     flights: Flight[];
     /// Seats already taken on each leg, in the same order as `flights`.
     occupiedSeats: string[][];
+    /// The cabin the customer shopped, so the fare they were quoted is the one
+    /// offered here. Ignored when a leg does not operate it.
+    cabinClass?: PassengerFormState['cabinClass'];
 }
 
 interface PassengerFormState {
@@ -63,7 +66,7 @@ function createBookingRequestId(): string {
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-export default function BookingCheckoutWizard({ flights, occupiedSeats: initialOccupiedSeats }: BookingCheckoutWizardProps) {
+export default function BookingCheckoutWizard({ flights, occupiedSeats: initialOccupiedSeats, cabinClass: searchedCabin }: BookingCheckoutWizardProps) {
     // Seats are chosen one leg at a time: each flight has its own cabin layout,
     // its own seat pattern, and its own occupancy.
     const [activeLegIndex, setActiveLegIndex] = useState<number>(0);
@@ -105,7 +108,11 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
     };
     const availableCabins = (Object.keys(CABIN_FARE_PERCENT) as PassengerFormState['cabinClass'][])
         .filter(cabin => cabinRowCounts[cabin] > 0);
-    const defaultCabin = availableCabins[0];
+    // The cabin the customer shopped, when this leg operates it. Falling back
+    // rather than failing: a leg without that cabin still has to be bookable.
+    const defaultCabin = searchedCabin && availableCabins.includes(searchedCabin)
+        ? searchedCabin
+        : availableCabins[0];
 
     const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
     const [passengers, setPassengers] = useState<PassengerFormState[]>([

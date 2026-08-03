@@ -235,9 +235,12 @@ describe('shared server validation schemas', () => {
 
         expect(searchFlightsSchema.parse({
             from: ` ${'A'.repeat(120)} `, to: ' B ', departureDate: '2026-06-25'
-        })).toEqual({ from: 'A'.repeat(120), to: 'B', departureDate: '2026-06-25' });
+        })).toEqual({ from: 'A'.repeat(120), to: 'B', departureDate: '2026-06-25', cabinClass: 'ECONOMY' });
         expect(searchFlightsSchema.safeParse({ from: 'A'.repeat(121), to: '', departureDate: '06/25/2026' }).success).toBe(false);
         expect(searchFlightsSchema.safeParse({ from: 'A', to: 'B', unknown: true }).success).toBe(false);
+        // A cabin the airline does not sell must not fall through to economy.
+        expect(searchFlightsSchema.safeParse({ from: 'A', to: 'B', cabinClass: 'SLEEPER' }).success).toBe(false);
+        expect(searchFlightsSchema.parse({ from: 'A', to: 'B', cabinClass: 'FIRST' }).cabinClass).toBe('FIRST');
     });
 
     it('rejects past departures and returns before departure', () => {

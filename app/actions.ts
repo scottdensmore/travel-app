@@ -13,7 +13,13 @@ import { assertSeatAvailableForCabin, validateSeatingLayout } from '@/lib/seatLa
 import { lockFlightForUpdate } from '@/lib/flightLock';
 import { updateFlightSeatingLayout } from '@/lib/FlightSeatLayoutService';
 import { actionValidationFailure } from '@/lib/actionResult';
-import { bookingTotalCents } from '@/lib/bookingPricing';
+import {
+    bookingTotalCents,
+    calculatePassengerFareCents,
+    formatPrice,
+    parsePriceToCents,
+    type CabinClass,
+} from '@/lib/bookingPricing';
 import { bookingFlights, outboundFlight, outboundLeg } from '@/lib/bookingItinerary';
 import { buildFlightRoutes, findNearbyOperatingDates } from '@/lib/flightSearch';
 import { airportTimeZoneFor } from '@/lib/airports';
@@ -68,6 +74,7 @@ export async function searchFlightsAction(
     to: string,
     departureDateStr?: string,
     returnDateStr?: string,
+    cabinClass?: CabinClass,
 ) {
     const parsed = parseActionInput(searchFlightsSchema, {
         from,
@@ -78,16 +85,18 @@ export async function searchFlightsAction(
         returnDate: returnDateStr === '' || returnDateStr === undefined
             ? undefined
             : returnDateStr,
+        ...(cabinClass === undefined ? {} : { cabinClass }),
     });
     if (!parsed.ok) return parsed;
     ({ from, to, departureDate: departureDateStr, returnDate: returnDateStr } = parsed.data);
+    const cabin = parsed.data.cabinClass;
 
     if (!departureDateStr) {
         const flights = await prisma.flight.findMany({
             where: { from, to },
             orderBy: { departureDate: 'asc' },
         });
-        return { flights, nearbyDates: [], inbound: null };
+        return { flights: flightsForCabin(flights, cabin), nearbyDates: [], inbound: null };
     }
 
     const now = new Date();
@@ -97,9 +106,9 @@ export async function searchFlightsAction(
     // show and the error stands. The return is a second dependency, and losing
     // it degrades the result rather than discarding the outbound too (#68).
     const [outboundResult, inboundResult] = await Promise.allSettled([
-        searchOneDirection(from, to, departureDateStr, now),
+        searchOneDirection(from, to, departureDateStr, now, cabin),
         returnDateStr
-            ? searchOneDirection(to, from, returnDateStr, now)
+            ? searchOneDirection(to, from, returnDateStr, now, cabin)
             : Promise.resolve(null),
     ]);
 
@@ -120,8 +129,55 @@ export async function searchFlightsAction(
  * which is a different thing from a return date with no flights on it.
  */
 export type InboundSearch =
-    | { status: 'ok'; flights: Flight[]; nearbyDates: string[] }
+    | { status: 'ok'; flights: SearchResultFlight[]; nearbyDates: string[] }
     | { status: 'unavailable' };
+
+const CABIN_ROW_COUNT: Record<CabinClass, (flight: Flight) => number | null> = {
+    ECONOMY: flight => flight.economyRows,
+    PREMIUM_ECONOMY: flight => flight.premiumEconomyRows,
+    BUSINESS: flight => flight.businessRows,
+    FIRST: flight => flight.firstClassRows,
+};
+
+/** A search result, and whether the cabin that was searched exists on it. */
+export type SearchResultFlight = Flight & { cabinAvailable: boolean };
+
+/**
+ * Results annotated for one cabin: priced at its fare where it operates, and
+ * marked where it does not.
+ *
+ * Flights without the cabin are kept rather than filtered out. Hiding them
+ * would make a search for Business on a route with plenty of Economy seats
+ * report no flights at all, which reads as "we do not fly there" instead of
+ * "not in that cabin". They carry the fare that can actually be booked, so the
+ * price shown is never one nobody will honour.
+ *
+ * A null row count is a flight predating per-cabin layouts; those fall back to
+ * the same defaults the seat map uses, which is to assume the cabin exists.
+ */
+function flightsForCabin(flights: Flight[], cabin: CabinClass): SearchResultFlight[] {
+    return flights.map(flight => {
+        const available = (CABIN_ROW_COUNT[cabin](flight) ?? 1) > 0;
+        if (!available || cabin === 'ECONOMY') {
+            // Economy needs no arithmetic, and an unavailable cabin is quoted at
+            // the catalogue fare because that is what the customer can book.
+            return { ...flight, cabinAvailable: available };
+        }
+        try {
+            return {
+                ...flight,
+                cabinAvailable: true,
+                price: formatPrice(
+                    calculatePassengerFareCents(parsePriceToCents(flight.price), cabin)
+                ),
+            };
+        } catch {
+            // A stored fare that cannot be parsed cannot be quoted in another
+            // cabin, so the flight is offered at the fare it does have.
+            return { ...flight, cabinAvailable: false };
+        }
+    });
+}
 
 /**
  * Flights leaving `from` for `to` on one date, with nearby operating dates when
@@ -138,7 +194,8 @@ async function searchOneDirection(
     to: string,
     isoDate: string,
     now: Date,
-): Promise<{ flights: Flight[]; nearbyDates: string[] }> {
+    cabin: CabinClass,
+): Promise<{ flights: SearchResultFlight[]; nearbyDates: string[] }> {
     const startOfDay = new Date(`${isoDate}T00:00:00.000Z`);
     const endOfDay = new Date(`${isoDate}T23:59:59.999Z`);
     // A flight that has already left today is not bookable, but one later today
@@ -147,7 +204,7 @@ async function searchOneDirection(
         ? { gt: now }
         : { gte: startOfDay };
 
-    const flights = await prisma.flight.findMany({
+    const flights = flightsForCabin(await prisma.flight.findMany({
         where: {
             from,
             to,
@@ -158,7 +215,7 @@ async function searchOneDirection(
             }
         },
         orderBy: { departureDate: 'asc' },
-    });
+    }), cabin);
 
     if (flights.length > 0) return { flights, nearbyDates: [] };
 

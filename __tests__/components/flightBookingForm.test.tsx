@@ -40,6 +40,7 @@ const mockFlights = [
         returnDate: null,
         price: '$350',
         status: 'ON_TIME',
+        cabinAvailable: true,
     },
 ];
 
@@ -54,6 +55,7 @@ const mockEnhancedFlights = [
         returnDate: null,
         price: '$200',
         status: 'ON_TIME',
+        cabinAvailable: true,
     },
     {
         id: 2,
@@ -65,6 +67,7 @@ const mockEnhancedFlights = [
         returnDate: null,
         price: '$500',
         status: 'ON_TIME',
+        cabinAvailable: true,
     },
     {
         id: 3,
@@ -76,6 +79,7 @@ const mockEnhancedFlights = [
         returnDate: null,
         price: '$100',
         status: 'ON_TIME',
+        cabinAvailable: true,
     },
     {
         id: 4,
@@ -87,6 +91,7 @@ const mockEnhancedFlights = [
         returnDate: null,
         price: '$300',
         status: 'CANCELLED',
+        cabinAvailable: true,
     }
 ];
 
@@ -110,7 +115,7 @@ describe('FlightBookingForm', () => {
     it('renders origins and the destinations reachable from the default origin', () => {
         renderForm();
         expect(screen.getByText('Where Your Journey Takes Flight')).toBeInTheDocument();
-        expect(screen.getByLabelText('Cabin class')).toHaveValue('economy');
+        expect(screen.getByLabelText('Cabin class')).toHaveValue('ECONOMY');
         // Origins
         expect(screen.getByRole('option', { name: 'Seattle, USA' })).toBeInTheDocument();
         expect(screen.getByRole('option', { name: 'New York, USA' })).toBeInTheDocument();
@@ -221,6 +226,7 @@ describe('FlightBookingForm', () => {
             'Detroit, USA',
             expect.any(String),
             expect.any(String),
+            'ECONOMY',
         );
     });
 
@@ -247,6 +253,7 @@ describe('FlightBookingForm', () => {
             departureDate: '2026-07-20',
             returnDate: '2026-07-27',
             tripType: 'round-trip',
+            cabinClass: 'ECONOMY' as const,
         };
 
         renderForm(initialSearch);
@@ -261,6 +268,7 @@ describe('FlightBookingForm', () => {
                 'London, UK',
                 '2026-07-20',
                 '2026-07-27',
+                'ECONOMY',
             );
         });
         expect(await screen.findByText('Available Flights')).toBeInTheDocument();
@@ -275,6 +283,7 @@ describe('FlightBookingForm', () => {
             departureDate: '',
             returnDate: '',
             tripType: 'round-trip',
+            cabinClass: 'ECONOMY' as const,
         };
 
         renderForm(initialSearch);
@@ -287,6 +296,7 @@ describe('FlightBookingForm', () => {
                 'Detroit, USA',
                 '',
                 '',
+                'ECONOMY',
             );
         });
         expect(await screen.findByText('Available Flights')).toBeInTheDocument();
@@ -395,6 +405,7 @@ describe('FlightBookingForm', () => {
             'Detroit, USA',
             '2026-07-15',
             '2026-07-22',
+            'ECONOMY',
         );
     });
 
@@ -498,6 +509,7 @@ describe('FlightBookingForm', () => {
             'Tokyo, Japan',
             '2026-07-16',
             '2026-07-23',
+            'ECONOMY',
         );
         expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
@@ -547,8 +559,8 @@ describe('FlightBookingForm', () => {
         const { container } = renderForm();
 
         const classSelect = container.querySelector('#class') as HTMLSelectElement;
-        fireEvent.change(classSelect, { target: { value: 'business' } });
-        expect(classSelect.value).toBe('business');
+        fireEvent.change(classSelect, { target: { value: 'BUSINESS' } });
+        expect(classSelect.value).toBe('BUSINESS');
 
         const departInput = container.querySelector('#depart') as HTMLInputElement;
         fireEvent.change(departInput, { target: { value: '2026-07-20' } });
@@ -651,6 +663,7 @@ describe('FlightBookingForm', () => {
                     returnDate: null,
                     price: '$275',
                     status: 'ON_TIME',
+                    cabinAvailable: true,
                 }],
                 nearbyDates: [],
             },
@@ -664,6 +677,78 @@ describe('FlightBookingForm', () => {
         });
         expect(screen.getByText('GA900')).toBeInTheDocument();
         expect(screen.getByText('$275')).toBeInTheDocument();
+    });
+
+    describe('Shopping a cabin', () => {
+        const businessFlights = [
+            { ...mockFlights[0], id: 1, flightNumber: 'CA101', price: '$700', cabinAvailable: true },
+            { ...mockFlights[0], id: 2, flightNumber: 'CA202', price: '$350', cabinAvailable: false },
+        ];
+
+        it('sends the chosen cabin to the search', async () => {
+            mockSearch.mockResolvedValue(searchSuccess(businessFlights));
+            renderForm();
+
+            fireEvent.change(screen.getByLabelText('Cabin class'), { target: { value: 'BUSINESS' } });
+            fireEvent.click(screen.getByText('Find your trip'));
+
+            await waitFor(() => expect(mockSearch).toHaveBeenCalledWith(
+                'Seattle, USA', 'Detroit, USA', expect.any(String), expect.any(String), 'BUSINESS',
+            ));
+        });
+
+        it('marks the flights that do not operate that cabin', async () => {
+            mockSearch.mockResolvedValue(searchSuccess(businessFlights));
+            renderForm();
+
+            fireEvent.change(screen.getByLabelText('Cabin class'), { target: { value: 'BUSINESS' } });
+            fireEvent.click(screen.getByText('Find your trip'));
+
+            await waitFor(() => expect(screen.getByText('CA101')).toBeInTheDocument());
+            // Both are offered; only one is marked. Hiding the second would
+            // report no flights on a route that has seats.
+            expect(screen.getByText('CA202')).toBeInTheDocument();
+            const notes = screen.getAllByTestId('cabin-unavailable');
+            expect(notes).toHaveLength(1);
+            expect(notes[0]).toHaveTextContent('No Business cabin');
+            expect(notes[0]).toHaveTextContent('Economy fare shown');
+        });
+
+        it('clears results the moment the cabin changes, so no stale fare can be booked', async () => {
+            // Seeded with real results: an empty list is the one case the old
+            // clearing helper handled, so testing with it proved nothing.
+            mockSearch.mockResolvedValue(searchSuccess(businessFlights));
+            renderForm();
+
+            fireEvent.click(screen.getByText('Find your trip'));
+            await waitFor(() => expect(screen.getByText('CA101')).toBeInTheDocument());
+            expect(screen.getAllByRole('link', { name: 'Book Now' })).not.toHaveLength(0);
+
+            fireEvent.change(screen.getByLabelText('Cabin class'), { target: { value: 'FIRST' } });
+
+            // The checkout link switches cabin immediately, so leaving the cards
+            // up would offer a First booking at the fare shown for economy.
+            expect(screen.queryByText('CA101')).not.toBeInTheDocument();
+            expect(screen.queryByText('Available Flights')).not.toBeInTheDocument();
+            expect(screen.queryAllByRole('link', { name: 'Book Now' })).toHaveLength(0);
+        });
+
+        it('restores a shared cabin from the URL', async () => {
+            mockSearch.mockResolvedValue(searchSuccess(businessFlights));
+            renderForm({
+                from: 'Seattle, USA',
+                to: 'Detroit, USA',
+                departureDate: '2026-07-15',
+                returnDate: '2026-07-22',
+                tripType: 'round-trip',
+                cabinClass: 'BUSINESS',
+            });
+
+            expect(screen.getByLabelText('Cabin class')).toHaveValue('BUSINESS');
+            await waitFor(() => expect(mockSearch).toHaveBeenCalledWith(
+                'Seattle, USA', 'Detroit, USA', '2026-07-15', '2026-07-22', 'BUSINESS',
+            ));
+        });
     });
 
     it('shows no return date on an outbound card', async () => {
@@ -714,6 +799,7 @@ describe('FlightBookingForm', () => {
                         returnDate: null,
                         price: '$275',
                         status: 'ON_TIME',
+                        cabinAvailable: true,
                     },
                     {
                         id: 100,
@@ -725,6 +811,7 @@ describe('FlightBookingForm', () => {
                         returnDate: null,
                         price: '$310',
                         status: 'ON_TIME',
+                        cabinAvailable: true,
                     },
                 ],
                 nearbyDates: [],
@@ -742,7 +829,7 @@ describe('FlightBookingForm', () => {
             await search();
 
             // A round trip cannot be booked one card at a time.
-            expect(screen.queryByRole('link', { name: 'Book Now' })).not.toBeInTheDocument();
+            expect(screen.queryAllByRole('link', { name: 'Book Now' })).toHaveLength(0);
             expect(screen.getAllByRole('button', { name: /Select flight/ }).length).toBeGreaterThan(1);
         });
 
@@ -893,6 +980,7 @@ describe('FlightBookingForm', () => {
                     returnDate: null,
                     price: '$275',
                     status: 'ON_TIME',
+                    cabinAvailable: true,
                 }]),
             });
             fireEvent.click(screen.getByRole('button', { name: 'Retry return flights' }));
