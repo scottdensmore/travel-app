@@ -745,7 +745,7 @@ describe('FlightBookingForm', () => {
                 departureDate: '2026-07-15',
                 returnDate: '2026-07-22',
                 tripType: 'round-trip',
-                cabinClass: 'BUSINESS',
+                cabinClass: 'BUSINESS' as const,
             });
 
             expect(screen.getByLabelText('Cabin class')).toHaveValue('BUSINESS');

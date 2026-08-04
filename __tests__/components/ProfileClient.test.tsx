@@ -35,16 +35,25 @@ const sampleBookings = [
         status: 'CONFIRMED',
         totalPriceCents: 35000,
         flightId: 201,
-        legs: [{ id: 501, sequence: 1, flight: {
-            id: 201,
-            flightNumber: 'GA101',
-            airline: 'Gemini Airways',
-            from: 'Seattle, USA',
-            to: 'Detroit, USA',
-            departureDate: '2026-06-15T08:00:00Z',
-            returnDate: null,
-            priceCents: 35000,
-        } }],
+        legs: [{
+            id: 501,
+            sequence: 1,
+            flight: {
+                id: 201,
+                flightNumber: 'GA101',
+                airline: 'Gemini Airways',
+                from: 'Seattle, USA',
+                to: 'Detroit, USA',
+                departureDate: '2026-06-15T08:00:00Z',
+                returnDate: null,
+                priceCents: 35000,
+            },
+            // Where the traveller sits on this leg, and the cabin they hold
+            // there. The traveller record carries neither (#137).
+            seatAssignments: [
+                { passengerId: 'p-1', seatNumber: '12A', cabinClass: 'ECONOMY' }
+            ],
+        }],
         passengers: [
             {
                 id: 'p-1',
@@ -53,8 +62,6 @@ const sampleBookings = [
                 dateOfBirth: '1990-01-01',
                 passportNumber: 'P12345',
                 gender: 'Female',
-                seatNumber: '12A',
-                cabinClass: 'ECONOMY'
             }
         ]
     }

@@ -141,10 +141,12 @@ describe('BookingCheckoutWizard', () => {
         mockBookFlightAction.mockResolvedValue({
             id: 12345,
             totalPriceCents: 10000,
+            // The booking reports one seat per leg, in leg order; the cabin
+            // comes from the request rather than the traveller row (#137).
             passengers: [{
                 firstName: 'Robert',
                 lastName: 'Jones',
-                seatNumber: '11C',
+                seatNumbers: ['11C'],
                 cabinClass: 'ECONOMY'
             }]
         });
@@ -235,7 +237,7 @@ describe('BookingCheckoutWizard', () => {
         let resolveBooking!: (value: {
             id: number;
             totalPriceCents: number | null;
-            passengers: Array<{ firstName: string; lastName: string; seatNumber: string; cabinClass: string }>;
+            passengers: Array<{ firstName: string; lastName: string; seatNumbers: string[]; cabinClass: string }>;
         }) => void;
         mockBookFlightAction.mockImplementation(() => new Promise((resolve) => {
             resolveBooking = resolve;
@@ -261,7 +263,7 @@ describe('BookingCheckoutWizard', () => {
         resolveBooking({
             id: 12345,
             totalPriceCents: 10000,
-            passengers: [{ firstName: 'Bob', lastName: 'Jones', seatNumber: '11C', cabinClass: 'ECONOMY' }]
+            passengers: [{ firstName: 'Bob', lastName: 'Jones', seatNumbers: ['11C'], cabinClass: 'ECONOMY' }]
         });
         await waitFor(() => expect(screen.getByText('Booking Confirmed!')).toBeInTheDocument());
     });
@@ -661,6 +663,47 @@ describe('BookingCheckoutWizard', () => {
                     idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/i)
                 });
             });
+        });
+
+        it('gives each leg its own boarding pass carrying that leg’s seat', async () => {
+            // The boarding pass used to print a single seat for the whole
+            // itinerary, which was the outbound seat labelled as the seat for
+            // the trip. A return traveller read the wrong seat off their own
+            // e-ticket (#137).
+            mockBookFlightAction.mockResolvedValue({
+                id: 900,
+                totalPriceCents: 25000,
+                passengers: [{
+                    firstName: 'Ada',
+                    lastName: 'Lovelace',
+                    seatNumbers: ['11A', '12C'],
+                    cabinClass: 'ECONOMY',
+                }],
+            });
+
+            const { container } = renderRoundTrip();
+            fillTraveler(container);
+            fireEvent.click(screen.getByText('Select Seats →'));
+
+            fireEvent.click(screen.getByTitle('Select Seat 11A'));
+            fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
+            fireEvent.click(screen.getByTitle('Select Seat 12C'));
+
+            fireEvent.click(screen.getByText('Review Booking →'));
+            fireEvent.click(screen.getByRole('button', { name: /Confirm \$250 booking/i }));
+
+            await waitFor(() => {
+                expect(screen.getByText('Booking Confirmed!')).toBeInTheDocument();
+            });
+
+            // A pass per leg: each names its own flight and carries the seat
+            // held on it, rather than one card listing the whole itinerary.
+            expect(screen.getByText('GA404')).toBeInTheDocument();
+            expect(screen.getByText('GA405')).toBeInTheDocument();
+            expect(screen.getByText('11A')).toBeInTheDocument();
+            expect(screen.getByText('12C')).toBeInTheDocument();
+            // The seats must not be pooled onto a single card.
+            expect(screen.queryByText('11A, 12C')).not.toBeInTheDocument();
         });
 
         it('clears every leg when the cabin changes, not just the visible one', () => {

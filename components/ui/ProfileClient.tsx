@@ -31,13 +31,12 @@ interface Passenger {
     firstName: string;
     lastName: string;
     gender: string;
-    seatNumber: string;
-    cabinClass: string;
 }
 
 interface SeatAssignment {
     passengerId: string;
     seatNumber: string;
+    cabinClass: string;
 }
 
 interface BookingLeg {
@@ -124,6 +123,10 @@ export default function ProfileClient({
     const seatKey = (legId: number, passengerId: string) => `${legId}:${passengerId}`;
     const seatFor = (passengerId: string) =>
         activeLeg ? passengerSeats[seatKey(activeLeg.id, passengerId)] ?? '' : '';
+    /** The cabin held on the leg being looked at, which is where it is recorded. */
+    const cabinFor = (passengerId: string) =>
+        activeLeg?.seatAssignments?.find(seat => seat.passengerId === passengerId)?.cabinClass
+        ?? 'ECONOMY';
 
     useEffect(() => {
         if (!selectedBooking) return;
@@ -143,10 +146,11 @@ export default function ProfileClient({
         const initial: { [key: string]: string } = {};
         for (const leg of legs) {
             for (const passenger of selectedBooking.passengers) {
-                const held = leg.seatAssignments?.find(seat => seat.passengerId === passenger.id)?.seatNumber;
-                // Bookings taken before seats were held per leg only have the
-                // passenger's own seat, which described the outbound.
-                initial[`${leg.id}:${passenger.id}`] = held ?? (leg.id === legs[0].id ? passenger.seatNumber : '');
+                // The assignment is the only record of where someone sits. The
+                // fallback here seeded the outbound seat onto every other leg,
+                // so a return seat opened pre-filled with the wrong one (#137).
+                initial[`${leg.id}:${passenger.id}`] =
+                    leg.seatAssignments?.find(seat => seat.passengerId === passenger.id)?.seatNumber ?? '';
             }
         }
         setPassengerSeats(initial);
@@ -613,7 +617,7 @@ export default function ProfileClient({
                                             key={p.id}
                                             onClick={() => setActivePassengerIdx(idx)}
                                             aria-pressed={activePassengerIdx === idx}
-                                            aria-label={`${p.firstName} ${p.lastName}, Seat: ${seatFor(p.id) || 'None'}, ${p.cabinClass}`}
+                                            aria-label={`${p.firstName} ${p.lastName}, Seat: ${seatFor(p.id) || 'None'}, ${cabinFor(p.id)}`}
                                             style={{
                                                 width: '100%',
                                                 color: 'inherit',
@@ -627,7 +631,7 @@ export default function ProfileClient({
                                         >
                                             <div style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{p.firstName} {p.lastName}</div>
                                             <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>
-                                                Seat: <span style={{ color: '#34d399', fontWeight: 'bold' }}>{seatFor(p.id) || 'None'}</span> ({p.cabinClass})
+                                                Seat: <span style={{ color: '#34d399', fontWeight: 'bold' }}>{seatFor(p.id) || 'None'}</span> ({cabinFor(p.id)})
                                             </div>
                                         </button>
                                     ))}
@@ -638,7 +642,7 @@ export default function ProfileClient({
                             {(() => {
                                 const parsedPattern = outboundFlight(selectedBooking)?.seatPattern || "ABC-DEF";
                                 const activeCabinRows = getRowsForClass(
-                                    selectedBooking.passengers[activePassengerIdx]?.cabinClass || 'ECONOMY'
+                                    cabinFor(selectedBooking.passengers[activePassengerIdx]?.id ?? '')
                                 );
                                 return (
                                     <div style={{ flex: '2 1 300px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>

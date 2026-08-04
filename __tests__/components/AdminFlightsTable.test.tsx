@@ -57,7 +57,12 @@ const mockFlights = [
                         firstName: 'Jane',
                         lastName: 'Smith',
                         gender: 'F',
-                        seatNumber: 'CANCELLED-12B',
+                        // A cancelled booking's seat is parked under a
+                        // placeholder, which the manifest reads as "Released".
+                        seatNumber: 'CANCELLED-p2',
+                        // A different cabin from the other traveller: the
+                        // manifest lists the cabin held on this leg, per
+                        // traveller, rather than one cabin for the flight.
                         cabinClass: 'BUSINESS',
                     }
                 ]

@@ -9,6 +9,8 @@ interface Passenger {
     firstName: string;
     lastName: string;
     gender: string;
+    /// Added by passengersSeatedOnLeg: where this traveller sits on the leg
+    /// being listed, which is a property of the assignment, not the person.
     seatNumber: string;
     cabinClass: string;
 }

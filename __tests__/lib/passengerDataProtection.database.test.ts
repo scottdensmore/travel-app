@@ -55,12 +55,15 @@ describe('passenger identity data in PostgreSQL', () => {
             }],
         });
         bookingId = result.id;
+        // Identity and nothing more, plus the seats held on each leg and the
+        // cabin they were bought in. No encrypted field, and no date of birth
+        // or passport number in any form.
         expect(result.passengers[0]).toEqual({
             id: expect.any(String),
             firstName: 'Ada',
             lastName: 'Lovelace',
             gender: 'Female',
-            seatNumber: '11A',
+            seatNumbers: ['11A'],
             cabinClass: 'ECONOMY',
         });
 

@@ -1,31 +1,5 @@
 /** @jest-environment node */
-import fs from 'fs';
-import path from 'path';
 import { prisma } from '@/lib/prisma';
-
-const migrationPath = path.resolve(
-    process.cwd(),
-    'prisma/migrations/20260801180000_add_seat_assignments/migration.sql'
-);
-
-/**
- * The backfill statement, taken from the migration rather than restated here,
- * scoped to one booking. Unscoped it would race other database test files that
- * create bookings concurrently.
- */
-function backfillStatement(bookingId: number): string {
-    const statement = fs.readFileSync(migrationPath, 'utf8')
-        .split(';')
-        .map(part => part
-            .split(/\r?\n/)
-            .filter(line => !line.trim().startsWith('--'))
-            .join('\n')
-            .trim())
-        .find(part => part.startsWith('INSERT INTO "SeatAssignment"'));
-
-    if (!statement) throw new Error('Backfill statement not found in the migration.');
-    return `${statement} WHERE passenger."bookingId" = ${bookingId}`;
-}
 
 const created = { flightIds: [] as number[], bookingIds: [] as number[] };
 
@@ -44,8 +18,11 @@ async function createFlight(suffix: string) {
     return flight;
 }
 
-/** A booking shaped the way one looked before seat assignments existed. */
-async function createLegacyBooking(flightId: number, seatNumber: string) {
+/**
+ * A booking with one traveller and one leg, carrying no seat of its own: where
+ * somebody sits is a SeatAssignment, which is what these tests exercise (#137).
+ */
+async function createBooking(flightId: number) {
     const booking = await prisma.booking.create({
         data: {
             legs: { create: [{ sequence: 1, flightId }] },
@@ -54,9 +31,6 @@ async function createLegacyBooking(flightId: number, seatNumber: string) {
                     firstName: 'Ada',
                     lastName: 'Lovelace',
                     gender: 'Female',
-                    seatNumber,
-                    cabinClass: 'ECONOMY',
-                    flightId,
                     // A traveller whose sensitive data has already been purged
                     // under the retention policy, so this fixture needs no
                     // encryption keys. Passenger_sensitive_data_state_check
@@ -78,30 +52,12 @@ describe('seat assignments in PostgreSQL', () => {
         await prisma.$disconnect();
     });
 
-    it('gives every existing passenger a seat assignment on their booking leg', async () => {
-        const flight = await createFlight(`BACKFILL-${Date.now()}`);
-        const booking = await createLegacyBooking(flight.id, '12A');
-
-        await prisma.$executeRawUnsafe(backfillStatement(booking.id));
-
-        const assignments = await prisma.seatAssignment.findMany({
-            where: { passengerId: booking.passengers[0].id },
-        });
-        expect(assignments).toEqual([
-            expect.objectContaining({
-                legId: booking.legs[0].id,
-                flightId: flight.id,
-                seatNumber: '12A',
-                cabinClass: 'ECONOMY',
-            }),
-        ]);
-    });
-
     it('still refuses the same seat on the same flight to a second booking', async () => {
-        // This is the guard that prevents two customers acquiring one seat. It
-        // has moved to this table, so it has to hold here.
+        // This is the guard that prevents two customers acquiring one seat.
+        // Dropping Passenger's unique seat index left this table holding it
+        // alone (#137), so it has to hold here.
         const flight = await createFlight(`CONTESTED-${Date.now()}`);
-        const first = await createLegacyBooking(flight.id, '3C');
+        const first = await createBooking(flight.id);
         const second = await prisma.booking.create({
             data: { legs: { create: [{ sequence: 1, flightId: flight.id }] } },
             include: { legs: true },
@@ -121,8 +77,7 @@ describe('seat assignments in PostgreSQL', () => {
         const rival = await prisma.passenger.create({
             data: {
                 firstName: 'Grace', lastName: 'Hopper', gender: 'Female',
-                seatNumber: '3D', cabinClass: 'ECONOMY',
-                flightId: flight.id, bookingId: second.id,
+                bookingId: second.id,
                 sensitiveDataDeletedAt: new Date(),
             },
         });
@@ -143,7 +98,7 @@ describe('seat assignments in PostgreSQL', () => {
         // expressed; the composite key is what stops it drifting from the leg.
         const flight = await createFlight(`CONSISTENT-${Date.now()}`);
         const other = await createFlight(`OTHER-${Date.now()}`);
-        const booking = await createLegacyBooking(flight.id, '9F');
+        const booking = await createBooking(flight.id);
 
         await expect(prisma.seatAssignment.create({
             data: {
@@ -158,7 +113,7 @@ describe('seat assignments in PostgreSQL', () => {
 
     it('seats a traveller only once on a given leg', async () => {
         const flight = await createFlight(`ONCE-${Date.now()}`);
-        const booking = await createLegacyBooking(flight.id, '7B');
+        const booking = await createBooking(flight.id);
         const passengerId = booking.passengers[0].id;
         const legId = booking.legs[0].id;
 
@@ -173,7 +128,7 @@ describe('seat assignments in PostgreSQL', () => {
 
     it('removes seat assignments when the booking is deleted', async () => {
         const flight = await createFlight(`CASCADE-${Date.now()}`);
-        const booking = await createLegacyBooking(flight.id, '2A');
+        const booking = await createBooking(flight.id);
         await prisma.seatAssignment.create({
             data: {
                 passengerId: booking.passengers[0].id,
