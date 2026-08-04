@@ -123,18 +123,13 @@ model Passenger {
   sensitiveDataExpiresAt  DateTime?
   sensitiveDataDeletedAt  DateTime?
   gender                  String
-  seatNumber              String
-  cabinClass              String
 
   bookingId Int
   booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
-  flightId Int
-  flight   Flight @relation(fields: [flightId], references: [id], onDelete: Cascade)
-
+  /// Where this traveller sits: one per leg. A traveller is a person; a seat
+  /// belongs to a flight, so the two are separate records (#137).
   seatAssignments SeatAssignment[]
-
-  @@unique([flightId, seatNumber])
   @@index([sensitiveDataExpiresAt])
 }
 
@@ -155,7 +150,6 @@ model Flight {
   economyRows        Int?
   seatPattern        String?
 
-  passengers      Passenger[]
   itineraryLegs   ItineraryLeg[]
   seatAssignments SeatAssignment[]
 

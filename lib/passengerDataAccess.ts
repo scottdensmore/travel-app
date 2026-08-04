@@ -5,6 +5,4 @@ export const safePassengerSelect = {
     firstName: true,
     lastName: true,
     gender: true,
-    seatNumber: true,
-    cabinClass: true,
 } satisfies Prisma.PassengerSelect;

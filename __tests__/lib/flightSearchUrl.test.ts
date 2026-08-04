@@ -149,7 +149,7 @@ describe('buildFlightSearchUrl', () => {
                 departureDate: '2026-07-15',
                 returnDate: '',
                 tripType: 'one-way',
-                cabinClass: 'ECONOMY',
+                cabinClass: 'ECONOMY' as const,
             }, '/');
             expect(url).not.toContain('cabin=');
         });

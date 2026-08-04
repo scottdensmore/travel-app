@@ -331,15 +331,17 @@ test.describe('Admin Control Journey', () => {
     expect(raceResults.filter(result => result.status === 'fulfilled')).toHaveLength(1);
     const raceState = await prisma.flight.findUniqueOrThrow({
       where: { id: raceFlight.id },
-      include: { passengers: true }
+      // Seats held on the flight, from whichever booking holds them: a flight
+      // no longer relates to travellers directly (#137).
+      include: { seatAssignments: true }
     });
     if (raceResults[0].status === 'fulfilled') {
       expect(raceState.firstClassRows).toBe(4);
-      expect(raceState.passengers).toHaveLength(0);
+      expect(raceState.seatAssignments).toHaveLength(0);
     } else {
       expect(raceState.firstClassRows).toBe(3);
-      expect(raceState.passengers).toHaveLength(1);
-      expect(raceState.passengers[0]).toMatchObject({ seatNumber: '11A', cabinClass: 'ECONOMY' });
+      expect(raceState.seatAssignments).toHaveLength(1);
+      expect(raceState.seatAssignments[0]).toMatchObject({ seatNumber: '11A', cabinClass: 'ECONOMY' });
     }
   });
 });

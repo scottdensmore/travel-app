@@ -53,7 +53,6 @@ const sampleBookings = [
                 dateOfBirth: '1990-01-01',
                 passportNumber: 'P12345',
                 gender: 'Female',
-                seatNumber: '12A',
                 cabinClass: 'ECONOMY'
             }
         ]

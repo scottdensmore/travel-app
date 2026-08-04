@@ -38,27 +38,40 @@ function passengerRequestSignature(passenger: PassengerInput): string {
     ]);
 }
 
-interface ProtectedPassenger extends Omit<PassengerInput, 'dateOfBirth' | 'passportNumber' | 'seatNumbers'> {
+interface ProtectedPassenger extends Omit<PassengerInput, 'dateOfBirth' | 'passportNumber' | 'seatNumbers' | 'cabinClass'> {
     id: string;
     dateOfBirthEncrypted: string | null;
     passportNumberEncrypted: string | null;
-    seatAssignments?: Array<{ seatNumber: string; leg: { sequence: number } }>;
+    seatAssignments?: Array<{
+        seatNumber: string;
+        cabinClass: string;
+        leg: { sequence: number };
+    }>;
+}
+
+/** A traveller's seats in leg order, which is how a booking reports them. */
+function seatNumbersInLegOrder(
+    passenger: { seatAssignments?: Array<{ seatNumber: string; leg: { sequence: number } }> }
+): string[] {
+    return [...(passenger.seatAssignments ?? [])]
+        .sort((left, right) => left.leg.sequence - right.leg.sequence)
+        .map(assignment => assignment.seatNumber);
 }
 
 function protectedPassengerRequestSignature(passenger: ProtectedPassenger): string {
     if (!passenger.dateOfBirthEncrypted || !passenger.passportNumberEncrypted) {
         throw new Error('Passenger identity data is no longer available.');
     }
-    // Seats come from the assignments, in leg order. Passenger carries only the
-    // outbound seat, so comparing that alone would treat a retry with a
-    // different return seat as the same request.
-    const seatNumbers = [...(passenger.seatAssignments ?? [])]
-        .sort((left, right) => left.leg.sequence - right.leg.sequence)
-        .map(assignment => assignment.seatNumber);
+    // Seats come from the assignments, in leg order, so a retry with a
+    // different return seat is a different request.
+    const seatNumbers = seatNumbersInLegOrder(passenger);
 
     return passengerRequestSignature({
         ...passenger,
         seatNumbers,
+        // The cabin is recorded per leg; a booking holds one cabin, so the
+        // first assignment answers for the request.
+        cabinClass: passenger.seatAssignments?.[0]?.cabinClass ?? 'ECONOMY',
         dateOfBirth: decryptPassengerData(passenger.dateOfBirthEncrypted, {
             passengerId: passenger.id,
             field: 'dateOfBirth',
@@ -132,6 +145,7 @@ export default class FlightBookingService {
                             seatAssignments: {
                                 select: {
                                     seatNumber: true,
+                                    cabinClass: true,
                                     leg: { select: { sequence: true } },
                                 },
                             },
@@ -150,13 +164,14 @@ export default class FlightBookingService {
                 }
                 return {
                     ...existingRequest,
+                    // Seats come from the assignments, which carry one per leg;
+                    // the traveller record no longer holds a seat at all (#137).
                     passengers: existingRequest.passengers.map(passenger => ({
                         id: passenger.id,
                         firstName: passenger.firstName,
                         lastName: passenger.lastName,
                         gender: passenger.gender,
-                        seatNumber: passenger.seatNumber,
-                        cabinClass: passenger.cabinClass,
+                        seatNumbers: seatNumbersInLegOrder(passenger),
                     })),
                     wasCreated: false,
                 };
@@ -233,11 +248,8 @@ export default class FlightBookingService {
                     }),
                     sensitiveDataExpiresAt,
                     gender: passenger.gender,
-                    // Passenger still carries one seat and one flight while those
-                    // columns are being retired; they describe the outbound leg.
-                    seatNumber: passenger.seatNumbers[0],
-                    cabinClass: passenger.cabinClass,
-                    flightId: outboundFlightId,
+                    // A traveller is a person, not a seat. Where they sit is a
+                    // SeatAssignment per leg, written below (#137).
                 };
             });
 
@@ -258,7 +270,17 @@ export default class FlightBookingService {
                     }
                 },
                 include: {
-                    passengers: { select: safePassengerSelect },
+                    passengers: {
+                        select: {
+                            ...safePassengerSelect,
+                            // The seats a confirmation prints: one per leg, in
+                            // leg order, from the assignment rather than the
+                            // traveller record (#137).
+                            seatAssignments: {
+                                select: { seatNumber: true, leg: { select: { sequence: true } } },
+                            },
+                        },
+                    },
                     legs: { orderBy: { sequence: 'asc' } }
                 }
             });
@@ -273,12 +295,27 @@ export default class FlightBookingService {
                         legId: leg.id,
                         flightId: leg.flightId,
                         seatNumber: passengers[passengerIndex].seatNumbers[legIndex],
-                        cabinClass: passenger.cabinClass,
+                        // The cabin belongs to the seat, and the request is
+                        // what says which cabin was bought.
+                        cabinClass: passengers[passengerIndex].cabinClass,
                     }))
                 )),
             });
 
-            return { ...booking, wasCreated: true };
+            return {
+                ...booking,
+                // From the request, not from the include: the assignments are
+                // written after the booking, so the loaded relation is empty
+                // here and a confirmation would print no seat at all.
+                passengers: booking.passengers.map((passenger, index) => ({
+                    id: passenger.id,
+                    firstName: passenger.firstName,
+                    lastName: passenger.lastName,
+                    gender: passenger.gender,
+                    seatNumbers: passengers[index].seatNumbers,
+                })),
+                wasCreated: true,
+            };
         });
 
         return savedBooking;

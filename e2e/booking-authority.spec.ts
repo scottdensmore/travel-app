@@ -16,7 +16,13 @@ test.describe('Authoritative booking persistence', () => {
     const flightIds = flights.map(flight => flight.id);
 
     await prisma.passenger.deleteMany({
-      where: { OR: [{ flightId: { in: flightIds } }, { booking: { userId: { in: userIds } } }] }
+      // A traveller reaches a flight through their booking's legs now (#137).
+      where: {
+        OR: [
+          { booking: { legs: { some: { flightId: { in: flightIds } } } } },
+          { booking: { userId: { in: userIds } } },
+        ],
+      }
     });
     await prisma.booking.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.flight.deleteMany({ where: { id: { in: flightIds } } });
@@ -68,7 +74,11 @@ test.describe('Authoritative booking persistence', () => {
 
     expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
     expect(results.filter(result => result.status === 'rejected')).toHaveLength(1);
-    expect(await prisma.passenger.count({ where: { flightId: flight.id, seatNumber: '1A' } })).toBe(1);
+    // Exactly one seat assignment holds 1A on this flight: SeatAssignment's
+    // unique index is now the sole guard against selling a seat twice (#137).
+    expect(await prisma.seatAssignment.count({
+        where: { flightId: flight.id, seatNumber: '1A' },
+    })).toBe(1);
     const persisted = await prisma.booking.findMany({ where: { legs: { some: { flightId: flight.id } } } });
     expect(persisted).toHaveLength(1);
     expect(persisted[0]).toMatchObject({ totalPriceCents: 12345, paymentIntentId: null });

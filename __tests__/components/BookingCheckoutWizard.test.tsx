@@ -144,7 +144,6 @@ describe('BookingCheckoutWizard', () => {
             passengers: [{
                 firstName: 'Robert',
                 lastName: 'Jones',
-                seatNumber: '11C',
                 cabinClass: 'ECONOMY'
             }]
         });

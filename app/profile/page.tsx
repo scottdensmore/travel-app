@@ -37,7 +37,9 @@ export default async function ProfilePage() {
           flight: true,
           // The seat is held per leg, so a round trip has a different one on
           // each; Passenger.seatNumber only ever described the outbound.
-          seatAssignments: { select: { passengerId: true, seatNumber: true } },
+          seatAssignments: {
+            select: { passengerId: true, seatNumber: true, cabinClass: true },
+          },
         },
         orderBy: { sequence: 'asc' },
       },

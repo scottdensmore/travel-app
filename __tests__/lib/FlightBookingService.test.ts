@@ -78,7 +78,6 @@ describe('FlightBookingService', () => {
                 {
                     firstName: 'Alice',
                     lastName: 'Smith',
-                    seatNumber: '4C',
                     cabinClass: 'BUSINESS'
                 }
             ]
@@ -159,8 +158,6 @@ describe('FlightBookingService', () => {
                             sensitiveDataExpiresAt: new Date('2099-01-31T10:00:00.000Z'),
                             gender: 'Female',
                             // Passenger keeps one seat while that column is retired.
-                            seatNumber: '4C',
-                            cabinClass: 'BUSINESS',
                             flightId: 7
                         }
                     ]
@@ -179,8 +176,6 @@ describe('FlightBookingService', () => {
                 passengerId: expect.any(String),
                 legId: 55,
                 flightId: 7,
-                seatNumber: '4C',
-                cabinClass: 'BUSINESS',
             }],
         });
 
@@ -231,8 +226,6 @@ describe('FlightBookingService', () => {
                 firstName: 'Alice',
                 lastName: 'Smith',
                 gender: 'Female',
-                seatNumber: '11A',
-                cabinClass: 'ECONOMY',
             }],
             wasCreated: false,
         });
@@ -395,7 +388,7 @@ describe('FlightBookingService', () => {
                 dateOfBirth: '1995-05-15',
                 passportNumber: 'US123456',
                 gender: 'Female',
-                seatNumbers: ['12A'], // Conflict!
+                seatNumbers: ['12A'],
                 cabinClass: 'ECONOMY'
             }
         ];

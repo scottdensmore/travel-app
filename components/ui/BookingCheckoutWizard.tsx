@@ -46,7 +46,8 @@ interface PassengerFormState {
 interface ConfirmedPassenger {
     firstName: string;
     lastName: string;
-    seatNumber: string;
+    /// One seat per leg, in itinerary order.
+    seatNumbers: string[];
     cabinClass: string;
 }
 
@@ -576,11 +577,15 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
             setBookingResult({
                 id: result.id,
                 totalPriceCents: result.totalPriceCents,
-                passengers: result.passengers.map(passenger => ({
+                // The confirmation prints the seat held on each leg, in leg
+                // order, rather than one seat for the whole trip (#137).
+                passengers: result.passengers.map((passenger: {
+                    firstName: string; lastName: string; seatNumbers: string[];
+                }, index: number) => ({
                     firstName: passenger.firstName,
                     lastName: passenger.lastName,
-                    seatNumber: passenger.seatNumber,
-                    cabinClass: passenger.cabinClass
+                    seatNumbers: passenger.seatNumbers,
+                    cabinClass: passengers[index]?.cabinClass ?? 'ECONOMY',
                 }))
             });
             setStep(4);
@@ -1264,8 +1269,18 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                                             <div style={{ fontSize: '0.95rem', fontWeight: 'bold', marginTop: '3px', color: '#a78bfa' }}>{flight.flightNumber}</div>
                                         </div>
                                         <div>
-                                            <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Seat</div>
-                                            <div style={{ fontSize: '1.1rem', fontWeight: 'bold', marginTop: '3px', color: '#34d399' }}>{p.seatNumber}</div>
+                                            <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>
+                                                {p.seatNumbers.length > 1 ? 'Seats' : 'Seat'}
+                                            </div>
+                                            {/*
+                                              * Every leg's seat. A round trip
+                                              * printed one, which was the
+                                              * outbound seat labelled as the
+                                              * seat for the whole trip (#137).
+                                              */}
+                                            <div style={{ fontSize: '1.1rem', fontWeight: 'bold', marginTop: '3px', color: '#34d399' }}>
+                                                {p.seatNumbers.join(', ')}
+                                            </div>
                                         </div>
                                         <div>
                                             <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Date</div>

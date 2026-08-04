@@ -417,23 +417,16 @@ export async function cancelBookingAction(bookingId: number) {
 
         const passengers = await tx.passenger.findMany({
             where: { bookingId },
-            select: { id: true, seatNumber: true },
+            select: { id: true },
         });
-        
+
         for (const passenger of passengers) {
-            // The seat is released by renaming it, so the unique constraint stops
-            // holding it. Both tables carry that constraint during the expand
-            // phase, so both have to be released or the seat is stranded:
-            // occupancy checks read Passenger and would see it free, while
-            // SeatAssignment would still refuse the next booking of it.
-            const releasedSeat = `CANCELLED-${passenger.id}`;
-            await tx.passenger.update({
-                where: { id: passenger.id },
-                data: { seatNumber: releasedSeat }
-            });
+            // The seat is released by renaming it, so the unique index on
+            // SeatAssignment stops holding it. That index is now the only guard
+            // against selling a seat twice, so releasing it there releases it.
             await tx.seatAssignment.updateMany({
                 where: { passengerId: passenger.id },
-                data: { seatNumber: releasedSeat }
+                data: { seatNumber: `CANCELLED-${passenger.id}` }
             });
         }
 
@@ -581,17 +574,6 @@ export async function changeBookingSeatsAction(
         for (const change of seatChanges) {
             await tx.seatAssignment.updateMany({
                 where: { passengerId: change.passengerId, legId: change.legId },
-                data: { seatNumber: change.seatNumber }
-            });
-        }
-
-        // Passenger.seatNumber still describes the outbound seat while the
-        // column is written, so only an outbound change updates it.
-        const outboundLegId = outboundLeg(booking)?.id;
-        for (const change of seatChanges) {
-            if (change.legId !== outboundLegId) continue;
-            await tx.passenger.update({
-                where: { id: change.passengerId },
                 data: { seatNumber: change.seatNumber }
             });
         }
