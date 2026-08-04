@@ -401,8 +401,10 @@ describe('ProfileClient interactive dashboard', () => {
             });
         });
 
-        it('falls back to the passenger seat when a leg has no assignment', () => {
-            // Bookings taken before seats were recorded per leg still render.
+        it('reports a leg with no assignment rather than borrowing a seat', () => {
+            // The fallback to Passenger.seatNumber described the outbound leg,
+            // so on any other leg it showed a seat the traveller does not hold.
+            // An absent assignment is a defect and now reads as one (#137).
             renderBookings([
                 {
                     ...roundTripBooking,
@@ -411,7 +413,8 @@ describe('ProfileClient interactive dashboard', () => {
             ]);
 
             const legs = within(screen.getByTestId('booking-row-202')).getAllByTestId(/^booking-leg-/);
-            expect(legs[0]).toHaveTextContent('Jane (12A)');
+            expect(legs[0]).toHaveTextContent('Jane (Not assigned)');
+            expect(legs[0]).not.toHaveTextContent('12A');
         });
 
         it('marks a released seat rather than printing the cancellation marker', () => {
