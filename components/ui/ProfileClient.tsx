@@ -331,10 +331,9 @@ export default function ProfileClient({
                                     // date at any width. Booking-level cells span
                                     // them. One tbody per booking groups the legs.
                                     const legRows = legs.length > 0 ? legs : [null];
-                                    const seatFor = (leg: BookingLeg | null, passengerId: string, fallback: string) =>
+                                    const seatFor = (leg: BookingLeg | null, passengerId: string) =>
                                         seatLabel(
                                             leg?.seatAssignments?.find(seat => seat.passengerId === passengerId)?.seatNumber
-                                            ?? fallback
                                         );
                                     return (
                                         <tbody key={booking.id} data-testid={`booking-row-${booking.id}`} className="border-b">
@@ -354,7 +353,7 @@ export default function ProfileClient({
                                                         {booking.passengers && booking.passengers.length > 0 && (
                                                             <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
                                                                 {booking.passengers
-                                                                    .map(p => `${p.firstName} (${seatFor(leg, p.id, p.seatNumber)})`)
+                                                                    .map(p => `${p.firstName} (${seatFor(leg, p.id)})`)
                                                                     .join(', ')}
                                                             </div>
                                                         )}

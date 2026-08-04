@@ -51,21 +51,23 @@ interface HeldSeat {
  * leg's assignment. `Passenger.seatNumber` answers with the outbound seat
  * whichever leg is being looked at, which is wrong for every leg but the first.
  *
- * Falls back to the passenger's own seat for bookings taken before seats were
- * held per leg, whose only record is that column.
+ * Reads only the assignment. The fallback to `Passenger.seatNumber` that stood
+ * in for bookings taken before #118 is gone: that column describes the outbound
+ * leg, so it was the wrong answer for every leg but the first (#137).
  */
-export function passengersSeatedOnLeg<
-    TPassenger extends { id: string; seatNumber: string; cabinClass: string }
->(
+export function passengersSeatedOnLeg<TPassenger extends { id: string }>(
     leg: { seatAssignments: HeldSeat[] },
     passengers: TPassenger[]
-): TPassenger[] {
+): Array<TPassenger & { seatNumber: string; cabinClass: string }> {
     return passengers.map((passenger) => {
         const held = leg.seatAssignments.find((seat) => seat.passengerId === passenger.id);
         return {
             ...passenger,
-            seatNumber: held?.seatNumber ?? passenger.seatNumber,
-            cabinClass: held?.cabinClass ?? passenger.cabinClass,
+            // Every traveller holds an assignment on every leg, asserted against
+            // the whole table by seatAssignmentCoverage.database.test.ts. A leg
+            // with no seat for someone is a defect, not a shape to render.
+            seatNumber: held?.seatNumber ?? 'Not assigned',
+            cabinClass: held?.cabinClass ?? 'ECONOMY',
         };
     });
 }

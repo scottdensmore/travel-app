@@ -71,10 +71,15 @@ describe('booking itinerary', () => {
             ]);
         });
 
-        it('keeps the passenger seat when the leg has no assignment for them', () => {
-            // Bookings taken before seats were held per leg.
+        it('reports a missing assignment rather than borrowing another seat', () => {
+            // Every traveller holds one on every leg, asserted against the whole
+            // table by seatAssignmentCoverage.database.test.ts. If one is absent
+            // that is a defect, so it must not be papered over with a seat from
+            // somewhere else (#137).
             const leg = { seatAssignments: [] };
-            expect(passengersSeatedOnLeg(leg, [ada])).toEqual([ada]);
+            expect(passengersSeatedOnLeg(leg, [ada])).toEqual([
+                { ...ada, seatNumber: 'Not assigned', cabinClass: 'ECONOMY' },
+            ]);
         });
 
         it('does not let one traveller\'s assignment describe another', () => {
@@ -84,8 +89,10 @@ describe('booking itinerary', () => {
 
             const [first, second] = passengersSeatedOnLeg(leg, [ada, grace]);
             expect(first.seatNumber).toBe('20F');
-            expect(second.seatNumber).toBe('11B');
-            expect(second.cabinClass).toBe('ECONOMY');
+            expect(first.cabinClass).toBe('BUSINESS');
+            // Grace has no assignment on this leg, so she is reported as
+            // unseated rather than inheriting Ada's.
+            expect(second.seatNumber).toBe('Not assigned');
         });
     });
 });
