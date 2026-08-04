@@ -1,0 +1,24 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "1a543a3dfb92",
+  "strategy": "manual-commit",
+  "branch": "refactor/flight-price-readers",
+  "checkpoints_count": 1,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/1a/543a3dfb92/0/metadata.json",
+      "transcript": "/1a/543a3dfb92/0/full.jsonl",
+      "compact_transcript": "/1a/543a3dfb92/0/transcript.jsonl",
+      "content_hash": "/1a/543a3dfb92/0/content_hash.txt",
+      "prompt": "/1a/543a3dfb92/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 4190,
+    "cache_creation_tokens": 9380936,
+    "cache_read_tokens": 938695163,
+    "output_tokens": 1048898,
+    "api_call_count": 1902
+  }
+}
