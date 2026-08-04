@@ -1,4 +1,5 @@
 "use client"
+import { flightFareCents, formatPrice } from '@/lib/bookingPricing';
 
 import React, { useEffect, useRef, useState } from 'react';
 import FlightStatusSelector from './FlightStatusSelector';
@@ -141,7 +142,7 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                                             </div>
                                         </td>
                                         <td style={{ padding: '12px', fontSize: '0.9rem', color: '#34d399', fontWeight: 'bold' }}>
-                                            {flight.price}
+                                            {formatPrice(flightFareCents(flight))}
                                         </td>
                                         <td style={{ padding: '12px', fontSize: '0.9rem' }}>
                                             <span style={{ color: '#10b981', fontWeight: 'bold' }}>{activeBookings} Active</span>

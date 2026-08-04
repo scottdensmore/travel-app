@@ -1,4 +1,5 @@
 "use client"
+import { flightFareCents, formatPrice } from '@/lib/bookingPricing';
 
 import React, { useState, useMemo } from 'react';
 
@@ -171,7 +172,7 @@ export default function FlightStatusBoard({ flights }: { flights: Flight[] }) {
                                                 </span>
                                             </td>
                                             <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right', fontWeight: 'bold', color: '#34d399' }}>
-                                                {flight.price}
+                                                {formatPrice(flightFareCents(flight))}
                                             </td>
                                         </tr>
                                     ))}

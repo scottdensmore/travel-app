@@ -784,6 +784,36 @@ describe('FlightBookingForm', () => {
             expect(order).toEqual(['EXPENSIVE', 'CHEAP']);
         });
 
+        it('renders the stored fare, not the formatted string beside it', async () => {
+            // If the two ever disagree, the number the database can compare and
+            // sum is the one a customer should be quoted (#135).
+            mockSearch.mockResolvedValue(searchSuccess([
+                { ...mockFlights[0], id: 1, price: '$999', priceCents: 35_000 },
+            ]));
+            renderForm();
+
+            fireEvent.click(screen.getByText('Find your trip'));
+
+            await waitFor(() => expect(screen.getByText('CA101')).toBeInTheDocument());
+            expect(screen.getByText('$350')).toBeInTheDocument();
+            expect(screen.queryByText('$999')).not.toBeInTheDocument();
+        });
+
+        it('never renders the sort sentinel as a price', async () => {
+            // An unreadable fare sorts last by standing in as infinity. That
+            // sentinel belongs to the comparators; formatting it renders "$∞".
+            mockSearch.mockResolvedValue(searchSuccess([
+                { ...mockFlights[0], id: 1, flightNumber: 'UNPRICED', price: 'on request', priceCents: null },
+            ]));
+            renderForm();
+
+            fireEvent.click(screen.getByText('Find your trip'));
+
+            await waitFor(() => expect(screen.getByText('UNPRICED')).toBeInTheDocument());
+            expect(screen.queryByText(/∞/)).not.toBeInTheDocument();
+            expect(screen.getByText('on request')).toBeInTheDocument();
+        });
+
         it('labels the price filter with the same formatter the results use', async () => {
             mockSearch.mockResolvedValue(searchSuccess([
                 { ...mockFlights[0], id: 1, price: '$900', priceCents: 90_000 },
