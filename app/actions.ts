@@ -20,7 +20,7 @@ import {
     parsePriceToCents,
     type CabinClass,
 } from '@/lib/bookingPricing';
-import { bookingFlights, outboundFlight, outboundLeg } from '@/lib/bookingItinerary';
+import { bookingFlights, outboundFlight } from '@/lib/bookingItinerary';
 import { buildFlightRoutes, findNearbyOperatingDates } from '@/lib/flightSearch';
 import { airportTimeZoneFor } from '@/lib/airports';
 import { bookingWindowIsoDates } from '@/lib/dates';
@@ -519,9 +519,9 @@ export async function changeBookingSeatsAction(
         }
 
         // The cabin a seat has to fit is the one held on that leg, which is
-        // recorded with the assignment. Passenger.cabinClass describes the
-        // outbound, so a leg booked in a different cabin was checked against
-        // the wrong one.
+        // recorded with the assignment. The traveller row used to carry a
+        // single cabin describing the outbound, so a leg booked in a different
+        // cabin was checked against the wrong one (#137).
         const heldCabins = new Map(
             (await tx.seatAssignment.findMany({
                 where: { legId: { in: seatChanges.map(change => change.legId) } },

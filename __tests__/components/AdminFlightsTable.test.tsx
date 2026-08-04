@@ -60,7 +60,10 @@ const mockFlights = [
                         // A cancelled booking's seat is parked under a
                         // placeholder, which the manifest reads as "Released".
                         seatNumber: 'CANCELLED-p2',
-                        cabinClass: 'ECONOMY',
+                        // A different cabin from the other traveller: the
+                        // manifest lists the cabin held on this leg, per
+                        // traveller, rather than one cabin for the flight.
+                        cabinClass: 'BUSINESS',
                     }
                 ]
             }
@@ -164,9 +167,7 @@ describe('AdminFlightsTable', () => {
         expect(screen.getByText('John Doe')).toBeInTheDocument();
         expect(screen.getByText('M')).toBeInTheDocument();
         expect(screen.queryByText('P123')).not.toBeInTheDocument();
-        // Both travellers on this occurrence are in economy; the manifest lists
-        // a cabin per traveller, not one for the flight.
-        expect(screen.getAllByText('ECONOMY')).toHaveLength(2);
+        expect(screen.getByText('ECONOMY')).toBeInTheDocument();
         expect(screen.getByText('Seat 12A')).toBeInTheDocument();
         
         expect(screen.getByText('Jane Smith')).toBeInTheDocument();

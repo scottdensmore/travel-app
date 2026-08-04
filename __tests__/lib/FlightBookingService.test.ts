@@ -76,9 +76,10 @@ describe('FlightBookingService', () => {
             legs: [{ id: 55, sequence: 1, flightId: 7 }],
             passengers: [
                 {
+                    id: 'passenger-1',
                     firstName: 'Alice',
                     lastName: 'Smith',
-                    cabinClass: 'BUSINESS'
+                    gender: 'Female'
                 }
             ]
         });
@@ -120,6 +121,10 @@ describe('FlightBookingService', () => {
                         seatAssignments: {
                             select: {
                                 seatNumber: true,
+                                // The cabin is recorded per leg now that the
+                                // traveller row no longer carries one (#137),
+                                // and the retry signature compares it.
+                                cabinClass: true,
                                 leg: { select: { sequence: true } },
                             },
                         },
@@ -157,8 +162,6 @@ describe('FlightBookingService', () => {
                             passportNumberEncrypted: expect.stringMatching(/^v1:/),
                             sensitiveDataExpiresAt: new Date('2099-01-31T10:00:00.000Z'),
                             gender: 'Female',
-                            // Passenger keeps one seat while that column is retired.
-                            flightId: 7
                         }
                     ]
                 }
@@ -170,12 +173,15 @@ describe('FlightBookingService', () => {
         });
 
         // The seat is recorded against the leg, from the same passenger array
-        // the booking was created from.
+        // the booking was created from. This is now the only record of where
+        // the traveller sits, so it carries the cabin too (#137).
         expect(mockTx.seatAssignment.createMany).toHaveBeenCalledWith({
             data: [{
                 passengerId: expect.any(String),
                 legId: 55,
                 flightId: 7,
+                seatNumber: '4C',
+                cabinClass: 'BUSINESS',
             }],
         });
 
@@ -195,9 +201,10 @@ describe('FlightBookingService', () => {
                 firstName: 'Alice', lastName: 'Smith',
                 dateOfBirthEncrypted: encryptPassengerData('1995-05-15', { passengerId, field: 'dateOfBirth' }),
                 passportNumberEncrypted: encryptPassengerData('US123456', { passengerId, field: 'passportNumber' }),
-                gender: 'Female', seatNumber: '11A', cabinClass: 'ECONOMY',
-                // Persisted seats live on the assignments, one per leg.
-                seatAssignments: [{ seatNumber: '11A', leg: { sequence: 1 } }]
+                gender: 'Female',
+                // Persisted seats live on the assignments, one per leg, and
+                // carry the cabin with them: the traveller row holds neither.
+                seatAssignments: [{ seatNumber: '11A', cabinClass: 'ECONOMY', leg: { sequence: 1 } }]
             }]
         };
         mockTx.flight.findMany.mockResolvedValue([{
@@ -226,6 +233,9 @@ describe('FlightBookingService', () => {
                 firstName: 'Alice',
                 lastName: 'Smith',
                 gender: 'Female',
+                // One seat per leg, in leg order, so a retried round trip
+                // reports both legs rather than the outbound twice.
+                seatNumbers: ['11A'],
             }],
             wasCreated: false,
         });
@@ -246,9 +256,10 @@ describe('FlightBookingService', () => {
                 firstName: 'Alice', lastName: 'Smith',
                 dateOfBirthEncrypted: encryptPassengerData('1995-05-15', { passengerId, field: 'dateOfBirth' }),
                 passportNumberEncrypted: encryptPassengerData('US123456', { passengerId, field: 'passportNumber' }),
-                gender: 'Female', seatNumber: '11A', cabinClass: 'ECONOMY',
-                // Persisted seats live on the assignments, one per leg.
-                seatAssignments: [{ seatNumber: '11A', leg: { sequence: 1 } }]
+                gender: 'Female',
+                // Persisted seats live on the assignments, one per leg, and
+                // carry the cabin with them: the traveller row holds neither.
+                seatAssignments: [{ seatNumber: '11A', cabinClass: 'ECONOMY', leg: { sequence: 1 } }]
             }]
         };
         mockTx.flight.findMany.mockResolvedValue([{

@@ -1233,9 +1233,16 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                         <p style={{ color: '#34d399', marginBottom: '2rem', fontWeight: 'bold' }}>Confirmed total: {bookingResult.totalPriceCents !== null ? formatPrice(bookingResult.totalPriceCents) : totalPriceDisplay}</p>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', alignItems: 'center', marginBottom: '2.5rem' }}>
-                            {bookingResult.passengers.map((p, idx) => (
+                            {/*
+                              * One boarding pass per traveller per leg. A seat
+                              * belongs to a leg, so a card naming one flight can
+                              * only carry that flight's seat: printing the whole
+                              * itinerary's seats on a single card was the same
+                              * defect in a different shape (#137).
+                              */}
+                            {bookingResult.passengers.flatMap((p, idx) => flights.map((legFlight, legIndex) => (
                                 /* Boarding Pass Card View Overlay */
-                                <div key={idx} style={{
+                                <div key={`${idx}:${legIndex}`} style={{
                                     width: '100%',
                                     maxWidth: '600px',
                                     borderRadius: '16px',
@@ -1266,25 +1273,17 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                                         </div>
                                         <div>
                                             <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Flight</div>
-                                            <div style={{ fontSize: '0.95rem', fontWeight: 'bold', marginTop: '3px', color: '#a78bfa' }}>{flight.flightNumber}</div>
+                                            <div style={{ fontSize: '0.95rem', fontWeight: 'bold', marginTop: '3px', color: '#a78bfa' }}>{legFlight.flightNumber}</div>
                                         </div>
                                         <div>
-                                            <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>
-                                                {p.seatNumbers.length > 1 ? 'Seats' : 'Seat'}
-                                            </div>
-                                            {/*
-                                              * Every leg's seat. A round trip
-                                              * printed one, which was the
-                                              * outbound seat labelled as the
-                                              * seat for the whole trip (#137).
-                                              */}
+                                            <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Seat</div>
                                             <div style={{ fontSize: '1.1rem', fontWeight: 'bold', marginTop: '3px', color: '#34d399' }}>
-                                                {p.seatNumbers.join(', ')}
+                                                {p.seatNumbers[legIndex]}
                                             </div>
                                         </div>
                                         <div>
                                             <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Date</div>
-                                            <div style={{ fontSize: '0.95rem', fontWeight: 'bold', marginTop: '3px' }}>{new Date(flight.departureDate).toLocaleDateString()}</div>
+                                            <div style={{ fontSize: '0.95rem', fontWeight: 'bold', marginTop: '3px' }}>{new Date(legFlight.departureDate).toLocaleDateString()}</div>
                                         </div>
                                     </div>
 
@@ -1292,7 +1291,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', background: 'rgba(0,0,0,0.3)', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                                         <div>
                                             <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)' }}>ROUTE</div>
-                                            <div style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>{flight.from.split(',')[0]} to {flight.to.split(',')[0]}</div>
+                                            <div style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>{legFlight.from.split(',')[0]} to {legFlight.to.split(',')[0]}</div>
                                         </div>
                                         {/* Fake barcode block */}
                                         <div style={{ display: 'flex', gap: '2px', background: '#fff', padding: '4px', borderRadius: '2px', height: '24px' }}>
@@ -1309,7 +1308,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                                         </div>
                                     </div>
                                 </div>
-                            ))}
+                            )))}
                         </div>
 
                         <div className="booking-success-actions">

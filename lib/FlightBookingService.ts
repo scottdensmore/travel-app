@@ -230,7 +230,6 @@ export default class FlightBookingService {
                 .reduce((latest, date) => (date > latest ? date : latest));
             const sensitiveDataExpiresAt = getPassengerDataRetentionDeadline(lastDeparture);
 
-            const [outboundFlightId] = flightIds;
             const protectedPassengers = passengers.map(passenger => {
                 const id = randomUUID();
                 const dateOfBirth = passenger.dateOfBirth.slice(0, 10);
@@ -270,17 +269,7 @@ export default class FlightBookingService {
                     }
                 },
                 include: {
-                    passengers: {
-                        select: {
-                            ...safePassengerSelect,
-                            // The seats a confirmation prints: one per leg, in
-                            // leg order, from the assignment rather than the
-                            // traveller record (#137).
-                            seatAssignments: {
-                                select: { seatNumber: true, leg: { select: { sequence: true } } },
-                            },
-                        },
-                    },
+                    passengers: { select: safePassengerSelect },
                     legs: { orderBy: { sequence: 'asc' } }
                 }
             });

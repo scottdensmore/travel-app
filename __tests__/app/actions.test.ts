@@ -856,28 +856,26 @@ describe('cancelBookingAction', () => {
         });
     });
 
-    it('releases the seat in both tables so it can be booked again', async () => {
-        // Releasing on Passenger alone strands the seat: occupancy checks read
-        // Passenger and would see it free, while the assignment would still
-        // refuse the next booking of that seat.
+    it('releases the seat on the assignment so it can be booked again', async () => {
+        // The assignment's unique index is the only thing holding the seat now
+        // that the traveller row no longer carries one (#137), so releasing it
+        // there releases it outright.
         mockedGetServerSession.mockResolvedValue({ user: { id: 'u1', role: 'USER' } });
         mockedBookingFindUnique.mockResolvedValue({
             id: 1, userId: 'u1', status: 'CONFIRMED', flightId: 7, legs: [],
         });
         mockTx.booking.findUnique.mockResolvedValue({ id: 1, status: 'CONFIRMED', flightId: 7 });
-        mockTx.passenger.findMany.mockResolvedValue([{ id: 'p-9', seatNumber: '4A' }]);
+        mockTx.passenger.findMany.mockResolvedValue([{ id: 'p-9' }]);
         mockTx.booking.update.mockResolvedValue({ id: 1 });
 
         await cancelBookingAction(1);
 
-        expect(mockTx.passenger.update).toHaveBeenCalledWith({
-            where: { id: 'p-9' },
-            data: { seatNumber: 'CANCELLED-p-9' }
-        });
         expect(mockTx.seatAssignment.updateMany).toHaveBeenCalledWith({
             where: { passengerId: 'p-9' },
             data: { seatNumber: 'CANCELLED-p-9' }
         });
+        // The traveller row holds no seat to release.
+        expect(mockTx.passenger.update).not.toHaveBeenCalled();
     });
 
     it('allows an admin to cancel any booking', async () => {
@@ -930,7 +928,7 @@ describe('changeBookingSeatsAction', () => {
         mockTx.booking.findUnique.mockResolvedValue({
             status: 'CONFIRMED',
             passengers: [
-                { id: 'p-1', firstName: 'Jane', seatNumber: '12A', cabinClass: 'ECONOMY' }
+                { id: 'p-1', firstName: 'Jane' }
             ]
         });
     });
@@ -948,7 +946,7 @@ describe('changeBookingSeatsAction', () => {
             flightId: 10,
             legs: [{ id: 50, sequence: 1, flightId: 10, flight: { id: 10 } }],
             passengers: [
-                { id: 'p-1', firstName: 'Jane', seatNumber: '12A', cabinClass: 'ECONOMY' }
+                { id: 'p-1', firstName: 'Jane' }
             ]
         });
 
@@ -965,16 +963,15 @@ describe('changeBookingSeatsAction', () => {
         ]);
 
         expect(mockTx.seatAssignment.findMany).toHaveBeenCalled();
-        expect(mockTx.passenger.update).toHaveBeenCalledWith({
-            where: { id: 'p-1' },
-            data: { seatNumber: '12B' }
-        });
         // Scoped to the leg: a passenger on a round trip holds an assignment
         // per leg, so updating by passenger alone would overwrite the other.
         expect(mockTx.seatAssignment.updateMany).toHaveBeenCalledWith({
             where: { passengerId: 'p-1', legId: 50 },
             data: { seatNumber: '12B' }
         });
+        // The assignment is the whole change: writing a seat onto the traveller
+        // row is what made an outbound change overwrite the return seat (#126).
+        expect(mockTx.passenger.update).not.toHaveBeenCalled();
     });
 
     it('rejects if a seat is already occupied', async () => {
@@ -985,7 +982,7 @@ describe('changeBookingSeatsAction', () => {
             flightId: 10,
             legs: [{ id: 50, sequence: 1, flightId: 10, flight: { id: 10 } }],
             passengers: [
-                { id: 'p-1', firstName: 'Jane', seatNumber: '12A', cabinClass: 'ECONOMY' }
+                { id: 'p-1', firstName: 'Jane' }
             ]
         });
 

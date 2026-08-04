@@ -83,16 +83,6 @@ export function seatLabel(seatNumber: string | null | undefined): string {
 }
 
 /**
- * The first leg of the itinerary, or null when the booking has none. Unlike
- * `outboundFlight`, this does not require the flight to have been loaded.
- */
-export function outboundLeg<TLeg extends { sequence: number }>(
-    booking: { legs: TLeg[] }
-): TLeg | null {
-    return orderedLegs(booking)[0] ?? null;
-}
-
-/**
  * The outbound flight, which is what every single-flight view wants today.
  * Null when the booking has no legs, or none whose flight was loaded.
  */
