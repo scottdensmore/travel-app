@@ -112,14 +112,21 @@ Chart and other browser-interactive components need `'use client'`.
    before starting code review. If a verifier finding requires a code change,
    rerun the verifier after addressing it.
 
-8. **Run `code-review` before every commit.** Invoke the `code-review`
-   sub-agent against the current branch diff and every staged, unstaged, and
-   untracked file. The reviewer must act as an expert in the languages and
-   frameworks used by this application, including TypeScript, React, Next.js,
-   Prisma, PostgreSQL, Jest, and Playwright. Address every actionable finding
-   before committing. If review findings cause changes, rerun the appropriate
-   tests and the `verifier`, then obtain a fresh `code-review` approval for the
-   changed state.
+8. **Review the code before every commit.** Two mechanisms cover this, and
+   neither is a bespoke sub-agent:
+   - The `PreToolUse` hooks in `.claude/settings.json` review the diff
+     automatically and block on `git push` and `gh pr create`. They run
+     without being asked; do not work around a block by pushing differently.
+   - For a full review, use the built-in `/code-review` command. Against a
+     pull request it runs unattended and posts its findings as a PR comment.
+     `/code-review ultra` is a deeper multi-agent review, but it is
+     user-triggered and billed — an agent cannot launch it.
+
+   Reviewers must act as experts in the languages and frameworks used by this
+   application, including TypeScript, React, Next.js, Prisma, PostgreSQL, Jest,
+   and Playwright. Address every actionable finding before committing. If review
+   findings cause changes, rerun the appropriate tests and the `verifier`, then
+   obtain fresh review approval for the changed state.
 
 9. **Commit after approval.** Commit only after verification and code review
    are complete. Use Conventional Commits:
@@ -133,7 +140,7 @@ Chart and other browser-interactive components need `'use client'`.
 
 10. **Create pull requests from the reviewed state.**
    - Confirm that local verification remains valid.
-   - Rerun `code-review` only if the reviewed state changed after the pre-commit
+   - Rerun code review only if the reviewed state changed after the pre-commit
      review.
    - A changed state includes code, tests, documentation, generated files,
      conflict resolution, or any other staged, unstaged, or untracked content.

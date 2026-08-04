@@ -579,13 +579,19 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                 totalPriceCents: result.totalPriceCents,
                 // The confirmation prints the seat held on each leg, in leg
                 // order, rather than one seat for the whole trip (#137).
+                //
+                // Every field comes off the booking's own traveller record. The
+                // form state is not paired back in by position: the booking
+                // decides the order it returns travellers in, and pairing the
+                // two by index would print one traveller's cabin under another
+                // traveller's name.
                 passengers: result.passengers.map((passenger: {
-                    firstName: string; lastName: string; seatNumbers: string[];
-                }, index: number) => ({
+                    firstName: string; lastName: string; seatNumbers: string[]; cabinClass: string;
+                }) => ({
                     firstName: passenger.firstName,
                     lastName: passenger.lastName,
                     seatNumbers: passenger.seatNumbers,
-                    cabinClass: passengers[index]?.cabinClass ?? 'ECONOMY',
+                    cabinClass: passenger.cabinClass,
                 }))
             });
             setStep(4);

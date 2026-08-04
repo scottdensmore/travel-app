@@ -28,10 +28,16 @@ export async function signInWithCredentials(
   await page.fill('#password', account.password);
   if (account.staffCode) await page.fill('#staffCode', account.staffCode);
   await page.click('button:has-text("Sign In with Email")');
-  // The dev server compiles the NextAuth credentials callback on the first
-  // request that reaches it, which is whichever test signs in first. That
-  // routinely costs more than the 5s default and failed only the first test
-  // of a run, wherever it happened to fall.
+  // Whichever test signs in first pays for the dev server compiling the
+  // NextAuth credentials callback, which routinely costs more than the 5s
+  // default. The tell was that the failure followed run order rather than any
+  // one test: running a passing spec first made it fail, and it passed again
+  // inside the suite. This is a mitigation, not a proven cure -- if a sign-in
+  // times out again, measure before theorising.
+  //
+  // Distinct from #121, which is the admin MFA journey spending its own 30s
+  // budget waiting on a TOTP window. Same suite, different mechanism; nothing
+  // here closes it.
   await expect(page).toHaveURL(expectedPath, { timeout: 30_000 });
 }
 

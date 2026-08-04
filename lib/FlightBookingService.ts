@@ -172,6 +172,9 @@ export default class FlightBookingService {
                         lastName: passenger.lastName,
                         gender: passenger.gender,
                         seatNumbers: seatNumbersInLegOrder(passenger),
+                        // The cabin travels with the seat, so a caller never has
+                        // to pair this row back up with its own request.
+                        cabinClass: passenger.seatAssignments?.[0]?.cabinClass ?? 'ECONOMY',
                     })),
                     wasCreated: false,
                 };
@@ -291,18 +294,31 @@ export default class FlightBookingService {
                 )),
             });
 
+            // What each traveller bought, keyed by the id we minted for them.
+            // protectedPassengers is built from passengers in order, so the two
+            // line up here by construction -- but the created rows come back
+            // from an unordered relation, so they are matched by identity below
+            // rather than by position.
+            const purchasedByPassengerId = new Map<string, PassengerInput>(protectedPassengers.map(
+                (protectedPassenger, index) => [protectedPassenger.id, passengers[index]]
+            ));
+
             return {
                 ...booking,
                 // From the request, not from the include: the assignments are
                 // written after the booking, so the loaded relation is empty
                 // here and a confirmation would print no seat at all.
-                passengers: booking.passengers.map((passenger, index) => ({
-                    id: passenger.id,
-                    firstName: passenger.firstName,
-                    lastName: passenger.lastName,
-                    gender: passenger.gender,
-                    seatNumbers: passengers[index].seatNumbers,
-                })),
+                passengers: booking.passengers.map(passenger => {
+                    const purchased = purchasedByPassengerId.get(passenger.id);
+                    return {
+                        id: passenger.id,
+                        firstName: passenger.firstName,
+                        lastName: passenger.lastName,
+                        gender: passenger.gender,
+                        seatNumbers: purchased?.seatNumbers ?? [],
+                        cabinClass: purchased?.cabinClass ?? 'ECONOMY',
+                    };
+                }),
                 wasCreated: true,
             };
         });

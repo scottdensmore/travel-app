@@ -48,6 +48,69 @@ describe('FlightBookingService', () => {
         expect(mockTx.booking.create).not.toHaveBeenCalled();
     });
 
+    it('gives each traveller their own seats when the created rows come back reordered', async () => {
+        // booking.create's include carries no orderBy, so the relation may come
+        // back in any order. Pairing it with the request array by position put
+        // one traveller's seats and cabin under another traveller's name.
+        mockTx.flight.findMany.mockResolvedValue([{
+            id: 7,
+            priceCents: 35000,
+            status: 'ON_TIME',
+            departureDate: new Date('2099-01-01T10:00:00Z'),
+            firstClassRows: 2,
+            businessRows: 4,
+            premiumEconomyRows: 4,
+            economyRows: 20,
+            seatPattern: 'ABC-DEF'
+        }]);
+        mockTx.booking.findFirst.mockResolvedValue(null);
+        mockTx.seatAssignment.findMany.mockResolvedValue([]);
+
+        const createdIds: string[] = [];
+        mockTx.booking.create.mockImplementation(({ data }: any) => {
+            for (const passenger of data.passengers.create) createdIds.push(passenger.id);
+            return Promise.resolve({
+                id: 2,
+                userId: 'u1',
+                totalPriceCents: 120000,
+                legs: [{ id: 55, sequence: 1, flightId: 7 }],
+                // Reversed: the database is under no obligation to hand these
+                // back in the order they were written.
+                passengers: [
+                    { id: createdIds[1], firstName: 'Grace', lastName: 'Hopper', gender: 'Female' },
+                    { id: createdIds[0], firstName: 'Ada', lastName: 'Lovelace', gender: 'Female' },
+                ],
+            });
+        });
+
+        const result = await new FlightBookingService().bookFlight({
+            flightIds: [7],
+            userId: 'u1',
+            passengers: [
+                {
+                    firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
+                    passportNumber: 'US1111111', gender: 'Female',
+                    seatNumbers: ['4C'], cabinClass: 'BUSINESS'
+                },
+                {
+                    firstName: 'Grace', lastName: 'Hopper', dateOfBirth: '1985-05-05',
+                    passportNumber: 'US2222222', gender: 'Female',
+                    seatNumbers: ['20A'], cabinClass: 'ECONOMY'
+                }
+            ],
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
+        });
+
+        expect(result.passengers).toEqual([
+            expect.objectContaining({
+                firstName: 'Grace', seatNumbers: ['20A'], cabinClass: 'ECONOMY'
+            }),
+            expect.objectContaining({
+                firstName: 'Ada', seatNumbers: ['4C'], cabinClass: 'BUSINESS'
+            }),
+        ]);
+    });
+
     it('calculates price from the locked flight and selected cabins', async () => {
         mockTx.flight.findMany.mockResolvedValue([{
             id: 7,
@@ -236,6 +299,9 @@ describe('FlightBookingService', () => {
                 // One seat per leg, in leg order, so a retried round trip
                 // reports both legs rather than the outbound twice.
                 seatNumbers: ['11A'],
+                // Carried on the response so no caller pairs it back up with
+                // their own request array by position.
+                cabinClass: 'ECONOMY',
             }],
             wasCreated: false,
         });

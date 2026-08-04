@@ -146,7 +146,8 @@ describe('BookingCheckoutWizard', () => {
             passengers: [{
                 firstName: 'Robert',
                 lastName: 'Jones',
-                seatNumbers: ['11C']
+                seatNumbers: ['11C'],
+                cabinClass: 'ECONOMY'
             }]
         });
 
@@ -236,7 +237,7 @@ describe('BookingCheckoutWizard', () => {
         let resolveBooking!: (value: {
             id: number;
             totalPriceCents: number | null;
-            passengers: Array<{ firstName: string; lastName: string; seatNumbers: string[] }>;
+            passengers: Array<{ firstName: string; lastName: string; seatNumbers: string[]; cabinClass: string }>;
         }) => void;
         mockBookFlightAction.mockImplementation(() => new Promise((resolve) => {
             resolveBooking = resolve;
@@ -262,7 +263,7 @@ describe('BookingCheckoutWizard', () => {
         resolveBooking({
             id: 12345,
             totalPriceCents: 10000,
-            passengers: [{ firstName: 'Bob', lastName: 'Jones', seatNumbers: ['11C'] }]
+            passengers: [{ firstName: 'Bob', lastName: 'Jones', seatNumbers: ['11C'], cabinClass: 'ECONOMY' }]
         });
         await waitFor(() => expect(screen.getByText('Booking Confirmed!')).toBeInTheDocument());
     });
@@ -676,6 +677,7 @@ describe('BookingCheckoutWizard', () => {
                     firstName: 'Ada',
                     lastName: 'Lovelace',
                     seatNumbers: ['11A', '12C'],
+                    cabinClass: 'ECONOMY',
                 }],
             });
 
