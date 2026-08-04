@@ -38,7 +38,6 @@ const mockFlights = [
         to: 'Detroit, USA',
         departureDate: '2026-05-15T12:00:00Z',
         returnDate: null,
-        price: '$350',
         priceCents: 35000,
         status: 'ON_TIME',
         cabinAvailable: true,
@@ -54,7 +53,6 @@ const mockEnhancedFlights = [
         to: 'Detroit, USA',
         departureDate: '2026-05-15T08:00:00Z',
         returnDate: null,
-        price: '$200',
         priceCents: 20000,
         status: 'ON_TIME',
         cabinAvailable: true,
@@ -67,7 +65,6 @@ const mockEnhancedFlights = [
         to: 'Detroit, USA',
         departureDate: '2026-05-15T12:00:00Z',
         returnDate: null,
-        price: '$500',
         priceCents: 50000,
         status: 'ON_TIME',
         cabinAvailable: true,
@@ -80,7 +77,6 @@ const mockEnhancedFlights = [
         to: 'Detroit, USA',
         departureDate: '2026-05-15T18:00:00Z',
         returnDate: null,
-        price: '$100',
         priceCents: 10000,
         status: 'ON_TIME',
         cabinAvailable: true,
@@ -93,7 +89,6 @@ const mockEnhancedFlights = [
         to: 'Detroit, USA',
         departureDate: '2026-05-15T10:00:00Z',
         returnDate: null,
-        price: '$300',
         priceCents: 30000,
         status: 'CANCELLED',
         cabinAvailable: true,
@@ -670,7 +665,6 @@ describe('FlightBookingForm', () => {
                     to: 'Seattle, USA',
                     departureDate: '2026-07-22T09:00:00Z',
                     returnDate: null,
-                    price: '$275',
                     priceCents: 27500,
                     status: 'ON_TIME',
                     cabinAvailable: true,
@@ -691,8 +685,8 @@ describe('FlightBookingForm', () => {
 
     describe('Shopping a cabin', () => {
         const businessFlights = [
-            { ...mockFlights[0], id: 1, flightNumber: 'CA101', price: '$700', cabinAvailable: true },
-            { ...mockFlights[0], id: 2, flightNumber: 'CA202', price: '$350', cabinAvailable: false },
+            { ...mockFlights[0], id: 1, flightNumber: 'CA101', priceCents: 70000, cabinAvailable: true },
+            { ...mockFlights[0], id: 2, flightNumber: 'CA202', priceCents: 35000, cabinAvailable: false },
         ];
 
         it('sends the chosen cabin to the search', async () => {
@@ -767,8 +761,8 @@ describe('FlightBookingForm', () => {
             // alphabetically, and stripping non-digits from "$1,200" once gave
             // 1200 while "$900" gave 900 -- the old parser's exact failure.
             mockSearch.mockResolvedValue(searchSuccess([
-                { ...mockFlights[0], id: 1, flightNumber: 'EXPENSIVE', price: '$1,200', priceCents: 120_000 },
-                { ...mockFlights[0], id: 2, flightNumber: 'CHEAP', price: '$900', priceCents: 90_000 },
+                { ...mockFlights[0], id: 1, flightNumber: 'EXPENSIVE', priceCents: 120_000 },
+                { ...mockFlights[0], id: 2, flightNumber: 'CHEAP', priceCents: 90_000 },
             ]));
             renderForm();
 
@@ -788,7 +782,7 @@ describe('FlightBookingForm', () => {
             // If the two ever disagree, the number the database can compare and
             // sum is the one a customer should be quoted (#135).
             mockSearch.mockResolvedValue(searchSuccess([
-                { ...mockFlights[0], id: 1, price: '$999', priceCents: 35_000 },
+                { ...mockFlights[0], id: 1, priceCents: 35_000 },
             ]));
             renderForm();
 
@@ -799,25 +793,11 @@ describe('FlightBookingForm', () => {
             expect(screen.queryByText('$999')).not.toBeInTheDocument();
         });
 
-        it('never renders the sort sentinel as a price', async () => {
-            // An unreadable fare sorts last by standing in as infinity. That
-            // sentinel belongs to the comparators; formatting it renders "$∞".
-            mockSearch.mockResolvedValue(searchSuccess([
-                { ...mockFlights[0], id: 1, flightNumber: 'UNPRICED', price: 'on request', priceCents: null },
-            ]));
-            renderForm();
-
-            fireEvent.click(screen.getByText('Find your trip'));
-
-            await waitFor(() => expect(screen.getByText('UNPRICED')).toBeInTheDocument());
-            expect(screen.queryByText(/∞/)).not.toBeInTheDocument();
-            expect(screen.getByText('on request')).toBeInTheDocument();
-        });
 
         it('labels the price filter with the same formatter the results use', async () => {
             mockSearch.mockResolvedValue(searchSuccess([
-                { ...mockFlights[0], id: 1, price: '$900', priceCents: 90_000 },
-                { ...mockFlights[0], id: 2, flightNumber: 'CA999', price: '$1,200', priceCents: 120_000 },
+                { ...mockFlights[0], id: 1, priceCents: 90_000 },
+                { ...mockFlights[0], id: 2, flightNumber: 'CA999', priceCents: 120_000 },
             ]));
             renderForm();
 
@@ -828,23 +808,6 @@ describe('FlightBookingForm', () => {
             expect(screen.getByText(/Max Price: \$1,200/)).toBeInTheDocument();
         });
 
-        it('keeps a result whose fare cannot be read rather than dropping it', async () => {
-            // A row the backfill could not read still has to be bookable; it
-            // simply sorts last.
-            mockSearch.mockResolvedValue(searchSuccess([
-                { ...mockFlights[0], id: 1, flightNumber: 'PRICED', price: '$900', priceCents: 90_000 },
-                { ...mockFlights[0], id: 2, flightNumber: 'UNPRICED', price: 'on request', priceCents: null },
-            ]));
-            renderForm();
-
-            fireEvent.click(screen.getByText('Find your trip'));
-            await waitFor(() => expect(screen.getByText('PRICED')).toBeInTheDocument());
-            expect(screen.getByText('UNPRICED')).toBeInTheDocument();
-
-            fireEvent.change(screen.getByLabelText('Sort:'), { target: { value: 'price-asc' } });
-            const order = screen.getAllByText(/(PRICED|UNPRICED)/).map(el => el.textContent);
-            expect(order).toEqual(['PRICED', 'UNPRICED']);
-        });
     });
 
     it('shows no return date on an outbound card', async () => {
@@ -893,7 +856,6 @@ describe('FlightBookingForm', () => {
                         to: 'Seattle, USA',
                         departureDate: '2026-07-22T09:00:00Z',
                         returnDate: null,
-                        price: '$275',
                         priceCents: 27500,
                         status: 'ON_TIME',
                         cabinAvailable: true,
@@ -906,7 +868,6 @@ describe('FlightBookingForm', () => {
                         to: 'Seattle, USA',
                         departureDate: '2026-07-22T17:00:00Z',
                         returnDate: null,
-                        price: '$310',
                         priceCents: 31000,
                         status: 'ON_TIME',
                         cabinAvailable: true,
@@ -1076,7 +1037,6 @@ describe('FlightBookingForm', () => {
                     to: 'Seattle, USA',
                     departureDate: '2026-07-22T09:00:00Z',
                     returnDate: null,
-                    price: '$275',
                     priceCents: 27500,
                     status: 'ON_TIME',
                     cabinAvailable: true,

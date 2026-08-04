@@ -27,7 +27,7 @@ const mockFlights = [
         from: 'JFK',
         to: 'LAX',
         departureDate: '2026-06-20T10:00:00.000Z',
-        price: '$200',
+        priceCents: 20000,
         status: 'ON_TIME',
         bookings: [
             {
@@ -71,7 +71,7 @@ const mockFlights = [
         from: 'SFO',
         to: 'SEA',
         departureDate: '2026-06-21T12:00:00.000Z',
-        price: '$150',
+        priceCents: 15000,
         status: 'DELAYED',
         bookings: []
     }

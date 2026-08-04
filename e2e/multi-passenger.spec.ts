@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { prisma } from '../lib/prisma';
-import { calculateBookingTotal } from '../lib/bookingPricing';
+import { calculateItineraryTotal } from '../lib/bookingPricing';
 import { registerAndSignIn } from './helpers/auth';
 
 test.describe('Multi-Passenger Booking Journey', () => {
@@ -144,7 +144,7 @@ test.describe('Multi-Passenger Booking Journey', () => {
       where: { user: { email: uniqueEmail } },
       orderBy: { createdAt: 'desc' }
     });
-    expect(persistedBooking.totalPriceCents).toBe(calculateBookingTotal(targetFlight.price, [
+    expect(persistedBooking.totalPriceCents).toBe(calculateItineraryTotal([targetFlight.priceCents], [
       { cabinClass: 'ECONOMY' },
       { cabinClass: 'ECONOMY' }
     ]).cents);

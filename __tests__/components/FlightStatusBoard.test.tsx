@@ -12,7 +12,7 @@ const mockFlights = [
         to: 'Detroit, USA',
         departureDate: '2026-06-15T08:00:00Z',
         returnDate: null,
-        price: '$350',
+        priceCents: 35000,
         status: 'ON_TIME',
     },
     {
@@ -23,7 +23,7 @@ const mockFlights = [
         to: 'London, UK',
         departureDate: '2026-06-10T19:30:00Z',
         returnDate: null,
-        price: '$850',
+        priceCents: 85000,
         status: 'DELAYED',
     },
     {
@@ -34,7 +34,7 @@ const mockFlights = [
         to: 'Tokyo, Japan',
         departureDate: '2026-07-05T11:00:00Z',
         returnDate: null,
-        price: '$1200',
+        priceCents: 120000,
         status: 'CANCELLED',
     }
 ];

@@ -31,21 +31,21 @@ describe('authoritative booking pricing', () => {
 
 describe('bookingTotalCents', () => {
     it('uses the stored total when the booking has one', () => {
-        expect(bookingTotalCents({ totalPriceCents: 35_000 }, { price: '$999' })).toBe(35_000);
+        expect(bookingTotalCents({ totalPriceCents: 35_000 }, { priceCents: 99900 })).toBe(35_000);
     });
 
     it('falls back to the flight price for bookings taken before the column existed', () => {
-        expect(bookingTotalCents({ totalPriceCents: null }, { price: '$350' })).toBe(35_000);
+        expect(bookingTotalCents({ totalPriceCents: null }, { priceCents: 35000 })).toBe(35_000);
     });
 
     it('treats a zero total as a real total rather than a missing one', () => {
         // A fully redeemed or waived booking must not silently re-price.
-        expect(bookingTotalCents({ totalPriceCents: 0 }, { price: '$350' })).toBe(0);
+        expect(bookingTotalCents({ totalPriceCents: 0 }, { priceCents: 35000 })).toBe(0);
     });
 
     it('returns zero when neither a total nor a usable flight price exists', () => {
         expect(bookingTotalCents({ totalPriceCents: null }, null)).toBe(0);
-        expect(bookingTotalCents({ totalPriceCents: null }, { price: 'not a price' })).toBe(0);
+        expect(bookingTotalCents({ totalPriceCents: null }, undefined)).toBe(0);
     });
 });
 
@@ -80,23 +80,12 @@ describe('calculateItineraryTotal', () => {
     });
 
     describe('flightFareCents', () => {
-        it('prefers the integer column over the formatted string', () => {
-            // The string is the retained one; if they ever disagree, the number
-            // the database can compare and sum is the one that counts.
-            expect(flightFareCents({ priceCents: 35000, price: '$999' })).toBe(35000);
-        });
-
-        it('falls back to the string for a row the backfill could not read', () => {
-            expect(flightFareCents({ priceCents: null, price: '$1,234.50' })).toBe(123450);
-            expect(flightFareCents({ price: '$350' })).toBe(35000);
+        it('reads the stored fare', () => {
+            expect(flightFareCents({ priceCents: 35000 })).toBe(35000);
         });
 
         it('treats a zero fare as a fare, not as missing', () => {
-            expect(flightFareCents({ priceCents: 0, price: '$350' })).toBe(0);
-        });
-
-        it('still rejects a string it cannot parse when there is no integer', () => {
-            expect(() => flightFareCents({ priceCents: null, price: 'free' })).toThrow();
+            expect(flightFareCents({ priceCents: 0 })).toBe(0);
         });
     });
 })

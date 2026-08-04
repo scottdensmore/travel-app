@@ -51,7 +51,7 @@ describe('FlightBookingService', () => {
     it('calculates price from the locked flight and selected cabins', async () => {
         mockTx.flight.findMany.mockResolvedValue([{
             id: 7,
-            price: '$350',
+            priceCents: 35000,
             status: 'ON_TIME',
             departureDate: new Date('2099-01-01T10:00:00Z'),
             firstClassRows: 2,
@@ -207,7 +207,7 @@ describe('FlightBookingService', () => {
         };
         mockTx.flight.findMany.mockResolvedValue([{
             id: 7,
-            price: '$350',
+            priceCents: 35000,
             status: 'ON_TIME',
             departureDate: new Date('2099-01-01T10:00:00Z')
         }]);
@@ -259,7 +259,7 @@ describe('FlightBookingService', () => {
             }]
         };
         mockTx.flight.findMany.mockResolvedValue([{
-            id: 7, price: '$350', status: 'ON_TIME', departureDate: new Date('2099-01-01T10:00:00Z')
+            id: 7, priceCents: 35000, status: 'ON_TIME', departureDate: new Date('2099-01-01T10:00:00Z')
         }]);
         mockTx.booking.findFirst.mockResolvedValue(existing);
         const request = {
@@ -296,13 +296,13 @@ describe('FlightBookingService', () => {
         };
         mockTx.booking.findFirst.mockResolvedValue(null);
         mockTx.flight.findMany.mockResolvedValue([{
-            id: 7, price: '$350', status: 'CANCELLED', departureDate: new Date('2099-01-01T10:00:00Z')
+            id: 7, priceCents: 35000, status: 'CANCELLED', departureDate: new Date('2099-01-01T10:00:00Z')
         }]);
         await expect(new FlightBookingService().bookFlight(request))
             .rejects.toThrow('Flight is not available for booking.');
 
         mockTx.flight.findMany.mockResolvedValue([{
-            id: 7, price: '$350', status: 'ON_TIME', departureDate: new Date('2020-01-01T10:00:00Z')
+            id: 7, priceCents: 35000, status: 'ON_TIME', departureDate: new Date('2020-01-01T10:00:00Z')
         }]);
         await expect(new FlightBookingService().bookFlight(request))
             .rejects.toThrow('Flight is not available for booking.');
@@ -312,7 +312,7 @@ describe('FlightBookingService', () => {
     it('rejects seats outside the configured cabin layout', async () => {
         mockTx.flight.findMany.mockResolvedValue([{
             id: 7,
-            price: '$350',
+            priceCents: 35000,
             status: 'ON_TIME',
             departureDate: new Date('2099-01-01T10:00:00Z'),
             firstClassRows: 1,
@@ -352,7 +352,7 @@ describe('FlightBookingService', () => {
 
     it('rejects duplicate seats within one booking request', async () => {
         mockTx.flight.findMany.mockResolvedValue([{
-            id: 7, price: '$350', status: 'ON_TIME',
+            id: 7, priceCents: 35000, status: 'ON_TIME',
             departureDate: new Date('2099-01-01T10:00:00Z')
         }]);
         mockTx.booking.findFirst.mockResolvedValue(null);
@@ -378,7 +378,7 @@ describe('FlightBookingService', () => {
 
     it('throws an error if a requested seat is already occupied', async () => {
         mockTx.flight.findMany.mockResolvedValue([{
-            id: 7, price: '$350', status: 'ON_TIME',
+            id: 7, priceCents: 35000, status: 'ON_TIME',
             departureDate: new Date('2099-01-01T10:00:00Z')
         }]);
         mockTx.booking.findFirst.mockResolvedValue(null);

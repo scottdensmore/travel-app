@@ -22,7 +22,7 @@ async function createFlight(suffix: string, from: string, to: string, day: strin
             from,
             to,
             departureDate: new Date(`${day}T08:00:00Z`),
-            price: '$350',
+            priceCents: 35000,
             status: 'ON_TIME',
             ...ROOMY,
         },

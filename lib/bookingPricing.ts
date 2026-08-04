@@ -25,18 +25,12 @@ export function parsePriceToCents(price: string): number {
 /**
  * A flight's fare in minor units.
  *
- * Prefers the integer column, which is authoritative, and falls back to parsing
- * the retained string for rows the backfill could not read. Every caller goes
- * through here so that the fallback lives in one place and disappears in one
- * place when the string column goes (#70).
+ * Trivial now that the fare is stored in one form (#135). Kept as the single
+ * accessor so callers still name what they are reading, and so a future change
+ * of representation has one place to happen.
  */
-export function flightFareCents(
-    flight: { priceCents?: number | null; price: string }
-): number {
-    if (flight.priceCents !== null && flight.priceCents !== undefined) {
-        return flight.priceCents;
-    }
-    return parsePriceToCents(flight.price);
+export function flightFareCents(flight: { priceCents: number }): number {
+    return flight.priceCents;
 }
 
 export function calculatePassengerFareCents(basePriceCents: number, cabinClass: CabinClass): number {
@@ -106,16 +100,10 @@ export function calculateBookingTotal(
  */
 export function bookingTotalCents(
     booking: { totalPriceCents: number | null },
-    flight: { price: string } | null | undefined,
+    flight: { priceCents: number } | null | undefined,
 ): number {
     if (booking.totalPriceCents !== null && booking.totalPriceCents !== undefined) {
         return booking.totalPriceCents;
     }
-    if (!flight) return 0;
-
-    try {
-        return parsePriceToCents(flight.price);
-    } catch {
-        return 0;
-    }
+    return flight?.priceCents ?? 0;
 }

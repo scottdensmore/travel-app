@@ -1,6 +1,7 @@
 "use client"
 
 import { BRAND } from '@/lib/brand';
+import { formatPrice } from '@/lib/bookingPricing';
 
 import React, { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
@@ -16,7 +17,7 @@ interface FlightSchedule {
     to: string;
     departureTime: string;
     daysOfWeek: number[];
-    price: string;
+    priceCents: number | null;
     firstClassRows?: number | null;
     businessRows?: number | null;
     premiumEconomyRows?: number | null;
@@ -33,7 +34,11 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
     const [from, setFrom] = useState(initialSchedule?.from ?? '');
     const [to, setTo] = useState(initialSchedule?.to ?? '');
     const [departureTime, setDepartureTime] = useState(initialSchedule?.departureTime ?? '');
-    const [price, setPrice] = useState(initialSchedule?.price ?? '');
+    const [price, setPrice] = useState(
+        initialSchedule?.priceCents === undefined || initialSchedule?.priceCents === null
+            ? ''
+            : formatPrice(initialSchedule.priceCents)
+    );
     const [daysOfWeek, setDaysOfWeek] = useState<number[]>(initialSchedule?.daysOfWeek ?? []);
 
     const [firstClassRows, setFirstClassRows] = useState(initialSchedule?.firstClassRows?.toString() ?? '3');

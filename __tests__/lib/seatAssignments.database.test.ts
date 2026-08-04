@@ -37,7 +37,7 @@ async function createFlight(suffix: string) {
             from: 'Seattle, USA',
             to: 'Detroit, USA',
             departureDate: new Date('2027-05-01T08:00:00Z'),
-            price: '$350',
+            priceCents: 35000,
         },
     });
     created.flightIds.push(flight.id);

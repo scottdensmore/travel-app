@@ -485,30 +485,11 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
      * into a number meant the ordering silently depended on how prices happened
      * to be formatted (#70).
      */
-    /**
-     * A fare as the customer reads it.
-     *
-     * Deliberately not fareCents: that returns infinity for an unreadable fare
-     * so the row sorts last, and formatting infinity renders "$∞". A fare that
-     * cannot be read falls back to whatever the catalogue string says.
-     */
-    const fareLabel = (flight: { priceCents?: number | null; price: string }): string => {
-        try {
-            return formatPrice(flightFareCents(flight));
-        } catch {
-            return flight.price;
-        }
-    };
+    /** A fare as the customer reads it. */
+    const fareLabel = (flight: { priceCents: number }): string =>
+        formatPrice(flightFareCents(flight));
 
-    const fareCents = (flight: { priceCents?: number | null; price: string }): number => {
-        try {
-            return flightFareCents(flight);
-        } catch {
-            // A fare neither stored nor parseable sorts to the bottom rather
-            // than taking the results down.
-            return Number.POSITIVE_INFINITY;
-        }
-    };
+    const fareCents = (flight: { priceCents: number }): number => flightFareCents(flight);
 
     // Filter out cancelled flights from active search results
     const activeResults = useMemo(() => {

@@ -8,15 +8,13 @@ import { isActionValidationFailure } from '@/lib/actionResult';
 import { CABIN_FARE_PERCENT, calculatePassengerFareCents, flightFareCents, formatPrice } from '@/lib/bookingPricing';
 
 interface Flight {
-    /// The fare in minor units, which is what the total is computed from.
-    priceCents?: number | null;
     id: number;
     flightNumber: string;
     airline: string;
     from: string;
     to: string;
     departureDate: Date | string;
-    price: string;
+    priceCents: number;
     firstClassRows?: number | null;
     businessRows?: number | null;
     premiumEconomyRows?: number | null;
