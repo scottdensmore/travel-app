@@ -34,7 +34,7 @@ describe('FlightScheduleService dynamic generator', () => {
                 to: 'Detroit, USA',
                 departureTime: '08:00',
                 daysOfWeek: [1, 3, 5],
-                price: '$350'
+                priceCents: 35000
             },
             {
                 id: 2,
@@ -44,7 +44,7 @@ describe('FlightScheduleService dynamic generator', () => {
                 to: 'London, UK',
                 departureTime: '19:30',
                 daysOfWeek: [2, 4, 6],
-                price: '$850',
+                priceCents: 85000,
                 firstClassRows: 1,
                 businessRows: 2,
                 premiumEconomyRows: 3,
@@ -85,7 +85,7 @@ describe('FlightScheduleService dynamic generator', () => {
                 from: 'New York, USA',
                 to: 'London, UK',
                 departureDate: new Date('2026-06-25T19:30:00Z'),
-                price: '$850',
+                priceCents: 85000,
                 firstClassRows: 1,
                 businessRows: 2,
                 premiumEconomyRows: 3,
@@ -109,7 +109,7 @@ describe('FlightScheduleService dynamic generator', () => {
             to: 'London, UK',
             departureTime: '19:30',
             daysOfWeek: [4],
-            price: '$850'
+            priceCents: 85000
         };
 
         mockedFlightScheduleFindMany.mockResolvedValue([mockSchedule]);
@@ -123,7 +123,7 @@ describe('FlightScheduleService dynamic generator', () => {
             to: 'London, UK',
             departureDate: new Date('2026-06-25T19:30:00Z'),
             returnDate: null,
-            price: '$850',
+            priceCents: 85000,
             status: 'DELAYED' // Administrative override preserved
         };
         mockedFlightFindFirst.mockResolvedValue(existingFlight);
@@ -146,7 +146,7 @@ describe('FlightScheduleService dynamic generator', () => {
             to: 'London, UK',
             departureTime: '19:30',
             daysOfWeek: [4],
-            price: '$850'
+            priceCents: 85000
         };
 
         mockedFlightScheduleFindMany.mockResolvedValue([mockSchedule]);
@@ -166,7 +166,7 @@ describe('FlightScheduleService dynamic generator', () => {
             to: 'London, UK',
             departureDate: new Date('2026-06-25T19:30:00Z'),
             returnDate: null,
-                price: '$850',
+                priceCents: 85000,
                 status: 'ON_TIME',
                 firstClassRows: 1,
                 businessRows: 2,
@@ -194,7 +194,7 @@ describe('FlightScheduleService dynamic generator', () => {
             to: 'London, UK',
             departureTime: '19:30',
             daysOfWeek: [4],
-            price: '$850'
+            priceCents: 85000
         };
 
         mockedFlightScheduleFindMany.mockResolvedValue([schedule]);
@@ -216,7 +216,7 @@ describe('FlightScheduleService dynamic generator', () => {
             to: 'London, UK',
             departureTime: '19:30',
             daysOfWeek: [4],
-            price: '$850'
+            priceCents: 85000
         };
 
         mockedFlightScheduleFindMany.mockResolvedValue([mockSchedule]);
@@ -242,7 +242,7 @@ describe('FlightScheduleService inventory horizon', () => {
         to: 'Detroit, USA',
         departureTime: '08:00',
         daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-        price: '$350'
+        priceCents: 35000
     };
 
     beforeEach(() => {

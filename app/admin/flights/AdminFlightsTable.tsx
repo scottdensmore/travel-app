@@ -28,7 +28,7 @@ interface Flight {
     from: string;
     to: string;
     departureDate: Date | string;
-    price: string;
+    priceCents: number;
     status: string;
     bookings: Booking[];
 }

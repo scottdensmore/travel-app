@@ -43,7 +43,7 @@ const sampleBookings = [
             to: 'Detroit, USA',
             departureDate: '2026-06-15T08:00:00Z',
             returnDate: null,
-            price: '$350',
+            priceCents: 35000,
         } }],
         passengers: [
             {
@@ -305,7 +305,7 @@ describe('ProfileClient interactive dashboard', () => {
                         to: 'Detroit, USA',
                         departureDate: '2026-06-15T08:00:00Z',
                         returnDate: null,
-                        price: '$350',
+                        priceCents: 35000,
                     },
                     seatAssignments: [{ passengerId: 'p-1', seatNumber: '12A' }],
                 },
@@ -320,7 +320,7 @@ describe('ProfileClient interactive dashboard', () => {
                         to: 'Seattle, USA',
                         departureDate: '2026-06-22T17:00:00Z',
                         returnDate: null,
-                        price: '$310',
+                        priceCents: 31000,
                     },
                     seatAssignments: [{ passengerId: 'p-1', seatNumber: '4C' }],
                 },

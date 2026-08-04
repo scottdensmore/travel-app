@@ -81,7 +81,6 @@ export default async function CheckoutPage({ searchParams }: PageProps) {
             from: flight.from,
             to: flight.to,
             departureDate: flight.departureDate.toISOString(),
-            price: flight.price,
             priceCents: flight.priceCents,
             firstClassRows: flight.firstClassRows,
             businessRows: flight.businessRows,

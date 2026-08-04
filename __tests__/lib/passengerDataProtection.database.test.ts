@@ -24,7 +24,7 @@ describe('passenger identity data in PostgreSQL', () => {
                 from: 'SEA',
                 to: 'SFO',
                 departureDate: new Date('2099-01-01T10:00:00.000Z'),
-                price: '$100',
+                priceCents: 10000,
                 status: 'ON_TIME',
                 economyRows: 20,
                 seatPattern: 'ABC-DEF',

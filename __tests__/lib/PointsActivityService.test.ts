@@ -12,7 +12,7 @@ describe('PointsActivityService dynamic calculations', () => {
                 flightNumber: 'GA101',
                 from: 'Seattle, USA',
                 to: 'Detroit, USA',
-                price: '$350',
+                priceCents: 35000,
             } }]
         },
         {
@@ -24,7 +24,7 @@ describe('PointsActivityService dynamic calculations', () => {
                 flightNumber: 'DL202',
                 from: 'Detroit, USA',
                 to: 'New York, USA',
-                price: '250',
+                priceCents: 25000,
             } }]
         }
     ];
@@ -87,7 +87,7 @@ describe('PointsActivityService dynamic calculations', () => {
                     flightNumber: 'GA103',
                     from: 'Detroit, USA',
                     to: 'Seattle, USA',
-                    price: '$150',
+                    priceCents: 15000,
                 } }]
             }
         ];
@@ -124,7 +124,7 @@ describe('PointsActivityService dynamic calculations', () => {
                     flightNumber: 'GA101',
                     from: 'Seattle, USA',
                     to: 'Detroit, USA',
-                    price: '$350',
+                    priceCents: 35000,
                 } }]
             }
         ];

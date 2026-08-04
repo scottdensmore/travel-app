@@ -7,6 +7,7 @@ import AdminFlightsTable from './AdminFlightsTable';
 import ManualOccurrenceBuilder from '@/components/ui/ManualOccurrenceBuilder';
 import { safePassengerSelect } from '@/lib/passengerDataAccess';
 import { passengersSeatedOnLeg } from '@/lib/bookingItinerary';
+import { formatPrice } from '@/lib/bookingPricing';
 
 export const dynamic = 'force-dynamic';
 
@@ -103,7 +104,7 @@ export default async function AdminFlightsPage() {
                                             {getDaysLabel(schedule.daysOfWeek)}
                                         </td>
                                         <td style={{ padding: '12px', fontSize: '0.9rem', color: '#34d399', fontWeight: 'bold' }}>
-                                            {schedule.price}
+                                            {formatPrice(schedule.priceCents ?? 0)}
                                         </td>
                                         <td style={{ padding: '12px', textAlign: 'right' }}>
                                             <DeleteScheduleButton id={schedule.id} />

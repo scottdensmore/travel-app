@@ -14,7 +14,7 @@ interface ScheduleItem {
     to: string;
     departureTime: string;
     daysOfWeek: number[];
-    price: string;
+    priceCents: number;
     firstClassRows?: number | null;
     businessRows?: number | null;
     premiumEconomyRows?: number | null;

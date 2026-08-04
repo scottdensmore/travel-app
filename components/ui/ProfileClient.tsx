@@ -18,7 +18,7 @@ interface Flight {
     from: string;
     to: string;
     departureDate: Date | string;
-    price: string;
+    priceCents: number;
     firstClassRows?: number | null;
     businessRows?: number | null;
     premiumEconomyRows?: number | null;

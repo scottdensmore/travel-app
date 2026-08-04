@@ -319,7 +319,7 @@ describe('searchFlightsAction', () => {
     it('prices results at the cabin that was searched', async () => {
         jest.useFakeTimers().setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
         mockedFlightFindMany.mockResolvedValue([
-            { id: 1, price: '$350', priceCents: 35_000, economyRows: 20, businessRows: 3 },
+            { id: 1, priceCents: 35_000, economyRows: 20, businessRows: 3 },
         ]);
 
         const result = await searchFlightsAction(
@@ -332,7 +332,7 @@ describe('searchFlightsAction', () => {
         // The integer moves with the string. Sorting or filtering on a base
         // fare while the screen shows a cabin fare would disagree with itself.
         expect(result).toMatchObject({
-            flights: [{ price: '$700', priceCents: 70_000, cabinAvailable: true }],
+            flights: [{ priceCents: 70_000, cabinAvailable: true }],
         });
         jest.useRealTimers();
     });
@@ -340,8 +340,8 @@ describe('searchFlightsAction', () => {
     it('marks flights the searched cabin does not operate, and keeps them', async () => {
         jest.useFakeTimers().setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
         mockedFlightFindMany.mockResolvedValue([
-            { id: 1, price: '$350', priceCents: 35_000, economyRows: 20, businessRows: 0 },
-            { id: 2, price: '$400', priceCents: 40_000, economyRows: 20, businessRows: 3 },
+            { id: 1, priceCents: 35_000, economyRows: 20, businessRows: 0 },
+            { id: 2, priceCents: 40_000, economyRows: 20, businessRows: 3 },
         ]);
 
         const result = await searchFlightsAction(
@@ -353,8 +353,8 @@ describe('searchFlightsAction', () => {
         expect(result).toMatchObject({
             flights: [
                 // Quoted at the fare it can actually be booked at.
-                { id: 1, cabinAvailable: false, price: '$350', priceCents: 35_000 },
-                { id: 2, cabinAvailable: true, price: '$800', priceCents: 80_000 },
+                { id: 1, cabinAvailable: false, priceCents: 35_000 },
+                { id: 2, cabinAvailable: true, priceCents: 80_000 },
             ],
         });
         jest.useRealTimers();
@@ -363,12 +363,12 @@ describe('searchFlightsAction', () => {
     it('defaults to economy when no cabin is given', async () => {
         jest.useFakeTimers().setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
         mockedFlightFindMany.mockResolvedValue([
-            { id: 1, price: '$350', priceCents: 35_000, economyRows: 20, businessRows: 0 },
+            { id: 1, priceCents: 35_000, economyRows: 20, businessRows: 0 },
         ]);
 
         const result = await searchFlightsAction('Seattle, USA', 'Detroit, USA', '2026-06-25');
 
-        expect(result).toMatchObject({ flights: [expect.objectContaining({ price: '$350' })] });
+        expect(result).toMatchObject({ flights: [expect.objectContaining({ priceCents: 35000 })] });
         jest.useRealTimers();
     });
 
@@ -603,7 +603,7 @@ describe('bookFlightAction', () => {
             id: 42,
             airline: 'Gemini Airways',
             flightNumber: 'GA101',
-            price: '$200',
+            priceCents: 20000,
             from: 'A',
             to: 'B'
         });
@@ -825,7 +825,7 @@ describe('cancelBookingAction', () => {
             userId: 'user-123',
             totalPriceCents: 6997,
             flightId: 10,
-            legs: [{ sequence: 1, flight: { flightNumber: 'GA101', airline: 'Gemini Airways', price: '$200' } }]
+            legs: [{ sequence: 1, flight: { flightNumber: 'GA101', airline: 'Gemini Airways', priceCents: 20000 } }]
         });
         mockTx.booking.update.mockResolvedValue({ id: 1 });
 
@@ -887,7 +887,7 @@ describe('cancelBookingAction', () => {
             userId: 'some-user',
             totalPriceCents: 20000,
             flightId: 10,
-            legs: [{ sequence: 1, flight: { flightNumber: 'GA101', airline: 'Gemini Airways', price: '$200' } }]
+            legs: [{ sequence: 1, flight: { flightNumber: 'GA101', airline: 'Gemini Airways', priceCents: 20000 } }]
         });
         mockTx.booking.update.mockResolvedValue({ id: 1 });
 
@@ -1171,7 +1171,8 @@ describe('admin flight schedule actions', () => {
             expect(mockedFlightScheduleCreate).toHaveBeenCalledWith({
                 data: {
                     ...sampleScheduleInput,
-                    // The fare is recorded in minor units alongside the string.
+                    price: undefined,
+                    // The fare is stored only in minor units now (#135).
                     priceCents: 85000,
                     firstClassRows: 3,
                     businessRows: 3,
@@ -1191,7 +1192,6 @@ describe('admin flight schedule actions', () => {
                     from: 'New York',
                     to: 'London',
                     departureDate: new Date('2026-06-29T08:00:00Z'),
-                    price: '$850',
                     priceCents: 85000,
                     status: 'ON_TIME',
                     firstClassRows: 3,
@@ -1230,7 +1230,8 @@ describe('admin flight schedule actions', () => {
                 where: { id: 5 },
                 data: {
                     ...sampleScheduleInput,
-                    // The fare is recorded in minor units alongside the string.
+                    price: undefined,
+                    // The fare is stored only in minor units now (#135).
                     priceCents: 85000,
                     firstClassRows: 3,
                     businessRows: 3,
@@ -1413,7 +1414,7 @@ describe('admin flight schedule actions', () => {
                     to: 'LAX',
                     departureTime: '08:00',
                     daysOfWeek: [1], // Mondays
-                    price: '$500',
+                    priceCents: 50000,
                 });
 
                 mockedFlightFindFirst.mockResolvedValue(null);
@@ -1436,7 +1437,7 @@ describe('admin flight schedule actions', () => {
                         from: 'JFK',
                         to: 'LAX',
                         departureDate: new Date('2026-07-06T08:00:00Z'),
-                        price: '$500',
+                        priceCents: 50000,
                         status: 'ON_TIME',
                         firstClassRows: 3,
                         businessRows: 6,
@@ -1521,7 +1522,7 @@ describe('admin flight schedule actions', () => {
                     to: 'LAX',
                     departureTime: '08:00',
                     daysOfWeek: [1],
-                    price: '$500',
+                    priceCents: 50000,
                 });
                 mockedFlightFindFirst.mockResolvedValue(null);
 
@@ -1544,7 +1545,7 @@ describe('admin flight schedule actions', () => {
                     to: 'LAX',
                     departureTime: '08:00',
                     daysOfWeek: [1],
-                    price: '$500',
+                    priceCents: 50000,
                 });
                 mockedFlightFindFirst.mockResolvedValue({ id: 42 });
                 mockTx.flight.findUnique.mockResolvedValue({ id: 42, seatAssignments: [] });
@@ -1574,7 +1575,7 @@ describe('admin flight schedule actions', () => {
                     to: 'LAX',
                     departureTime: '08:00',
                     daysOfWeek: [1],
-                    price: '$500',
+                    priceCents: 50000,
                 });
                 mockedFlightFindFirst
                     .mockResolvedValueOnce(null)
@@ -1627,7 +1628,7 @@ describe('admin flight schedule actions', () => {
                     to: 'LAX',
                     departureTime: '08:00',
                     daysOfWeek: [1],
-                    price: '$500',
+                    priceCents: 50000,
                 });
                 mockedFlightFindFirst.mockResolvedValue({
                     id: 42,
@@ -1670,7 +1671,7 @@ describe('admin flight schedule actions', () => {
                     to: 'LAX',
                     departureTime: '08:00',
                     daysOfWeek: [1],
-                    price: '$500',
+                    priceCents: 50000,
                 });
                 mockedFlightFindFirst.mockResolvedValue({ id: 42 });
                 mockTx.flight.findUnique.mockResolvedValue({

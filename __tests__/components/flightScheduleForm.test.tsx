@@ -62,7 +62,7 @@ describe('FlightScheduleForm', () => {
             to: 'London',
             departureTime: '14:30',
             daysOfWeek: [1, 3, 5],
-            price: '$850',
+            priceCents: 85000,
         };
 
         render(<FlightScheduleForm initialSchedule={initialSchedule} />);
@@ -192,7 +192,7 @@ describe('FlightScheduleForm', () => {
             to: 'London',
             departureTime: '14:30',
             daysOfWeek: [1],
-            price: '$850',
+            priceCents: 85000,
         };
 
         render(<FlightScheduleForm initialSchedule={initialSchedule} />);

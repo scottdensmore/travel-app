@@ -18,7 +18,7 @@ const sampleFlight = {
     from: 'Seattle, USA',
     to: 'Detroit, USA',
     departureDate: '2026-06-30T10:00:00Z',
-    price: '$100'
+    priceCents: 10000
 };
 
 describe('BookingCheckoutWizard', () => {
@@ -344,7 +344,7 @@ describe('BookingCheckoutWizard', () => {
     describe('Multi-Passenger Coordinated Adjacent Seat Maps', () => {
         const twoPassengersFlight = {
             ...sampleFlight,
-            price: '$100'
+            priceCents: 10000
         };
 
         const setupStep2WithTwoPassengers = (
@@ -495,7 +495,7 @@ describe('BookingCheckoutWizard', () => {
             from: 'Detroit, USA',
             to: 'Seattle, USA',
             departureDate: '2026-07-07T10:00:00Z',
-            price: '$150'
+            priceCents: 15000
         };
 
         const renderRoundTrip = (occupied: string[][] = [[], []]) =>

@@ -323,6 +323,19 @@ describe('shared server validation schemas', () => {
         ]));
     });
 
+    it('accepts a fare in the form the edit form seeds it', () => {
+        // The edit form fills this field with formatPrice output, which uses
+        // thousands separators. Rejecting that would make a schedule
+        // impossible to re-save without editing the price (#135).
+        const base = {
+            flightNumber: 'MA1', airline: 'A', from: 'X', to: 'Y',
+            departureTime: '08:00', daysOfWeek: [1],
+        };
+        expect(scheduleSchema.safeParse({ ...base, price: '$1,234.56' }).success).toBe(true);
+        expect(scheduleSchema.safeParse({ ...base, price: '$1234' }).success).toBe(true);
+        expect(scheduleSchema.safeParse({ ...base, price: '$1,23' }).success).toBe(false);
+    });
+
     it('covers exact city-guide and schedule boundaries', () => {
         const imagePrefix = 'data:image/png;base64,';
         const boundaryGuide = {
@@ -342,7 +355,7 @@ describe('shared server validation schemas', () => {
         const boundarySchedule = {
             flightNumber: 'AB12345678', airline: 'A'.repeat(120), from: 'F'.repeat(120), to: 'T'.repeat(120),
             departureTime: '23:59', daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-            price: '$999999.99', firstClassRows: 0, businessRows: 0,
+            price: '$999999', firstClassRows: 0, businessRows: 0,
             premiumEconomyRows: 0, economyRows: 1, seatPattern: 'ABCDEFGHIJKL'
         };
         expect(scheduleSchema.safeParse(boundarySchedule).success).toBe(true);

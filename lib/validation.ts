@@ -201,7 +201,11 @@ export const scheduleSchema = z.object({
         .max(7)
         .refine(days => new Set(days).size === days.length, 'Days of week must be unique.')
         .transform(days => [...days].sort((left, right) => left - right)),
-    price: requiredText('Price', 32).regex(/^\$?\d+(?:\.\d{1,2})?$/, 'Price format is invalid.'),
+    /// Thousands separators are accepted because the edit form seeds this field
+    /// from formatPrice, which emits them. Rejecting its own output would make a
+    /// schedule impossible to re-save unedited.
+    price: requiredText('Price', 32)
+        .regex(/^\$?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?$/, 'Price format is invalid.'),
     firstClassRows: rowCountSchema.default(3),
     businessRows: rowCountSchema.default(3),
     premiumEconomyRows: rowCountSchema.default(4),

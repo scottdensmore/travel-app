@@ -17,7 +17,6 @@ import {
     bookingTotalCents,
     calculatePassengerFareCents,
     flightFareCents,
-    formatPrice,
     parsePriceToCents,
     type CabinClass,
 } from '@/lib/bookingPricing';
@@ -164,21 +163,13 @@ function flightsForCabin(flights: Flight[], cabin: CabinClass): SearchResultFlig
             // the catalogue fare because that is what the customer can book.
             return { ...flight, cabinAvailable: available };
         }
-        try {
-            // Both forms of the fare move together, so anything that sorts or
-            // filters on the integer agrees with the price on screen.
-            const fareCents = calculatePassengerFareCents(flightFareCents(flight), cabin);
-            return {
-                ...flight,
-                cabinAvailable: true,
-                priceCents: fareCents,
-                price: formatPrice(fareCents),
-            };
-        } catch {
-            // A stored fare that cannot be parsed cannot be quoted in another
-            // cabin, so the flight is offered at the fare it does have.
-            return { ...flight, cabinAvailable: false };
-        }
+        // The fare is stored in one form, so quoting a cabin is arithmetic on a
+        // number rather than a parse that can fail.
+        return {
+            ...flight,
+            cabinAvailable: true,
+            priceCents: calculatePassengerFareCents(flightFareCents(flight), cabin),
+        };
     });
 }
 
@@ -705,7 +696,6 @@ export async function saveFlightScheduleAction(data: {
                 to: data.to,
                 departureTime: data.departureTime,
                 daysOfWeek: data.daysOfWeek,
-                price: data.price,
                 priceCents: parsePriceToCents(data.price),
                 firstClassRows,
                 businessRows,
@@ -723,7 +713,6 @@ export async function saveFlightScheduleAction(data: {
                 to: data.to,
                 departureTime: data.departureTime,
                 daysOfWeek: data.daysOfWeek,
-                price: data.price,
                 priceCents: parsePriceToCents(data.price),
                 firstClassRows,
                 businessRows,
@@ -763,7 +752,6 @@ export async function saveFlightScheduleAction(data: {
                             from: savedSchedule.from,
                             to: savedSchedule.to,
                             departureDate,
-                            price: savedSchedule.price,
                             priceCents: savedSchedule.priceCents,
                             status: 'ON_TIME',
                             firstClassRows,
@@ -894,7 +882,6 @@ export async function generateFlightOccurrencesAction(
                             from: schedule.from,
                             to: schedule.to,
                             departureDate,
-                            price: schedule.price,
                             priceCents: schedule.priceCents,
                             status: 'ON_TIME',
                             firstClassRows,

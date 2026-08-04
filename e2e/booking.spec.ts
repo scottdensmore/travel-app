@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { prisma } from '../lib/prisma';
-import { calculateBookingTotal } from '../lib/bookingPricing';
+import { calculateItineraryTotal } from '../lib/bookingPricing';
 import { registerAndSignIn } from './helpers/auth';
 
 test.describe('Flight Booking Journey', () => {
@@ -155,7 +155,7 @@ test.describe('Flight Booking Journey', () => {
       where: { user: { email: uniqueEmail } },
       orderBy: { createdAt: 'desc' }
     });
-    const expectedTotal = calculateBookingTotal(targetFlight.price, [{ cabinClass: 'ECONOMY' }]);
+    const expectedTotal = calculateItineraryTotal([targetFlight.priceCents], [{ cabinClass: 'ECONOMY' }]);
     expect(persistedBooking.totalPriceCents).toBe(expectedTotal.cents);
     expect(persistedBooking.paymentIntentId).toBeNull();
     expect(persistedBooking.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/i);
@@ -336,8 +336,8 @@ test.describe('Flight Booking Journey', () => {
     expect(booking.legs[1].seatAssignments.map(seat => seat.seatNumber)).toEqual([inboundSeatName]);
 
     const expectedTotal =
-      calculateBookingTotal(outbound.price, [{ cabinClass: 'ECONOMY' }]).cents +
-      calculateBookingTotal(inbound.price, [{ cabinClass: 'ECONOMY' }]).cents;
+      calculateItineraryTotal([outbound.priceCents, inbound.priceCents],
+        [{ cabinClass: 'ECONOMY' }]).cents;
     expect(booking.totalPriceCents).toBe(expectedTotal);
 
     // --- The profile shows the whole itinerary, not just the outbound ---

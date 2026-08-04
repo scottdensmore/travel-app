@@ -296,7 +296,7 @@ test.describe('Admin Control Journey', () => {
         from: 'Seattle, USA',
         to: 'Detroit, USA',
         departureDate: raceDate,
-        price: '$499',
+        priceCents: 49900,
         firstClassRows: 3,
         businessRows: 3,
         premiumEconomyRows: 4,
