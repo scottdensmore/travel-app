@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "02c07aa0d6e6",
+  "strategy": "manual-commit",
+  "branch": "refactor/stop-writing-passenger-seat",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "AGENTS.md",
+    "__tests__/components/BookingCheckoutWizard.test.tsx",
+    "__tests__/lib/FlightBookingService.test.ts",
+    "components/ui/BookingCheckoutWizard.tsx",
+    "e2e/helpers/auth.ts",
+    "lib/FlightBookingService.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/02/c07aa0d6e6/0/metadata.json",
+      "transcript": "/02/c07aa0d6e6/0/full.jsonl",
+      "compact_transcript": "/02/c07aa0d6e6/0/transcript.jsonl",
+      "content_hash": "/02/c07aa0d6e6/0/content_hash.txt",
+      "prompt": "/02/c07aa0d6e6/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2805,
+    "cache_creation_tokens": 241937,
+    "cache_read_tokens": 12678504,
+    "output_tokens": 33601,
+    "api_call_count": 58
+  }
+}
