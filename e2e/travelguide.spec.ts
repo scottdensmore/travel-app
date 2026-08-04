@@ -26,21 +26,22 @@ test.describe('Travel Guide Journey', () => {
     const newYorkMarker = page.locator('.rsm-marker[data-city="New York"]');
     await expect(newYorkMarker).toBeVisible();
     await newYorkMarker.click();
-    await expect(page.locator('.guide-extra.highlight h3')).toContainText('New York');
+    await expect(page.locator('.guide-extra h3')).toContainText('New York');
 
     // Click on "Detroit, USA" in the sidebar list to make it active
-    const cityListItem = page.locator('li h3:has-text("Detroit")').first();
+    const cityListItem = page.getByRole('button', { name: 'Detroit, USA', exact: true });
     await expect(cityListItem).toBeVisible();
     await cityListItem.click();
 
     // Verify highlighted city details sidebar is visible and displays correct header
-    const activeSidebar = page.locator('.guide-extra.highlight');
+    // One panel exists at a time now, for the selected city (#78).
+    const activeSidebar = page.locator('.guide-extra');
     await expect(activeSidebar).toBeVisible();
     await expect(activeSidebar.locator('h3')).toContainText(/Detroit/i);
 
     // Write and submit a review
     const reviewText = `Amazing experience here! Reviewed at ${Date.now()}`;
-    await activeSidebar.locator('textarea[placeholder="Share your experience..."]').fill(reviewText);
+    await activeSidebar.locator('textarea#review-content').fill(reviewText);
     await activeSidebar.locator('button:has-text("Submit Review")').click();
 
     // Expect the review text to appear in the reviews list

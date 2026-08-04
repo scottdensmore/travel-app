@@ -73,7 +73,7 @@ describe('TravelGuideClient', () => {
             <TravelGuideClient cities={sampleCities} initialFavorites={[]} />
         );
 
-        expect(serverHtml).toContain('Loading Map...');
+        expect(serverHtml).toContain('Loading map');
         expect(serverHtml).not.toContain('data-testid="map"');
     });
 
@@ -93,20 +93,34 @@ describe('TravelGuideClient', () => {
         expect(screen.getByText('Great music history!')).toBeInTheDocument();
     });
 
-    it('switches the active city guide when clicking on another city marker or header', () => {
+    it('shows one guide at a time, for the city that is selected', () => {
         render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
 
-        // Click on Paris header in the list
-        const parisHeader = screen.getAllByRole('heading', { name: 'Paris, France' })[0];
-        fireEvent.click(parisHeader);
+        // Every city used to mount its own panel, all absolutely positioned at
+        // the same coordinates. Only the selected one exists now (#78).
+        expect(screen.getAllByRole('region')).toHaveLength(1);
+        expect(screen.getByText('Motor City')).toBeInTheDocument();
 
-        // Detroit details should no longer be the active highlight (represented by class highlight)
-        const detroitDetails = screen.getByText('Motor City').closest('.guide-extra');
-        expect(detroitDetails).not.toHaveClass('highlight');
+        fireEvent.click(screen.getByRole('button', { name: 'Paris, France' }));
 
+        expect(screen.queryByText('Motor City')).not.toBeInTheDocument();
+        expect(screen.getByText('City of Lights')).toBeInTheDocument();
+        expect(screen.getAllByRole('region')).toHaveLength(1);
+        expect(screen.getByRole('button', { name: 'Paris, France' }))
+            .toHaveAttribute('aria-pressed', 'true');
+    });
 
-        const parisDetails = screen.getByText('City of Lights').closest('.guide-extra');
-        expect(parisDetails).toHaveClass('highlight');
+    it('carries the review draft with the city it was typed for', () => {
+        render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
+
+        // One shared piece of state drove every mounted form, so a draft for one
+        // city was the draft for all of them.
+        fireEvent.change(screen.getByLabelText('Your review'), {
+            target: { value: 'Half-written thought' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Paris, France' }));
+
+        expect(screen.getByLabelText('Your review')).toHaveValue('');
     });
 
     it('toggles favorites successfully and reverts on API failure', async () => {
@@ -115,19 +129,22 @@ describe('TravelGuideClient', () => {
         render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
 
         // Toggle favorite for Detroit (id: 1)
-        const favoriteButtons = screen.getAllByRole('button', { name: '🤍' });
-        fireEvent.click(favoriteButtons[0]);
+        // The buttons carry a label now, rather than leaving a screen reader to
+        // announce an emoji.
+        fireEvent.click(screen.getByRole('button', { name: 'Add Detroit to favourites' }));
 
         expect(mockToggleFavorite).toHaveBeenCalledWith(1);
 
         // Now mock failure
         mockToggleFavorite.mockRejectedValue(new Error('Unauthorized'));
-        fireEvent.click(favoriteButtons[0]);
+        // The label flips with the state, so re-query rather than reusing a stale handle.
+        fireEvent.click(screen.getByRole('button', { name: /Detroit (to|from) favourites/ }));
 
         await waitFor(() => {
-            expect(global.alert).toHaveBeenCalledWith('Please sign in to save favorites.');
-            // Verify favorite reverts to filled heart (since unfavoriting failed)
-            expect(favoriteButtons[0]).toHaveTextContent('❤️');
+            expect(screen.getByRole('alert')).toHaveTextContent('Please sign in to save favorites.');
+            // Reverts to the filled heart, since unfavouriting failed.
+            expect(screen.getByRole('button', { name: /Detroit (to|from) favourites/ }))
+                .toHaveTextContent('❤️');
         });
     });
 
@@ -142,14 +159,14 @@ describe('TravelGuideClient', () => {
         });
 
         render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
-        const favoriteButton = screen.getAllByRole('button', { name: '🤍' })[0];
+        const favoriteButton = screen.getByRole('button', { name: 'Add Detroit to favourites' });
         fireEvent.click(favoriteButton);
 
         await waitFor(() => {
-            expect(global.alert).toHaveBeenCalledWith('City guide was not found.');
+            expect(screen.getByRole('alert')).toHaveTextContent('City guide was not found.');
             expect(favoriteButton).toHaveTextContent('🤍');
         });
-        expect(global.alert).not.toHaveBeenCalledWith('Please sign in to save favorites.');
+        expect(screen.getByRole('alert')).not.toHaveTextContent('Please sign in to save favorites.');
     });
 
 
@@ -162,8 +179,8 @@ describe('TravelGuideClient', () => {
         render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
 
         // Find review input inside highlighted section (Detroit)
-        const reviewInput = screen.getAllByPlaceholderText('Share your experience...')[0];
-        const submitButton = screen.getAllByRole('button', { name: 'Submit Review' })[0];
+        const reviewInput = screen.getByLabelText('Your review');
+        const submitButton = screen.getByRole('button', { name: 'Submit Review' });
 
         fireEvent.change(reviewInput, { target: { value: 'Awesome city!' } });
         fireEvent.click(submitButton);
@@ -181,7 +198,7 @@ describe('TravelGuideClient', () => {
         fireEvent.click(submitButton);
 
         await waitFor(() => {
-            expect(global.alert).toHaveBeenCalledWith('Please sign in to submit a review.');
+            expect(screen.getByRole('alert')).toHaveTextContent('Please sign in to submit a review.');
             // Verify input is preserved on error
             expect(reviewInput).toHaveValue('Fails');
         });
@@ -189,14 +206,35 @@ describe('TravelGuideClient', () => {
 
 
 
-    it('resets selection when clicking back link', () => {
+    it('returns to the list, and says what to do next', () => {
         render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
 
-        const backLink = screen.getAllByText('← Back')[0];
-        fireEvent.click(backLink);
+        fireEvent.click(screen.getByRole('button', { name: '← All destinations' }));
 
-        const detroitDetails = screen.getByText('Motor City').closest('.guide-extra');
-        expect(detroitDetails).not.toHaveClass('highlight');
+        expect(screen.queryByText('Motor City')).not.toBeInTheDocument();
+        expect(screen.queryByRole('region')).not.toBeInTheDocument();
+        expect(screen.getByText(/Choose a destination/i)).toBeInTheDocument();
+    });
+
+    it('selects a city from the keyboard', () => {
+        render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
+
+        // The map answered only to a mouse, which made it a decoration for
+        // anyone not using one.
+        const parisMarker = screen.getByRole('button', {
+            name: 'Show the guide for Paris, France',
+        });
+        fireEvent.keyDown(parisMarker, { key: 'Enter' });
+
+        expect(screen.getByText('City of Lights')).toBeInTheDocument();
+        expect(parisMarker).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('says so when there are no guides at all', () => {
+        render(<TravelGuideClient cities={[]} initialFavorites={[]} />);
+
+        expect(screen.getByText('No destination guides yet.')).toBeInTheDocument();
+        expect(screen.queryByRole('region')).not.toBeInTheDocument();
     });
 
     it('triggers marker click, rating change, card favorite click, and ignores empty reviews', async () => {
@@ -208,21 +246,20 @@ describe('TravelGuideClient', () => {
         // 1. Marker click
         const markers = screen.getAllByTestId('marker');
         fireEvent.click(markers[1]); // Click Paris marker
-        const parisDetails = screen.getByText('City of Lights').closest('.guide-extra');
-        expect(parisDetails).toHaveClass('highlight');
+        expect(screen.getByText('City of Lights')).toBeInTheDocument();
 
         // 2. Rating change on Paris (active card)
-        const ratingSelects = screen.getAllByRole('combobox');
-        fireEvent.change(ratingSelects[1], { target: { value: '4' } }); // Paris rating select is 1st (as Detroit is 0th)
-        expect(ratingSelects[1]).toHaveValue('4');
+        const ratingSelect = screen.getByLabelText('Your rating');
+        fireEvent.change(ratingSelect, { target: { value: '4' } });
+        expect(ratingSelect).toHaveValue('4');
 
         // 3. Card-level favorite click on Paris
-        const cardFavoriteButton = screen.getAllByRole('button', { name: '🤍 Favorite' })[1];
+        const cardFavoriteButton = screen.getByRole('button', { name: '🤍 Favorite' });
         fireEvent.click(cardFavoriteButton);
         expect(mockToggleFavorite).toHaveBeenCalledWith(2);
 
         // 4. Ignore empty review submit
-        const submitButton = screen.getAllByRole('button', { name: 'Submit Review' })[1]; // Paris submit button
+        const submitButton = screen.getByRole('button', { name: 'Submit Review' });
         fireEvent.click(submitButton);
         expect(mockSubmitReview).not.toHaveBeenCalled();
     });
