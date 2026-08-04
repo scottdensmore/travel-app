@@ -1,0 +1,24 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "aad0bc418117",
+  "strategy": "manual-commit",
+  "branch": "refactor/passenger-seat-fallbacks",
+  "checkpoints_count": 1,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/aa/d0bc418117/0/metadata.json",
+      "transcript": "/aa/d0bc418117/0/full.jsonl",
+      "compact_transcript": "/aa/d0bc418117/0/transcript.jsonl",
+      "content_hash": "/aa/d0bc418117/0/content_hash.txt",
+      "prompt": "/aa/d0bc418117/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 4317,
+    "cache_creation_tokens": 10227960,
+    "cache_read_tokens": 993217335,
+    "output_tokens": 1078966,
+    "api_call_count": 1970
+  }
+}
