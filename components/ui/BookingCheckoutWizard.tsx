@@ -5,9 +5,11 @@ import Link from 'next/link';
 import { PassengerInput } from '@/lib/FlightBookingService';
 import { bookFlightAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
-import { CABIN_FARE_PERCENT, calculatePassengerFareCents, formatPrice, parsePriceToCents } from '@/lib/bookingPricing';
+import { CABIN_FARE_PERCENT, calculatePassengerFareCents, flightFareCents, formatPrice } from '@/lib/bookingPricing';
 
 interface Flight {
+    /// The fare in minor units, which is what the total is computed from.
+    priceCents?: number | null;
     id: number;
     flightNumber: string;
     airline: string;
@@ -142,7 +144,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
     // Calculate total price
     const calculatePassengerPrice = (cabin: 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST') =>
         flights.reduce(
-            (total, leg) => total + calculatePassengerFareCents(parsePriceToCents(leg.price), cabin),
+            (total, leg) => total + calculatePassengerFareCents(flightFareCents(leg), cabin),
             0
         );
 

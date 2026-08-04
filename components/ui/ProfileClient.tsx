@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import PointsActivityTable from "@/components/ui/pointsActivityTable";
 import NextStatusChart from "@/components/ui/charts/nextStatusChart";
 import PointsHistoryChart from "@/components/ui/charts/pointsHistoryChart";
-import { formatPrice } from '@/lib/bookingPricing';
+import { flightFareCents, formatPrice } from '@/lib/bookingPricing';
 import { orderedLegs, outboundFlight, seatLabel } from '@/lib/bookingItinerary';
 import { cancelBookingAction, deleteReviewAction, toggleFavoriteCityGuideAction, changeBookingSeatsAction, getOccupiedSeatsAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
@@ -366,7 +366,7 @@ export default function ProfileClient({
                                                             <td className="py-2 whitespace-nowrap align-top" rowSpan={legRows.length}>{
                                                                 booking.totalPriceCents !== null && booking.totalPriceCents !== undefined
                                                                     ? formatPrice(booking.totalPriceCents)
-                                                                    : legs[0]?.flight?.price ?? '\u2014'
+                                                                    : legs[0]?.flight ? formatPrice(flightFareCents(legs[0].flight)) : '\u2014'
                                                             }</td>
                                                             <td className="py-2 align-top" rowSpan={legRows.length}>
                                                                 <span style={{

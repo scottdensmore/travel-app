@@ -9,7 +9,7 @@ import type { SearchResultFlight } from '@/app/actions'
 import { isActionValidationFailure } from '@/lib/actionResult'
 import type { FlightRoute } from '@/lib/flightSearch'
 import { airportTimeZoneFor } from '@/lib/airports'
-import { flightFareCents, formatPrice, parsePriceToCents } from '@/lib/bookingPricing'
+import { flightFareCents, formatPrice } from '@/lib/bookingPricing'
 import {
     buildFlightSearchUrl,
     type FlightSearchCriteria,
@@ -485,6 +485,21 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
      * into a number meant the ordering silently depended on how prices happened
      * to be formatted (#70).
      */
+    /**
+     * A fare as the customer reads it.
+     *
+     * Deliberately not fareCents: that returns infinity for an unreadable fare
+     * so the row sorts last, and formatting infinity renders "$∞". A fare that
+     * cannot be read falls back to whatever the catalogue string says.
+     */
+    const fareLabel = (flight: { priceCents?: number | null; price: string }): string => {
+        try {
+            return formatPrice(flightFareCents(flight));
+        } catch {
+            return flight.price;
+        }
+    };
+
     const fareCents = (flight: { priceCents?: number | null; price: string }): number => {
         try {
             return flightFareCents(flight);
@@ -595,7 +610,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         if (!selectedOutbound || !selectedInbound) return null;
         try {
             return formatPrice(
-                parsePriceToCents(selectedOutbound.price) + parsePriceToCents(selectedInbound.price)
+                flightFareCents(selectedOutbound) + flightFareCents(selectedInbound)
             );
         } catch {
             // A malformed stored fare should not take the search page down; the
@@ -985,7 +1000,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                                 </div>
                                             </div>
                                             <div className="flight-result-fare">
-                                                <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>{flight.price}</span>
+                                                <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>{fareLabel(flight)}</span>
                                                 {!flight.cabinAvailable && <CabinUnavailableNote cabin={cabinClass} />}
                                                 {isChoosingItinerary ? (
                                                     <LegSelectButton
@@ -1077,7 +1092,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                                             </div>
                                                         </div>
                                                         <div className="flight-result-fare">
-                                                            <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>{flight.price}</span>
+                                                            <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>{fareLabel(flight)}</span>
                                                             {!flight.cabinAvailable && <CabinUnavailableNote cabin={cabinClass} />}
                                                             <LegSelectButton
                                                                 flight={flight}
