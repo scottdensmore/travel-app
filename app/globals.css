@@ -483,8 +483,25 @@ button:active, button[type="submit"]:active {
   box-sizing: border-box;
 }
 
+.guide-list-heading {
+  font-size: 1rem;
+  color: #a78bfa;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 12px;
+}
+
+.travel-guides ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
 .travel-guides ul li {
-  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 8px;
   margin-bottom: 8px;
@@ -495,17 +512,168 @@ button:active, button[type="submit"]:active {
   background: rgba(255, 255, 255, 0.05);
 }
 
+.travel-guides ul li.selected {
+  background: rgba(139, 92, 246, 0.14);
+  border: 1px solid rgba(139, 92, 246, 0.45);
+}
+
+/* The city name is the control that selects it, so it is a button that reads
+   as text rather than a heading carrying a click handler. */
+.guide-city-select {
+  flex: 1;
+  height: auto;
+  width: auto;
+  padding: 10px 4px;
+  background: none;
+  background-image: none;
+  border: 0;
+  box-shadow: none;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.guide-city-select:hover,
+.guide-favourite:hover,
+.guide-favourite-wide:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.guide-favourite,
+.guide-favourite-wide {
+  height: auto;
+  width: auto;
+  padding: 8px;
+  min-width: 44px;
+  min-height: 44px;
+  background: none;
+  background-image: none;
+  border: 0;
+  box-shadow: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.guide-favourite-wide {
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+/* In normal flow. This panel also carried .sticky-sidebar, which is
+   position:absolute, so every city's panel stacked at the same coordinates and
+   sat on top of the list. That was the overlap (#78). */
 .guide-extra {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   padding: 24px;
   margin-top: 16px;
-  display: none;
 }
 
-.sticky-sidebar .highlight {
-  display: block;
+.guide-detail-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.guide-reviews {
+  list-style: none;
+  padding-left: 0;
+}
+
+.guide-reviews li {
+  margin-bottom: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 0.5rem;
+}
+
+.guide-review-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.guide-review-head img {
+  border-radius: 50%;
+}
+
+.guide-stars {
+  color: #f59e0b;
+}
+
+.guide-review-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.guide-review-form label {
+  font-size: 0.85rem;
+  color: #a78bfa;
+  font-weight: bold;
+}
+
+.guide-review-form textarea {
+  min-height: 80px;
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.guide-review-submit {
+  height: auto;
+  min-height: 44px;
+  width: auto;
+}
+
+.guide-empty,
+.guide-map-state {
+  color: rgba(255, 255, 255, 0.6);
+  font-style: italic;
+}
+
+.guide-map-state {
+  padding: 24px;
+}
+
+.guide-detail-empty {
+  margin-top: 16px;
+  padding: 24px;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+}
+
+.guide-feedback {
+  background: #3a1c1c;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 0 0 12px;
+}
+
+/* This application defines no focus style of its own, so the guide's controls
+   bring one rather than inheriting a suppressed browser default (#80). */
+.guide-city-select:focus-visible,
+.guide-favourite:focus-visible,
+.guide-favourite-wide:focus-visible,
+.guide-back:focus-visible,
+.guide-review-submit:focus-visible,
+.guide-marker:focus-visible {
+  outline: 3px solid #c084fc;
+  outline-offset: 2px;
 }
 
 .sticky-sidebar .guide-extra h3 {
