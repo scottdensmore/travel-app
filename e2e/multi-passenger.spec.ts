@@ -124,10 +124,14 @@ test.describe('Multi-Passenger Booking Journey', () => {
 
     // --- STEP 3: Review ---
     await expect(page.locator('h2:has-text("Review Booking")')).toBeVisible();
-    await expect(page.locator('text=Alice Smith')).toBeVisible();
-    await expect(page.locator('text=Class: ECONOMY | Seat: 11A')).toBeVisible();
-    await expect(page.locator('text=Bob Jones')).toBeVisible();
-    await expect(page.locator('text=Class: ECONOMY | Seat: 11B')).toBeVisible();
+    // Each traveller's seat is read off the leg it is held on (#152).
+    const reviewLeg = page.getByTestId('review-leg');
+    await expect(reviewLeg).toHaveCount(1);
+    // Asserted per row, not against the whole card: a card that merely contains
+    // both names and both seats would read the same if the seats were swapped.
+    await expect(reviewLeg.locator('li', { hasText: 'Alice Smith' })).toContainText('Seat 11A');
+    await expect(reviewLeg.locator('li', { hasText: 'Bob Jones' })).toContainText('Seat 11B');
+    await expect(page.locator('text=Class: ECONOMY').first()).toBeVisible();
 
     // Confirm
     await page.click('button:has-text("Confirm $")');

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import BookingCheckoutWizard from '@/components/ui/BookingCheckoutWizard';
 import { bookFlightAction } from '@/app/actions';
@@ -169,9 +169,11 @@ describe('BookingCheckoutWizard', () => {
         // Proceed to Billing
         fireEvent.click(screen.getByText('Review Booking →'));
 
-        // Verify summary details are correct
-        expect(screen.getByText('Bob Jones')).toBeInTheDocument();
-        expect(screen.getByText('Class: ECONOMY | Seat: 11C')).toBeInTheDocument();
+        // Verify summary details are correct. The seat is read off the leg it
+        // is held on, and the fare breakdown carries the cabin (#152).
+        expect(screen.getByTestId('review-leg')).toHaveTextContent('Bob Jones');
+        expect(screen.getByTestId('review-leg')).toHaveTextContent('Seat 11C');
+        expect(screen.getByText('Class: ECONOMY')).toBeInTheDocument();
         expect(screen.getByText('Estimated Total')).toBeInTheDocument();
 
         expect(screen.queryByPlaceholderText('4111 2222 3333 4444')).not.toBeInTheDocument();
@@ -632,6 +634,156 @@ describe('BookingCheckoutWizard', () => {
             expect(screen.getByRole('heading', { name: 'Review Booking' })).toBeInTheDocument();
         });
 
+        it('reviews every leg of the itinerary, not just the last one opened', () => {
+            // The review step read the leg the seat map happened to be showing,
+            // so a round trip offered one flight card — the customer could not
+            // check the return leg on the last screen before confirming (#152).
+            const { container } = renderRoundTrip();
+            fillTraveler(container);
+            fireEvent.click(screen.getByText('Select Seats →'));
+
+            fireEvent.click(screen.getByTitle('Select Seat 11A'));
+            fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
+            fireEvent.click(screen.getByTitle('Select Seat 12C'));
+            fireEvent.click(screen.getByText('Review Booking →'));
+
+            const legs = screen.getAllByTestId('review-leg');
+            expect(legs).toHaveLength(2);
+
+            expect(legs[0]).toHaveTextContent('Departing');
+            expect(legs[0]).toHaveTextContent('GA404');
+            expect(legs[0]).toHaveTextContent('Seattle, USA → Detroit, USA');
+
+            expect(legs[1]).toHaveTextContent('Returning');
+            expect(legs[1]).toHaveTextContent('GA405');
+            expect(legs[1]).toHaveTextContent('Detroit, USA → Seattle, USA');
+        });
+
+        it('shows each seat against the leg it is held on', () => {
+            // Seats were pooled into one comma list with nothing saying which
+            // seat belonged to which flight (#152).
+            const { container } = renderRoundTrip();
+            fillTraveler(container);
+            fireEvent.click(screen.getByText('Select Seats →'));
+
+            fireEvent.click(screen.getByTitle('Select Seat 11A'));
+            fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
+            fireEvent.click(screen.getByTitle('Select Seat 12C'));
+            fireEvent.click(screen.getByText('Review Booking →'));
+
+            const [departing, returning] = screen.getAllByTestId('review-leg');
+            expect(departing).toHaveTextContent('Ada Lovelace');
+            expect(departing).toHaveTextContent('11A');
+            expect(departing).not.toHaveTextContent('12C');
+
+            expect(returning).toHaveTextContent('Ada Lovelace');
+            expect(returning).toHaveTextContent('12C');
+            expect(returning).not.toHaveTextContent('11A');
+        });
+
+        it('still names one leg and one seat on a one-way review', () => {
+            const { container } = render(
+                <BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />
+            );
+            fillTraveler(container);
+            fireEvent.click(screen.getByText('Select Seats →'));
+            fireEvent.click(screen.getByTitle('Select Seat 11A'));
+            fireEvent.click(screen.getByText('Review Booking →'));
+
+            const legs = screen.getAllByTestId('review-leg');
+            expect(legs).toHaveLength(1);
+            expect(legs[0]).toHaveTextContent('GA404');
+            expect(legs[0]).toHaveTextContent('11A');
+            // A single leg is not a direction; the eyebrow belongs to a trip
+            // that has more than one.
+            expect(legs[0]).not.toHaveTextContent('Departing');
+        });
+
+        it('does not bill a lone traveller in a breakdown of one row', () => {
+            // Seats moved into the leg cards, so a single traveller would
+            // otherwise be named once per leg and again under a "Fare
+            // breakdown" whose one row equals the total directly beneath it.
+            const { container } = render(
+                <BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />
+            );
+            fillTraveler(container);
+            fireEvent.click(screen.getByText('Select Seats →'));
+            fireEvent.click(screen.getByTitle('Select Seat 11A'));
+            fireEvent.click(screen.getByText('Review Booking →'));
+
+            expect(screen.queryByText('Fare breakdown')).not.toBeInTheDocument();
+            expect(screen.getAllByText('Ada Lovelace')).toHaveLength(1);
+            // The cabin is still stated, and the total still stands alone.
+            expect(screen.getByText('Class: ECONOMY')).toBeInTheDocument();
+            expect(screen.getByText('Estimated Total')).toBeInTheDocument();
+        });
+
+        it('breaks the fare down once there is someone to compare against', () => {
+            const { container } = renderRoundTrip();
+            fillTraveler(container);
+
+            fireEvent.click(screen.getByText('+ Add Traveler'));
+            fireEvent.change(screen.getAllByPlaceholderText('John')[1], { target: { value: 'Grace' } });
+            fireEvent.change(screen.getAllByPlaceholderText('Doe')[1], { target: { value: 'Hopper' } });
+            fireEvent.change(container.querySelectorAll('input[type="date"]')[1], { target: { value: '1906-12-09' } });
+            fireEvent.change(screen.getAllByPlaceholderText('A00000000')[1], { target: { value: 'US4440000' } });
+
+            fireEvent.click(screen.getByText('Select Seats →'));
+            // Seat the whole group on each leg in turn.
+            fireEvent.click(screen.getByText(/Auto-Assign Adjacent Seats/i));
+            fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
+            fireEvent.click(screen.getByText(/Auto-Assign Adjacent Seats/i));
+            fireEvent.click(screen.getByText('Review Booking →'));
+
+            expect(screen.getByText('Fare breakdown')).toBeInTheDocument();
+            // Named once per leg above, then once more against their fare.
+            expect(screen.getAllByText('Ada Lovelace')).toHaveLength(3);
+            expect(screen.getAllByText('Class: ECONOMY')).toHaveLength(2);
+
+            // Asserted row by row. A card that merely *contains* both names and
+            // both seats reads identically whether or not each traveller is
+            // paired with the seat they actually hold, so whole-card assertions
+            // cannot see the defect this change exists to fix. The list is
+            // reached by its accessible name, which pins that too.
+            const [departing, returning] = screen.getAllByTestId('review-leg');
+            const seatRows = (leg: HTMLElement, flightNumber: string) =>
+                within(within(leg).getByRole('list', { name: `Travellers on Gemini Airways ${flightNumber}` }))
+                    .getAllByRole('listitem');
+
+            const [adaOut, graceOut] = seatRows(departing, 'GA404');
+            expect(adaOut).toHaveTextContent('Ada Lovelace');
+            expect(adaOut).toHaveTextContent('Seat 11A');
+            expect(graceOut).toHaveTextContent('Grace Hopper');
+            expect(graceOut).toHaveTextContent('Seat 11B');
+
+            const [adaBack, graceBack] = seatRows(returning, 'GA405');
+            expect(adaBack).toHaveTextContent('Ada Lovelace');
+            expect(adaBack).toHaveTextContent('Seat 11A');
+            expect(graceBack).toHaveTextContent('Grace Hopper');
+            expect(graceBack).toHaveTextContent('Seat 11B');
+        });
+
+        it('labels a middle leg by position rather than calling it a return', () => {
+            // MAX_ITINERARY_LEGS caps this at two today, so a third leg is not
+            // reachable through the app. Connecting itineraries (#131) make it
+            // so, and "Returning" belongs to the last leg, not the second.
+            const middleFlight = { ...inboundFlight, id: 44, flightNumber: 'GA406' };
+            const { container } = render(
+                <BookingCheckoutWizard
+                    flights={[sampleFlight, middleFlight, inboundFlight]}
+                    occupiedSeats={[[], [], []]}
+                />
+            );
+            fillTraveler(container);
+            fireEvent.click(screen.getByText('Select Seats →'));
+
+            const tabs = screen.getAllByRole('tab');
+            expect(tabs).toHaveLength(3);
+            expect(tabs[0]).toHaveTextContent('Departing');
+            expect(tabs[1]).toHaveTextContent('Leg 2');
+            expect(tabs[2]).toHaveTextContent('Returning');
+        });
+
         it('books both legs with the seat chosen for each', async () => {
             mockBookFlightAction.mockResolvedValue({ id: 900, bookingReference: 'RT12345' });
 
@@ -644,7 +796,10 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByTitle('Select Seat 12C'));
 
             fireEvent.click(screen.getByText('Review Booking →'));
-            expect(screen.getByText(/Class:/).textContent).toContain('Seats: 11A, 12C');
+            // Each seat sits under its own leg rather than in one pooled list.
+            const [departing, returning] = screen.getAllByTestId('review-leg');
+            expect(departing).toHaveTextContent('Seat 11A');
+            expect(returning).toHaveTextContent('Seat 12C');
 
             fireEvent.click(screen.getByRole('button', { name: /Confirm \$250 booking/i }));
 
