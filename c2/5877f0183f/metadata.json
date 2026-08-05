@@ -3,7 +3,7 @@
   "checkpoint_id": "c25877f0183f",
   "strategy": "manual-commit",
   "branch": "docs/file-out-of-scope-findings",
-  "checkpoints_count": 6,
+  "checkpoints_count": 9,
   "files_touched": [
     "AGENTS.md"
   ],
@@ -14,13 +14,20 @@
       "compact_transcript": "/c2/5877f0183f/0/transcript.jsonl",
       "content_hash": "/c2/5877f0183f/0/content_hash.txt",
       "prompt": "/c2/5877f0183f/0/prompt.txt"
+    },
+    {
+      "metadata": "/c2/5877f0183f/1/metadata.json",
+      "transcript": "/c2/5877f0183f/1/full.jsonl",
+      "compact_transcript": "/c2/5877f0183f/1/transcript.jsonl",
+      "content_hash": "/c2/5877f0183f/1/content_hash.txt",
+      "prompt": "/c2/5877f0183f/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 3400,
-    "cache_creation_tokens": 1206587,
-    "cache_read_tokens": 77279314,
-    "output_tokens": 180384,
-    "api_call_count": 366
+    "input_tokens": 3450,
+    "cache_creation_tokens": 1252847,
+    "cache_read_tokens": 78637234,
+    "output_tokens": 199255,
+    "api_call_count": 393
   }
 }

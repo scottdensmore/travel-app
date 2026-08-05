@@ -1,0 +1,9 @@
+Pick up the travel-app roadmap. Read issue #143 for the plan and tell me what's next.
+
+---
+
+Lets update the workflow: If you ever find something we should fix later that should not be part of the current work, create an issue to come back to later
+
+---
+
+Yes lets go ahead and file those
