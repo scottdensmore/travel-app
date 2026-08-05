@@ -12,7 +12,9 @@ npm ci                      # Node 22 required (.npmrc engine-strict blocks othe
 npm run dev                 # http://localhost:3000
 npm run lint                # eslint app components lib
 npx tsc --noEmit            # typecheck (no npm script)
-npm test                    # Jest — needs a running Postgres (see Gotchas)
+npm test                    # Jest, both projects — needs a running Postgres (see Gotchas)
+npm run test:unit           # the parallel project; takes flags, e.g. -- -t 'name'
+npm run test:database       # the *.database.test.ts project, serialised
 npx playwright test         # E2E; auto-starts the dev server
 npm run build               # next build + scripts/sanitize-standalone.mjs
 ```
@@ -50,6 +52,11 @@ that runs this application injects configuration at runtime.
 ## Gotchas
 
 - `__tests__/**/*.database.test.ts` require a live Postgres; start it before `npm test`
+- Those files run serially in their own Jest project: they share one database and
+  several assert against whole tables, so running them beside each other counted one
+  file's fixtures in another file's scan (#155). `npm test` runs the unit project
+  first and stops if it fails, so pass flags to `test:unit`/`test:database` directly
+  rather than to `npm test`, which does not forward them
 - Node-environment tests need `/** @jest-environment node */` (jsdom is the Jest default)
 - Playwright runs `workers: 1, fullyParallel: false` on purpose — parallel runs collide on the DB
 - Always `npm run build`, never bare `next build`: the sanitize step strips `.env` files from

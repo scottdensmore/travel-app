@@ -10,7 +10,9 @@
     "build": "next build && node scripts/sanitize-standalone.mjs",
     "start": "next start",
     "lint": "eslint app components lib",
-    "test": "npx jest",
+    "test": "npm run test:unit && npm run test:database",
+    "test:unit": "npx jest --selectProjects unit",
+    "test:database": "npx jest --selectProjects database --runInBand",
     "inventory:generate": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/generate-inventory.ts",
     "inventory:check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/check-inventory.ts"
   },
