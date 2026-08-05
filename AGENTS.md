@@ -79,7 +79,9 @@ Chart and other browser-interactive components need `'use client'`.
    operational outcome over a broad horizontal layer. If the next issue is too
    large for one pull request, split it into ordered slices and complete only
    the current slice. Keep pull requests small enough for thorough review,
-   reliable verification, and quick rollback.
+   reliable verification, and quick rollback. When work surfaces a defect or
+   improvement that belongs outside the current slice, do not widen the slice
+   to absorb it — file it as described under Issue Tracking and carry on.
 
 4. **Use test-driven development when behavior or structure is testable.**
    - Add or update a focused test before implementation.
@@ -179,6 +181,18 @@ Chart and other browser-interactive components need `'use client'`.
 - Reference the issue number in the pull request. When a pull request delivers
   only part of an issue, comment with the number and what remains rather than
   closing it.
+- **File anything found but not fixed.** When work surfaces a defect, risk, or
+  improvement outside the current slice, open a GitHub issue for it before
+  moving on. A finding recorded only in a commit message, a pull request
+  comment, or a chat reply is a finding that gets lost. Search open issues
+  first and comment on the existing one instead of opening a duplicate.
+- An issue filed this way states where the problem is (file and line), what
+  was observed, and why it matters. Say whether it was verified against
+  running code or is a reading of the source that still needs confirming.
+  Apply `roadmap` only when it is product-hardening work belonging to a phase.
+- Filing is not a substitute for finishing the current slice. If the finding
+  makes the slice wrong or unsafe to ship, say so and stop instead of filing
+  around it.
 
 ## Containerization Fallback
 
