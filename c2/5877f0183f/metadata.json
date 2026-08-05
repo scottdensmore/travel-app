@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "c25877f0183f",
+  "strategy": "manual-commit",
+  "branch": "docs/file-out-of-scope-findings",
+  "checkpoints_count": 6,
+  "files_touched": [
+    "AGENTS.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/c2/5877f0183f/0/metadata.json",
+      "transcript": "/c2/5877f0183f/0/full.jsonl",
+      "compact_transcript": "/c2/5877f0183f/0/transcript.jsonl",
+      "content_hash": "/c2/5877f0183f/0/content_hash.txt",
+      "prompt": "/c2/5877f0183f/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3400,
+    "cache_creation_tokens": 1206587,
+    "cache_read_tokens": 77279314,
+    "output_tokens": 180384,
+    "api_call_count": 366
+  }
+}
