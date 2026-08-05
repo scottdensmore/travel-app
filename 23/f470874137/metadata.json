@@ -1,0 +1,29 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "23f470874137",
+  "strategy": "manual-commit",
+  "branch": "fix/bound-flight-status-board",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "__tests__/app/flightsPage.test.ts",
+    "__tests__/components/FlightStatusBoard.test.tsx",
+    "app/flights/page.tsx",
+    "components/ui/FlightStatusBoard.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/23/f470874137/0/metadata.json",
+      "transcript": "/23/f470874137/0/full.jsonl",
+      "compact_transcript": "/23/f470874137/0/transcript.jsonl",
+      "content_hash": "/23/f470874137/0/content_hash.txt",
+      "prompt": "/23/f470874137/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 549,
+    "cache_creation_tokens": 599337,
+    "cache_read_tokens": 64591586,
+    "output_tokens": 219591,
+    "api_call_count": 295
+  }
+}
