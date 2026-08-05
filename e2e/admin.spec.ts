@@ -5,10 +5,26 @@ import { updateFlightSeatingLayout } from '../lib/FlightSeatLayoutService';
 import { createVerifiedAccount, registerAndSignIn, signInWithCredentials } from './helpers/auth';
 import { createStaffTotpCode } from '../lib/staffMfa';
 
+/**
+ * A TOTP code is only valid inside its own 30-second window. Generating one in
+ * the tail of a window risks the window rolling over before the server checks
+ * it, so this waits the tail out.
+ *
+ * The wait is bounded: it only triggers in the last 6 seconds of a window and
+ * settles 1 second into the next, so it costs at most 7 seconds, and nothing
+ * for the other 80% of the clock.
+ *
+ * It says what it consumed, because it is the one unpredictable cost in this
+ * journey and #121 was two rounds of guessing about it. If this test times out
+ * again, the log line rules the wait in or out instead of leaving it to
+ * inference.
+ */
 async function waitForStableTotpWindow() {
   const remainder = Date.now() % 30_000;
-  if (remainder > 24_000) {
-    await new Promise(resolve => setTimeout(resolve, 31_000 - remainder));
+  const waitMs = remainder > 24_000 ? 31_000 - remainder : 0;
+  console.log(`[admin.spec] TOTP window wait: ${waitMs}ms`);
+  if (waitMs > 0) {
+    await new Promise(resolve => setTimeout(resolve, waitMs));
   }
 }
 
