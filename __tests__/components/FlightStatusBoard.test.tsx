@@ -39,9 +39,125 @@ const mockFlights = [
     }
 ];
 
+const coverage = 'the last 6 hours and the next 7 days';
+
+describe('FlightStatusBoard coverage window', () => {
+    // The board holds a window rather than the timetable (#153). A search for
+    // something outside it returns nothing, which reads as "your flight is
+    // missing" unless the board says what it covers.
+    it('states the window it was given', () => {
+        render(<FlightStatusBoard flights={mockFlights} coverage={coverage} />);
+
+        expect(
+            screen.getByText('This board covers departures in the last 6 hours and the next 7 days.')
+        ).toBeInTheDocument();
+    });
+
+    it('answers a fruitless search by naming it and the range, and offers a way out', () => {
+        render(<FlightStatusBoard flights={mockFlights} coverage={coverage} />);
+
+        fireEvent.change(screen.getByPlaceholderText(/Search by flight number/i), {
+            target: { value: 'GA999' },
+        });
+
+        expect(
+            screen.getByText(
+                'No flights on this board match “GA999”. It only covers departures in the last 6 hours and the next 7 days.'
+            )
+        ).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'Search all flights' })).toHaveAttribute('href', '/');
+    });
+
+    it('blames the filter and the search together when both are set', () => {
+        // Checking the query first answered a search for something that *is* on
+        // the board with "no flights match" — while the status filter was what
+        // had removed it, and the offered way out was to go search again.
+        render(<FlightStatusBoard flights={mockFlights} coverage={coverage} />);
+
+        fireEvent.change(screen.getByPlaceholderText(/Search by flight number/i), {
+            target: { value: 'GA101' },
+        });
+        fireEvent.change(screen.getByDisplayValue('All Statuses'), { target: { value: 'CANCELLED' } });
+
+        expect(
+            screen.getByText('No flights on this board match “GA101” and are marked Cancelled.')
+        ).toBeInTheDocument();
+        // GA101 is on the board, so the window is not the reason and must not
+        // be offered as one.
+        expect(screen.queryByText(/only covers departures/)).not.toBeInTheDocument();
+    });
+
+    it('raises the window when the search matches nothing, filter or no filter', () => {
+        // The mirror of the case above: here the query is why the table is
+        // empty, so the range is the useful thing to say.
+        render(<FlightStatusBoard flights={mockFlights} coverage={coverage} />);
+
+        fireEvent.change(screen.getByPlaceholderText(/Search by flight number/i), {
+            target: { value: 'ZZ999' },
+        });
+        fireEvent.change(screen.getByDisplayValue('All Statuses'), { target: { value: 'DELAYED' } });
+
+        expect(
+            screen.getByText(
+                'No flights on this board match “ZZ999”. It only covers departures in the last 6 hours and the next 7 days.'
+            )
+        ).toBeInTheDocument();
+    });
+
+    it('answers a status filter on its own terms, not as a failed search', () => {
+        // Both DELAYED and CANCELLED rows can fall outside the window, so these
+        // are reachable filters that used to tell the user to change a search
+        // term they had never typed.
+        render(<FlightStatusBoard flights={[mockFlights[0]]} coverage={coverage} />);
+
+        fireEvent.change(screen.getByDisplayValue('All Statuses'), { target: { value: 'DELAYED' } });
+
+        expect(screen.getByText('No flights on this board are marked Delayed.')).toBeInTheDocument();
+        expect(screen.queryByText(/Try searching for a different destination/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/match “/)).not.toBeInTheDocument();
+    });
+
+    it('says the window is empty when nothing has been searched or filtered', () => {
+        render(<FlightStatusBoard flights={[]} coverage={coverage} />);
+
+        expect(
+            screen.getByText('No departures are scheduled in the last 6 hours and the next 7 days.')
+        ).toBeInTheDocument();
+        // Nothing was typed, so there is no search to suggest changing.
+        expect(screen.queryByText(/Try searching/)).not.toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: 'Search all flights' })).not.toBeInTheDocument();
+    });
+
+    it('claims neither a live feed nor arrivals, having neither', () => {
+        // The subtitle said "Real-time departures, arrivals, and schedule
+        // status updates". There is no feed, there is no arrivals column, and
+        // the coverage line directly beneath refuted both a line later (#84).
+        render(<FlightStatusBoard flights={mockFlights} coverage={coverage} />);
+
+        expect(screen.queryByText(/Real-time/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/arrivals/i)).not.toBeInTheDocument();
+    });
+
+    it('announces how many flights are shown as the filters change', () => {
+        render(<FlightStatusBoard flights={mockFlights} coverage={coverage} />);
+
+        expect(screen.getByRole('status')).toHaveTextContent('3 flights shown');
+
+        fireEvent.change(screen.getByPlaceholderText(/Search by flight number/i), {
+            target: { value: 'GA101' },
+        });
+        expect(screen.getByRole('status')).toHaveTextContent('1 flight shown');
+
+        fireEvent.change(screen.getByPlaceholderText(/Search by flight number/i), {
+            target: { value: 'GA999' },
+        });
+        expect(screen.getByRole('status')).toHaveTextContent('0 flights shown');
+    });
+});
+
 describe('FlightStatusBoard filtering and search', () => {
     it('renders the header and table with all flights initially', () => {
-        render(<FlightStatusBoard flights={mockFlights} />);
+        render(<FlightStatusBoard flights={mockFlights} coverage={coverage} />);
 
         expect(screen.getByText('Live Flight Status')).toBeInTheDocument();
         expect(screen.getByText('GA101')).toBeInTheDocument();
@@ -50,7 +166,7 @@ describe('FlightStatusBoard filtering and search', () => {
     });
 
     it('filters flights by text search query', () => {
-        render(<FlightStatusBoard flights={mockFlights} />);
+        render(<FlightStatusBoard flights={mockFlights} coverage={coverage} />);
 
         const searchInput = screen.getByPlaceholderText(/Search by flight number/i);
         
@@ -66,7 +182,7 @@ describe('FlightStatusBoard filtering and search', () => {
     });
 
     it('filters flights by status select dropdown', () => {
-        render(<FlightStatusBoard flights={mockFlights} />);
+        render(<FlightStatusBoard flights={mockFlights} coverage={coverage} />);
 
         const statusSelect = screen.getByRole('combobox');
         
@@ -83,11 +199,13 @@ describe('FlightStatusBoard filtering and search', () => {
     });
 
     it('shows no flights found when query has no matches', () => {
-        render(<FlightStatusBoard flights={mockFlights} />);
+        render(<FlightStatusBoard flights={mockFlights} coverage={coverage} />);
 
         const searchInput = screen.getByPlaceholderText(/Search by flight number/i);
         fireEvent.change(searchInput, { target: { value: 'nonexistent' } });
 
-        expect(screen.getByText('🔍 No flights found')).toBeInTheDocument();
+        // A heading, and named without the decorative emoji, so that is how it
+        // is asked for.
+        expect(screen.getByRole('heading', { name: 'No flights found' })).toBeInTheDocument();
     });
 });
