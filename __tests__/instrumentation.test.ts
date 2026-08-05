@@ -1,3 +1,10 @@
+/** @jest-environment node */
+
+// This exercises Node server startup, so it has to run in the Node environment:
+// under jsdom `@prisma/client` resolves to the browser build, whose members
+// throw on access. That only stayed hidden while nothing reached a client
+// method at import time.
+
 jest.mock('@/lib/authTokens', () => ({ pruneExpiredAuthTokens: jest.fn() }));
 jest.mock('@/lib/passengerDataRetention', () => ({ purgeExpiredPassengerData: jest.fn() }));
 jest.mock('@/lib/passengerDataRotation', () => ({ rotatePassengerDataEncryptionBatch: jest.fn() }));

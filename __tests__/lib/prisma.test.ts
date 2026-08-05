@@ -4,11 +4,23 @@ const clientOptions = jest.fn();
 jest.mock('@prisma/client', () => ({
     PrismaClient: jest.fn().mockImplementation((options: unknown) => {
         clientOptions(options);
-        return {};
+        return { $on: jest.fn() };
     }),
 }));
 
-type PrismaLogOptions = { log?: string[] };
+type PrismaLogEntry = string | { emit: string; level: string };
+type PrismaLogOptions = { log?: PrismaLogEntry[] };
+
+/**
+ * Which levels are enabled, whether Prisma writes them itself (a bare string)
+ * or hands them over as events for redaction (#142). These tests are about the
+ * levels; `__tests__/security/prismaLogging.test.ts` owns the delivery.
+ */
+function enabledLevels(options: PrismaLogOptions): string[] {
+    return (options.log ?? []).map((entry) =>
+        typeof entry === 'string' ? entry : entry.level
+    );
+}
 
 /**
  * The client is a module-level singleton cached on globalThis, so both have to
@@ -43,23 +55,23 @@ describe('prisma client logging', () => {
     });
 
     it('logs queries during local development', () => {
-        expect(loadClientWithNodeEnv('development').log).toContain('query');
+        expect(enabledLevels(loadClientWithNodeEnv('development'))).toContain('query');
     });
 
     it('never logs queries in production', () => {
         // Prisma's query log includes bind parameters, so this would write
         // customer email addresses and token digests to deployed stdout.
-        expect(loadClientWithNodeEnv('production').log).not.toContain('query');
+        expect(enabledLevels(loadClientWithNodeEnv('production'))).not.toContain('query');
     });
 
     it('never logs queries when the environment is unset, as in seeds and scripts', () => {
-        expect(loadClientWithNodeEnv(undefined).log).not.toContain('query');
+        expect(enabledLevels(loadClientWithNodeEnv(undefined))).not.toContain('query');
     });
 
     it('keeps warnings and errors in every environment', () => {
         for (const environment of ['development', 'production', 'test', undefined]) {
-            const { log } = loadClientWithNodeEnv(environment);
-            expect(log).toEqual(expect.arrayContaining(['warn', 'error']));
+            const levels = enabledLevels(loadClientWithNodeEnv(environment));
+            expect(levels).toEqual(expect.arrayContaining(['warn', 'error']));
         }
     });
 });

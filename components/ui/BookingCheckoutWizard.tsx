@@ -2,7 +2,11 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { PassengerInput } from '@/lib/FlightBookingService';
+// `import type`, not a value import: FlightBookingService is not a server
+// module and pulls in lib/prisma, which now throws if it is ever evaluated in a
+// browser. SWC elides this today because the binding is only used as a type —
+// this makes that a guarantee rather than an optimisation.
+import type { PassengerInput } from '@/lib/FlightBookingService';
 import { bookFlightAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
 import { CABIN_FARE_PERCENT, calculatePassengerFareCents, flightFareCents, formatPrice } from '@/lib/bookingPricing';

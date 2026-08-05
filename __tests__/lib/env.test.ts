@@ -1,3 +1,8 @@
+/** @jest-environment node */
+
+// `lib/env` reaches `lib/prisma` through `lib/staffMfa`, and under jsdom that
+// resolves Prisma's browser build, whose members throw on access.
+
 import { validateServerEnvironment } from '@/lib/env';
 
 const validEnvironment = {
