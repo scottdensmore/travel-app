@@ -1,0 +1,29 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "d52c45bf3bc2",
+  "strategy": "manual-commit",
+  "branch": "fix/serialize-database-tests",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "AGENTS.md",
+    "__tests__/lib/seatAssignmentCoverage.database.test.ts",
+    "jest.config.js",
+    "package.json"
+  ],
+  "sessions": [
+    {
+      "metadata": "/d5/2c45bf3bc2/0/metadata.json",
+      "transcript": "/d5/2c45bf3bc2/0/full.jsonl",
+      "compact_transcript": "/d5/2c45bf3bc2/0/transcript.jsonl",
+      "content_hash": "/d5/2c45bf3bc2/0/content_hash.txt",
+      "prompt": "/d5/2c45bf3bc2/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 396,
+    "cache_creation_tokens": 507062,
+    "cache_read_tokens": 36303915,
+    "output_tokens": 159107,
+    "api_call_count": 213
+  }
+}

@@ -1,0 +1,17 @@
+Ok lets do 152
+
+---
+
+What is the workflow now?
+
+---
+
+Ok what should we pick up next?
+
+---
+
+What is the best path to fix this flake?
+
+---
+
+Yes go ahead and implement
