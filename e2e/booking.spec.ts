@@ -129,7 +129,9 @@ test.describe('Flight Booking Journey', () => {
     
     // Verify booking summary details
     await expect(page.locator('text=Bob Jones').first()).toBeVisible();
-    await expect(page.locator('text=Class: ECONOMY | Seat: 11A').first()).toBeVisible();
+    // The seat is printed inside the leg that holds it (#152).
+    await expect(page.getByTestId('review-leg')).toContainText('Seat 11A');
+    await expect(page.locator('text=Class: ECONOMY').first()).toBeVisible();
 
     await expect(page.locator('text=Payment is not collected in this demo')).toBeVisible();
     await expect(page.locator('input[placeholder="4111 2222 3333 4444"]')).not.toBeVisible();
@@ -308,16 +310,28 @@ test.describe('Flight Booking Journey', () => {
     await expect(page.getByText(/Please select a returning seat/i)).toBeVisible();
     await expect(legTabs.nth(1)).toHaveAttribute('aria-selected', 'true');
 
-    const inboundSeat = page.locator('button[title^="Select Seat"]').first();
+    // Deliberately not the first free seat: both legs are empty and identically
+    // laid out, so taking .first() on each gives the same seat name and the
+    // review assertions below could not tell a swapped pairing from a correct
+    // one.
+    const inboundSeat = page.locator('button[title^="Select Seat"]').nth(1);
     const inboundSeatName = (await inboundSeat.getAttribute('title'))!.replace('Select Seat ', '');
     await inboundSeat.click();
 
-    // --- STEP 3: Review shows both seats ---
+    // --- STEP 3: Review shows both legs, each carrying its own seat ---
+    //
+    // This used to assert the pooled list "Seats: 11A, 12C", which passed
+    // whether or not the seats were paired with the right legs — and the review
+    // step was in fact showing a single leg at the time (#152). Asserting each
+    // seat inside its own leg is what tells those two states apart.
     await page.click('button:has-text("Review Booking →")');
     await expect(page.locator('h2:has-text("Review Booking")')).toBeVisible();
-    await expect(
-      page.locator(`text=Seats: ${outboundSeatName}, ${inboundSeatName}`).first()
-    ).toBeVisible();
+    const reviewLegs = page.getByTestId('review-leg');
+    await expect(reviewLegs).toHaveCount(2);
+    await expect(reviewLegs.nth(0)).toContainText('Departing');
+    await expect(reviewLegs.nth(0)).toContainText(`Seat ${outboundSeatName}`);
+    await expect(reviewLegs.nth(1)).toContainText('Returning');
+    await expect(reviewLegs.nth(1)).toContainText(`Seat ${inboundSeatName}`);
 
     await page.locator('button:has-text("Confirm $")').click();
     await expect(page.locator('h2:has-text("Booking Confirmed!")')).toBeVisible({ timeout: 10000 });

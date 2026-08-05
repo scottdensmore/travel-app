@@ -58,6 +58,23 @@ const CABIN_LABELS = {
     FIRST: 'First Class (+200%)'
 };
 
+/**
+ * Names a leg by its direction, for the seat switcher and the review summary.
+ *
+ * "Returning" is only true of the last leg of a there-and-back trip, which is
+ * all `MAX_ITINERARY_LEGS` allows today. Connecting itineraries (#131) will
+ * make a middle leg neither departing nor returning, so this file's two callers
+ * read the assumption from here rather than each holding a copy of it.
+ *
+ * ProfileClient renders the same label from its own inline copy, so checkout
+ * and the profile will disagree about a middle leg until that moves too (#160).
+ */
+function legDirectionLabel(legIndex: number, legCount: number): string {
+    if (legIndex === 0) return 'Departing';
+    if (legIndex === legCount - 1) return 'Returning';
+    return `Leg ${legIndex + 1}`;
+}
+
 function createBookingRequestId(): string {
     const bytes = new Uint8Array(16);
     globalThis.crypto.getRandomValues(bytes);
@@ -827,7 +844,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                                             }}
                                         >
                                             <span style={{ display: 'block', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                                                {legIndex === 0 ? 'Departing' : 'Returning'}
+                                                {legDirectionLabel(legIndex, flights.length)}
                                             </span>
                                             <span style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
                                                 {leg.from} → {leg.to}{unseated ? ' · seat needed' : ''}
@@ -1159,27 +1176,99 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                             {/* Summary list */}
                             <div style={{ border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '1.5rem', background: 'rgba(0,0,0,0.15)' }}>
                                 <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem', color: '#a78bfa' }}>Trip Summary</h3>
-                                <div style={{ marginBottom: '1.25rem', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '1rem' }}>
-                                    <div style={{ fontWeight: 'bold', fontSize: '0.95rem', color: '#c084fc' }}>{flight.airline} {flight.flightNumber}</div>
-                                    <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginTop: '4px' }}>
-                                        {flight.from} → {flight.to}
-                                    </div>
-                                    <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginTop: '4px' }}>
-                                        Departure: {new Date(flight.departureDate).toLocaleDateString()}
-                                    </div>
-                                </div>
-
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                    {passengers.map((p, i) => (
-                                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                                            <div>
-                                                <strong>{p.firstName} {p.lastName}</strong>
-                                                <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)' }}>Class: {p.cabinClass} | Seat{p.seatNumbers.length > 1 ? 's' : ''}: {p.seatNumbers.join(', ')}</div>
+                                {/*
+                                  * Every leg, not the one the seat map happened
+                                  * to be showing. A seat belongs to a leg, so it
+                                  * is printed inside that leg's card: pooling
+                                  * the itinerary's seats into one comma list
+                                  * left the customer no way to tell which seat
+                                  * they held on which flight (#152).
+                                  */}
+                                {/* `role="list"`: WebKit drops list semantics from a
+                                    `list-style: none` list, which is exactly the
+                                    grouping a screen reader needs here. */}
+                                <h4 style={{ margin: '0 0 0.75rem', fontSize: '0.95rem', color: '#a78bfa' }}>Itinerary</h4>
+                                <ul role="list" style={{ listStyle: 'none', margin: '0 0 1.5rem', padding: 0, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                    {flights.map((leg, legIndex) => (
+                                        <li
+                                            key={leg.id}
+                                            data-testid="review-leg"
+                                            style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '1rem' }}
+                                        >
+                                            {flights.length > 1 && (
+                                                <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px' }}>
+                                                    {legDirectionLabel(legIndex, flights.length)}
+                                                </div>
+                                            )}
+                                            <div style={{ fontWeight: 'bold', fontSize: '0.95rem', color: '#c084fc' }}>{leg.airline} {leg.flightNumber}</div>
+                                            <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginTop: '4px' }}>
+                                                {leg.from} → {leg.to}
                                             </div>
-                                            <span style={{ fontWeight: 'bold' }}>{formatPrice(calculatePassengerPrice(p.cabinClass))}</span>
-                                        </div>
+                                            <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginTop: '4px' }}>
+                                                Departure: {new Date(leg.departureDate).toLocaleDateString()}
+                                            </div>
+                                            {/* Named, so a screen reader reaching these rows out
+                                                of order still knows whose flight they belong to. */}
+                                            <ul
+                                                role="list"
+                                                aria-label={`Travellers on ${leg.airline} ${leg.flightNumber}`}
+                                                style={{ listStyle: 'none', margin: '0.75rem 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}
+                                            >
+                                                {passengers.map((p, i) => (
+                                                    <li key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', fontSize: '0.8rem', color: 'rgba(255,255,255,0.75)' }}>
+                                                        {/* A 100-character name is valid input. Without
+                                                            `minWidth: 0` the flex item refuses to shrink
+                                                            below min-content and pushes the seat outside
+                                                            the card; the seat must never wrap away from
+                                                            the name it belongs to. */}
+                                                        <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{p.firstName} {p.lastName}</span>
+                                                        {p.seatNumbers[legIndex] ? (
+                                                            <span style={{ color: '#34d399', fontWeight: 'bold', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                                                                Seat {p.seatNumbers[legIndex]}
+                                                            </span>
+                                                        ) : (
+                                                            /* Unreachable while validateStep2 gates this
+                                                               step; a missing seat is not a success. */
+                                                            <span style={{ color: 'rgba(255,255,255,0.5)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                                                                No seat chosen
+                                                            </span>
+                                                        )}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </li>
                                     ))}
-                                </div>
+                                </ul>
+
+                                {/*
+                                  * The fare covers the whole itinerary, so it is quoted per
+                                  * traveller rather than per leg.
+                                  *
+                                  * Only when there is someone to compare against. One
+                                  * traveller's "breakdown" is a single row identical to the
+                                  * total beneath it, and repeats a name already given once
+                                  * per leg above — so that case states the cabin and stops.
+                                  */}
+                                {passengers.length > 1 ? (
+                                    <>
+                                        <h4 style={{ margin: '0 0 0.75rem', fontSize: '0.95rem', color: '#a78bfa' }}>Fare breakdown</h4>
+                                        <ul role="list" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                            {passengers.map((p, i) => (
+                                                <li key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', fontSize: '0.85rem' }}>
+                                                    <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                                                        <strong>{p.firstName} {p.lastName}</strong>
+                                                        <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)' }}>Class: {p.cabinClass}</div>
+                                                    </div>
+                                                    <span style={{ fontWeight: 'bold', flexShrink: 0, whiteSpace: 'nowrap' }}>{formatPrice(calculatePassengerPrice(p.cabinClass))}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </>
+                                ) : (
+                                    <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.5)' }}>
+                                        Class: {passengers[0].cabinClass}
+                                    </div>
+                                )}
 
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: 'bold', borderTop: '1px solid rgba(255,255,255,0.08)', marginTop: '1.25rem', paddingTop: '1rem', color: '#34d399' }}>
                                     <span>Estimated Total</span>
