@@ -1,0 +1,52 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "d6eff8e70e0a",
+  "session_id": "94121201-47c3-4281-aeff-7838379a510d",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-05T16:46:36.712576184Z",
+  "branch": "fix/round-trip-review-legs",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "__tests__/components/BookingCheckoutWizard.test.tsx",
+    "components/ui/BookingCheckoutWizard.tsx",
+    "e2e/booking.spec.ts",
+    "e2e/multi-passenger.spec.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-5",
+  "turn_id": "a9d4943162bf",
+  "checkpoint_transcript_start": 180,
+  "transcript_lines_at_start": 180,
+  "compact_transcript_start": 48,
+  "token_usage": {
+    "input_tokens": 112,
+    "cache_creation_tokens": 84550,
+    "cache_read_tokens": 7556029,
+    "output_tokens": 44642,
+    "api_call_count": 60
+  },
+  "session_metrics": {
+    "turn_count": 4
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-05T16:46:36.467120164Z",
+    "agent_lines": 260,
+    "agent_removed": 33,
+    "human_added": 23,
+    "human_modified": 12,
+    "human_removed": 0,
+    "total_committed": 295,
+    "total_lines_changed": 328,
+    "agent_percentage": 89.32926829268293,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
