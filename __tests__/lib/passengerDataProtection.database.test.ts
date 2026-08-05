@@ -92,8 +92,13 @@ describe('passenger identity data in PostgreSQL', () => {
             where: { id: stored.id },
             data: { sensitiveDataExpiresAt: expiredAt },
         });
-        await expect(purgeExpiredPassengerData(new Date('2026-01-02T00:00:00.000Z')))
-            .resolves.toBeGreaterThanOrEqual(1);
+        // Deliberately not asserting on the return value. It counts every row
+        // the sweep touched across the whole table, so it is both fragile --
+        // anything else purging concurrently claims this row and the count
+        // comes back 0 -- and weak, since an unrelated expired row would
+        // satisfy it while this one stayed intact (#149). What matters is what
+        // happened to this passenger, which is asserted below.
+        await purgeExpiredPassengerData(new Date('2026-01-02T00:00:00.000Z'));
         await expect(prisma.passenger.findUnique({
             where: { id: stored.id },
             select: {
