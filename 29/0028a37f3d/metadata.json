@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "290028a37f3d",
+  "strategy": "manual-commit",
+  "branch": "fix/redact-prisma-error-logs",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "__tests__/instrumentation.test.ts",
+    "__tests__/lib/env.test.ts",
+    "__tests__/lib/prisma.test.ts",
+    "__tests__/security/prismaLogging.test.ts",
+    "components/ui/BookingCheckoutWizard.tsx",
+    "lib/prisma.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/29/0028a37f3d/0/metadata.json",
+      "transcript": "/29/0028a37f3d/0/full.jsonl",
+      "compact_transcript": "/29/0028a37f3d/0/transcript.jsonl",
+      "content_hash": "/29/0028a37f3d/0/content_hash.txt",
+      "prompt": "/29/0028a37f3d/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 322,
+    "cache_creation_tokens": 228732,
+    "cache_read_tokens": 25490903,
+    "output_tokens": 127038,
+    "api_call_count": 173
+  }
+}
