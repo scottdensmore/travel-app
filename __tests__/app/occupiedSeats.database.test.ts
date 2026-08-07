@@ -1,12 +1,22 @@
 /** @jest-environment node */
 import { getOccupiedSeatsAction } from '@/app/actions';
 import { randomUUID } from 'crypto';
+import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 import FlightBookingService from '@/lib/FlightBookingService';
 
 jest.mock('next-auth', () => ({ getServerSession: jest.fn() }));
 jest.mock('next/cache', () => ({ revalidatePath: jest.fn() }));
 jest.mock('@/lib/auth', () => ({ authOptions: {} }));
+
+const mockedGetServerSession = getServerSession as unknown as jest.Mock;
+
+beforeEach(() => {
+    // The action refuses an unauthenticated caller (#154). These cases are
+    // about which seats come back, not about who is asking, so they run as a
+    // signed-in traveller; the refusal itself is covered in actions.test.ts.
+    mockedGetServerSession.mockResolvedValue({ user: { id: 'occupied-seats-suite' } });
+});
 
 const created = { flightIds: [] as number[], bookingIds: [] as number[], userIds: [] as string[] };
 

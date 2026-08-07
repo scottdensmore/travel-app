@@ -15,7 +15,8 @@ import {
     getUserNotificationsAction,
     markNotificationAsReadAction,
     markAllNotificationsAsReadAction,
-    generateFlightOccurrencesAction
+    generateFlightOccurrencesAction,
+    getOccupiedSeatsAction
 } from '@/app/actions';
 import { getServerSession } from 'next-auth';
 import TravelGuideService from '@/lib/TravelGuideService';
@@ -72,6 +73,7 @@ jest.mock('@/lib/prisma', () => ({
         userFavorite: { findUnique: jest.fn(), delete: jest.fn(), create: jest.fn() },
         review: { create: jest.fn(), findUnique: jest.fn(), delete: jest.fn() },
         booking: { findUnique: jest.fn(), delete: jest.fn(), update: jest.fn(), findMany: jest.fn() },
+        seatAssignment: { findMany: jest.fn() },
         notification: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), createMany: jest.fn() },
         $transaction: jest.fn((callback) => callback(mockTx)),
     },
@@ -1689,5 +1691,63 @@ describe('admin flight schedule actions', () => {
                 expect(mockTx.flight.update).not.toHaveBeenCalled();
             });
         });
+    });
+});
+
+describe('getOccupiedSeatsAction authorization', () => {
+    const mockedSeatFindMany = (prisma as any).seatAssignment.findMany as jest.Mock;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockedSeatFindMany.mockResolvedValue([{ seatNumber: '11A' }, { seatNumber: '12C' }]);
+    });
+
+    /**
+     * This was the one read action with no session check and no public caller.
+     * Both places that render a seat map — checkout and the profile — sit behind
+     * the middleware matcher, but a server action is its own endpoint: the
+     * matcher guards page navigations, and the action is dispatched by header.
+     * So the check belongs here rather than on the route (#154).
+     */
+    it('refuses an unauthenticated caller, without reaching the database', async () => {
+        mockedGetServerSession.mockResolvedValue(null);
+
+        await expect(getOccupiedSeatsAction(42)).rejects.toThrow('Unauthorized');
+        expect(mockedSeatFindMany).not.toHaveBeenCalled();
+    });
+
+    it('refuses a session carrying no user id', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: {} });
+
+        await expect(getOccupiedSeatsAction(42)).rejects.toThrow('Unauthorized');
+        expect(mockedSeatFindMany).not.toHaveBeenCalled();
+    });
+
+    it('answers any signed-in traveller, for any flight', async () => {
+        // Deliberately not scoped to flights the caller has booked: checkout
+        // needs the occupancy of a flight before there is a booking to check
+        // against, so that rule would refuse the case the action exists for.
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-1' } });
+
+        await expect(getOccupiedSeatsAction(42)).resolves.toEqual(['11A', '12C']);
+        expect(mockedSeatFindMany).toHaveBeenCalledWith(expect.objectContaining({
+            where: expect.objectContaining({ flightId: 42 }),
+        }));
+    });
+
+    it('still validates the flight id for a signed-in caller', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-1' } });
+
+        await expect(getOccupiedSeatsAction(-1 as number)).rejects.toThrow();
+        expect(mockedSeatFindMany).not.toHaveBeenCalled();
+    });
+
+    it('answers who is asking before what they asked for', async () => {
+        // Both wrong: the refusal should say so rather than reporting the id,
+        // which would tell an anonymous caller which ids are well-formed.
+        mockedGetServerSession.mockResolvedValue(null);
+
+        await expect(getOccupiedSeatsAction(-1 as number)).rejects.toThrow('Unauthorized');
+        expect(mockedSeatFindMany).not.toHaveBeenCalled();
     });
 });

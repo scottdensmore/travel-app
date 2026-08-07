@@ -315,7 +315,25 @@ export async function bookFlightAction(bookingData: {
     return result;
 }
 
+/**
+ * Which seats are taken on a flight, for the seat maps in checkout and in the
+ * profile's seat change.
+ *
+ * Both of those routes are behind the middleware matcher, but a server action
+ * is its own endpoint — the matcher guards page navigations and the action is
+ * dispatched by header, so the route's protection is not this function's. It
+ * was the only read here with neither a session check nor a public caller;
+ * `searchFlightsAction` and `getFlightRoutesAction` are open because the
+ * unauthenticated home page genuinely needs them (#154).
+ *
+ * Any signed-in traveller may ask about any flight. Narrowing it to flights the
+ * caller has booked would refuse checkout, which needs the occupancy of a
+ * flight before there is a booking to check against.
+ */
 export async function getOccupiedSeatsAction(flightId: number) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
     flightId = parseInput(numericIdSchema, flightId);
     // Seats are held per leg. Reading Passenger.seatNumber answered with the
     // outbound seat whichever flight was asked about, so on a round trip it
