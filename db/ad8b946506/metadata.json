@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "dbad8b946506",
+  "strategy": "manual-commit",
+  "branch": "design/product-identity-assets",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "__tests__/components/titlebar.test.tsx",
+    "__tests__/docs/productIdentity.test.ts",
+    "app/favicon.ico",
+    "app/globals.css",
+    "app/icon.svg",
+    "app/layout.tsx",
+    "components/ui/BookingCheckoutWizard.tsx",
+    "components/ui/titlebar.tsx",
+    "public/img/gemini-background.jpg",
+    "public/img/hero-routes.svg",
+    "public/img/logo.svg"
+  ],
+  "sessions": [
+    {
+      "metadata": "/db/ad8b946506/0/metadata.json",
+      "transcript": "/db/ad8b946506/0/full.jsonl",
+      "compact_transcript": "/db/ad8b946506/0/transcript.jsonl",
+      "content_hash": "/db/ad8b946506/0/content_hash.txt",
+      "prompt": "/db/ad8b946506/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1447,
+    "cache_creation_tokens": 1606194,
+    "cache_read_tokens": 154647721,
+    "output_tokens": 343548,
+    "api_call_count": 476
+  }
+}
