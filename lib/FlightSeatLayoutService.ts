@@ -1,3 +1,4 @@
+import { heldSeats } from '@/lib/seatOccupancy';
 import { prisma } from '@/lib/prisma';
 import { lockFlightForUpdate } from '@/lib/flightLock';
 import {
@@ -38,7 +39,7 @@ export async function updateFlightSeatingLayout(
                 // outbound flight, so a return leg's seats were invisible here
                 // and a layout change could strand them.
                 seatAssignments: {
-                    where: { leg: { booking: { status: { not: 'CANCELLED' } } } },
+                    where: heldSeats(),
                     select: { seatNumber: true, cabinClass: true }
                 }
             }

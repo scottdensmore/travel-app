@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache';
+import { heldSeats } from '@/lib/seatOccupancy';
 import TravelGuideService from '@/lib/TravelGuideService';
 import FlightBookingService, { PassengerInput } from '@/lib/FlightBookingService';
 import CityGuide from '@/lib/types/CityGuide';
@@ -339,10 +340,7 @@ export async function getOccupiedSeatsAction(flightId: number) {
     // outbound seat whichever flight was asked about, so on a round trip it
     // reported a free seat as taken and the taken one as free.
     const assignments = await prisma.seatAssignment.findMany({
-        where: {
-            flightId,
-            leg: { booking: { status: { not: "CANCELLED" } } }
-        },
+        where: heldSeats({ flightId }),
         select: {
             seatNumber: true
         }
@@ -570,11 +568,10 @@ export async function changeBookingSeatsAction(
         // leg. Reading Passenger.seatNumber would report the outbound seat for
         // every leg of a round trip.
         const occupied = await tx.seatAssignment.findMany({
-            where: {
+            where: heldSeats({
                 flightId: { in: flightIds },
-                leg: { booking: { status: { not: "CANCELLED" } } },
                 NOT: { leg: { bookingId } },
-            },
+            }),
             select: { flightId: true, seatNumber: true },
         });
         const occupiedSeats = new Set(occupied.map(seat => `${seat.flightId}:${seat.seatNumber}`));
