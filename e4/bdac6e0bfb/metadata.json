@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "e4bdac6e0bfb",
+  "strategy": "manual-commit",
+  "branch": "refactor/share-seat-occupancy",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "__tests__/lib/seatOccupancy.database.test.ts",
+    "__tests__/lib/seatOccupancy.test.ts",
+    "app/actions.ts",
+    "lib/FlightBookingService.ts",
+    "lib/FlightSeatLayoutService.ts",
+    "lib/seatOccupancy.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/e4/bdac6e0bfb/0/metadata.json",
+      "transcript": "/e4/bdac6e0bfb/0/full.jsonl",
+      "compact_transcript": "/e4/bdac6e0bfb/0/transcript.jsonl",
+      "content_hash": "/e4/bdac6e0bfb/0/content_hash.txt",
+      "prompt": "/e4/bdac6e0bfb/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1672,
+    "cache_creation_tokens": 2324083,
+    "cache_read_tokens": 234320609,
+    "output_tokens": 424751,
+    "api_call_count": 596
+  }
+}
