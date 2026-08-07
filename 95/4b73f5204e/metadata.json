@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "954b73f5204e",
+  "strategy": "manual-commit",
+  "branch": "fix/brand-on-boarding-pass",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "__tests__/components/BookingCheckoutWizard.test.tsx",
+    "__tests__/docs/productIdentity.test.ts",
+    "components/ui/BookingCheckoutWizard.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/95/4b73f5204e/0/metadata.json",
+      "transcript": "/95/4b73f5204e/0/full.jsonl",
+      "compact_transcript": "/95/4b73f5204e/0/transcript.jsonl",
+      "content_hash": "/95/4b73f5204e/0/content_hash.txt",
+      "prompt": "/95/4b73f5204e/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1166,
+    "cache_creation_tokens": 1015379,
+    "cache_read_tokens": 76488819,
+    "output_tokens": 243830,
+    "api_call_count": 325
+  }
+}
