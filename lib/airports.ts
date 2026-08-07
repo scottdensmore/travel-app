@@ -40,3 +40,49 @@ const timeZonesByLabel = new Map(AirportData.map(({ label, timeZone }) => [label
 export function airportTimeZoneFor(label: string): string | null {
     return timeZonesByLabel.get(label) ?? null;
 }
+
+const codesByLabel = new Map(AirportData.map((airport) => [airport.label, airport.iataCode]));
+
+/**
+ * The IATA code for the free-text place a route names.
+ *
+ * `Flight.from` and `Flight.to` carry a label; the airport a route actually
+ * touches is identified by its code, which is stable where a label is editable
+ * prose. Every writer of a flight resolves through here so the code and the
+ * label cannot describe different places (#73).
+ *
+ * Null when the label is unknown, which callers must treat as a failure rather
+ * than a default: guessing an airport would put a flight somewhere it does not
+ * go.
+ */
+export function airportCodeFor(label: string): string | null {
+    return codesByLabel.get(label) ?? null;
+}
+
+/**
+ * The pair of airport references a flight on this route needs.
+ *
+ * Every writer of a flight goes through here so the reference and the label
+ * cannot describe different places, and so a route naming somewhere with no
+ * airport fails at the point of creation rather than at the constraint -- where
+ * the error names a column instead of a place.
+ *
+ * @throws Error when either end is not a known airport.
+ */
+export function airportCodesForRoute(from: string, to: string): {
+    fromAirportCode: string;
+    toAirportCode: string;
+} {
+    const fromAirportCode = airportCodeFor(from);
+    const toAirportCode = airportCodeFor(to);
+
+    const unknown = [...new Set([
+        ...(fromAirportCode === null ? [from] : []),
+        ...(toAirportCode === null ? [to] : []),
+    ])];
+    if (unknown.length > 0) {
+        throw new Error(`No airport is known for ${unknown.map((place) => JSON.stringify(place)).join(' or ')}.`);
+    }
+
+    return { fromAirportCode: fromAirportCode!, toAirportCode: toAirportCode! };
+}

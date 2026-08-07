@@ -1,4 +1,5 @@
 /** @jest-environment node */
+import { airportCodesForRoute } from '@/lib/airports';
 import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { heldSeats } from '@/lib/seatOccupancy';
@@ -70,6 +71,7 @@ beforeAll(async () => {
             airline: 'Mona Airways',
             from: 'Seattle, USA',
             to: 'Detroit, USA',
+            ...airportCodesForRoute('Seattle, USA', 'Detroit, USA'),
             departureDate: new Date('2028-03-01T08:00:00Z'),
             priceCents: 35_000,
             status: 'ON_TIME',

@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client'
 import CityGuideData from '../lib/data/CityGuideData'
 import AirportData from '../lib/data/AirportData'
 import { FlightData, FlightScheduleData } from '../lib/data/FlightData'
+import { airportCodesForRoute } from '../lib/airports'
 import { MAX_BOOKING_LEAD_DAYS } from '../lib/dates'
 import FlightScheduleService from '../lib/FlightScheduleService'
 import { prisma as applicationPrisma } from '../lib/prisma'
@@ -73,7 +74,10 @@ async function main() {
         });
         if (!existing) {
             const flight = await prisma.flight.create({
-                data: flightData
+                data: {
+                    ...flightData,
+                    ...airportCodesForRoute(flightData.from, flightData.to),
+                }
             })
             console.log(`Created static legacy flight with id: ${flight.id}`)
         }

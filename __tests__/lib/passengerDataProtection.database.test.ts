@@ -1,4 +1,5 @@
 /** @jest-environment node */
+import { airportCodesForRoute } from '@/lib/airports';
 import FlightBookingService from '@/lib/FlightBookingService';
 import { prisma } from '@/lib/prisma';
 import { decryptPassengerData } from '@/lib/passengerDataProtection';
@@ -21,8 +22,9 @@ describe('passenger identity data in PostgreSQL', () => {
             data: {
                 flightNumber,
                 airline: 'Privacy Air',
-                from: 'SEA',
-                to: 'SFO',
+                from: 'Seattle, USA',
+                to: 'San Francisco, USA',
+                ...airportCodesForRoute('Seattle, USA', 'San Francisco, USA'),
                 departureDate: new Date('2099-01-01T10:00:00.000Z'),
                 priceCents: 10000,
                 status: 'ON_TIME',

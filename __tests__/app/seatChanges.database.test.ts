@@ -1,4 +1,5 @@
 /** @jest-environment node */
+import { airportCodesForRoute } from '@/lib/airports';
 import { changeBookingSeatsAction } from '@/app/actions';
 import { getServerSession } from 'next-auth';
 import { randomUUID } from 'crypto';
@@ -22,6 +23,7 @@ async function createFlight(suffix: string, from: string, to: string, day: strin
             airline: 'Gemini Airways',
             from,
             to,
+            ...airportCodesForRoute(from, to),
             departureDate: new Date(`${day}T08:00:00Z`),
             priceCents: 35000,
             status: 'ON_TIME',

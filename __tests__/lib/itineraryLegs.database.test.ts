@@ -1,4 +1,5 @@
 /** @jest-environment node */
+import { airportCodesForRoute } from '@/lib/airports';
 import { prisma } from '@/lib/prisma';
 
 async function createFlight(flightNumber: string) {
@@ -8,6 +9,7 @@ async function createFlight(flightNumber: string) {
             airline: 'Gemini Airways',
             from: 'Seattle, USA',
             to: 'Detroit, USA',
+            ...airportCodesForRoute('Seattle, USA', 'Detroit, USA'),
             departureDate: new Date(`2027-03-01T08:00:00Z`),
             priceCents: 35000,
         },

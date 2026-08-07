@@ -1,7 +1,7 @@
 /** @jest-environment node */
 import { FlightData, FlightScheduleData } from '@/lib/data/FlightData';
 import AirportData from '@/lib/data/AirportData';
-import { airportLocalDate, airportTimeZoneFor } from '@/lib/airports';
+import { airportCodeFor, airportCodesForRoute, airportLocalDate, airportTimeZoneFor } from '@/lib/airports';
 
 describe('airport local date', () => {
     it('resolves the calendar day at the airport, not in UTC', () => {
@@ -74,5 +74,41 @@ describe('airport timezone lookup', () => {
         for (const { label, timeZone } of AirportData) {
             expect(airportTimeZoneFor(label)).toBe(timeZone);
         }
+    });
+});
+
+describe('airportCodeFor', () => {
+    it('resolves the label a route carries to a stable code', () => {
+        expect(airportCodeFor('Seattle, USA')).toBe('SEA');
+        expect(airportCodeFor('Paris, France')).toBe('CDG');
+    });
+
+    it('refuses an unknown place rather than guessing one', () => {
+        // A flight put at the wrong airport is worse than a flight that fails
+        // to be created.
+        expect(airportCodeFor('Atlantis, Nowhere')).toBeNull();
+        expect(airportCodeFor('')).toBeNull();
+    });
+
+});
+
+describe('airportCodesForRoute', () => {
+    it('gives a flight both ends of its route', () => {
+        expect(airportCodesForRoute('Seattle, USA', 'Detroit, USA')).toEqual({
+            fromAirportCode: 'SEA',
+            toAirportCode: 'DTW',
+        });
+    });
+
+    it('refuses rather than writing a flight to nowhere, naming what it could not place', () => {
+        expect(() => airportCodesForRoute('Atlantis, Nowhere', 'Detroit, USA'))
+            .toThrow('No airport is known for "Atlantis, Nowhere".');
+        expect(() => airportCodesForRoute('Seattle, USA', 'El Dorado, Nowhere'))
+            .toThrow('No airport is known for "El Dorado, Nowhere".');
+    });
+
+    it('names a place once when both ends are the same unknown', () => {
+        expect(() => airportCodesForRoute('Nowhere', 'Nowhere'))
+            .toThrow('No airport is known for "Nowhere".');
     });
 });
