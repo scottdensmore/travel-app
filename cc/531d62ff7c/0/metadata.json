@@ -1,0 +1,92 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "cc531d62ff7c",
+  "session_id": "94121201-47c3-4281-aeff-7838379a510d",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-07T16:35:15.922906231Z",
+  "branch": "fix/cabin-label-on-eticket",
+  "checkpoints_count": 1,
+  "save_step_count": 1,
+  "files_touched": [
+    "__tests__/components/AdminFlightsTable.test.tsx",
+    "__tests__/components/BookingCheckoutWizard.test.tsx",
+    "__tests__/components/ProfileClient.test.tsx",
+    "__tests__/lib/bookingItinerary.test.ts",
+    "app/admin/flights/AdminFlightsTable.tsx",
+    "components/ui/BookingCheckoutWizard.tsx",
+    "components/ui/ProfileClient.tsx",
+    "components/ui/flightBookingForm.tsx",
+    "e2e/booking.spec.ts",
+    "e2e/multi-passenger.spec.ts",
+    "lib/bookingItinerary.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-5",
+  "turn_id": "dd6189ab62eb",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 1610,
+    "cache_creation_tokens": 2284173,
+    "cache_read_tokens": 210678860,
+    "output_tokens": 395140,
+    "api_call_count": 563
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "claude-skill-toolu_01PoA31daKg2DhkuJoCobHR5",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "frontend-design"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "dd6189ab62eb",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 1584,
+        "end": 1585,
+        "entry_ids": [
+          "32469cfe-0ad7-433a-b3ed-8fe51c184595"
+        ],
+        "tool_use_id": "toolu_01PoA31daKg2DhkuJoCobHR5"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01PoA31daKg2DhkuJoCobHR5"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: frontend-design",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 15
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-07T16:35:13.218173521Z",
+    "agent_lines": 125,
+    "agent_removed": 32,
+    "human_added": 51,
+    "human_modified": 22,
+    "human_removed": 0,
+    "total_committed": 198,
+    "total_lines_changed": 231,
+    "agent_percentage": 67.96536796536796,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
