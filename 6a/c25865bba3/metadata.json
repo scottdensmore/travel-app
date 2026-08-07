@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "6ac25865bba3",
+  "strategy": "manual-commit",
+  "branch": "feat/typed-cabin-class",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "AGENTS.md",
+    "__tests__/lib/cabinClass.database.test.ts",
+    "__tests__/lib/cabinClass.test.ts",
+    "prisma/migrations/20260807120000_type_cabin_class/migration.sql",
+    "prisma/schema.prisma"
+  ],
+  "sessions": [
+    {
+      "metadata": "/6a/c25865bba3/0/metadata.json",
+      "transcript": "/6a/c25865bba3/0/full.jsonl",
+      "compact_transcript": "/6a/c25865bba3/0/transcript.jsonl",
+      "content_hash": "/6a/c25865bba3/0/content_hash.txt",
+      "prompt": "/6a/c25865bba3/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1765,
+    "cache_creation_tokens": 2386315,
+    "cache_read_tokens": 272858433,
+    "output_tokens": 463293,
+    "api_call_count": 646
+  }
+}
