@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "aab35e756c9c",
+  "strategy": "manual-commit",
+  "branch": "refactor/share-leg-direction-label",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "__tests__/components/ProfileClient.test.tsx",
+    "__tests__/lib/bookingItinerary.test.ts",
+    "components/ui/BookingCheckoutWizard.tsx",
+    "components/ui/ProfileClient.tsx",
+    "lib/bookingItinerary.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/aa/b35e756c9c/0/metadata.json",
+      "transcript": "/aa/b35e756c9c/0/full.jsonl",
+      "compact_transcript": "/aa/b35e756c9c/0/transcript.jsonl",
+      "content_hash": "/aa/b35e756c9c/0/content_hash.txt",
+      "prompt": "/aa/b35e756c9c/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1222,
+    "cache_creation_tokens": 1456577,
+    "cache_read_tokens": 89402042,
+    "output_tokens": 259496,
+    "api_call_count": 355
+  }
+}
