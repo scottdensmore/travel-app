@@ -14,7 +14,10 @@ const mockBookFlightAction = bookFlightAction as jest.Mock;
 const sampleFlight = {
     id: 42,
     flightNumber: 'GA404',
-    airline: 'Gemini Airways',
+    // Neutral on purpose: the boarding-pass test asserts no "gemini" appears
+    // anywhere on the confirmation, and a fixture carrying it would fail that
+    // as a brand regression the moment the pass starts showing the operator.
+    airline: 'Test Air',
     from: 'Seattle, USA',
     to: 'Detroit, USA',
     departureDate: '2026-06-30T10:00:00Z',
@@ -747,7 +750,7 @@ describe('BookingCheckoutWizard', () => {
             // reached by its accessible name, which pins that too.
             const [departing, returning] = screen.getAllByTestId('review-leg');
             const seatRows = (leg: HTMLElement, flightNumber: string) =>
-                within(within(leg).getByRole('list', { name: `Travellers on Gemini Airways ${flightNumber}` }))
+                within(within(leg).getByRole('list', { name: `Travellers on Test Air ${flightNumber}` }))
                     .getAllByRole('listitem');
 
             const [adaOut, graceOut] = seatRows(departing, 'GA404');
@@ -850,6 +853,14 @@ describe('BookingCheckoutWizard', () => {
             await waitFor(() => {
                 expect(screen.getByText('Booking Confirmed!')).toBeInTheDocument();
             });
+
+            // The carrier on the e-ticket is the product. It read "GEMINI
+            // AIRWAYS" until #158, and the source scan that was supposed to
+            // catch that was case-sensitive. The negative is the assertion
+            // carrying the regression value; the count is one per pass — one
+            // traveller over two legs.
+            expect(screen.queryByText(/gemini/i)).not.toBeInTheDocument();
+            expect(screen.getAllByText('MONA AIRWAYS')).toHaveLength(2);
 
             // A pass per leg: each names its own flight and carries the seat
             // held on it, rather than one card listing the whole itinerary.
