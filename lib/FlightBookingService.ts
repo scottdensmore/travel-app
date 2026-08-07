@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { heldSeats } from '@/lib/seatOccupancy';
 import { bookingFlights } from '@/lib/bookingItinerary';
 import { prisma } from '@/lib/prisma';
 import { assertSeatAvailableForCabin } from '@/lib/seatLayout';
@@ -205,10 +206,7 @@ export default class FlightBookingService {
                 // Passenger, which can only describe one leg.
                 const occupied = new Set(
                     (await tx.seatAssignment.findMany({
-                        where: {
-                            flightId: flight.id,
-                            leg: { booking: { status: { not: "CANCELLED" } } },
-                        },
+                        where: heldSeats({ flightId: flight.id }),
                         select: { seatNumber: true },
                     })).map(assignment => assignment.seatNumber)
                 );
