@@ -221,6 +221,11 @@ export default class FlightBookingService {
             const total = calculateItineraryTotal(
                 flights.map(flightFareCents),
                 passengers.map(passenger => ({
+                    // `passengers` here is the parsed request, so this is
+                    // already one of the four — but `PassengerInput` still
+                    // declares `string`, and narrowing that is a chain through
+                    // the local Prisma-shaped types and fourteen fixtures
+                    // (#183).
                     cabinClass: passenger.cabinClass as 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST'
                 }))
             );

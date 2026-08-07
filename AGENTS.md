@@ -51,6 +51,16 @@ that runs this application injects configuration at runtime.
 
 ## Gotchas
 
+- A migration that fails leaves Prisma refusing to apply anything else: the next
+  `migrate deploy` reports `P3009`, not the original error. Fix the data the migration
+  objected to, then `npx prisma migrate resolve --rolled-back <migration_name>` before
+  deploying again. A failed migration rolls back whole — no half-created type or
+  column survives — so the retry is clean. Several migrations here `RAISE EXCEPTION`
+  deliberately rather than let a cast fail with a less useful message, so this is a
+  normal path rather than a disaster
+- There are no down migrations. Rolling one back means reversing its SQL by hand and
+  deleting its row from `_prisma_migrations`; write the reversal in the migration's
+  header comment when it is not obvious
 - `__tests__/**/*.database.test.ts` require a live Postgres; start it before `npm test`
 - Those files run serially in their own Jest project: they share one database and
   several assert against whole tables, so running them beside each other counted one

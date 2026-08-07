@@ -243,6 +243,19 @@ model ItineraryLeg {
   @@index([flightId])
 }
 
+/// The cabins the airline sells.
+///
+/// Typed in the database rather than left as free text: the column was
+/// `TEXT NOT NULL` with no constraint, so the four-cabin rule lived only in the
+/// Zod schema at the request boundary and anything reaching the table another
+/// way could write nonsense that every read path would then believe (#73).
+enum CabinClass {
+  ECONOMY
+  PREMIUM_ECONOMY
+  BUSINESS
+  FIRST
+}
+
 /// Where one traveller sits on one leg. Separated from Passenger because a
 /// traveller is one person per booking while a seat is one per leg: a round trip
 /// would otherwise need a second Passenger row, duplicating that person's
@@ -260,7 +273,7 @@ model SeatAssignment {
   leg         ItineraryLeg @relation(fields: [legId, flightId], references: [id, flightId], onDelete: Cascade)
   flight      Flight       @relation(fields: [flightId], references: [id])
   seatNumber  String
-  cabinClass  String
+  cabinClass  CabinClass
 
   /// The guard against two customers acquiring the same seat.
   @@unique([flightId, seatNumber])
