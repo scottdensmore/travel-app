@@ -35,7 +35,11 @@ function flightIdParam(value: string | string[] | undefined): number | null {
 
 export default async function CheckoutPage({ searchParams }: PageProps) {
     const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    // Guards on the same thing the actions this page calls guard on. Checking
+    // only `user` let a session without an id past the redirect and into
+    // `getOccupiedSeatsAction`, which would throw — a 500 where a trip back to
+    // sign-in belongs (#154).
+    if (!session?.user?.id) {
         redirect('/login');
     }
 
