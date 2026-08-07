@@ -133,6 +133,19 @@ model Passenger {
   @@index([sensitiveDataExpiresAt])
 }
 
+/// Whether a flight is running.
+///
+/// Typed in the database rather than left as free text: the column was
+/// `TEXT NOT NULL DEFAULT 'ON_TIME'` with no constraint, so the three-status
+/// rule lived only in `flightStatusSchema` at the request boundary. A status
+/// written any other way would be filtered on by search and rendered on the
+/// status board to a customer checking whether their flight is running (#73).
+enum FlightStatus {
+  ON_TIME
+  DELAYED
+  CANCELLED
+}
+
 model Flight {
   id            Int       @id @default(autoincrement())
   flightNumber  String
@@ -142,7 +155,7 @@ model Flight {
   departureDate DateTime
   /// The fare in minor units. The only form the fare is stored in (#135).
   priceCents    Int
-  status        String    @default("ON_TIME")
+  status        FlightStatus @default(ON_TIME)
 
   firstClassRows     Int?
   businessRows       Int?
