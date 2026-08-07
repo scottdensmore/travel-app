@@ -1,0 +1,84 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "902d1886c520",
+  "session_id": "94121201-47c3-4281-aeff-7838379a510d",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-07T20:26:58.32278669Z",
+  "branch": "feat/typed-flight-status",
+  "checkpoints_count": 1,
+  "save_step_count": 1,
+  "files_touched": [
+    "lib/data/FlightData.ts",
+    "prisma/migrations/20260807170000_type_flight_status/migration.sql",
+    "prisma/schema.prisma"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-5",
+  "turn_id": "157eab50ad99",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 1844,
+    "cache_creation_tokens": 2438390,
+    "cache_read_tokens": 308472670,
+    "output_tokens": 496520,
+    "api_call_count": 689
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "claude-skill-toolu_01PoA31daKg2DhkuJoCobHR5",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "frontend-design"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "157eab50ad99",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 1584,
+        "end": 1585,
+        "entry_ids": [
+          "32469cfe-0ad7-433a-b3ed-8fe51c184595"
+        ],
+        "tool_use_id": "toolu_01PoA31daKg2DhkuJoCobHR5"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01PoA31daKg2DhkuJoCobHR5"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: frontend-design",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 19
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-07T20:26:55.920844155Z",
+    "agent_lines": 93,
+    "agent_removed": 2,
+    "human_added": 143,
+    "human_modified": 1,
+    "human_removed": 0,
+    "total_committed": 237,
+    "total_lines_changed": 239,
+    "agent_percentage": 39.74895397489539,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}

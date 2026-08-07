@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "902d1886c520",
+  "strategy": "manual-commit",
+  "branch": "feat/typed-flight-status",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "lib/data/FlightData.ts",
+    "prisma/migrations/20260807170000_type_flight_status/migration.sql",
+    "prisma/schema.prisma"
+  ],
+  "sessions": [
+    {
+      "metadata": "/90/2d1886c520/0/metadata.json",
+      "transcript": "/90/2d1886c520/0/full.jsonl",
+      "compact_transcript": "/90/2d1886c520/0/transcript.jsonl",
+      "content_hash": "/90/2d1886c520/0/content_hash.txt",
+      "prompt": "/90/2d1886c520/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1844,
+    "cache_creation_tokens": 2438390,
+    "cache_read_tokens": 308472670,
+    "output_tokens": 496520,
+    "api_call_count": 689
+  }
+}
