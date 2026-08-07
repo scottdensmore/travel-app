@@ -1,5 +1,6 @@
 // Relative, not the '@/' alias: the seed runs this through ts-node, which does
 // not resolve path aliases.
+import type { Prisma } from '@prisma/client';
 import { BRAND } from '../brand';
 
 export const FlightData = [
@@ -48,7 +49,10 @@ export const FlightData = [
         priceCents: 50000,
         status: 'ON_TIME'
     }
-];
+    // Checked against what the table accepts, so a status here has to be one
+    // the `FlightStatus` enum admits. Without this the literals widen to
+    // `string`, and the seed would only fail when Postgres rejected the insert.
+] satisfies Prisma.FlightCreateInput[];
 
 export const FlightScheduleData = [
     {
