@@ -1,5 +1,10 @@
 /** @jest-environment node */
-import { bookingFlights, outboundFlight, passengersSeatedOnLeg } from '@/lib/bookingItinerary';
+import {
+    bookingFlights,
+    legDirectionLabel,
+    outboundFlight,
+    passengersSeatedOnLeg,
+} from '@/lib/bookingItinerary';
 
 const seattle = { id: 1, flightNumber: 'GA101', from: 'Seattle, USA', to: 'Detroit, USA' };
 const detroit = { id: 2, flightNumber: 'GA102', from: 'Detroit, USA', to: 'Seattle, USA' };
@@ -93,6 +98,33 @@ describe('booking itinerary', () => {
             // Grace has no assignment on this leg, so she is reported as
             // unseated rather than inheriting Ada's.
             expect(second.seatNumber).toBe('Not assigned');
+        });
+    });
+
+    describe('legDirectionLabel', () => {
+        // Checkout and the profile both name a leg by direction. They held
+        // separate copies of the rule, which agreed only because
+        // MAX_ITINERARY_LEGS is 2 — connecting itineraries (#131) would have
+        // had the two screens calling one flight different things (#160).
+        it('names the two legs of a there-and-back trip', () => {
+            expect(legDirectionLabel(0, 2)).toBe('Departing');
+            expect(legDirectionLabel(1, 2)).toBe('Returning');
+        });
+
+        it('calls the only leg of a one-way trip the departure', () => {
+            expect(legDirectionLabel(0, 1)).toBe('Departing');
+        });
+
+        it('numbers a middle leg, which is neither out nor back', () => {
+            expect(legDirectionLabel(0, 3)).toBe('Departing');
+            expect(legDirectionLabel(1, 3)).toBe('Leg 2');
+            expect(legDirectionLabel(2, 3)).toBe('Returning');
+        });
+
+        it('numbers every leg between the first and last of a longer trip', () => {
+            expect([0, 1, 2, 3, 4].map((index) => legDirectionLabel(index, 5))).toEqual([
+                'Departing', 'Leg 2', 'Leg 3', 'Leg 4', 'Returning',
+            ]);
         });
     });
 });

@@ -83,6 +83,29 @@ export function seatLabel(seatNumber: string | null | undefined): string {
 }
 
 /**
+ * Names a leg by its direction, wherever one is labelled.
+ *
+ * "Returning" is only true of the *last* leg of a there-and-back trip, which is
+ * all `MAX_ITINERARY_LEGS` permits today. Checkout and the profile each held
+ * their own `index === 0 ? 'Departing' : 'Returning'`, which agreed only
+ * because of that cap: connecting itineraries (#131) raise it, and the two
+ * screens would then have called one flight different things (#160).
+ *
+ * It lives beside `seatLabel` because both answer the same kind of question:
+ * how a piece of an itinerary reads to a customer.
+ *
+ * This covers the places that *label* a leg. Two seat-validation messages still
+ * build their own lowercase "departing"/"returning" inline, because they read as
+ * prose in a sentence rather than as a label and cannot take these strings as
+ * they stand (#171).
+ */
+export function legDirectionLabel(legIndex: number, legCount: number): string {
+    if (legIndex === 0) return 'Departing';
+    if (legIndex === legCount - 1) return 'Returning';
+    return `Leg ${legIndex + 1}`;
+}
+
+/**
  * The outbound flight, which is what every single-flight view wants today.
  * Null when the booking has no legs, or none whose flight was loaded.
  */

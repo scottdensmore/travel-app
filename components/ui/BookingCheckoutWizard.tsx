@@ -11,6 +11,7 @@ import { bookFlightAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
 import { CABIN_FARE_PERCENT, calculatePassengerFareCents, flightFareCents, formatPrice } from '@/lib/bookingPricing';
 import { BRAND } from '@/lib/brand';
+import { legDirectionLabel } from '@/lib/bookingItinerary';
 
 interface Flight {
     id: number;
@@ -62,23 +63,6 @@ const CABIN_LABELS = {
     BUSINESS: 'Business (+100%)',
     FIRST: 'First Class (+200%)'
 };
-
-/**
- * Names a leg by its direction, for the seat switcher and the review summary.
- *
- * "Returning" is only true of the last leg of a there-and-back trip, which is
- * all `MAX_ITINERARY_LEGS` allows today. Connecting itineraries (#131) will
- * make a middle leg neither departing nor returning, so this file's two callers
- * read the assumption from here rather than each holding a copy of it.
- *
- * ProfileClient renders the same label from its own inline copy, so checkout
- * and the profile will disagree about a middle leg until that moves too (#160).
- */
-function legDirectionLabel(legIndex: number, legCount: number): string {
-    if (legIndex === 0) return 'Departing';
-    if (legIndex === legCount - 1) return 'Returning';
-    return `Leg ${legIndex + 1}`;
-}
 
 function createBookingRequestId(): string {
     const bytes = new Uint8Array(16);
