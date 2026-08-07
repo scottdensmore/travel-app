@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { pageTitle } from '@/lib/brand';
+import { BRAND, pageTitle } from '@/lib/brand';
 import React from "react";
 import FlightBookingForm from "../components/ui/flightBookingForm";
 import { getFlightRoutesAction } from "./actions";
@@ -12,11 +12,36 @@ import {
 
 // Reads live flight inventory from the DB, so render per-request rather than
 // statically prerendering at build time (which would need a database).
+/**
+ * The social card.
+ *
+ * Declared here rather than in the root layout because this route renders per
+ * request. `metadataBase` resolves when a page renders, so a card at the root
+ * baked the build machine's URL into every prerendered auth page — in a
+ * container image, `http://localhost:3000/img/og-image.jpg`, which fetches
+ * nothing. An auth page needs no marketing card anyway (#140).
+ */
+const socialCard = {
+    // Just the name: the image already carries the tagline, and an unfurl
+    // stacks the title directly above the image, so repeating it printed the
+    // same sentence twice in two different casings.
+    title: BRAND.name,
+    description: BRAND.description,
+    images: [{
+        url: '/img/og-image.jpg',
+        width: 1200,
+        height: 630,
+        alt: `${BRAND.name} — ${BRAND.tagline}`,
+    }],
+};
+
 export const metadata: Metadata = {
     // Spelled out rather than relying on the template: Next applies that to
     // child segments, and this page shares a segment with the root layout.
     title: pageTitle('Book flights'),
     description: 'Search flights by route, date and cabin, and book your trip with Mona Airways.',
+    openGraph: { type: 'website', siteName: BRAND.name, url: '/', ...socialCard },
+    twitter: { card: 'summary_large_image', ...socialCard },
 };
 
 export const dynamic = 'force-dynamic';

@@ -103,7 +103,10 @@ const TitleBar: React.FC = () => {
         <header className={pathname?.startsWith('/admin') ? 'admin-header' : ''}>
             <div className="logo">
                 <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}>
-                    <img src="/img/logo.svg" alt={BRAND.name} width="32" height="32" />
+                    {/* Decorative: the name follows in text inside the same
+                        link, so alt would make the link read "Mona Airways
+                        Mona Airways". The mark carries no wordmark of its own. */}
+                    <img src="/img/logo.svg" alt="" width="32" height="32" />
                     <span style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>{BRAND.name}</span>
                 </Link>
                 <span>{pageTitle}</span>
