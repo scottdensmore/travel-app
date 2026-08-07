@@ -131,7 +131,7 @@ test.describe('Flight Booking Journey', () => {
     await expect(page.locator('text=Bob Jones').first()).toBeVisible();
     // The seat is printed inside the leg that holds it (#152).
     await expect(page.getByTestId('review-leg')).toContainText('Seat 11A');
-    await expect(page.locator('text=Class: ECONOMY').first()).toBeVisible();
+    await expect(page.locator('text=Class: Economy').first()).toBeVisible();
 
     await expect(page.locator('text=Payment is not collected in this demo')).toBeVisible();
     await expect(page.locator('input[placeholder="4111 2222 3333 4444"]')).not.toBeVisible();

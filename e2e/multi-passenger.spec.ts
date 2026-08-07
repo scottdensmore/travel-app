@@ -131,7 +131,7 @@ test.describe('Multi-Passenger Booking Journey', () => {
     // both names and both seats would read the same if the seats were swapped.
     await expect(reviewLeg.locator('li', { hasText: 'Alice Smith' })).toContainText('Seat 11A');
     await expect(reviewLeg.locator('li', { hasText: 'Bob Jones' })).toContainText('Seat 11B');
-    await expect(page.locator('text=Class: ECONOMY').first()).toBeVisible();
+    await expect(page.locator('text=Class: Economy').first()).toBeVisible();
 
     // Confirm
     await page.click('button:has-text("Confirm $")');

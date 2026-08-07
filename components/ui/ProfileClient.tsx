@@ -6,7 +6,7 @@ import PointsActivityTable from "@/components/ui/pointsActivityTable";
 import NextStatusChart from "@/components/ui/charts/nextStatusChart";
 import PointsHistoryChart from "@/components/ui/charts/pointsHistoryChart";
 import { flightFareCents, formatPrice } from '@/lib/bookingPricing';
-import { legDirectionLabel, orderedLegs, outboundFlight, seatLabel } from '@/lib/bookingItinerary';
+import { cabinLabel, legDirectionLabel, orderedLegs, outboundFlight, seatLabel } from '@/lib/bookingItinerary';
 import { cancelBookingAction, deleteReviewAction, toggleFavoriteCityGuideAction, changeBookingSeatsAction, getOccupiedSeatsAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
 import { PointsActivityDisplayData } from '@/lib/types/PointsActivity';
@@ -617,7 +617,7 @@ export default function ProfileClient({
                                             key={p.id}
                                             onClick={() => setActivePassengerIdx(idx)}
                                             aria-pressed={activePassengerIdx === idx}
-                                            aria-label={`${p.firstName} ${p.lastName}, Seat: ${seatFor(p.id) || 'None'}, ${cabinFor(p.id)}`}
+                                            aria-label={`${p.firstName} ${p.lastName}, Seat: ${seatFor(p.id) || 'None'}, ${cabinLabel(cabinFor(p.id))}`}
                                             style={{
                                                 width: '100%',
                                                 color: 'inherit',
@@ -631,7 +631,7 @@ export default function ProfileClient({
                                         >
                                             <div style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{p.firstName} {p.lastName}</div>
                                             <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>
-                                                Seat: <span style={{ color: '#34d399', fontWeight: 'bold' }}>{seatFor(p.id) || 'None'}</span> ({cabinFor(p.id)})
+                                                Seat: <span style={{ color: '#34d399', fontWeight: 'bold' }}>{seatFor(p.id) || 'None'}</span> ({cabinLabel(cabinFor(p.id))})
                                             </div>
                                         </button>
                                     ))}

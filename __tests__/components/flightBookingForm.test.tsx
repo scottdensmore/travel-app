@@ -1074,4 +1074,18 @@ describe('FlightBookingForm', () => {
             expect(screen.getByText('No return flights available on this date.')).toBeInTheDocument();
         });
     });
+    it('names cabins the way the rest of the booking does', () => {
+        // The picker was hardcoded and said "First" while checkout, the review
+        // and the boarding pass all said "First Class", so a customer chose one
+        // cabin by name and was sold another (#169).
+        render(<FlightBookingForm routes={routes} />);
+
+        const options = Array.from(
+            (screen.getByLabelText(/Cabin class/i) as HTMLSelectElement).options
+        ).map(option => option.text);
+
+        expect(options).toEqual(['Economy', 'Premium Economy', 'Business', 'First Class']);
+        expect(options.some(text => /_/.test(text))).toBe(false);
+    });
+
 });

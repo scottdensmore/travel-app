@@ -82,6 +82,34 @@ export function seatLabel(seatNumber: string | null | undefined): string {
     return seatNumber.startsWith('CANCELLED') ? 'Released' : seatNumber;
 }
 
+const CABIN_NAMES: Record<string, string> = {
+    ECONOMY: 'Economy',
+    PREMIUM_ECONOMY: 'Premium Economy',
+    BUSINESS: 'Business',
+    FIRST: 'First Class',
+};
+
+/**
+ * How a cabin reads to a customer.
+ *
+ * The enum was printed straight onto the boarding pass, so an e-ticket said
+ * `PREMIUM_ECONOMY` — underscore, capitals and all — on the one artefact people
+ * keep and show at an airport (#169).
+ *
+ * An unrecognised value is made readable rather than passed through, so a cabin
+ * added to the schema before this map catches up still cannot reach a ticket
+ * shouting in snake case. It is only ever a fallback: a real cabin belongs
+ * above, where the wording is chosen rather than derived.
+ */
+export function cabinLabel(cabinClass: string | null | undefined): string {
+    if (!cabinClass) return '';
+    return CABIN_NAMES[cabinClass] ?? cabinClass
+        .toLowerCase()
+        .split('_')
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+}
+
 /**
  * Names a leg by its direction, wherever one is labelled.
  *

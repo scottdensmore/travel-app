@@ -1,6 +1,7 @@
 /** @jest-environment node */
 import {
     bookingFlights,
+    cabinLabel,
     legDirectionLabel,
     outboundFlight,
     passengersSeatedOnLeg,
@@ -125,6 +126,28 @@ describe('booking itinerary', () => {
             expect([0, 1, 2, 3, 4].map((index) => legDirectionLabel(index, 5))).toEqual([
                 'Departing', 'Leg 2', 'Leg 3', 'Leg 4', 'Returning',
             ]);
+        });
+    });
+
+    describe('cabinLabel', () => {
+        // The raw enum was printed on the boarding pass, so a customer's
+        // e-ticket read PREMIUM_ECONOMY, underscore and all (#169).
+        it('names each cabin the way a customer would', () => {
+            expect(cabinLabel('ECONOMY')).toBe('Economy');
+            expect(cabinLabel('PREMIUM_ECONOMY')).toBe('Premium Economy');
+            expect(cabinLabel('BUSINESS')).toBe('Business');
+            expect(cabinLabel('FIRST')).toBe('First Class');
+        });
+
+        it('makes an unknown cabin readable rather than printing it raw', () => {
+            // A cabin added to the schema before this map catches up should
+            // still not reach a ticket shouting in snake case.
+            expect(cabinLabel('PREMIUM_BUSINESS')).toBe('Premium Business');
+        });
+
+        it('says nothing for a missing cabin', () => {
+            expect(cabinLabel(undefined)).toBe('');
+            expect(cabinLabel('')).toBe('');
         });
     });
 });
