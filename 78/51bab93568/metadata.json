@@ -1,0 +1,48 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "7851bab93568",
+  "strategy": "manual-commit",
+  "branch": "feat/flight-airport-fk",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "__tests__/app/actions.test.ts",
+    "__tests__/app/occupiedSeats.database.test.ts",
+    "__tests__/app/seatChanges.database.test.ts",
+    "__tests__/lib/FlightScheduleService.test.ts",
+    "__tests__/lib/airports.test.ts",
+    "__tests__/lib/cabinClass.database.test.ts",
+    "__tests__/lib/flightAirports.database.test.ts",
+    "__tests__/lib/flightStatus.database.test.ts",
+    "__tests__/lib/itineraryLegs.database.test.ts",
+    "__tests__/lib/passengerDataProtection.database.test.ts",
+    "__tests__/lib/seatAssignmentCoverage.database.test.ts",
+    "__tests__/lib/seatAssignments.database.test.ts",
+    "__tests__/lib/seatLayoutGuard.database.test.ts",
+    "__tests__/lib/seatOccupancy.database.test.ts",
+    "app/actions.ts",
+    "e2e/admin.spec.ts",
+    "e2e/booking-authority.spec.ts",
+    "lib/FlightScheduleService.ts",
+    "lib/airports.ts",
+    "lib/data/FlightData.ts",
+    "prisma/migrations/20260807210000_flight_airport_references/migration.sql",
+    "prisma/schema.prisma",
+    "prisma/seed.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/78/51bab93568/0/metadata.json",
+      "transcript": "/78/51bab93568/0/full.jsonl",
+      "compact_transcript": "/78/51bab93568/0/transcript.jsonl",
+      "content_hash": "/78/51bab93568/0/content_hash.txt",
+      "prompt": "/78/51bab93568/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2023,
+    "cache_creation_tokens": 3364298,
+    "cache_read_tokens": 394196643,
+    "output_tokens": 554589,
+    "api_call_count": 785
+  }
+}
