@@ -176,7 +176,7 @@ describe('BookingCheckoutWizard', () => {
         // is held on, and the fare breakdown carries the cabin (#152).
         expect(screen.getByTestId('review-leg')).toHaveTextContent('Bob Jones');
         expect(screen.getByTestId('review-leg')).toHaveTextContent('Seat 11C');
-        expect(screen.getByText('Class: ECONOMY')).toBeInTheDocument();
+        expect(screen.getByText('Class: Economy')).toBeInTheDocument();
         expect(screen.getByText('Estimated Total')).toBeInTheDocument();
 
         expect(screen.queryByPlaceholderText('4111 2222 3333 4444')).not.toBeInTheDocument();
@@ -208,7 +208,7 @@ describe('BookingCheckoutWizard', () => {
         expect(screen.getByText('Robert Jones')).toBeInTheDocument();
         expect(screen.getByText('GA404')).toBeInTheDocument();
         expect(screen.getByText('11C')).toBeInTheDocument();
-        expect(screen.getByText('ECONOMY')).toBeInTheDocument();
+        expect(screen.getByText('Economy')).toBeInTheDocument();
     });
 
     it('shows action booking submission error on API failure', async () => {
@@ -717,7 +717,7 @@ describe('BookingCheckoutWizard', () => {
             expect(screen.queryByText('Fare breakdown')).not.toBeInTheDocument();
             expect(screen.getAllByText('Ada Lovelace')).toHaveLength(1);
             // The cabin is still stated, and the total still stands alone.
-            expect(screen.getByText('Class: ECONOMY')).toBeInTheDocument();
+            expect(screen.getByText('Class: Economy')).toBeInTheDocument();
             expect(screen.getByText('Estimated Total')).toBeInTheDocument();
         });
 
@@ -741,7 +741,7 @@ describe('BookingCheckoutWizard', () => {
             expect(screen.getByText('Fare breakdown')).toBeInTheDocument();
             // Named once per leg above, then once more against their fare.
             expect(screen.getAllByText('Ada Lovelace')).toHaveLength(3);
-            expect(screen.getAllByText('Class: ECONOMY')).toHaveLength(2);
+            expect(screen.getAllByText('Class: Economy')).toHaveLength(2);
 
             // Asserted row by row. A card that merely *contains* both names and
             // both seats reads identically whether or not each traveller is
@@ -870,6 +870,37 @@ describe('BookingCheckoutWizard', () => {
             expect(screen.getByText('12C')).toBeInTheDocument();
             // The seats must not be pooled onto a single card.
             expect(screen.queryByText('11A, 12C')).not.toBeInTheDocument();
+        });
+
+        it('prints the cabin in words on the boarding pass', async () => {
+            // The badge printed the enum, so an e-ticket read PREMIUM_ECONOMY —
+            // underscore and capitals — on the artefact people keep (#169).
+            mockBookFlightAction.mockResolvedValue({
+                id: 901,
+                totalPriceCents: 25000,
+                passengers: [{
+                    firstName: 'Ada',
+                    lastName: 'Lovelace',
+                    seatNumbers: ['11A', '12C'],
+                    cabinClass: 'PREMIUM_ECONOMY',
+                }],
+            });
+
+            const { container } = renderRoundTrip();
+            fillTraveler(container);
+            fireEvent.click(screen.getByText('Select Seats →'));
+            fireEvent.click(screen.getByTitle('Select Seat 11A'));
+            fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
+            fireEvent.click(screen.getByTitle('Select Seat 12C'));
+            fireEvent.click(screen.getByText('Review Booking →'));
+            fireEvent.click(screen.getByRole('button', { name: /Confirm \$250 booking/i }));
+
+            await waitFor(() => {
+                expect(screen.getByText('Booking Confirmed!')).toBeInTheDocument();
+            });
+
+            expect(screen.getAllByText('Premium Economy')).toHaveLength(2);
+            expect(screen.queryByText(/PREMIUM_ECONOMY/)).not.toBeInTheDocument();
         });
 
         it('clears every leg when the cabin changes, not just the visible one', () => {

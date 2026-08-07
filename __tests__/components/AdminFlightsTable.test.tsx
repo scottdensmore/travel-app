@@ -167,7 +167,7 @@ describe('AdminFlightsTable', () => {
         expect(screen.getByText('John Doe')).toBeInTheDocument();
         expect(screen.getByText('M')).toBeInTheDocument();
         expect(screen.queryByText('P123')).not.toBeInTheDocument();
-        expect(screen.getByText('ECONOMY')).toBeInTheDocument();
+        expect(screen.getByText('Economy')).toBeInTheDocument();
         expect(screen.getByText('Seat 12A')).toBeInTheDocument();
         
         expect(screen.getByText('Jane Smith')).toBeInTheDocument();
@@ -175,7 +175,7 @@ describe('AdminFlightsTable', () => {
         expect(screen.queryByText('P456')).not.toBeInTheDocument();
         expect(screen.queryByText('DOB')).not.toBeInTheDocument();
         expect(screen.queryByText('Passport')).not.toBeInTheDocument();
-        expect(screen.getByText('BUSINESS')).toBeInTheDocument();
+        expect(screen.getByText('Business')).toBeInTheDocument();
         expect(screen.getByText('Released')).toBeInTheDocument();
 
         // Status column labels

@@ -11,7 +11,7 @@ import { bookFlightAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
 import { CABIN_FARE_PERCENT, calculatePassengerFareCents, flightFareCents, formatPrice } from '@/lib/bookingPricing';
 import { BRAND } from '@/lib/brand';
-import { legDirectionLabel } from '@/lib/bookingItinerary';
+import { cabinLabel, legDirectionLabel } from '@/lib/bookingItinerary';
 
 interface Flight {
     id: number;
@@ -57,12 +57,31 @@ interface ConfirmedPassenger {
     cabinClass: string;
 }
 
-const CABIN_LABELS = {
-    ECONOMY: 'Economy',
-    PREMIUM_ECONOMY: 'Premium Economy (+50%)',
-    BUSINESS: 'Business (+100%)',
-    FIRST: 'First Class (+200%)'
+/**
+ * The cabin picker's option text: the cabin's name, plus what it adds to the
+ * fare. Only the picker carries the surcharge — everywhere else a cabin is just
+ * its name (#169).
+ *
+ * The percentage is derived rather than written down, so the option cannot
+ * promise +50% while `CABIN_FARE_PERCENT` charges something else.
+ */
+/** Read aloud, not drawn. The badge has no room for a visible caption. */
+const CAPTION_FOR_SCREEN_READERS: React.CSSProperties = {
+    position: 'absolute',
+    width: '1px',
+    height: '1px',
+    padding: 0,
+    margin: '-1px',
+    overflow: 'hidden',
+    clip: 'rect(0, 0, 0, 0)',
+    whiteSpace: 'nowrap',
+    border: 0,
 };
+
+function cabinOptionLabel(cabin: keyof typeof CABIN_FARE_PERCENT): string {
+    const surcharge = CABIN_FARE_PERCENT[cabin] - CABIN_FARE_PERCENT.ECONOMY;
+    return surcharge === 0 ? cabinLabel(cabin) : `${cabinLabel(cabin)} (+${surcharge}%)`;
+}
 
 function createBookingRequestId(): string {
     const bytes = new Uint8Array(16);
@@ -758,7 +777,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                                             onChange={(e) => handlePassengerChange(index, 'cabinClass', e.target.value as PassengerFormState['cabinClass'])}
                                             style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', background: '#181720', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}>
                                             {availableCabins.map((cabin) => (
-                                                <option key={cabin} value={cabin}>{CABIN_LABELS[cabin]}</option>
+                                                <option key={cabin} value={cabin}>{cabinOptionLabel(cabin)}</option>
                                             ))}
                                         </select>
                                     </div>
@@ -912,7 +931,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                                             type="button"
                                             onClick={() => setActivePassengerIndex(idx)}
                                             data-validation-path={`passengers.${idx}.seatNumber`}
-                                            aria-label={`${p.firstName || 'Passenger'} ${p.lastName || `#${idx + 1}`}, Class: ${p.cabinClass}, Seat: ${p.seatNumbers[activeLegIndex] || 'Not Chosen'}`}
+                                            aria-label={`${p.firstName || 'Passenger'} ${p.lastName || `#${idx + 1}`}, Class: ${cabinLabel(p.cabinClass)}, Seat: ${p.seatNumbers[activeLegIndex] || 'Not Chosen'}`}
                                             aria-pressed={activePassengerIndex === idx}
                                             data-invalid={Boolean(getPassengerSeatError(idx)) || undefined}
                                             aria-describedby={getPassengerSeatError(idx) ? `passenger-${idx}-seatNumber-error` : undefined}
@@ -934,7 +953,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                                             }}>
                                             <span style={{ display: 'block', fontWeight: 'bold', fontSize: '0.9rem' }}>{p.firstName || 'Passenger'} {p.lastName || `#${idx + 1}`}</span>
                                             <span style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>
-                                                Class: {p.cabinClass} | Seat: <span style={{ color: '#34d399', fontWeight: 'bold' }}>{p.seatNumbers[activeLegIndex] || 'Not Chosen'}</span>
+                                                Class: {cabinLabel(p.cabinClass)} | Seat: <span style={{ color: '#34d399', fontWeight: 'bold' }}>{p.seatNumbers[activeLegIndex] || 'Not Chosen'}</span>
                                             </span>
                                         </button>
                                         {getPassengerSeatError(idx) && (
@@ -1246,7 +1265,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                                                 <li key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', fontSize: '0.85rem' }}>
                                                     <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
                                                         <strong>{p.firstName} {p.lastName}</strong>
-                                                        <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)' }}>Class: {p.cabinClass}</div>
+                                                        <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)' }}>Class: {cabinLabel(p.cabinClass)}</div>
                                                     </div>
                                                     <span style={{ fontWeight: 'bold', flexShrink: 0, whiteSpace: 'nowrap' }}>{formatPrice(calculatePassengerPrice(p.cabinClass))}</span>
                                                 </li>
@@ -1255,7 +1274,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                                     </>
                                 ) : (
                                     <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.5)' }}>
-                                        Class: {passengers[0].cabinClass}
+                                        Class: {cabinLabel(passengers[0].cabinClass)}
                                     </div>
                                 )}
 
@@ -1338,8 +1357,16 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                                     overflow: 'hidden',
                                     boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
                                 }}>
-                                    {/* Ticket header banner */}
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 20px', background: 'rgba(0,0,0,0.2)', borderBottom: '1px dashed rgba(255,255,255,0.15)' }}>
+                                    {/* Ticket header banner.
+
+                                        `gap` and `alignItems` rather than
+                                        `space-between` alone: at 390px the
+                                        longest cabin badge took half the width
+                                        and sat flush against the carrier name,
+                                        with no space between them at all. The
+                                        gap holds whatever the two strings turn
+                                        out to be (#169). */}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '12px 20px', background: 'rgba(0,0,0,0.2)', borderBottom: '1px dashed rgba(255,255,255,0.15)' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                             {/* Decorative: the mark carries no
                                                 wordmark and the carrier is named
@@ -1354,8 +1381,27 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                                                 header for navigation. */}
                                             <span style={{ fontSize: '0.8rem', fontWeight: 600, letterSpacing: '0.14em' }}>{BRAND.name.toUpperCase()}</span>
                                         </div>
-                                        <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#c084fc', border: '1px solid #c084fc', padding: '2px 8px', borderRadius: '4px' }}>
-                                            {p.cabinClass}
+                                        {/* Never broken across lines. The enum
+                                            was one unbreakable token, so giving
+                                            the cabin a space to wrap at split
+                                            "Premium / Economy" inside a pill at
+                                            390px — worse on the ticket than the
+                                            wide badge it replaced. The carrier
+                                            name takes the two lines instead,
+                                            which is a lockup rather than a
+                                            broken word (#169). */}
+                                        <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#c084fc', border: '1px solid #c084fc', padding: '2px 8px', borderRadius: '4px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                                            {/* A word, not an `aria-label`. ARIA
+                                                ignores that attribute on a bare
+                                                span — the role is `generic` —
+                                                so the label read as nothing at
+                                                all. Every other field on the
+                                                pass carries a visible caption;
+                                                this one is the odd one out, so
+                                                it gets the caption in the
+                                                reading order instead. */}
+                                            <span style={CAPTION_FOR_SCREEN_READERS}>Cabin: </span>
+                                            {cabinLabel(p.cabinClass)}
                                         </span>
                                     </div>
 

@@ -3,6 +3,7 @@
 import * as React from 'react'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import Link from 'next/link'
+import { cabinLabel } from '@/lib/bookingItinerary'
 import { searchFlightsAction } from '@/app/actions'
 import { Flight } from '@prisma/client'
 import type { SearchResultFlight } from '@/app/actions'
@@ -12,6 +13,7 @@ import { airportTimeZoneFor } from '@/lib/airports'
 import { flightFareCents, formatPrice } from '@/lib/bookingPricing'
 import {
     buildFlightSearchUrl,
+    SEARCH_CABINS,
     type FlightSearchCriteria,
     type SearchCabin,
 } from '@/lib/flightSearchUrl'
@@ -56,13 +58,6 @@ function formatSuggestedDate(dateString: string): string {
     }).format(new Date(`${dateString}T00:00:00.000Z`));
 }
 
-const CABIN_LABEL: Record<SearchCabin, string> = {
-    ECONOMY: 'Economy',
-    PREMIUM_ECONOMY: 'Premium Economy',
-    BUSINESS: 'Business',
-    FIRST: 'First',
-};
-
 /**
  * Says a flight does not operate the cabin that was searched, and that the fare
  * shown is the one it can be booked at instead.
@@ -72,7 +67,7 @@ const CabinUnavailableNote: React.FC<{ cabin: SearchCabin }> = ({ cabin }) => (
         className="cabin-unavailable"
         data-testid="cabin-unavailable"
     >
-        No {CABIN_LABEL[cabin]} cabin · Economy fare shown
+        No {cabinLabel(cabin)} cabin · Economy fare shown
     </span>
 );
 
@@ -716,10 +711,13 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                         value={cabinClass}
                         onChange={e => handleCabinChange(e.target.value as SearchCabin)}
                     >
-                        <option value="ECONOMY">Economy</option>
-                        <option value="PREMIUM_ECONOMY">Premium Economy</option>
-                        <option value="BUSINESS">Business</option>
-                        <option value="FIRST">First</option>
+                        {/* Named from the shared label, not written out here:
+                            this control said "First" while checkout, the review
+                            and the ticket all said "First Class", so a customer
+                            picked one cabin and was sold another by name. */}
+                        {SEARCH_CABINS.map(cabin => (
+                            <option key={cabin} value={cabin}>{cabinLabel(cabin)}</option>
+                        ))}
                     </select>
                 </div>
 

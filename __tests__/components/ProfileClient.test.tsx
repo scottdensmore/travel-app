@@ -382,6 +382,29 @@ describe('ProfileClient interactive dashboard', () => {
             expect(screen.getByTestId('booking-row-101')).toHaveTextContent(/one way/i);
         });
 
+        it('names the cabin in the seat modal the way the ticket does', async () => {
+            // The modal read the cabin off the seat assignment and printed it
+            // raw, so a customer's own booking showed "(PREMIUM_ECONOMY)" — the
+            // same defect as the boarding pass, in the place #169 missed.
+            mockGetOccupiedSeats.mockResolvedValue([]);
+            const premium = {
+                ...roundTripBooking,
+                id: 204,
+                legs: roundTripBooking.legs.map(leg => ({
+                    ...leg,
+                    seatAssignments: [
+                        { passengerId: 'p-1', seatNumber: '12A', cabinClass: 'PREMIUM_ECONOMY' },
+                    ],
+                })),
+            };
+            renderBookings([premium]);
+
+            fireEvent.click(screen.getAllByRole('button', { name: 'Change Seats' })[0]);
+
+            expect(await screen.findByText(/\(Premium Economy\)/)).toBeInTheDocument();
+            expect(screen.queryByText(/PREMIUM_ECONOMY/)).not.toBeInTheDocument();
+        });
+
         it('names the legs the way checkout does, including a middle one', async () => {
             // Both screens labelled legs from their own copy of
             // `index === 0 ? 'Departing' : 'Returning'`. They agreed only
