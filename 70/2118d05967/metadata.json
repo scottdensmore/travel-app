@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "702118d05967",
+  "strategy": "manual-commit",
+  "branch": "fix/gate-occupied-seats",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "__tests__/app/actions.test.ts",
+    "__tests__/app/occupiedSeats.database.test.ts",
+    "app/actions.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/70/2118d05967/0/metadata.json",
+      "transcript": "/70/2118d05967/0/full.jsonl",
+      "compact_transcript": "/70/2118d05967/0/transcript.jsonl",
+      "content_hash": "/70/2118d05967/0/content_hash.txt",
+      "prompt": "/70/2118d05967/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1500,
+    "cache_creation_tokens": 2227275,
+    "cache_read_tokens": 171473031,
+    "output_tokens": 364066,
+    "api_call_count": 504
+  }
+}

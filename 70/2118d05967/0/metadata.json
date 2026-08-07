@@ -1,0 +1,84 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "702118d05967",
+  "session_id": "94121201-47c3-4281-aeff-7838379a510d",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-07T15:22:50.70026601Z",
+  "branch": "fix/gate-occupied-seats",
+  "checkpoints_count": 2,
+  "save_step_count": 1,
+  "files_touched": [
+    "__tests__/app/actions.test.ts",
+    "__tests__/app/occupiedSeats.database.test.ts",
+    "app/actions.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-5",
+  "turn_id": "b93d0b4e89b5",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 1500,
+    "cache_creation_tokens": 2227275,
+    "cache_read_tokens": 171473031,
+    "output_tokens": 364066,
+    "api_call_count": 504
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "claude-skill-toolu_01PoA31daKg2DhkuJoCobHR5",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "frontend-design"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "b93d0b4e89b5",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 1584,
+        "end": 1585,
+        "entry_ids": [
+          "32469cfe-0ad7-433a-b3ed-8fe51c184595"
+        ],
+        "tool_use_id": "toolu_01PoA31daKg2DhkuJoCobHR5"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01PoA31daKg2DhkuJoCobHR5"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: frontend-design",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 14
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-07T15:22:47.930194022Z",
+    "agent_lines": 79,
+    "agent_removed": 1,
+    "human_added": 14,
+    "human_modified": 1,
+    "human_removed": 0,
+    "total_committed": 94,
+    "total_lines_changed": 96,
+    "agent_percentage": 83.33333333333334,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
