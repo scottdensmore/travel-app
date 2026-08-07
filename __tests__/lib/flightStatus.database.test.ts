@@ -1,4 +1,5 @@
 /** @jest-environment node */
+import { airportCodesForRoute } from '@/lib/airports';
 import { prisma } from '@/lib/prisma';
 import { flightStatusSchema } from '@/lib/validation';
 
@@ -20,6 +21,7 @@ async function createFlight(status?: string) {
             airline: 'Mona Airways',
             from: 'Seattle, USA',
             to: 'Detroit, USA',
+            ...airportCodesForRoute('Seattle, USA', 'Detroit, USA'),
             departureDate: new Date('2028-06-01T08:00:00Z'),
             priceCents: 35_000,
             economyRows: 20,
@@ -80,8 +82,9 @@ describe('flight status', () => {
 
         const flightNumber = `FS-DEFAULT-${Date.now()}`;
         await prisma.$executeRawUnsafe(
-            `INSERT INTO "Flight" ("flightNumber", "airline", "from", "to", "departureDate", "priceCents")
-             VALUES ($1, 'Mona Airways', 'Seattle, USA', 'Detroit, USA', $2, 35000)`,
+            `INSERT INTO "Flight" ("flightNumber", "airline", "from", "to",
+                                   "fromAirportCode", "toAirportCode", "departureDate", "priceCents")
+             VALUES ($1, 'Mona Airways', 'Seattle, USA', 'Detroit, USA', 'SEA', 'DTW', $2, 35000)`,
             flightNumber, new Date('2028-06-02T08:00:00Z'),
         );
         const inserted = await prisma.flight.findFirstOrThrow({ where: { flightNumber } });

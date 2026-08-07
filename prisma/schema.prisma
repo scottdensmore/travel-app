@@ -152,6 +152,13 @@ model Flight {
   airline       String
   from          String
   to            String
+  /// The airports this flight actually touches. `from`/`to` still carry the
+  /// label every read path renders; these carry the identity, which is stable
+  /// where a label is editable prose (#73).
+  fromAirportCode String
+  toAirportCode   String
+  fromAirport     Airport @relation("FlightOrigin", fields: [fromAirportCode], references: [iataCode])
+  toAirport       Airport @relation("FlightDestination", fields: [toAirportCode], references: [iataCode])
   departureDate DateTime
   /// The fare in minor units. The only form the fare is stored in (#135).
   priceCents    Int
@@ -167,6 +174,9 @@ model Flight {
   seatAssignments SeatAssignment[]
 
   @@unique([flightNumber, departureDate])
+
+  @@index([fromAirportCode])
+  @@index([toAirportCode])
 }
 
 model UserFavorite {
@@ -234,6 +244,9 @@ model Airport {
   city     String
   country  String
   timeZone String
+
+  departures Flight[] @relation("FlightOrigin")
+  arrivals   Flight[] @relation("FlightDestination")
 }
 
 /// One flight within a booking. A booking is its own itinerary, so there is no

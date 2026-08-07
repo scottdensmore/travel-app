@@ -1,3 +1,4 @@
+import { airportCodesForRoute } from '@/lib/airports';
 import { expect, test } from '@playwright/test';
 import FlightBookingService from '../lib/FlightBookingService';
 import { prisma } from '../lib/prisma';
@@ -41,6 +42,7 @@ test.describe('Authoritative booking persistence', () => {
         airline: 'Concurrency Air',
         from: 'Seattle, USA',
         to: 'Detroit, USA',
+        ...airportCodesForRoute('Seattle, USA', 'Detroit, USA'),
         departureDate: new Date(Date.now() + 86_400_000),
         priceCents: 12345,
         firstClassRows: 0,
@@ -105,6 +107,7 @@ test.describe('Authoritative booking persistence', () => {
         airline: 'Idempotent Air',
         from: 'Detroit, USA',
         to: 'Seattle, USA',
+        ...airportCodesForRoute('Detroit, USA', 'Seattle, USA'),
         departureDate: new Date(Date.now() + 172_800_000),
         priceCents: 20000,
         firstClassRows: 0,
@@ -147,6 +150,7 @@ test.describe('Authoritative booking persistence', () => {
         airline: 'Mismatch Air',
         from: 'Seattle, USA',
         to: 'Chicago, USA',
+        ...airportCodesForRoute('Seattle, USA', 'Chicago, USA'),
         departureDate: new Date(Date.now() + 259_200_000),
         priceCents: 25000,
         firstClassRows: 0,

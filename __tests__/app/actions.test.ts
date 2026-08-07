@@ -1119,8 +1119,8 @@ describe('admin flight schedule actions', () => {
         const sampleScheduleInput = {
             flightNumber: 'AA101',
             airline: 'American Airlines',
-            from: 'New York',
-            to: 'London',
+            from: 'New York, USA',
+            to: 'London, UK',
             departureTime: '08:00',
             daysOfWeek: [1], // Mondays
             price: '$850',
@@ -1150,6 +1150,41 @@ describe('admin flight schedule actions', () => {
                 }
             });
 
+            expect(mockedFlightScheduleCreate).not.toHaveBeenCalled();
+        });
+
+        it('refuses a place that is not an airport, before writing anything', async () => {
+            // The occurrence loop resolves these to airports. Resolving after
+            // the schedule was saved meant a typo threw, the write stood, and
+            // the administrator was shown a generic failure for a save that had
+            // succeeded — Next masks server-action messages in production.
+            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
+
+            const result = await saveFlightScheduleAction({
+                ...sampleScheduleInput,
+                from: 'New York',
+            });
+
+            expect(result).toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR' } });
+            // Attached to the field the administrator typed, so the form can
+            // point at it rather than only summarising at the top of the page.
+            expect((result as { error: { fields: Record<string, string[]> } }).error.fields.from[0])
+                .toMatch(/^No airport is known for "New York"\./);
+            expect(mockedFlightScheduleCreate).not.toHaveBeenCalled();
+            expect(mockedFlightCreate).not.toHaveBeenCalled();
+        });
+
+        it('reports both ends at once rather than one round trip each', async () => {
+            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
+
+            const result = await saveFlightScheduleAction({
+                ...sampleScheduleInput,
+                from: 'New York',
+                to: 'Boston',
+            });
+
+            const { fields } = (result as { error: { fields: Record<string, string[]> } }).error;
+            expect(Object.keys(fields).sort()).toEqual(['from', 'to']);
             expect(mockedFlightScheduleCreate).not.toHaveBeenCalled();
         });
 
@@ -1188,8 +1223,10 @@ describe('admin flight schedule actions', () => {
                 data: {
                     flightNumber: 'AA101',
                     airline: 'American Airlines',
-                    from: 'New York',
-                    to: 'London',
+                    from: 'New York, USA',
+                    to: 'London, UK',
+                    fromAirportCode: 'JFK',
+                    toAirportCode: 'LHR',
                     departureDate: new Date('2026-06-29T08:00:00Z'),
                     priceCents: 85000,
                     status: 'ON_TIME',
@@ -1409,8 +1446,8 @@ describe('admin flight schedule actions', () => {
                     id: 1,
                     flightNumber: 'AA101',
                     airline: 'American Airlines',
-                    from: 'JFK',
-                    to: 'LAX',
+                    from: 'New York, USA',
+                    to: 'San Francisco, USA',
                     departureTime: '08:00',
                     daysOfWeek: [1], // Mondays
                     priceCents: 50000,
@@ -1433,8 +1470,10 @@ describe('admin flight schedule actions', () => {
                     data: {
                         flightNumber: 'AA101',
                         airline: 'American Airlines',
-                        from: 'JFK',
-                        to: 'LAX',
+                        from: 'New York, USA',
+                        to: 'San Francisco, USA',
+                        fromAirportCode: 'JFK',
+                        toAirportCode: 'SFO',
                         departureDate: new Date('2026-07-06T08:00:00Z'),
                         priceCents: 50000,
                         status: 'ON_TIME',
@@ -1517,8 +1556,8 @@ describe('admin flight schedule actions', () => {
                     id: 1,
                     flightNumber: 'AA101',
                     airline: 'American Airlines',
-                    from: 'JFK',
-                    to: 'LAX',
+                    from: 'New York, USA',
+                    to: 'San Francisco, USA',
                     departureTime: '08:00',
                     daysOfWeek: [1],
                     priceCents: 50000,
@@ -1540,8 +1579,8 @@ describe('admin flight schedule actions', () => {
                     id: 1,
                     flightNumber: 'AA101',
                     airline: 'American Airlines',
-                    from: 'JFK',
-                    to: 'LAX',
+                    from: 'New York, USA',
+                    to: 'San Francisco, USA',
                     departureTime: '08:00',
                     daysOfWeek: [1],
                     priceCents: 50000,
@@ -1570,8 +1609,8 @@ describe('admin flight schedule actions', () => {
                     id: 1,
                     flightNumber: 'AA101',
                     airline: 'American Airlines',
-                    from: 'JFK',
-                    to: 'LAX',
+                    from: 'New York, USA',
+                    to: 'San Francisco, USA',
                     departureTime: '08:00',
                     daysOfWeek: [1],
                     priceCents: 50000,
@@ -1623,8 +1662,8 @@ describe('admin flight schedule actions', () => {
                     id: 1,
                     flightNumber: 'AA101',
                     airline: 'American Airlines',
-                    from: 'JFK',
-                    to: 'LAX',
+                    from: 'New York, USA',
+                    to: 'San Francisco, USA',
                     departureTime: '08:00',
                     daysOfWeek: [1],
                     priceCents: 50000,
@@ -1666,8 +1705,8 @@ describe('admin flight schedule actions', () => {
                     id: 1,
                     flightNumber: 'AA101',
                     airline: 'American Airlines',
-                    from: 'JFK',
-                    to: 'LAX',
+                    from: 'New York, USA',
+                    to: 'San Francisco, USA',
                     departureTime: '08:00',
                     daysOfWeek: [1],
                     priceCents: 50000,

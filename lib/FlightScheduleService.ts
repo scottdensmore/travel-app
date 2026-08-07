@@ -1,4 +1,5 @@
 import type { Flight } from '@prisma/client';
+import { airportCodesForRoute } from './airports';
 import { addDaysToIsoDate, todayIsoDate } from './dates';
 import { prisma } from './prisma';
 
@@ -102,6 +103,7 @@ export default class FlightScheduleService {
                             airline: schedule.airline,
                             from: schedule.from,
                             to: schedule.to,
+                            ...airportCodesForRoute(schedule.from, schedule.to),
                             departureDate,
                             priceCents: schedule.priceCents,
                             status: 'ON_TIME',

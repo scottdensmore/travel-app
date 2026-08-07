@@ -13,7 +13,7 @@ import { prisma } from '@/lib/prisma';
 import { assertSeatAvailableForCabin, validateSeatingLayout } from '@/lib/seatLayout';
 import { lockFlightForUpdate } from '@/lib/flightLock';
 import { updateFlightSeatingLayout } from '@/lib/FlightSeatLayoutService';
-import { actionValidationFailure } from '@/lib/actionResult';
+import { actionValidationFailure, actionValidationFailures } from '@/lib/actionResult';
 import {
     bookingTotalCents,
     calculatePassengerFareCents,
@@ -23,7 +23,7 @@ import {
 } from '@/lib/bookingPricing';
 import { bookingFlights, outboundFlight } from '@/lib/bookingItinerary';
 import { buildFlightRoutes, findNearbyOperatingDates } from '@/lib/flightSearch';
-import { airportTimeZoneFor } from '@/lib/airports';
+import { airportCodeFor, airportCodesForRoute, airportTimeZoneFor } from '@/lib/airports';
 import { bookingWindowIsoDates } from '@/lib/dates';
 import {
     bookingRequestSchema,
@@ -682,6 +682,27 @@ export async function saveFlightScheduleAction(data: {
         );
     }
 
+    // Before the schedule is written, not after.
+    //
+    // The occurrence loop below resolves these to airports, and a place that is
+    // not an airport threw there — after the schedule had already been saved.
+    // The administrator saw a generic failure for a save that had in fact
+    // succeeded, because Next masks server-action messages in production. A
+    // place someone typed is fixable input, so it is reported the way every
+    // other fixable input in this action is.
+    // Both ends, not the first bad one: returning early left the other field
+    // looking valid and cost a second round trip to be told about it.
+    const unknownPlaces: Record<string, string> = {};
+    if (airportCodeFor(data.from) === null) {
+        unknownPlaces.from = `No airport is known for "${data.from}". Use a place the airline flies from, such as "Seattle, USA".`;
+    }
+    if (airportCodeFor(data.to) === null) {
+        unknownPlaces.to = `No airport is known for "${data.to}". Use a place the airline flies to, such as "Detroit, USA".`;
+    }
+    if (Object.keys(unknownPlaces).length > 0) {
+        return actionValidationFailures(unknownPlaces);
+    }
+
     let savedSchedule;
     if (data.id) {
         savedSchedule = await prisma.flightSchedule.update({
@@ -748,6 +769,7 @@ export async function saveFlightScheduleAction(data: {
                             airline: savedSchedule.airline,
                             from: savedSchedule.from,
                             to: savedSchedule.to,
+                            ...airportCodesForRoute(savedSchedule.from, savedSchedule.to),
                             departureDate,
                             priceCents: savedSchedule.priceCents,
                             status: 'ON_TIME',
@@ -878,6 +900,7 @@ export async function generateFlightOccurrencesAction(
                             airline: schedule.airline,
                             from: schedule.from,
                             to: schedule.to,
+                            ...airportCodesForRoute(schedule.from, schedule.to),
                             departureDate,
                             priceCents: schedule.priceCents,
                             status: 'ON_TIME',

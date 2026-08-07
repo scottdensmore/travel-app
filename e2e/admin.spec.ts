@@ -1,3 +1,4 @@
+import { airportCodesForRoute } from '@/lib/airports';
 import { test, expect } from '@playwright/test';
 import { prisma } from '../lib/prisma';
 import FlightBookingService from '../lib/FlightBookingService';
@@ -311,6 +312,7 @@ test.describe('Admin Control Journey', () => {
         airline: 'Playwright Air',
         from: 'Seattle, USA',
         to: 'Detroit, USA',
+        ...airportCodesForRoute('Seattle, USA', 'Detroit, USA'),
         departureDate: raceDate,
         priceCents: 49900,
         firstClassRows: 3,

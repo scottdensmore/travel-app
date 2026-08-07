@@ -49,6 +49,13 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
     const [showSeatingConfig, setShowSeatingConfig] = useState(false);
     
     const [error, setError] = useState<string | null>(null);
+    /**
+     * Per-field messages from the server, so a rejected place is reported on the
+     * input that holds it. The action returns these; the form used to keep only
+     * the summary, which left the offending field looking untouched and the
+     * explanation in a box that is often scrolled off the top of the page.
+     */
+    const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
     const [success, setSuccess] = useState<string | null>(null);
 
     const weekdays = [
@@ -127,8 +134,28 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                 });
                 if (isActionValidationFailure(result)) {
                     setError(result.error.message);
+                    const fields = Object.fromEntries(
+                        Object.entries(result.error.fields)
+                            .filter(([field]) => field !== '_root')
+                            .map(([field, messages]) => [field, messages[0]]),
+                    );
+                    setFieldErrors(fields);
+                    // Take the caller to the first thing they have to change.
+                    // Leaving focus on a disabled submit button drops it to the
+                    // body, from where Tab walks forward out of the form.
+                    const firstField = Object.keys(fields)[0];
+                    if (firstField) {
+                        requestAnimationFrame(() => {
+                            const input = document.getElementById(firstField);
+                            input?.focus();
+                            // Optional: not every environment implements it, and focus alone
+                            // already brings the field into view in a browser.
+                            input?.scrollIntoView?.({ block: 'center' });
+                        });
+                    }
                     return;
                 }
+                setFieldErrors({});
 
                 setSuccess(initialSchedule ? 'Schedule updated successfully!' : 'New schedule created successfully!');
                 if (!initialSchedule) {
@@ -206,11 +233,18 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                         id="from"
                         type="text" 
                         value={from} 
-                        onChange={e => setFrom(e.target.value)} 
+                        onChange={e => { setFrom(e.target.value); setFieldErrors(previous => ({ ...previous, from: '' })); }} 
                         placeholder="e.g. Seattle, USA"
                         disabled={isPending}
                         required
+                        aria-invalid={Boolean(fieldErrors.from) || undefined}
+                        aria-describedby={fieldErrors.from ? 'from-error' : undefined}
                     />
+                    {fieldErrors.from && (
+                        <p id="from-error" style={{ margin: 0, fontSize: '0.8rem', color: '#f87171' }}>
+                            {fieldErrors.from}
+                        </p>
+                    )}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <label htmlFor="to" style={{ fontSize: '0.85rem', color: '#a78bfa', fontWeight: 'bold' }}>To (Destination) *</label>
@@ -218,11 +252,18 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                         id="to"
                         type="text" 
                         value={to} 
-                        onChange={e => setTo(e.target.value)} 
+                        onChange={e => { setTo(e.target.value); setFieldErrors(previous => ({ ...previous, to: '' })); }} 
                         placeholder="e.g. Detroit, USA"
                         disabled={isPending}
                         required
+                        aria-invalid={Boolean(fieldErrors.to) || undefined}
+                        aria-describedby={fieldErrors.to ? 'to-error' : undefined}
                     />
+                    {fieldErrors.to && (
+                        <p id="to-error" style={{ margin: 0, fontSize: '0.8rem', color: '#f87171' }}>
+                            {fieldErrors.to}
+                        </p>
+                    )}
                 </div>
             </div>
 

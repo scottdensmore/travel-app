@@ -52,7 +52,11 @@ export const FlightData = [
     // Checked against what the table accepts, so a status here has to be one
     // the `FlightStatus` enum admits. Without this the literals widen to
     // `string`, and the seed would only fail when Postgres rejected the insert.
-] satisfies Prisma.FlightCreateInput[];
+    //
+    // The airport references are omitted on purpose: they are derived from the
+    // labels below by `airportCodesForRoute` when the seed writes, so naming
+    // them here would be a second place for a route to disagree with itself.
+] satisfies Omit<Prisma.FlightCreateInput, 'fromAirportCode' | 'toAirportCode' | 'fromAirport' | 'toAirport'>[];
 
 export const FlightScheduleData = [
     {
