@@ -6,7 +6,7 @@ import PointsActivityTable from "@/components/ui/pointsActivityTable";
 import NextStatusChart from "@/components/ui/charts/nextStatusChart";
 import PointsHistoryChart from "@/components/ui/charts/pointsHistoryChart";
 import { flightFareCents, formatPrice } from '@/lib/bookingPricing';
-import { orderedLegs, outboundFlight, seatLabel } from '@/lib/bookingItinerary';
+import { legDirectionLabel, orderedLegs, outboundFlight, seatLabel } from '@/lib/bookingItinerary';
 import { cancelBookingAction, deleteReviewAction, toggleFavoriteCityGuideAction, changeBookingSeatsAction, getOccupiedSeatsAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
 import { PointsActivityDisplayData } from '@/lib/types/PointsActivity';
@@ -595,7 +595,7 @@ export default function ProfileClient({
                                             }}
                                         >
                                             <span style={{ display: 'block', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                                                {index === 0 ? 'Departing' : 'Returning'}
+                                                {legDirectionLabel(index, modalLegs.length)}
                                             </span>
                                             <span style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
                                                 {leg.flight!.from} → {leg.flight!.to}

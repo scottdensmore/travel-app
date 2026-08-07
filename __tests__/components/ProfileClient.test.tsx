@@ -382,6 +382,38 @@ describe('ProfileClient interactive dashboard', () => {
             expect(screen.getByTestId('booking-row-101')).toHaveTextContent(/one way/i);
         });
 
+        it('names the legs the way checkout does, including a middle one', async () => {
+            // Both screens labelled legs from their own copy of
+            // `index === 0 ? 'Departing' : 'Returning'`. They agreed only
+            // because MAX_ITINERARY_LEGS is 2; connecting itineraries (#131)
+            // would have had the profile call leg 2 of 3 "Returning" while
+            // checkout called it "Leg 2" (#160).
+            mockGetOccupiedSeats.mockResolvedValue([]);
+            const threeLegBooking = {
+                ...roundTripBooking,
+                id: 203,
+                legs: [
+                    roundTripBooking.legs[0],
+                    {
+                        ...roundTripBooking.legs[1],
+                        id: 503,
+                        sequence: 2,
+                        flight: { ...roundTripBooking.legs[1].flight, id: 203, flightNumber: 'GA500' },
+                    },
+                    { ...roundTripBooking.legs[1], id: 504, sequence: 3 },
+                ],
+            };
+            renderBookings([threeLegBooking]);
+
+            fireEvent.click(screen.getAllByRole('button', { name: 'Change Seats' })[0]);
+            const tabs = screen.getByTestId('seat-change-legs').querySelectorAll('[role="tab"]');
+
+            expect(tabs).toHaveLength(3);
+            expect(tabs[0]).toHaveTextContent('Departing');
+            expect(tabs[1]).toHaveTextContent('Leg 2');
+            expect(tabs[2]).toHaveTextContent('Returning');
+        });
+
         it('changes the seat on the chosen leg and leaves the other alone', async () => {
             mockGetOccupiedSeats.mockResolvedValue([]);
             mockChangeBookingSeats.mockResolvedValue({ id: 202 });
