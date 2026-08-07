@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900" preserveAspectRatio="xMidYMid slice" role="presentation">
+  <!--
+    The home hero.
+
+    This replaced a photograph of an aircraft with another airline's name painted
+    along the fuselage (#140). A photograph cannot be redrawn, and a stock
+    substitute would say nothing about this product, so the hero is built from
+    the thing the product is actually made of: routes between places, and the
+    legs that join them.
+
+    Ambient rather than illustrative. It sits behind the booking form under a
+    dark gradient, so every stroke is low-contrast on purpose — this is
+    atmosphere, and the form is what the page is for.
+  -->
+  <defs>
+    <radialGradient id="dawn" cx="0.76" cy="0.16" r="0.8">
+      <stop offset="0" stop-color="#8b5cf6" stop-opacity=".45"/>
+      <stop offset="0.55" stop-color="#6d28d9" stop-opacity=".10"/>
+      <stop offset="1" stop-color="#0d0c14" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="ember" cx="0.12" cy="0.92" r="0.6">
+      <stop offset="0" stop-color="#d946ef" stop-opacity=".20"/>
+      <stop offset="1" stop-color="#0d0c14" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="route" x1="0" y1="900" x2="1600" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#a78bfa" stop-opacity=".05"/>
+      <stop offset="0.5" stop-color="#c084fc" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#d946ef" stop-opacity=".08"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1600" height="900" fill="#0d0c14"/>
+  <rect width="1600" height="900" fill="url(#dawn)"/>
+  <rect width="1600" height="900" fill="url(#ember)"/>
+
+  <!-- Routes. Each is one arc between two places, drawn the way a great circle
+       looks on a flat map: bowed toward the pole it crosses. -->
+  <g fill="none" stroke="url(#route)" stroke-linecap="round">
+    <path d="M-60 742 Q 420 452 902 566 T 1680 330" stroke-width="2.4"/>
+    <path d="M-40 866 Q 560 690 1010 742 T 1670 596" stroke-width="1.6" opacity=".7"/>
+    <path d="M120 900 Q 520 300 1180 244 T 1660 96" stroke-width="2"/>
+    <path d="M-60 470 Q 380 254 860 306 T 1664 172" stroke-width="1.4" opacity=".55"/>
+    <path d="M240 900 Q 900 640 1240 430 T 1620 452" stroke-width="1.2" opacity=".45"/>
+  </g>
+
+  <!-- Places. Only where a route begins or turns, so the dots mean something.
+
+       Kept out of the middle of the canvas on purpose: the search card is
+       centred, translucent, and lands over roughly 54-78% of the width once
+       `cover` has done its work. A line crossing it reads as atmosphere; a
+       filled dot the size of a radio button reads as a control. -->
+  <g fill="#c084fc">
+    <circle cx="196" cy="712" r="4.5" opacity=".6"/>
+    <circle cx="1452" cy="286" r="5" opacity=".8"/>
+    <circle cx="1524" cy="640" r="3.5" opacity=".45"/>
+    <circle cx="352" cy="392" r="3" opacity=".4"/>
+    <circle cx="1372" cy="470" r="3.5" opacity=".45"/>
+  </g>
+  <g fill="none" stroke="#c084fc">
+    <circle cx="1452" cy="286" r="13" stroke-width="1.2" opacity=".26"/>
+    <circle cx="196" cy="712" r="11" stroke-width="1" opacity=".2"/>
+  </g>
+</svg>

@@ -42,7 +42,12 @@ describe('TitleBar', () => {
         render(<TitleBar />);
 
         expect(screen.getByText('Book Flight', { selector: 'span' })).toBeInTheDocument();
-        expect(screen.getByAltText('Mona Airways')).toBeInTheDocument();
+
+        // The home link names the product once. It used to carry the name
+        // twice — `alt` on the mark plus the visible text beside it — which a
+        // screen reader read out as "Mona Airways Mona Airways". The mark no
+        // longer contains a wordmark of its own, so it is decorative (#140).
+        expect(screen.getByRole('link', { name: 'Mona Airways' })).toBeInTheDocument();
     });
 
     it('offers no navigation that goes nowhere', () => {

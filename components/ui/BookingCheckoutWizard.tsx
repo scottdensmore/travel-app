@@ -1341,13 +1341,18 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                                     {/* Ticket header banner */}
                                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 20px', background: 'rgba(0,0,0,0.2)', borderBottom: '1px dashed rgba(255,255,255,0.15)' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            {/* Decorative: the carrier is named
+                                            {/* Decorative: the mark carries no
+                                                wordmark and the carrier is named
                                                 in full immediately beside it, so
-                                                alt text would only repeat it —
-                                                and the mark itself still carries
-                                                the old wordmark (#140). */}
+                                                alt text would only repeat it. */}
                                             <img src="/img/logo.svg" alt="" width="20" height="20" />
-                                            <span style={{ fontSize: '0.8rem', fontWeight: 'bold', letterSpacing: '1px' }}>{BRAND.name.toUpperCase()}</span>
+                                            {/* Caps and widely tracked, the same
+                                                treatment the social card uses.
+                                                The identity has two wordmark
+                                                settings: this one for a printed
+                                                stamp, title-case bold in the
+                                                header for navigation. */}
+                                            <span style={{ fontSize: '0.8rem', fontWeight: 600, letterSpacing: '0.14em' }}>{BRAND.name.toUpperCase()}</span>
                                         </div>
                                         <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#c084fc', border: '1px solid #c084fc', padding: '2px 8px', borderRadius: '4px' }}>
                                             {p.cabinClass}

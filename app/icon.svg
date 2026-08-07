@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Mona Airways">
+  <!--
+    The tab icon. The same M as `public/img/logo.svg`, on its own field, because
+    a browser tab strip is light in one theme and dark in another and the bare
+    mark would sink into one of them.
+
+    Solid white, both strokes, and larger in the badge than the mark is in its
+    box. At 16px the two-tone split closed the counters and the quiet leg
+    smeared: a glyph that small carries one idea, and the two-leg story belongs
+    to the sizes that can hold it.
+  -->
+  <defs>
+    <linearGradient id="badge" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8b5cf6"/>
+      <stop offset="1" stop-color="#d946ef"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="7.5" fill="url(#badge)"/>
+  <g fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6.5 23.5 11 9 16 19.5 21 9 25.5 23.5"/>
+  </g>
+</svg>
