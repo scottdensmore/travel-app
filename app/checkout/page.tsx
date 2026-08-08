@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { flightRouteInclude } from '@/lib/flightRoute';
 import { getOccupiedSeatsAction } from '@/app/actions';
 import BookingCheckoutWizard from '@/components/ui/BookingCheckoutWizard';
 import { MAX_ITINERARY_LEGS } from '@/lib/validation';
@@ -69,7 +70,10 @@ export default async function CheckoutPage({ searchParams }: PageProps) {
         notFound();
     }
 
-    const found = await prisma.flight.findMany({ where: { id: { in: flightIds } } });
+    const found = await prisma.flight.findMany({
+        where: { id: { in: flightIds } },
+        include: flightRouteInclude,
+    });
     const flightsById = new Map(found.map(flight => [flight.id, flight]));
     if (flightsById.size !== flightIds.length) {
         notFound();
@@ -82,8 +86,8 @@ export default async function CheckoutPage({ searchParams }: PageProps) {
             id: flight.id,
             flightNumber: flight.flightNumber,
             airline: flight.airline,
-            from: flight.from,
-            to: flight.to,
+            from: flight.fromAirport.label,
+            to: flight.toAirport.label,
             departureDate: flight.departureDate.toISOString(),
             priceCents: flight.priceCents,
             firstClassRows: flight.firstClassRows,

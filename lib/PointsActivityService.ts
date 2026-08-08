@@ -4,8 +4,18 @@ import { Booking, Flight } from "@prisma/client";
 import { bookingTotalCents } from "./bookingPricing";
 import { outboundFlight } from "./bookingItinerary";
 
-type BookingLeg = { sequence: number; flight: Flight | null };
-type BookingWithFlight = Booking & { flight?: Flight | null; legs: BookingLeg[] };
+/**
+ * Only what this service reads. Tying it to the Prisma model meant a flight
+ * whose route had been resolved from its airports no longer fitted, though it
+ * carried every field used here (#73).
+ */
+type ActivityFlight = Pick<Flight, 'id' | 'airline' | 'flightNumber' | 'priceCents'> & {
+  from: string;
+  to: string;
+};
+
+type BookingLeg = { sequence: number; flight: ActivityFlight | null };
+type BookingWithFlight = Booking & { flight?: ActivityFlight | null; legs: BookingLeg[] };
 
 class PointsActivityService {
   private bookings: BookingWithFlight[] | null;

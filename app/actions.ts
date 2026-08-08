@@ -24,6 +24,7 @@ import {
 import { bookingFlights, outboundFlight } from '@/lib/bookingItinerary';
 import { buildFlightRoutes, findNearbyOperatingDates } from '@/lib/flightSearch';
 import { airportCodeFor, airportCodesForRoute, airportTimeZoneFor } from '@/lib/airports';
+import { flightRouteInclude, flightRouteWhere, withRouteLabels } from '@/lib/flightRoute';
 import { bookingWindowIsoDates } from '@/lib/dates';
 import {
     bookingRequestSchema,
@@ -93,10 +94,14 @@ export async function searchFlightsAction(
     const cabin = parsed.data.cabinClass;
 
     if (!departureDateStr) {
-        const flights = await prisma.flight.findMany({
-            where: { from, to },
+        const route = flightRouteWhere(from, to);
+        if (route === null) return { flights: [], nearbyDates: [], inbound: null };
+
+        const flights = (await prisma.flight.findMany({
+            where: route,
             orderBy: { departureDate: 'asc' },
-        });
+            include: flightRouteInclude,
+        })).map(withRouteLabels);
         return { flights: flightsForCabin(flights, cabin), nearbyDates: [], inbound: null };
     }
 
@@ -199,10 +204,12 @@ async function searchOneDirection(
         ? { gt: now }
         : { gte: startOfDay };
 
-    const flights = flightsForCabin(await prisma.flight.findMany({
+    const route = flightRouteWhere(from, to);
+    if (route === null) return { flights: [], nearbyDates: [] };
+
+    const flights = flightsForCabin((await prisma.flight.findMany({
         where: {
-            from,
-            to,
+            ...route,
             status: { not: 'CANCELLED' },
             departureDate: {
                 ...departureLowerBound,
@@ -210,7 +217,8 @@ async function searchOneDirection(
             }
         },
         orderBy: { departureDate: 'asc' },
-    }), cabin);
+        include: flightRouteInclude,
+    })).map(withRouteLabels), cabin);
 
     if (flights.length > 0) return { flights, nearbyDates: [] };
 
@@ -231,8 +239,7 @@ async function searchOneDirection(
         }),
         prisma.flight.findMany({
             where: {
-                from,
-                to,
+                ...route,
                 status: 'CANCELLED',
                 departureDate: {
                     gte: new Date(`${earliestDate}T00:00:00.000Z`),
@@ -296,14 +303,17 @@ export async function bookFlightAction(bookingData: {
         // The confirmation names the outbound flight; a round trip's inbound
         // is shown on the itinerary rather than in the notification.
         const [outboundFlightId] = bookingData.flightIds;
-        const flight = await prisma.flight.findUnique({ where: { id: outboundFlightId } });
+        const flight = await prisma.flight.findUnique({
+            where: { id: outboundFlightId },
+            include: flightRouteInclude,
+        });
         if (flight && result.wasCreated) {
             const points = Math.floor(bookingTotalCents(result, flight) / 100);
             await prisma.notification.create({
                 data: {
                     userId,
                     title: `Booking Confirmed: ${flight.airline} ${flight.flightNumber}`,
-                    message: `Successfully booked flight ${flight.flightNumber} from ${flight.from} to ${flight.to}. Earned +${points} status points.`,
+                    message: `Successfully booked flight ${flight.flightNumber} from ${flight.fromAirport.label} to ${flight.toAirport.label}. Earned +${points} status points.`,
                     type: "POINTS"
                 }
             });
@@ -986,10 +996,14 @@ export async function updateFlightStatusAction(flightId: number, status: 'ON_TIM
     if (!parsedStatus.ok) return parsedStatus;
     flightId = parsedId.data;
     status = parsedStatus.data;
-    const updated = await prisma.flight.update({
+    const withAirports = await prisma.flight.update({
         where: { id: flightId },
-        data: { status }
+        data: { status },
+        include: flightRouteInclude,
     });
+    // The relation objects would otherwise ride this return value across to
+    // the client, which reads it only to check for a validation failure.
+    const updated = withRouteLabels(withAirports);
 
     try {
         const bookings = await prisma.booking.findMany({

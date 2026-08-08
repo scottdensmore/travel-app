@@ -80,6 +80,16 @@ jest.mock('@/lib/prisma', () => ({
 }));
 
 const mockedGetServerSession = getServerSession as unknown as jest.Mock;
+
+/**
+ * A row as Prisma returns it once the search reads the route from the airports
+ * the flight references, and the same row as the action hands it on — the
+ * relation is resolved to `from`/`to` at the boundary rather than shipped (#73).
+ */
+function routed<T extends { from: string; to: string }>(flight: T) {
+    return { ...flight, fromAirport: { label: flight.from }, toAirport: { label: flight.to } };
+}
+
 const mockSaveCityGuide = new (TravelGuideService as any)().saveCityGuide as jest.Mock;
 const mockBookFlight = new (FlightBookingService as any)().bookFlight as jest.Mock;
 const mockGenerateFlightsForDate = new (FlightScheduleService as any)().generateFlightsForDate as jest.Mock;
@@ -207,12 +217,14 @@ describe('searchFlightsAction', () => {
         const flights = [
             { id: 1, flightNumber: 'CA101', from: 'Seattle, USA', to: 'Detroit, USA' },
         ];
-        mockedFlightFindMany.mockResolvedValue(flights);
+        mockedFlightFindMany.mockResolvedValue(flights.map(routed));
 
         const result = await searchFlightsAction('Seattle, USA', 'Detroit, USA');
 
         expect(mockedFlightFindMany).toHaveBeenCalledWith(
-            expect.objectContaining({ where: { from: 'Seattle, USA', to: 'Detroit, USA' } })
+            // Narrowed by the airports the flight references, not by two
+            // flights spelling a place the same way (#73).
+            expect.objectContaining({ where: { fromAirportCode: 'SEA', toAirportCode: 'DTW' } })
         );
         expect(result).toEqual({
             flights: flights.map(flight => ({ ...flight, cabinAvailable: true })),
@@ -227,7 +239,7 @@ describe('searchFlightsAction', () => {
         const flights = [
             { id: 1, flightNumber: 'CA101', from: 'Seattle, USA', to: 'Detroit, USA', departureDate: new Date('2026-06-25T08:00:00Z') },
         ];
-        mockedFlightFindMany.mockResolvedValue(flights);
+        mockedFlightFindMany.mockResolvedValue(flights.map(routed));
 
         const result = await searchFlightsAction('Seattle, USA', 'Detroit, USA', '2026-06-25');
 
@@ -236,15 +248,20 @@ describe('searchFlightsAction', () => {
         expect(mockGenerateFlightsForDate).not.toHaveBeenCalled();
         expect(mockedFlightFindMany).toHaveBeenCalledWith({
             where: {
-                from: 'Seattle, USA',
-                to: 'Detroit, USA',
+                fromAirportCode: 'SEA',
+                toAirportCode: 'DTW',
                 status: { not: 'CANCELLED' },
                 departureDate: {
                     gte: new Date('2026-06-25T00:00:00.000Z'),
                     lte: new Date('2026-06-25T23:59:59.999Z')
                 }
             },
-            orderBy: { departureDate: 'asc' }
+            orderBy: { departureDate: 'asc' },
+            // The route rendered comes from the referenced airports (#73).
+            include: {
+                fromAirport: { select: { label: true } },
+                toAirport: { select: { label: true } },
+            },
         });
         expect(result).toEqual({
             flights: flights.map(flight => ({ ...flight, cabinAvailable: true })),
@@ -258,8 +275,8 @@ describe('searchFlightsAction', () => {
         const outbound = [{ id: 1, from: 'Seattle, USA', to: 'Detroit, USA' }];
         const inbound = [{ id: 2, from: 'Detroit, USA', to: 'Seattle, USA' }];
         mockedFlightFindMany
-            .mockResolvedValueOnce(outbound)
-            .mockResolvedValueOnce(inbound);
+            .mockResolvedValueOnce(outbound.map(routed))
+            .mockResolvedValueOnce(inbound.map(routed));
 
         const result = await searchFlightsAction(
             'Seattle, USA', 'Detroit, USA', '2026-06-25', '2026-07-02',
@@ -269,8 +286,8 @@ describe('searchFlightsAction', () => {
         // date, not a fixed offset from the outbound (#69).
         expect(mockedFlightFindMany).toHaveBeenNthCalledWith(2, expect.objectContaining({
             where: expect.objectContaining({
-                from: 'Detroit, USA',
-                to: 'Seattle, USA',
+                fromAirportCode: 'DTW',
+                toAirportCode: 'SEA',
                 departureDate: {
                     gte: new Date('2026-07-02T00:00:00.000Z'),
                     lte: new Date('2026-07-02T23:59:59.999Z'),
@@ -288,7 +305,7 @@ describe('searchFlightsAction', () => {
         jest.useFakeTimers().setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
         const outbound = [{ id: 1, from: 'Seattle, USA', to: 'Detroit, USA' }];
         mockedFlightFindMany
-            .mockResolvedValueOnce(outbound)
+            .mockResolvedValueOnce(outbound.map(routed))
             .mockRejectedValueOnce(new Error('connection reset'));
 
         const result = await searchFlightsAction(
@@ -321,7 +338,7 @@ describe('searchFlightsAction', () => {
     it('prices results at the cabin that was searched', async () => {
         jest.useFakeTimers().setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
         mockedFlightFindMany.mockResolvedValue([
-            { id: 1, priceCents: 35_000, economyRows: 20, businessRows: 3 },
+            routed({ id: 1, priceCents: 35_000, economyRows: 20, businessRows: 3, from: 'Seattle, USA', to: 'Detroit, USA' }),
         ]);
 
         const result = await searchFlightsAction(
@@ -342,8 +359,8 @@ describe('searchFlightsAction', () => {
     it('marks flights the searched cabin does not operate, and keeps them', async () => {
         jest.useFakeTimers().setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
         mockedFlightFindMany.mockResolvedValue([
-            { id: 1, priceCents: 35_000, economyRows: 20, businessRows: 0 },
-            { id: 2, priceCents: 40_000, economyRows: 20, businessRows: 3 },
+            routed({ id: 1, priceCents: 35_000, economyRows: 20, businessRows: 0, from: 'Seattle, USA', to: 'Detroit, USA' }),
+            routed({ id: 2, priceCents: 40_000, economyRows: 20, businessRows: 3, from: 'Seattle, USA', to: 'Detroit, USA' }),
         ]);
 
         const result = await searchFlightsAction(
@@ -365,7 +382,7 @@ describe('searchFlightsAction', () => {
     it('defaults to economy when no cabin is given', async () => {
         jest.useFakeTimers().setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
         mockedFlightFindMany.mockResolvedValue([
-            { id: 1, priceCents: 35_000, economyRows: 20, businessRows: 0 },
+            routed({ id: 1, priceCents: 35_000, economyRows: 20, businessRows: 0, from: 'Seattle, USA', to: 'Detroit, USA' }),
         ]);
 
         const result = await searchFlightsAction('Seattle, USA', 'Detroit, USA', '2026-06-25');
@@ -382,7 +399,7 @@ describe('searchFlightsAction', () => {
 
     it('reports no inbound for a one-way search', async () => {
         jest.useFakeTimers().setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
-        mockedFlightFindMany.mockResolvedValue([{ id: 1 }]);
+        mockedFlightFindMany.mockResolvedValue([routed({ id: 1, from: 'Seattle, USA', to: 'Detroit, USA' })]);
 
         const result = await searchFlightsAction('Seattle, USA', 'Detroit, USA', '2026-06-25');
 
@@ -426,8 +443,8 @@ describe('searchFlightsAction', () => {
         });
         expect(mockedFlightFindMany).toHaveBeenNthCalledWith(2, {
             where: {
-                from: 'Seattle, USA',
-                to: 'Detroit, USA',
+                fromAirportCode: 'SEA',
+                toAirportCode: 'DTW',
                 status: 'CANCELLED',
                 departureDate: {
                     gte: new Date('2026-07-14T00:00:00.000Z'),
@@ -456,8 +473,8 @@ describe('searchFlightsAction', () => {
 
         expect(mockedFlightFindMany).toHaveBeenCalledWith({
             where: {
-                from: 'Seattle, USA',
-                to: 'Detroit, USA',
+                fromAirportCode: 'SEA',
+                toAirportCode: 'DTW',
                 status: { not: 'CANCELLED' },
                 departureDate: {
                     gt: now,
@@ -465,6 +482,12 @@ describe('searchFlightsAction', () => {
                 },
             },
             orderBy: { departureDate: 'asc' },
+            // The route rendered in the results comes from the airports the
+            // flight references, so the search has to ask for them (#73).
+            include: {
+                fromAirport: { select: { label: true } },
+                toAirport: { select: { label: true } },
+            },
         });
     });
 
@@ -606,8 +629,13 @@ describe('bookFlightAction', () => {
             airline: 'Gemini Airways',
             flightNumber: 'GA101',
             priceCents: 20000,
-            from: 'A',
-            to: 'B'
+            // Deliberately not what the airports say, so the message asserted
+            // below can only be right if it reads the references (#73). With
+            // both saying 'A' the assertion passed either way.
+            from: 'somewhere',
+            to: 'somewhere else',
+            fromAirport: { label: 'A' },
+            toAirport: { label: 'B' },
         });
 
         const passengers = [{
@@ -1311,8 +1339,12 @@ describe('admin flight schedule actions', () => {
                 id: 99,
                 airline: 'Gemini Airways',
                 flightNumber: 'GA101',
-                from: 'Seattle',
-                to: 'Detroit',
+                // Deliberately not what the airports say, so the message below
+                // can only be right if it reads the references (#73).
+                from: 'somewhere',
+                to: 'somewhere else',
+                fromAirport: { label: 'Seattle, USA' },
+                toAirport: { label: 'Detroit, USA' },
                 status: 'DELAYED'
             });
             mockedBookingFindMany.mockResolvedValue([
@@ -1326,9 +1358,19 @@ describe('admin flight schedule actions', () => {
 
             expect(mockedFlightUpdate).toHaveBeenCalledWith({
                 where: { id: 99 },
-                data: { status: 'DELAYED' }
+                data: { status: 'DELAYED' },
+                include: {
+                    fromAirport: { select: { label: true } },
+                    toAirport: { select: { label: true } },
+                },
             });
             expect(result).toEqual(expect.objectContaining({ id: 99, status: 'DELAYED' }));
+            // The route crosses back as two strings. Leaving the relation on
+            // this value would ship two more objects to a client that reads it
+            // only to check for a validation failure.
+            expect(result).toMatchObject({ from: 'Seattle, USA', to: 'Detroit, USA' });
+            expect(result).not.toHaveProperty('fromAirport');
+            expect(result).not.toHaveProperty('toAirport');
 
             expect(mockedBookingFindMany).toHaveBeenCalledWith({
                 where: { legs: { some: { flightId: 99 } }, status: 'CONFIRMED' },
@@ -1340,13 +1382,13 @@ describe('admin flight schedule actions', () => {
                     {
                         userId: 'user-1',
                         title: 'Flight Update: Gemini Airways GA101',
-                        message: 'Your upcoming flight GA101 from Seattle to Detroit is now DELAYED.',
+                        message: 'Your upcoming flight GA101 from Seattle, USA to Detroit, USA is now DELAYED.',
                         type: 'FLIGHT_STATUS'
                     },
                     {
                         userId: 'user-2',
                         title: 'Flight Update: Gemini Airways GA101',
-                        message: 'Your upcoming flight GA101 from Seattle to Detroit is now DELAYED.',
+                        message: 'Your upcoming flight GA101 from Seattle, USA to Detroit, USA is now DELAYED.',
                         type: 'FLIGHT_STATUS'
                     }
                 ]

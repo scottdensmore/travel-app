@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import React from 'react';
 import { prisma } from '@/lib/prisma';
 import FlightStatusBoard from '@/components/ui/FlightStatusBoard';
+import { flightRouteInclude, withRouteLabels } from '@/lib/flightRoute';
 
 export const metadata: Metadata = {
     title: 'Flight status',
@@ -86,20 +87,20 @@ export default async function FlightsPage() {
             id: true,
             flightNumber: true,
             airline: true,
-            from: true,
-            to: true,
             departureDate: true,
             priceCents: true,
             status: true,
+            ...flightRouteInclude,
         },
     });
 
     // When the cap truncates, the board holds less than the window asked for,
     // so it must not claim the whole week — count departures instead of days.
+    const routed = flights.map(withRouteLabels);
     const truncated = flights.length === MAX_ROWS;
     const coverage = `the last ${count(HISTORY_HOURS, 'hour')} and the next ${
         truncated ? count(flights.length, 'flight') : count(HORIZON_DAYS, 'day')
     }`;
 
-    return <FlightStatusBoard flights={flights} coverage={coverage} />;
+    return <FlightStatusBoard flights={routed} coverage={coverage} />;
 }
