@@ -19,8 +19,6 @@ async function createFlight(status?: string) {
         data: {
             flightNumber: `FS-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
             airline: 'Mona Airways',
-            from: 'Seattle, USA',
-            to: 'Detroit, USA',
             ...airportCodesForRoute('Seattle, USA', 'Detroit, USA'),
             departureDate: new Date('2028-06-01T08:00:00Z'),
             priceCents: 35_000,
@@ -82,9 +80,9 @@ describe('flight status', () => {
 
         const flightNumber = `FS-DEFAULT-${Date.now()}`;
         await prisma.$executeRawUnsafe(
-            `INSERT INTO "Flight" ("flightNumber", "airline", "from", "to",
+            `INSERT INTO "Flight" ("flightNumber", "airline",
                                    "fromAirportCode", "toAirportCode", "departureDate", "priceCents")
-             VALUES ($1, 'Mona Airways', 'Seattle, USA', 'Detroit, USA', 'SEA', 'DTW', $2, 35000)`,
+             VALUES ($1, 'Mona Airways', 'SEA', 'DTW', $2, 35000)`,
             flightNumber, new Date('2028-06-02T08:00:00Z'),
         );
         const inserted = await prisma.flight.findFirstOrThrow({ where: { flightNumber } });

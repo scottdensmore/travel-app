@@ -7,8 +7,6 @@ async function createFlight(flightNumber: string) {
         data: {
             flightNumber,
             airline: 'Gemini Airways',
-            from: 'Seattle, USA',
-            to: 'Detroit, USA',
             ...airportCodesForRoute('Seattle, USA', 'Detroit, USA'),
             departureDate: new Date(`2027-03-01T08:00:00Z`),
             priceCents: 35000,

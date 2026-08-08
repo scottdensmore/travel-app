@@ -1251,8 +1251,6 @@ describe('admin flight schedule actions', () => {
                 data: {
                     flightNumber: 'AA101',
                     airline: 'American Airlines',
-                    from: 'New York, USA',
-                    to: 'London, UK',
                     fromAirportCode: 'JFK',
                     toAirportCode: 'LHR',
                     departureDate: new Date('2026-06-29T08:00:00Z'),
@@ -1512,8 +1510,6 @@ describe('admin flight schedule actions', () => {
                     data: {
                         flightNumber: 'AA101',
                         airline: 'American Airlines',
-                        from: 'New York, USA',
-                        to: 'San Francisco, USA',
                         fromAirportCode: 'JFK',
                         toAirportCode: 'SFO',
                         departureDate: new Date('2026-07-06T08:00:00Z'),

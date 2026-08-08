@@ -2,9 +2,9 @@ export interface AirportRecord {
     /** IATA station code, the stable identifier for the airport. */
     iataCode: string;
     /**
-     * The free-text value `Flight.from` and `Flight.to` carry today. This is a
-     * transitional join key: routes will reference airports directly once the
-     * domain model in #73 lands.
+     * How this place is written wherever a person reads or types it: a schedule
+     * names a route in these words, and so does a search. Flights reference the
+     * code and render this, rather than storing it a second time (#73).
      */
     label: string;
     city: string;

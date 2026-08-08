@@ -310,8 +310,6 @@ test.describe('Admin Control Journey', () => {
       data: {
         flightNumber: 'E2E606',
         airline: 'Playwright Air',
-        from: 'Seattle, USA',
-        to: 'Detroit, USA',
         ...airportCodesForRoute('Seattle, USA', 'Detroit, USA'),
         departureDate: raceDate,
         priceCents: 49900,

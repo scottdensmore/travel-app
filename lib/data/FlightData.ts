@@ -56,7 +56,10 @@ export const FlightData = [
     // The airport references are omitted on purpose: they are derived from the
     // labels below by `airportCodesForRoute` when the seed writes, so naming
     // them here would be a second place for a route to disagree with itself.
-] satisfies Omit<Prisma.FlightCreateInput, 'fromAirportCode' | 'toAirportCode' | 'fromAirport' | 'toAirport'>[];
+    // `from`/`to` are how a route is authored here, not columns -- the seed
+    // resolves them to airport references (#73). Everything else still has to
+    // satisfy what Prisma will accept, which is what caught a bad status.
+] satisfies (Omit<Prisma.FlightCreateInput, 'fromAirport' | 'toAirport'> & { from: string; to: string })[];
 
 export const FlightScheduleData = [
     {

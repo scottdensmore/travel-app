@@ -46,10 +46,10 @@ const codesByLabel = new Map(AirportData.map((airport) => [airport.label, airpor
 /**
  * The IATA code for the free-text place a route names.
  *
- * `Flight.from` and `Flight.to` carry a label; the airport a route actually
- * touches is identified by its code, which is stable where a label is editable
- * prose. Every writer of a flight resolves through here so the code and the
- * label cannot describe different places (#73).
+ * A route is authored and searched in words -- a schedule names a place, and so
+ * does a search -- while the airport it touches is identified by its code. Every
+ * writer of a flight resolves through here, which is what let the flight stop
+ * storing the words at all (#73).
  *
  * Null when the label is unknown, which callers must treat as a failure rather
  * than a default: guessing an airport would put a flight somewhere it does not

@@ -101,8 +101,6 @@ export default class FlightScheduleService {
                         data: {
                             flightNumber: schedule.flightNumber,
                             airline: schedule.airline,
-                            from: schedule.from,
-                            to: schedule.to,
                             ...airportCodesForRoute(schedule.from, schedule.to),
                             departureDate,
                             priceCents: schedule.priceCents,

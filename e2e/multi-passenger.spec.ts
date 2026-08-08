@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { prisma } from '../lib/prisma';
+import { flightRouteInclude } from '@/lib/flightRoute';
 import { calculateItineraryTotal } from '../lib/bookingPricing';
 import { registerAndSignIn } from './helpers/auth';
 
@@ -48,6 +49,8 @@ test.describe('Multi-Passenger Booking Journey', () => {
           gt: new Date()
         }
       },
+      // The route is on the airports now, not on the flight (#73).
+      include: flightRouteInclude,
       orderBy: {
         departureDate: 'asc'
       }
@@ -62,8 +65,8 @@ test.describe('Multi-Passenger Booking Journey', () => {
     await page.getByLabel('One Way').click();
 
     // Fill origin & destination
-    await page.selectOption('#from', targetFlight.from);
-    await page.selectOption('#to', targetFlight.to);
+    await page.selectOption('#from', targetFlight.fromAirport.label);
+    await page.selectOption('#to', targetFlight.toAirport.label);
     const formattedDate = targetFlight.departureDate.toISOString().split('T')[0];
     await page.fill('#depart', formattedDate);
     await page.click('button:has-text("Find your trip")');

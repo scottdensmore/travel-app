@@ -29,8 +29,6 @@ beforeAll(async () => {
             data: {
                 flightNumber: `COV-${suffix}-${n}`,
                 airline: 'Mona Airways',
-                from: n === 1 ? 'Seattle, USA' : 'Detroit, USA',
-                to: n === 1 ? 'Detroit, USA' : 'Seattle, USA',
                 ...airportCodesForRoute(n === 1 ? 'Seattle, USA' : 'Detroit, USA', n === 1 ? 'Detroit, USA' : 'Seattle, USA'),
                 departureDate: new Date(`2028-0${n}-01T08:00:00Z`),
                 priceCents: 35_000,

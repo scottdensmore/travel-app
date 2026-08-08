@@ -26,8 +26,6 @@ beforeAll(async () => {
         data: {
             flightNumber: `CABIN-${suffix}`,
             airline: 'Mona Airways',
-            from: 'Seattle, USA',
-            to: 'Detroit, USA',
             ...airportCodesForRoute('Seattle, USA', 'Detroit, USA'),
             departureDate: new Date('2028-05-01T08:00:00Z'),
             priceCents: 35_000,

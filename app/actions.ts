@@ -25,6 +25,7 @@ import { bookingFlights, outboundFlight } from '@/lib/bookingItinerary';
 import { buildFlightRoutes, findNearbyOperatingDates } from '@/lib/flightSearch';
 import { airportCodeFor, airportCodesForRoute, airportTimeZoneFor } from '@/lib/airports';
 import { flightRouteInclude, flightRouteWhere, withRouteLabels } from '@/lib/flightRoute';
+import type { RoutedFlight } from '@/lib/flightRoute';
 import { bookingWindowIsoDates } from '@/lib/dates';
 import {
     bookingRequestSchema,
@@ -146,7 +147,7 @@ const CABIN_ROW_COUNT: Record<CabinClass, (flight: Flight) => number | null> = {
 };
 
 /** A search result, and whether the cabin that was searched exists on it. */
-export type SearchResultFlight = Flight & { cabinAvailable: boolean };
+export type SearchResultFlight = RoutedFlight & { cabinAvailable: boolean };
 
 /**
  * Results annotated for one cabin: priced at its fare where it operates, and
@@ -161,7 +162,7 @@ export type SearchResultFlight = Flight & { cabinAvailable: boolean };
  * A null row count is a flight predating per-cabin layouts; those fall back to
  * the same defaults the seat map uses, which is to assume the cabin exists.
  */
-function flightsForCabin(flights: Flight[], cabin: CabinClass): SearchResultFlight[] {
+function flightsForCabin(flights: RoutedFlight[], cabin: CabinClass): SearchResultFlight[] {
     return flights.map(flight => {
         const available = (CABIN_ROW_COUNT[cabin](flight) ?? 1) > 0;
         if (!available || cabin === 'ECONOMY') {
@@ -777,8 +778,6 @@ export async function saveFlightScheduleAction(data: {
                         data: {
                             flightNumber: savedSchedule.flightNumber,
                             airline: savedSchedule.airline,
-                            from: savedSchedule.from,
-                            to: savedSchedule.to,
                             ...airportCodesForRoute(savedSchedule.from, savedSchedule.to),
                             departureDate,
                             priceCents: savedSchedule.priceCents,
@@ -908,8 +907,6 @@ export async function generateFlightOccurrencesAction(
                         data: {
                             flightNumber: schedule.flightNumber,
                             airline: schedule.airline,
-                            from: schedule.from,
-                            to: schedule.to,
                             ...airportCodesForRoute(schedule.from, schedule.to),
                             departureDate,
                             priceCents: schedule.priceCents,

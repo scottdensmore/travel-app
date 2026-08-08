@@ -20,26 +20,24 @@ import AdminFlightsPage from '@/app/admin/flights/page';
 import FlightsPage from '@/app/flights/page';
 
 /**
- * No page renders `Flight.from` or `Flight.to`.
+ * Every page renders the route from the airports the flight references (#73).
  *
- * The columns hold text identical to the airport labels on every seeded row, so
- * a page reading the wrong source produces byte-identical output and no test
- * anywhere notices -- which is exactly what happened: five of these read paths
- * could be reverted with the whole suite green (#73).
+ * This suite was built to answer "which of two sources did you read", because
+ * the columns and the airports held identical text and five read paths could be
+ * reverted with the whole suite green. Dropping the columns settles that
+ * question permanently, so what it guards now is the resolution itself: a page
+ * that forgets to ask for the relation gets `undefined`, and one that maps it
+ * wrongly gets the route backwards.
  *
- * The fixture below breaks that tie. Its columns say one thing and its airports
- * say another, so every page is asked the only question that distinguishes them:
- * which of the two did you read?
+ * Rio -> Miami keeps the assertions attributable. The seed flies Miami -> Rio
+ * and not the reverse, so no other row can satisfy them on the fixture's behalf.
  *
  * These pages are async server components. Rather than render them, the tree
- * they return is walked for every string it would show and every prop it hands a
- * client component -- so a route reaching the browser by either route is caught.
+ * they return is walked for every string it would show and every prop it hands
+ * a client component -- so a route reaching the browser either way is seen.
  */
-const WRONG_ORIGIN = 'Nowhere, Atlantis';
-const WRONG_DESTINATION = 'Elsewhere, Atlantis';
-
-const ORIGIN = 'Seattle, USA';
-const DESTINATION = 'Detroit, USA';
+const ORIGIN = 'Rio de Janeiro, Brazil';
+const DESTINATION = 'Miami, USA';
 
 const mockedGetServerSession = getServerSession as unknown as jest.Mock;
 
@@ -54,17 +52,9 @@ beforeAll(async () => {
             flightNumber: `RTE-${randomUUID().slice(0, 8)}`,
             airline: 'Mona Airways',
             ...airportCodesForRoute(ORIGIN, DESTINATION),
-            // The whole-table invariant in flightAirports.database.test.ts
-            // excludes rows naming Atlantis, which is how this deliberate
-            // violation stays out of that file's failures.
-            from: WRONG_ORIGIN,
-            to: WRONG_DESTINATION,
             // Inside the seven-day window /admin/flights renders. Outside it,
-            // three of these cases passed on other seeded flights that happen
-            // to name Seattle. The flight-number assertion in every case is
-            // what fixes that: it proves the fixture is on the page, which is
-            // what makes the negative assertions -- the ones that catch a page
-            // reading the columns -- mean anything at all (#155).
+            // the page never shows this flight and every assertion about it is
+            // vacuous, which is what `routeHandedOver` refuses (#155).
             departureDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
             priceCents: 41_900,
         },
@@ -191,24 +181,25 @@ describe('the route a page renders', () => {
         });
 
         expect(await routeHandedOver(checkout)).toMatchObject({ from: ORIGIN, to: DESTINATION });
-        expect(await pageText(checkout)).not.toContain('Atlantis');
     });
 
     it('comes from the airports on the profile', async () => {
         expect(await routeHandedOver(() => ProfilePage())).toMatchObject({ from: ORIGIN, to: DESTINATION });
-        expect(await pageText(() => ProfilePage())).not.toContain('Atlantis');
     });
 
     it('comes from the airports on the admin dashboard', async () => {
-        // Recent bookings, capped at five and ordered newest first -- the
-        // fixture above is the newest, so it is on the page.
-        // This one renders the route inline rather than handing it to a client
-        // component, so it is read as text -- and the arrow pins the direction.
+        // Recent bookings, capped at five and ordered newest first, so the
+        // fixture is on the page. This one renders the route inline rather than
+        // handing it to a client component, so it is read as text -- and the
+        // arrow pins the direction the other cases get from the keyed object.
+        //
+        // Unlike them, this case is attributable only because nothing else is
+        // booked on Rio -> Miami. A confirmed booking on that route from
+        // another suite would let it pass on the wrong row.
         const text = await pageText(() => AdminPage());
 
         expect(text).toContain(flightNumber);
         expect(text).toContain(`${ORIGIN} → ${DESTINATION}`);
-        expect(text).not.toContain('Atlantis');
     });
 
     it('comes from the airports on the status board', async () => {
@@ -216,11 +207,9 @@ describe('the route a page renders', () => {
         // one asking for the relation inside a `select` rather than an
         // `include` -- so this is where that shape meets a real database.
         expect(await routeHandedOver(() => FlightsPage())).toMatchObject({ from: ORIGIN, to: DESTINATION });
-        expect(await pageText(() => FlightsPage())).not.toContain('Atlantis');
     });
 
     it('comes from the airports on the admin flights table', async () => {
         expect(await routeHandedOver(() => AdminFlightsPage())).toMatchObject({ from: ORIGIN, to: DESTINATION });
-        expect(await pageText(() => AdminFlightsPage())).not.toContain('Atlantis');
     });
 });
