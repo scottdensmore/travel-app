@@ -150,11 +150,10 @@ model Flight {
   id            Int       @id @default(autoincrement())
   flightNumber  String
   airline       String
-  from          String
-  to            String
-  /// The airports this flight actually touches. `from`/`to` still carry the
-  /// label every read path renders; these carry the identity, which is stable
-  /// where a label is editable prose (#73).
+  /// Where this flight goes, and the only place it says so. The route was also
+  /// stored as free text until #73: prose that was simultaneously the identity
+  /// of a place and the words shown to a customer, so editing it repointed the
+  /// route. The label lives on `Airport` and is read through these.
   fromAirportCode String
   toAirportCode   String
   fromAirport     Airport @relation("FlightOrigin", fields: [fromAirportCode], references: [iataCode])

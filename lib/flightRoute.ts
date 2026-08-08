@@ -1,17 +1,27 @@
 /**
  * Where a flight goes, read from the airports it references.
  *
- * `Flight.from` and `Flight.to` still exist and still hold the same words, but
- * they are prose that happened to also be the identity of a place. The
- * references added in #73 are the identity; these labels are presentation, and
- * presentation is derived at the read boundary rather than stored twice.
+ * The route was also stored as two text columns until #73 -- prose that happened
+ * to also be the identity of a place, so editing it repointed the flight. The
+ * references are the identity; the labels are presentation, and presentation is
+ * derived at the read boundary rather than stored a second time.
  *
- * Deriving it here rather than in each component is deliberate: every view keeps
- * receiving a flight with `from` and `to` on it, so nothing downstream changes,
- * and dropping the columns becomes a migration rather than a rewrite.
+ * Deriving it here rather than in each component is what let the columns go
+ * without touching a single view: everything downstream still receives a flight
+ * with `from` and `to` on it.
  */
 
+import type { Flight } from '@prisma/client';
 import { airportCodeFor } from './airports';
+
+/**
+ * A stored flight with its route resolved from the airports it references.
+ *
+ * The Prisma model has no `from`/`to` of its own since #73, so this is the shape
+ * anything rendering a route works with -- and the one `withRouteLabels`
+ * produces.
+ */
+export type RoutedFlight = Flight & { from: string; to: string };
 
 /**
  * The relation any query feeding a route render has to ask for.
@@ -31,10 +41,11 @@ interface FlightWithAirports {
 }
 
 /**
- * Replaces a flight's stored route text with the labels its airports carry.
+ * Gives a flight the `from` and `to` its airports name.
  *
- * While both exist they say the same thing, so this is invisible — which is the
- * point: it proves nothing reads the columns before they are dropped.
+ * The stored route text this replaced said the same words, which is what made
+ * removing it a migration rather than a rewrite: everything downstream still
+ * receives the two keys it always did.
  */
 export function withRouteLabels<T extends FlightWithAirports>(flight: T) {
     const { fromAirport, toAirport, ...rest } = flight;

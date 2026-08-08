@@ -40,8 +40,6 @@ test.describe('Authoritative booking persistence', () => {
       data: {
         flightNumber: flightNumbers[0],
         airline: 'Concurrency Air',
-        from: 'Seattle, USA',
-        to: 'Detroit, USA',
         ...airportCodesForRoute('Seattle, USA', 'Detroit, USA'),
         departureDate: new Date(Date.now() + 86_400_000),
         priceCents: 12345,
@@ -105,8 +103,6 @@ test.describe('Authoritative booking persistence', () => {
       data: {
         flightNumber: flightNumbers[1],
         airline: 'Idempotent Air',
-        from: 'Detroit, USA',
-        to: 'Seattle, USA',
         ...airportCodesForRoute('Detroit, USA', 'Seattle, USA'),
         departureDate: new Date(Date.now() + 172_800_000),
         priceCents: 20000,
@@ -148,8 +144,6 @@ test.describe('Authoritative booking persistence', () => {
       data: {
         flightNumber: flightNumbers[2],
         airline: 'Mismatch Air',
-        from: 'Seattle, USA',
-        to: 'Chicago, USA',
         ...airportCodesForRoute('Seattle, USA', 'Chicago, USA'),
         departureDate: new Date(Date.now() + 259_200_000),
         priceCents: 25000,

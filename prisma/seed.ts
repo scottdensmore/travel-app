@@ -73,10 +73,11 @@ async function main() {
             }
         });
         if (!existing) {
+            const { from, to, ...flightFields } = flightData;
             const flight = await prisma.flight.create({
                 data: {
-                    ...flightData,
-                    ...airportCodesForRoute(flightData.from, flightData.to),
+                    ...flightFields,
+                    ...airportCodesForRoute(from, to),
                 }
             })
             console.log(`Created static legacy flight with id: ${flight.id}`)

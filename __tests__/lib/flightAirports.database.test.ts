@@ -2,16 +2,17 @@
 import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { airportCodesForRoute } from '@/lib/airports';
+import { FlightData } from '@/lib/data/FlightData';
 
 /**
- * A flight points at the airports it touches, and they agree with the labels it
- * renders.
+ * A flight points at the airports it touches, and that is the only place it
+ * says where it goes.
  *
- * `from` and `to` are free text that is both the identity of a place and the
+ * `from` and `to` were free text that was both the identity of a place and the
  * words shown to a customer, so editing the prose silently repointed the route
- * and nothing stopped a flight naming somewhere no airport exists. This is the
- * first of two steps: the references are here and filled, the reads still use
- * the labels, and dropping the labels is the second step (#73).
+ * and nothing stopped a flight naming somewhere no airport exists. The
+ * references arrived in #189, the reads moved to them in #197, and this is the
+ * step that removes the second answer to the question (#73).
  */
 const created = { flightIds: [] as number[] };
 
@@ -30,45 +31,68 @@ describe('flight airports', () => {
         expect(flights).toBeGreaterThan(0);
     });
 
-    it('names the same place twice, never two different ones', async () => {
-        // Not merely "the column is filled": filled with the wrong airport
-        // would satisfy NOT NULL and the foreign key both.
-        const disagreements = await prisma.$queryRaw<Array<{ count: bigint }>>`
-            SELECT count(*)::bigint AS count
-            FROM "Flight" f
-            JOIN "Airport" origin ON origin."iataCode" = f."fromAirportCode"
-            JOIN "Airport" destination ON destination."iataCode" = f."toAirportCode"
-            WHERE (origin."label" <> f."from" AND f."from" NOT LIKE '%Atlantis')
-               OR (destination."label" <> f."to" AND f."to" NOT LIKE '%Atlantis')
-              -- The route-render suites write rows that break this on purpose:
-              -- disagreeing columns are the only way to prove which source a
-              -- page read. Excluded so an interrupted run leaves a stray
-              -- fixture rather than a failure in a file that never mentions it
-              -- (#155).
-              --
-              -- Keyed to the sentinel place rather than to a flight-number
-              -- prefix: flightNumber has no format rule, so exempting RTE-%
-              -- would have left a namespace an administrator could occupy and
-              -- this invariant would then never check. No real row can name
-              -- Atlantis -- airportCodeFor refuses it at every writer.
+    it('has nowhere left to store a route as text', async () => {
+        // The invariant this file used to assert -- that the columns agree with
+        // the airports -- is gone because the disagreement is now unstateable.
+        // That is the whole point of the change, so it is asserted directly
+        // rather than left as the absence of a test.
+        const columns = await prisma.$queryRaw<Array<{ column_name: string }>>`
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'Flight' AND column_name IN ('from', 'to')
         `;
 
-        expect(Number(disagreements[0].count)).toBe(0);
+        expect(columns).toEqual([]);
+    });
+
+    it('seeds each flight onto the route its data names', async () => {
+        // The columns used to be the cross-check: a whole-table scan asserted
+        // they agreed with the airports, so a writer resolving a route to the
+        // wrong pair was caught. Removing them removed that, and the seed is
+        // the one writer with no unit assertion on its create payload -- so
+        // reversing its two arguments went undetected by the entire suite.
+        //
+        // FlightData is the authored truth here, so it is what the rows are
+        // compared against.
+        const expected = new Map(FlightData.map((flight) => [
+            flight.flightNumber,
+            airportCodesForRoute(flight.from, flight.to),
+        ]));
+
+        const seeded = await prisma.flight.findMany({
+            where: { flightNumber: { in: [...expected.keys()] } },
+            select: { flightNumber: true, fromAirportCode: true, toAirportCode: true },
+        });
+
+        // A flight number repeats across the occurrences the scheduler
+        // generates, so this covers both writers rather than the five legacy
+        // rows -- but only if every authored number actually reached the table
+        // (#155).
+        expect(new Set(seeded.map((flight) => flight.flightNumber)))
+            .toEqual(new Set(expected.keys()));
+        for (const flight of seeded) {
+            expect({ flightNumber: flight.flightNumber, ...expected.get(flight.flightNumber) })
+                .toEqual({
+                    flightNumber: flight.flightNumber,
+                    fromAirportCode: flight.fromAirportCode,
+                    toAirportCode: flight.toAirportCode,
+                });
+        }
     });
 
     it('refuses a flight pointing at an airport that does not exist', async () => {
         await expect(prisma.$executeRawUnsafe(
-            `INSERT INTO "Flight" ("flightNumber", "airline", "from", "to",
+            `INSERT INTO "Flight" ("flightNumber", "airline",
                                    "fromAirportCode", "toAirportCode", "departureDate", "priceCents")
-             VALUES ($1, 'Mona Airways', 'Seattle, USA', 'Detroit, USA', 'ZZZ', 'DTW', $2, 35000)`,
+             VALUES ($1, 'Mona Airways', 'ZZZ', 'DTW', $2, 35000)`,
             `FA-${randomUUID()}`, new Date('2028-07-01T08:00:00Z'),
         )).rejects.toThrow(/foreign key constraint/i);
     });
 
     it('refuses a flight that names no airport at all', async () => {
         await expect(prisma.$executeRawUnsafe(
-            `INSERT INTO "Flight" ("flightNumber", "airline", "from", "to", "departureDate", "priceCents")
-             VALUES ($1, 'Mona Airways', 'Seattle, USA', 'Detroit, USA', $2, 35000)`,
+            `INSERT INTO "Flight" ("flightNumber", "airline", "departureDate", "priceCents")
+             VALUES ($1, 'Mona Airways', $2, 35000)`,
             `FA-${randomUUID()}`, new Date('2028-07-01T08:00:00Z'),
             // 23502 is the not-null violation. Matched on the SQLSTATE rather
             // than the prose, because Postgres reports the failing row here
@@ -83,8 +107,6 @@ describe('flight airports', () => {
             data: {
                 flightNumber: `FA-${randomUUID()}`,
                 airline: 'Mona Airways',
-                from: 'Seattle, USA',
-                to: 'Detroit, USA',
                 ...airportCodesForRoute('Seattle, USA', 'Detroit, USA'),
                 departureDate: new Date('2028-07-02T08:00:00Z'),
                 priceCents: 35_000,

@@ -22,8 +22,6 @@ describe('passenger identity data in PostgreSQL', () => {
             data: {
                 flightNumber,
                 airline: 'Privacy Air',
-                from: 'Seattle, USA',
-                to: 'San Francisco, USA',
                 ...airportCodesForRoute('Seattle, USA', 'San Francisco, USA'),
                 departureDate: new Date('2099-01-01T10:00:00.000Z'),
                 priceCents: 10000,

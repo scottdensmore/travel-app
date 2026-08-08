@@ -26,8 +26,6 @@ async function createFlight(suffix: string, from: string, to: string, day: strin
         data: {
             flightNumber: `OCC-${suffix}`,
             airline: 'Gemini Airways',
-            from,
-            to,
             ...airportCodesForRoute(from, to),
             departureDate: new Date(`${day}T08:00:00Z`),
             priceCents: 35000,

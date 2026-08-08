@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { prisma } from '../lib/prisma';
+import { flightRouteInclude, withRouteLabels } from '@/lib/flightRoute';
 import { calculateItineraryTotal } from '../lib/bookingPricing';
 import { registerAndSignIn } from './helpers/auth';
 
@@ -55,6 +56,8 @@ test.describe('Flight Booking Journey', () => {
           gt: new Date()
         }
       },
+      // The route is on the airports now, not on the flight (#73).
+      include: flightRouteInclude,
       orderBy: {
         departureDate: 'asc'
       }
@@ -69,8 +72,8 @@ test.describe('Flight Booking Journey', () => {
     await page.getByLabel('One Way').click();
 
     // Fill origin & destination dynamically based on the database flight
-    await page.selectOption('#from', targetFlight.from);
-    await page.selectOption('#to', targetFlight.to);
+    await page.selectOption('#from', targetFlight.fromAirport.label);
+    await page.selectOption('#to', targetFlight.toAirport.label);
 
     // Fill departure date formatted as YYYY-MM-DD
     const formattedDate = targetFlight.departureDate.toISOString().split('T')[0];
@@ -265,25 +268,28 @@ test.describe('Flight Booking Journey', () => {
   });
 
   test('User can book a round trip and both legs are seated and persisted', async ({ page }) => {
-    const outbound = await prisma.flight.findFirstOrThrow({
+    const outbound = withRouteLabels(await prisma.flight.findFirstOrThrow({
       where: { departureDate: { gt: new Date() } },
+      include: flightRouteInclude,
       orderBy: { departureDate: 'asc' }
-    });
+    }));
     // A true reverse leg when the schedule has one, otherwise any other upcoming
     // flight — this journey exercises checkout mechanics, not route pairing.
-    const inbound =
+    const inbound = withRouteLabels(
       (await prisma.flight.findFirst({
         where: {
-          from: outbound.to,
-          to: outbound.from,
+          fromAirportCode: outbound.toAirportCode,
+          toAirportCode: outbound.fromAirportCode,
           departureDate: { gt: outbound.departureDate }
         },
+        include: flightRouteInclude,
         orderBy: { departureDate: 'asc' }
       })) ??
       (await prisma.flight.findFirstOrThrow({
         where: { id: { not: outbound.id }, departureDate: { gt: new Date() } },
+        include: flightRouteInclude,
         orderBy: { departureDate: 'asc' }
-      }));
+      })));
 
     await page.goto(`/checkout?outbound=${outbound.id}&inbound=${inbound.id}`);
 

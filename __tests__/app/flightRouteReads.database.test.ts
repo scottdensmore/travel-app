@@ -9,23 +9,24 @@ jest.mock('next/cache', () => ({ revalidatePath: jest.fn() }));
 jest.mock('@/lib/auth', () => ({ authOptions: {} }));
 
 /**
- * Where a flight goes comes from the airports it references, not from the two
- * text columns beside them (#73).
+ * Where a flight goes comes from the airports it references (#73).
  *
- * This is what makes dropping `Flight.from` and `Flight.to` a migration rather
- * than a rewrite, so it is asserted against the columns holding something no
- * search would ever match and no customer should ever see. If a read path still
- * depends on them, the flight either fails to come back or comes back naming
- * nowhere — and this fails either way.
+ * Until the columns were dropped this suite proved *which of two sources* a read
+ * path used, by writing a flight whose `from`/`to` contradicted its airports.
+ * There is one source now, so that question is unaskable and the contradiction
+ * is gone with it. What remains worth asserting is that the route survives the
+ * trip: search narrows by the airport codes, and the labels come back resolved.
  *
- * The columns are still NOT NULL, so they cannot simply be left empty; garbage
- * is the closest a test can get to their absence while they exist.
+ * Rio → Miami is deliberate. The seed flies Miami → Rio and not the reverse, so
+ * no other row can satisfy these assertions on the fixture's behalf — which is
+ * what the disagreeing columns used to guarantee.
  */
-const WRONG_ORIGIN = 'Nowhere, Atlantis';
-const WRONG_DESTINATION = 'Elsewhere, Atlantis';
+const ORIGIN = 'Rio de Janeiro, Brazil';
+const DESTINATION = 'Miami, USA';
 
-const ORIGIN = 'Seattle, USA';
-const DESTINATION = 'Detroit, USA';
+/** A place no airport answers to, for the branches that must return nothing. */
+const UNKNOWN_ORIGIN = 'Nowhere, Atlantis';
+const UNKNOWN_DESTINATION = 'Elsewhere, Atlantis';
 // Inside the booking window the schema enforces, and far enough out that no
 // other suite's fixtures share the day.
 const DEPARTURE_DATE = new Date(Date.now() + 200 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -38,11 +39,7 @@ beforeAll(async () => {
         data: {
             flightNumber: `RTE-${randomUUID().slice(0, 8)}`,
             airline: 'Mona Airways',
-            // The route it actually flies, said only by the references.
             ...airportCodesForRoute(ORIGIN, DESTINATION),
-            // The route the abandoned columns claim.
-            from: WRONG_ORIGIN,
-            to: WRONG_DESTINATION,
             departureDate: new Date(`${DEPARTURE_DATE}T17:30:00Z`),
             priceCents: 41_900,
         },
@@ -57,14 +54,14 @@ afterAll(async () => {
 });
 
 describe('searching by route', () => {
-    it('finds a flight whose airports match, whatever its labels say', async () => {
+    it('finds a flight by the airports it references', async () => {
         const result = await searchFlightsAction(ORIGIN, DESTINATION, DEPARTURE_DATE);
 
         if ('ok' in result) throw new Error(`search rejected the input: ${JSON.stringify(result)}`);
         expect(result.flights.map((flight) => flight.flightNumber)).toContain(flightNumber);
     });
 
-    it('renders the airport it references, not the label stored beside it', async () => {
+    it('resolves the route back to the labels those airports carry', async () => {
         const result = await searchFlightsAction(ORIGIN, DESTINATION, DEPARTURE_DATE);
 
         if ('ok' in result) throw new Error(`search rejected the input: ${JSON.stringify(result)}`);
@@ -91,16 +88,14 @@ describe('searching by route', () => {
         // The dateless branch has its own guard, and deleting it left the whole
         // suite green: `where` becomes `null`, which stops filtering by route
         // rather than matching nothing.
-        const result = await searchFlightsAction(WRONG_ORIGIN, WRONG_DESTINATION);
+        const result = await searchFlightsAction(UNKNOWN_ORIGIN, UNKNOWN_DESTINATION);
 
         if ('ok' in result) throw new Error(`search rejected the input: ${JSON.stringify(result)}`);
         expect(result.flights).toHaveLength(0);
     });
 
-    it('does not find that flight under the labels it stores', async () => {
-        // The mirror of the first case, and the one that would still pass if
-        // the query had simply been left matching on text.
-        const result = await searchFlightsAction(WRONG_ORIGIN, WRONG_DESTINATION, DEPARTURE_DATE);
+    it('returns nothing for a place no airport answers to, on a date', async () => {
+        const result = await searchFlightsAction(UNKNOWN_ORIGIN, UNKNOWN_DESTINATION, DEPARTURE_DATE);
 
         if ('ok' in result) throw new Error(`search rejected the input: ${JSON.stringify(result)}`);
         expect(result.flights).toHaveLength(0);
