@@ -1,0 +1,53 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "9bc1af2006b8",
+  "strategy": "manual-commit",
+  "branch": "refactor/drop-flight-route-columns",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "__tests__/app/actions.test.ts",
+    "__tests__/app/flightRouteReads.database.test.ts",
+    "__tests__/app/occupiedSeats.database.test.ts",
+    "__tests__/app/routeRenderSources.database.test.ts",
+    "__tests__/app/seatChanges.database.test.ts",
+    "__tests__/lib/FlightScheduleService.test.ts",
+    "__tests__/lib/cabinClass.database.test.ts",
+    "__tests__/lib/flightAirports.database.test.ts",
+    "__tests__/lib/flightStatus.database.test.ts",
+    "__tests__/lib/itineraryLegs.database.test.ts",
+    "__tests__/lib/passengerDataProtection.database.test.ts",
+    "__tests__/lib/seatAssignmentCoverage.database.test.ts",
+    "__tests__/lib/seatAssignments.database.test.ts",
+    "__tests__/lib/seatLayoutGuard.database.test.ts",
+    "__tests__/lib/seatOccupancy.database.test.ts",
+    "app/actions.ts",
+    "e2e/admin.spec.ts",
+    "e2e/booking-authority.spec.ts",
+    "e2e/booking.spec.ts",
+    "e2e/multi-passenger.spec.ts",
+    "e2e/notifications.spec.ts",
+    "lib/FlightScheduleService.ts",
+    "lib/airports.ts",
+    "lib/data/FlightData.ts",
+    "lib/flightRoute.ts",
+    "prisma/migrations/20260808120000_drop_flight_route_text/migration.sql",
+    "prisma/schema.prisma",
+    "prisma/seed.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/9b/c1af2006b8/0/metadata.json",
+      "transcript": "/9b/c1af2006b8/0/full.jsonl",
+      "compact_transcript": "/9b/c1af2006b8/0/transcript.jsonl",
+      "content_hash": "/9b/c1af2006b8/0/content_hash.txt",
+      "prompt": "/9b/c1af2006b8/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2497,
+    "cache_creation_tokens": 4869496,
+    "cache_read_tokens": 497580447,
+    "output_tokens": 723230,
+    "api_call_count": 1040
+  }
+}
