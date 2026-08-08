@@ -38,7 +38,19 @@ describe('flight airports', () => {
             FROM "Flight" f
             JOIN "Airport" origin ON origin."iataCode" = f."fromAirportCode"
             JOIN "Airport" destination ON destination."iataCode" = f."toAirportCode"
-            WHERE origin."label" <> f."from" OR destination."label" <> f."to"
+            WHERE (origin."label" <> f."from" AND f."from" NOT LIKE '%Atlantis')
+               OR (destination."label" <> f."to" AND f."to" NOT LIKE '%Atlantis')
+              -- The route-render suites write rows that break this on purpose:
+              -- disagreeing columns are the only way to prove which source a
+              -- page read. Excluded so an interrupted run leaves a stray
+              -- fixture rather than a failure in a file that never mentions it
+              -- (#155).
+              --
+              -- Keyed to the sentinel place rather than to a flight-number
+              -- prefix: flightNumber has no format rule, so exempting RTE-%
+              -- would have left a namespace an administrator could occupy and
+              -- this invariant would then never check. No real row can name
+              -- Atlantis -- airportCodeFor refuses it at every writer.
         `;
 
         expect(Number(disagreements[0].count)).toBe(0);

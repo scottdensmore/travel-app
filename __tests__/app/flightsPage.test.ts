@@ -66,8 +66,12 @@ describe('flight status board page', () => {
         const { select } = await queryArgs();
 
         expect(Object.keys(select).sort()).toEqual([
-            'airline', 'departureDate', 'flightNumber', 'from', 'id', 'priceCents', 'status', 'to',
+            'airline', 'departureDate', 'flightNumber', 'fromAirport', 'id', 'priceCents', 'status', 'toAirport',
         ]);
+        // The route comes from the airports the flight references, not from the
+        // prose columns beside them (#73).
+        expect(select.fromAirport).toEqual({ select: { label: true } });
+        expect(select.toAirport).toEqual({ select: { label: true } });
         // The cabin row counts and seat pattern are a third of what remains
         // once the window has done its work, and nothing here reads them.
         for (const unused of ['seatPattern', 'economyRows', 'businessRows', 'firstClassRows', 'premiumEconomyRows']) {
@@ -75,8 +79,27 @@ describe('flight status board page', () => {
         }
     });
 
+    it('gives the board the route its airports name, not the columns beside them', async () => {
+        findMany.mockResolvedValue([{
+            id: 1,
+            fromAirport: { label: 'Seattle, USA' },
+            toAirport: { label: 'Detroit, USA' },
+        }]);
+
+        const { flights } = (await FlightsPage()).props;
+
+        // Also that the relation itself does not travel: it would ride into
+        // the RSC payload as two objects the board never reads.
+        expect(flights).toEqual([{ id: 1, from: 'Seattle, USA', to: 'Detroit, USA' }]);
+    });
+
+
     describe('the range it tells the board it covers', () => {
-        const rows = (count: number) => Array.from({ length: count }, (_, i) => ({ id: i }));
+        const rows = (count: number) => Array.from({ length: count }, (_, i) => ({
+            id: i,
+            fromAirport: { label: 'Seattle, USA' },
+            toAirport: { label: 'Detroit, USA' },
+        }));
 
         it('describes the whole window when everything fits', async () => {
             findMany.mockResolvedValue(rows(3));

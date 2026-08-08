@@ -4,6 +4,7 @@ import PointsActivityService from "@/lib/PointsActivityService";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { flightRouteInclude, withLegRouteLabels } from "@/lib/flightRoute";
 import ProfileClient from "@/components/ui/ProfileClient";
 import { safePassengerSelect } from "@/lib/passengerDataAccess";
 
@@ -34,7 +35,7 @@ export default async function ProfilePage() {
       // here beyond rendering more than one (#69).
       legs: {
         include: {
-          flight: true,
+          flight: { include: flightRouteInclude },
           // The seat is held per leg, so a round trip has a different one on
           // each; Passenger.seatNumber only ever described the outbound.
           seatAssignments: {
@@ -59,7 +60,15 @@ export default async function ProfilePage() {
     orderBy: { createdAt: "desc" }
   });
 
-  const pointsActivityService = new PointsActivityService(userBookings);
+  // The route each leg renders comes from the airports its flight references.
+  // Resolved once here so the client component and the points activity both
+  // keep receiving a flight with `from` and `to` on it (#73).
+  const bookings = userBookings.map(booking => ({
+    ...booking,
+    legs: booking.legs.map(withLegRouteLabels),
+  }));
+
+  const pointsActivityService = new PointsActivityService(bookings);
   const activityData = pointsActivityService.getPointsActivity();
   const currentPoints = pointsActivityService.getCurrentPoints();
   const currentStatus = pointsActivityService.getCurrentStatus();
@@ -71,7 +80,7 @@ export default async function ProfilePage() {
       userAvatar={userAvatar}
       currentStatus={currentStatus}
       currentPoints={currentPoints}
-      bookings={userBookings}
+      bookings={bookings}
       favorites={userFavorites}
       reviews={userReviews}
       activityData={activityData}

@@ -1,5 +1,6 @@
 import React from 'react';
 import { prisma } from '@/lib/prisma';
+import { flightRouteInclude, withLegRouteLabels } from '@/lib/flightRoute';
 import Link from 'next/link';
 import { outboundFlight } from '@/lib/bookingItinerary';
 
@@ -22,7 +23,7 @@ export default async function AdminDashboard() {
                 },
             },
             legs: {
-                include: { flight: true },
+                include: { flight: { include: flightRouteInclude } },
                 orderBy: { sequence: 'asc' },
             },
         },
@@ -101,7 +102,7 @@ export default async function AdminDashboard() {
                         </thead>
                         <tbody>
                             {recentBookings.map((booking) => {
-                                const flight = outboundFlight(booking);
+                                const flight = outboundFlight({ ...booking, legs: booking.legs.map(withLegRouteLabels) });
                                 return (
                                     <tr key={booking.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
                                         <td style={{ padding: '12px', fontSize: '0.9rem', color: '#fff' }}>

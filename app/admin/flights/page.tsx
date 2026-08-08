@@ -7,6 +7,7 @@ import AdminFlightsTable from './AdminFlightsTable';
 import ManualOccurrenceBuilder from '@/components/ui/ManualOccurrenceBuilder';
 import { safePassengerSelect } from '@/lib/passengerDataAccess';
 import { passengersSeatedOnLeg } from '@/lib/bookingItinerary';
+import { flightRouteInclude, withRouteLabels } from '@/lib/flightRoute';
 import { formatPrice } from '@/lib/bookingPricing';
 
 export const dynamic = 'force-dynamic';
@@ -29,6 +30,7 @@ export default async function AdminFlightsPage() {
             }
         },
         include: {
+            ...flightRouteInclude,
             itineraryLegs: {
                 include: {
                     // The seats held on this flight. A traveller on a round trip
@@ -54,7 +56,7 @@ export default async function AdminFlightsPage() {
     };
 
     const flightsWithBookings = flights.map(({ itineraryLegs, ...flight }) => ({
-        ...flight,
+        ...withRouteLabels(flight),
         bookings: itineraryLegs.map((leg) => ({
             ...leg.booking,
             passengers: passengersSeatedOnLeg(leg, leg.booking.passengers),
