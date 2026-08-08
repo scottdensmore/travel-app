@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "8a5bfa1cd531",
+  "strategy": "manual-commit",
+  "branch": "refactor/read-flight-airports",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "__tests__/app/actions.test.ts",
+    "__tests__/app/flightRouteReads.database.test.ts",
+    "__tests__/app/flightsPage.test.ts",
+    "__tests__/app/routeRenderSources.database.test.ts",
+    "__tests__/lib/flightAirports.database.test.ts",
+    "app/actions.ts",
+    "app/admin/flights/page.tsx",
+    "app/admin/page.tsx",
+    "app/checkout/page.tsx",
+    "app/flights/page.tsx",
+    "app/profile/page.tsx",
+    "lib/PointsActivityService.ts",
+    "lib/flightRoute.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/8a/5bfa1cd531/0/metadata.json",
+      "transcript": "/8a/5bfa1cd531/0/full.jsonl",
+      "compact_transcript": "/8a/5bfa1cd531/0/transcript.jsonl",
+      "content_hash": "/8a/5bfa1cd531/0/content_hash.txt",
+      "prompt": "/8a/5bfa1cd531/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2343,
+    "cache_creation_tokens": 4592841,
+    "cache_read_tokens": 477850761,
+    "output_tokens": 665790,
+    "api_call_count": 957
+  }
+}
