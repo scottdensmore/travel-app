@@ -99,3 +99,82 @@ The ethernet not working?
 ---
 
 try again
+
+---
+
+<task-notification>
+<task-id>a8d7d3ec157ba4950</task-id>
+<tool-use-id>toolu_01XcMCUDcdE3f7TSoW34tjvS</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/03223f67-2849-410e-b635-fa0a918e683d/tasks/a8d7d3ec157ba4950.output</output-file>
+<status>completed</status>
+<summary>Agent "UI review of route rendering" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Environment restored (review users/bookings/notifications deleted, flight 17 back to `ON_TIME`, drifted airport label restored, baseline tree removed, working tree untouched — only the reviewed diff remains).
+
+## What I did
+
+Read the diff first, then drove the running app with Playwright's bundled Chromium (the Playwright MCP server wants a Chrome install that is not present on this machine, so I scripted the browser directly). I also stood up a **second dev server on :3100 running the pre-change `HEAD` tree**, ran the identical journeys against both, and diffed the extracted text and the screenshots pixel-by-pixel. That is the evidence for "zero user-visible change".
+
+Note: the dev server already listening on :3000 was hung (no response in &gt;2 minutes); I killed it and started a fresh `npm run dev`, which is what is running now.
+
+Seeded data check first: 1414 flights, **0** rows where `Airport.label` disagrees with `Flight.from`/`Flight.to`, and every `FlightSchedule` and `Flight` place string exists in `lib/data/AirportData`. So identical rendering is the expected outcome, and any difference would have been a code defect.
+
+## Result: no blocking defects
+
+**Text:** the extracted text of every journey at every viewport is byte-identical between the changed app and pre-change `HEAD`. The only diffs in the whole capture set were the console noise below and a computed `outline` width on one focus probe.
+
+**Pixels:** 47 of 51 matched screenshot pairs differ by 0.000%. The four that differ (0.04–0.4%) are focus/hover timing — I cropped each diff region to confirm: a focus ring on the Passport Number input, and a hovered row on the status board. No route string differs in spacing, casing, or truncation anywhere.
+
+Journeys **rendered** at 390x844, 768x1024 and 1440x900:
+
+1. Home search → results, one-way and round trip with return date, cabin filter `BUSINESS` — `changed-j1a-oneway-*.png`, `changed-j1b-roundtrip-*.png`
+2. Date with no flights → nearest-operating-dates (`Try a nearby date: Sat, Aug 8 / Tue, Aug 11`) — `changed-j2-nodates-*.png`
+3. `/flights` status board, the `select`-with-spread-relations shape, plus its text filter and its empty state — `changed-j3-flights-*.png`, `changed-j3-filter-*.png`, `changed-j3-filter-empty-*.png`
+4. `/checkout` — leg switcher, seat step, review step, and a completed booking to the e-ticket — `changed-j4-step1/-step2-seats/-step2-seated/-step3-review-*.png`, `changed-j4-eticket-desktop.png`
+5. `/profile` booking history and points activity, plus the empty-profile state — `changed-j5-profile-*.png`, `changed-j5-profile-empty-*.png`
+6. `/admin` recent bookings Route column — `changed-j6-admin-*.png`
+7. `/admin/flights` schedules table, occurrences table, and the manifest dialog — `changed-j7-adminflights-*.png`, `changed-j7-drawer-*.png`
+
+Extras the diff also touches: the booking-confirmed notification (`app/actions.ts:316`) and the flight-status notification (`app/actions.ts:1018`), both rendered in the bell panel — `changed-notifications-booked-desktop.png`, `changed-notifications-delayed-desktop.png`. Both read the airports: *"Successfully booked flight MA203 from London, UK to New York, USA"* and *"Your upcoming flight MA203 from London, UK to New York, USA is now DELAYED."*
+
+"Does it say the true thing" held everywhere I could check pairing: the checkout review lists `MA203 / London, UK → New York, USA` and `MA202 / New York, USA → London, UK` under DEPARTING/RETURNING respectively; `/profile` shows the same two legs with per-leg seats; `/admin` shows the outbound leg only, correctly.
+
+## Findings (none blocking)
+
+**1. Latent — the search resolves the route through compiled data, the results render it from the database.** `flightRouteWhere` (`/home/scottdensmore/Developer/scottdensmore/travel-app/lib/flightRoute.ts:60-66`) maps the requested place to a code via `airportCodeFor` (`lib/airports.ts:58`, backed by `lib/data/AirportData`), while the words rendered now come from the `Airport` row. The origin/destination dropdown is a third source: `FlightSchedule.from`/`to` prose (`app/actions.ts:268-281`). If those ever disagree, the form and the results name different places.
+
+I proved this is reachable by editing one `Airport` row (`DTW.label` → `Detroit Metro, USA`) and rendering both builds. Desktop, `/?from=Seattle, USA&amp;to=Detroit, USA&amp;depart=2026-08-10&amp;trip=one-way`:
+
+- changed: `#to` select still reads `Detroit, USA`, result card reads `Seattle, USA ------&gt; Detroit Metro, USA`
+- pre-change: card reads `Detroit, USA`, matching the form
+
+Evidence: `drift-changed-search-desktop.png` / `drift-baseline-search-desktop.png`, and the same on `/flights` (`drift-*-board-desktop.png`). I restored the label immediately.
+
+This is the intended direction of #73 (the airport row is the truth), and no code path in the app can create the drift today — only the seed writes `Airport`, and `scheduleSchema` rejects a place `airportCodeFor` does not know (`app/actions.ts:706-714`). So it is a coupling to record, not a live defect. Worth a note in `lib/flightRoute.ts` or an issue: while both readers exist, the search's label→code map and the render's code→label map must not drift.
+
+**2. `?from=Atlantis` never reaches the changed code, and says nothing.** `parseFlightSearchParams` (`lib/flightSearchUrl.ts:74-77`) rejects a `from`/`to` pair absent from `routes`, so `initialSearch` is `undefined`, no search runs, and the page renders the default form (Chicago → Paris) with no results and no message that the link was not understood. No error, no crash, no `undefined` — `changed-j2b-atlantis-{phone,tablet,desktop}.png`, and identical to pre-change. The silent fallback is pre-existing, not introduced here; flagging it only because the brief asked for that URL specifically.
+
+Since the browser cannot reach the new `route === null` branch (`app/actions.ts:97-98` and `207-208`), I exercised it at the action level against the live DB on both builds. Four unknown-place shapes, including a round trip: both return `{flights: 0, nearbyDates: [], inbound: ...}` with no throw, byte-identical between changed and pre-change.
+
+**3. Pre-existing — `/checkout` scrolls horizontally at 390px.** On the Seats step, `document.scrollWidth` is 419 against a 390 client width. Measured identically on pre-change `HEAD` (419 both), so this change did not cause it and did not fix it. The overflowing subtree is the signed-in top nav (`UL` right edge 485px) plus the seat grid. Worth its own issue if it is not already tracked.
+
+**4. Nit, pre-existing — the e-ticket truncates the route at the first comma.** `components/ui/BookingCheckoutWizard.tsx:1434` renders `legFlight.from.split(',')[0]`, so the ticket says `ROUTE London to New York` where every other surface says `London, UK → New York, USA`. That string now originates from the `Airport` label rather than the `Flight` column, so the truncation is one more place quietly depending on the label's "City, Country" shape.
+
+**5. Console noise, both builds.** `Failed to load notifications: TypeError: Failed to fetch` / `network error` when a navigation aborts the notifications server action in flight. Present on pre-change `HEAD` too. No React warnings, no `pageerror`, no hydration mismatches on any journey.
+
+## Headings with nothing to report
+
+- **Keyboard and focus:** results `Select` buttons are reachable with visible focus rings and accessible names (`Select flight MA203 as the departing leg`); the manifest dialog opens with Enter from the trigger, `role="dialog" aria-modal="true"`, focus lands inside it, Escape closes it, and focus returns to the Manifest button. Verified at phone, tablet and desktop.
+- **Contrast against the dark theme:** the route text this change renders measures 5.32:1 on the search card (12px, `rgba(255,255,255,0.5)` composited over the card and page layers) and 18.4:1 in the status board cells. Both pass AA. No CSS is in the diff and the pixel diff is zero, so contrast could not have moved.
+- **Empty and loading states:** empty profile ("You have no bookings yet.", points activity showing only "Starting Points"), empty board filter ("🔍 No flights found"), and the no-flights search all render correctly with the airports resolved or absent as appropriate.
+- **Layout:** no horizontal page scroll at any viewport on journeys 1, 2, 3, 5, 6, 7. The admin tables overflow inside their `overflow-x: auto` wrappers, which is the intended containment.
+
+## What I could not exercise
+
+- **The `route === null` branch through the UI** — unreachable by design (see finding 2); covered at the action level instead.
+- **A leg with a null flight** (`withLegRouteLabels`'s null branch, `lib/flightRoute.ts:45-47`, rendering `—` in `ProfileClient.tsx:365`) — `ItineraryLeg.flightId` is required, so I could not produce one without corrupting the schema. Not exercised.
+- **The degraded inbound state** (`data-testid="inbound-unavailable"`, when the return-leg query fails while the outbound succeeds) — needs an injected query failure. `searchOneDirection` is on the changed path, so this is a real gap; the unit tests in `__tests__/app/actions.test.ts` cover it, but I did not see it rendered.
+- **The in-flight search spinner** — I waited fixed intervals rather than capturing the transient loading state. The markup is unchanged by the diff.
+- **Browsers other than Chromium**, and any real device.</result>
+<usage><subagent_tokens>181188</subagent_tokens><tool_uses>38</tool_uses><duration_ms>905740</duration_ms></usage>
+</task-notification>
