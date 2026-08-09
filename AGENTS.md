@@ -74,9 +74,10 @@ that runs this application injects configuration at runtime.
   file's fixtures in another file's scan (#155). `npm test` runs the unit project
   first and stops if it fails, so pass flags to `test:unit`/`test:database` directly
   rather than to `npm test`, which does not forward them. What serialises them is
-  `--runInBand` in the `test:database` script, not the config — `npx jest
-  --selectProjects database` looks equivalent and runs them in parallel, which
-  reproduces exactly the interference the split removed (#215)
+  `--runInBand` in the `test:database` script, not the config, so the project's
+  `globalSetup` refuses any run it is not given — `npx jest --selectProjects
+  database` stops with a message naming the worker count rather than
+  reproducing the interference the split removed (#215)
 - Node-environment tests need `/** @jest-environment node */` (jsdom is the Jest default)
 - Playwright runs `workers: 1, fullyParallel: false` on purpose — parallel runs collide on the DB
 - Always `npm run build`, never bare `next build`: the sanitize step strips `.env` files from

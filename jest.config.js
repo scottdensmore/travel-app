@@ -51,6 +51,8 @@ module.exports = async () => ({
       ...customJestConfig,
       displayName: 'database',
       testMatch: ['**/*.database.test.?(ts|tsx|js|jsx)'],
+      // Refuses the run rather than letting it interfere quietly (#215).
+      globalSetup: '<rootDir>/jest.database-setup.js',
     })(),
   ],
 })
