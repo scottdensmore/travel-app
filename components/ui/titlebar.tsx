@@ -1,7 +1,7 @@
 "use client"
 
 import { BRAND } from '@/lib/brand';
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
@@ -19,37 +19,6 @@ interface Notification {
     type: string;
     isRead: boolean;
     createdAt: Date | string;
-}
-
-/**
- * Exactly what a browser says when it tears down a request mid-flight.
- *
- * Matched whole rather than by substring, and against this closed list rather
- * than a pattern. Both matter: in development Next forwards a server error's
- * message to the client verbatim, and `/aborted/i` alone silences PostgreSQL's
- * "current transaction is aborted, commands ignored until end of transaction
- * block" and Prisma's "Transaction aborted." -- the two failures a developer
- * most needs to see.
- */
-const TORN_DOWN_BY_NAVIGATION = new Set([
-    'Failed to fetch',                                  // Chrome
-    'NetworkError when attempting to fetch resource.',  // Firefox
-    'Load failed',                                      // Safari
-    'network error',                                    // Chromium, server action torn down
-]);
-
-/**
- * The request did not fail; it was cancelled out from under us.
- *
- * A server action still in flight when the page navigates rejects with a
- * `TypeError` from `fetch`, or an `AbortError`, depending on how the browser
- * tears it down. Neither means anything went wrong.
- */
-function isAbortedRequest(error: unknown): boolean {
-    if (!(error instanceof Error)) return false;
-    if (error.name === 'AbortError') return true;
-
-    return TORN_DOWN_BY_NAVIGATION.has(error.message);
 }
 
 const TitleBar: React.FC = () => {
@@ -72,31 +41,49 @@ const TitleBar: React.FC = () => {
     const userAvatar = session?.user?.image || "/img/my-profile-photo.jpg";
     const isAdmin = session?.user?.role === 'ADMIN' && session.user.staffMfaVerified;
 
-    const fetchNotifications = useCallback(async () => {
-        if (session?.user) {
-            try {
-                const notifs = await getUserNotificationsAction();
-                setNotifications(notifs as Notification[]);
-            } catch (err) {
-                // A navigation aborts whatever this poll had in flight, which
-                // is not a failure -- nothing was lost and the next tick asks
-                // again. Reporting it as one trains everyone to ignore the
-                // line, and it is the only console error the suite ever sees
-                // (#195).
-                if (isAbortedRequest(err)) return;
-                console.error("Failed to load notifications:", err);
-            }
-        } else {
-            setNotifications([]);
-        }
-    }, [session]);
+    // Set while the document is going away, so a poll that dies with it can be
+    // told apart from one that failed on its own.
+    const leavingPage = useRef(false);
+
+    useEffect(() => {
+        const onPageHide = () => { leavingPage.current = true; };
+        window.addEventListener('pagehide', onPageHide);
+        return () => window.removeEventListener('pagehide', onPageHide);
+    }, []);
 
     // Fetch immediately on mount / route change, and set up 3s polling interval
     useEffect(() => {
-        fetchNotifications();
-        const interval = setInterval(fetchNotifications, 3000);
-        return () => clearInterval(interval);
-    }, [fetchNotifications, pathname]);
+        // Whether *this* poll's result is still wanted. A server action takes no
+        // abort signal, so the teardown is what gets tracked rather than the
+        // request -- which is the distinction that matters: a rejection arriving
+        // after the effect was cleaned up, or while the page is being replaced,
+        // lost nothing and is not news. Anything else is (#195, #212).
+        //
+        // Matching the rejection's message instead could not tell a navigation
+        // from a dead server: browsers say `Failed to fetch` for both.
+        let active = true;
+
+        const poll = async () => {
+            if (!session?.user) {
+                setNotifications([]);
+                return;
+            }
+            try {
+                const notifs = await getUserNotificationsAction();
+                if (active) setNotifications(notifs as Notification[]);
+            } catch (err) {
+                if (!active || leavingPage.current) return;
+                console.error("Failed to load notifications:", err);
+            }
+        };
+
+        poll();
+        const interval = setInterval(poll, 3000);
+        return () => {
+            active = false;
+            clearInterval(interval);
+        };
+    }, [session, pathname]);
 
     // Click outside to close notifications drawer
     useEffect(() => {

@@ -72,7 +72,52 @@ async function warmAuthRoutes(baseURL: string): Promise<void> {
  * after, so it is gone quietly. Nothing here can tell that booking from the
  * one a previous run left holding 11A.
  */
+/**
+ * Hosts a suite is allowed to destroy data on.
+ *
+ * `localhost` is a developer's machine and CI's service container; `db` is the
+ * Compose service. Anything else is somebody's real database.
+ */
+const DISPOSABLE_HOSTS = new Set(['localhost', '127.0.0.1', '::1', 'db']);
+
+/**
+ * Refuse to delete anything on a database this suite does not own.
+ *
+ * The deletion below is unqualified by design -- it has to be, since it cannot
+ * tell a previous run's booking from any other. That makes a misaimed
+ * `DATABASE_URL` catastrophic and silent: point it at staging, run `npm test`
+ * or `npx playwright test`, and every booking is gone with nothing asked and
+ * nothing recoverable.
+ *
+ * So the check is on the destination rather than on intent, and it fails closed:
+ * an unparseable or absent URL stops the run too.
+ */
+function assertDisposableDatabase(): void {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error('Refusing to clear bookings: DATABASE_URL is not set.');
+  }
+
+  let host: string;
+  try {
+    host = new URL(databaseUrl).hostname;
+  } catch {
+    throw new Error('Refusing to clear bookings: DATABASE_URL is not a URL this can check.');
+  }
+
+  if (!DISPOSABLE_HOSTS.has(host)) {
+    throw new Error(
+      `Refusing to clear bookings: DATABASE_URL points at "${host}", which is not a `
+      + `database this suite is allowed to destroy data on `
+      + `(${[...DISPOSABLE_HOSTS].join(', ')}). `
+      + 'Point DATABASE_URL at a local or Compose database before running the tests.'
+    );
+  }
+}
+
 export async function clearPreviousRunBookings(): Promise<void> {
+  assertDisposableDatabase();
+
   await prisma.booking.deleteMany();
 }
 

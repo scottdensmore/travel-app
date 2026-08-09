@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import TitleBar from '@/components/ui/titlebar';
 import { usePathname } from 'next/navigation';
@@ -32,24 +32,25 @@ const mockMarkAllNotificationsAsRead = markAllNotificationsAsReadAction as jest.
 
 describe('TitleBar', () => {
     beforeEach(() => {
+        // `clearAllMocks` clears call history but leaves implementations in
+        // place, so a nested block that signs a visitor in leaves every later
+        // sibling rendering as that user. Re-establishing the anonymous default
+        // here keeps each test's session its own business, rather than a
+        // function of the order they run in.
         jest.clearAllMocks();
+        (require('next-auth/react').useSession as jest.Mock).mockReturnValue({ data: null });
         mockGetUserNotifications.mockReturnValue(new Promise(() => { }));
     });
 
-    describe('when a notifications poll is cut short', () => {
-        // A navigation aborts whatever the 3s poll had in flight. That is not a
-        // failure, and reporting it as one made the only console error the e2e
-        // suite ever sees -- which then failed a spec that asserts the console
-        // is clean (#195).
+    describe('when a notifications poll fails', () => {
         let consoleError: jest.SpyInstance;
 
         beforeEach(() => {
             // Installed here rather than in the describe body: declared there it
             // is created at collection time and torn down by this block's
-            // `afterAll`, so moving this describe below the others would
-            // silently strip `console.error` from all of them.
+            // teardown, so moving this describe below the others would silently
+            // strip `console.error` from all of them.
             consoleError = jest.spyOn(console, 'error').mockImplementation(() => { });
-            // The poll only runs for a signed-in visitor.
             (require('next-auth/react').useSession as jest.Mock).mockReturnValue({
                 data: { user: { role: 'USER', email: 'user@example.com' } },
             });
@@ -57,41 +58,69 @@ describe('TitleBar', () => {
 
         afterEach(() => consoleError.mockRestore());
 
-        it.each([
-            ['a fetch torn down by navigation', new TypeError('Failed to fetch')],
-            ['a network error', new TypeError('NetworkError when attempting to fetch resource.')],
-            ['an explicit abort', Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' })],
-            // What Chromium actually reports for a server action cut short by a
-            // navigation, and the string the e2e suite sees.
-            ['a server action torn down mid-flight', new TypeError('network error')],
-            // Safari's wording. The suite runs chromium only, so nothing else
-            // here can reach it.
-            ['a WebKit teardown', new TypeError('Load failed')],
-        ])('stays quiet about %s', async (_name, error) => {
-            mockGetUserNotifications.mockRejectedValue(error);
+        it('reports it, even when it reads like a torn-down request', async () => {
+            // The message cannot tell a navigation from a dead server -- a
+            // browser says `Failed to fetch` for both. Suppressing on the
+            // message meant a signed-in user whose server had gone away saw
+            // nothing at all, in the console or on the page (#212).
+            mockGetUserNotifications.mockRejectedValue(new TypeError('Failed to fetch'));
 
             render(<TitleBar />);
-            await waitFor(() => expect(mockGetUserNotifications).toHaveBeenCalled());
 
-            expect(consoleError).not.toHaveBeenCalled();
+            await waitFor(() => expect(consoleError).toHaveBeenCalledWith(
+                'Failed to load notifications:',
+                expect.objectContaining({ message: 'Failed to fetch' }),
+            ));
         });
 
         it.each([
-            ['an authorization failure', 'Unauthorized'],
-            // In development Next forwards a server error's message verbatim,
-            // so these arrive at this catch exactly as written. A substring
-            // match on "aborted" or "network error" silenced all three.
             ['a poisoned Postgres transaction', 'current transaction is aborted, commands ignored until end of transaction block'],
             ['a closed Prisma transaction', 'Transaction API error: Transaction already closed: Transaction aborted.'],
-            ['a database reachability error', 'A network error occurred while reaching the database'],
-        ])('still reports %s', async (_name, message) => {
+            ['an authorization failure', 'Unauthorized'],
+        ])('reports %s', async (_name, message) => {
             mockGetUserNotifications.mockRejectedValue(new Error(message));
 
             render(<TitleBar />);
+
             await waitFor(() => expect(consoleError).toHaveBeenCalledWith(
                 'Failed to load notifications:',
                 expect.objectContaining({ message }),
             ));
+        });
+
+        it('stays quiet when the page is being replaced', async () => {
+            // The one case that is genuinely not a failure: the document is
+            // going away and this poll's answer was never going to be used.
+            // It was the only console error the e2e suite ever produced (#195).
+            let reject: (error: Error) => void = () => { };
+            mockGetUserNotifications.mockReturnValue(new Promise((_, r) => { reject = r; }));
+
+            render(<TitleBar />);
+            await waitFor(() => expect(mockGetUserNotifications).toHaveBeenCalled());
+
+            window.dispatchEvent(new Event('pagehide'));
+            await act(async () => {
+                reject(new TypeError('Failed to fetch'));
+                await Promise.resolve();
+            });
+
+            expect(consoleError).not.toHaveBeenCalled();
+        });
+
+        it('stays quiet when the poll outlives the component', async () => {
+            let reject: (error: Error) => void = () => { };
+            mockGetUserNotifications.mockReturnValue(new Promise((_, r) => { reject = r; }));
+
+            const { unmount } = render(<TitleBar />);
+            await waitFor(() => expect(mockGetUserNotifications).toHaveBeenCalled());
+
+            unmount();
+            await act(async () => {
+                reject(new TypeError('Failed to fetch'));
+                await Promise.resolve();
+            });
+
+            expect(consoleError).not.toHaveBeenCalled();
         });
     });
 
