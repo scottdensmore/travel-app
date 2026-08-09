@@ -37,6 +37,7 @@ describe('passenger identity data in PostgreSQL', () => {
         if (bookingId) await prisma.booking.deleteMany({ where: { id: bookingId } });
         if (flightId) await prisma.flight.deleteMany({ where: { id: flightId } });
         if (userId) await prisma.user.deleteMany({ where: { id: userId } });
+        await prisma.$disconnect();
     });
 
     it('stores only ciphertext, returns only safe fields, and purges on expiry', async () => {

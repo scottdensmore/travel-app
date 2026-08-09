@@ -268,6 +268,14 @@ test.describe('Flight Booking Journey', () => {
   });
 
   test('User can book a round trip and both legs are seated and persisted', async ({ page }) => {
+    // Four outcomes in one budget: a two-leg checkout, a confirmation, a
+    // profile load and a seat change, against a server that compiles each
+    // route the first time it is asked for. Measured at 21.6s cold against a
+    // 30s default, and every run is cold now that Playwright starts its own
+    // server (#196) — so the margin is thinner than when this was filed and a
+    // slow first compile takes it (#178).
+    test.slow();
+
     const outbound = withRouteLabels(await prisma.flight.findFirstOrThrow({
       where: { departureDate: { gt: new Date() } },
       include: flightRouteInclude,
