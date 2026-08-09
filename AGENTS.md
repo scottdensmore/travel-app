@@ -154,6 +154,36 @@ Chart and other browser-interactive components need `'use client'`.
    findings cause changes, rerun the appropriate tests and the `verifier`, then
    obtain fresh review approval for the changed state.
 
+   **Codex reviews every pull request, and its verdict is a merge gate.** It
+   runs on the pull request rather than the working tree, so this loop belongs
+   after step 10 has opened one. Do not merge until it approves.
+
+   - It reacts 👀 on the pull request while it is reading, and posts inline
+     review comments if it finds anything. When it is satisfied it removes the
+     👀 and reacts 👍. Both reactions are on the **pull request itself**, not on
+     a comment: `gh api repos/<owner>/<repo>/issues/<pr>/reactions`.
+   - Its findings are inline review threads, not issue comments. They are
+     invisible to `gh pr view --json comments`; read them with
+     `gh api repos/<owner>/<repo>/pulls/<pr>/comments`, or through GraphQL
+     `reviewThreads` when you need the thread IDs to resolve them.
+   - Every push re-triggers it. So the loop is: address the findings, run the
+     tests, push, reply to each thread saying what changed and why, resolve
+     the thread, then wait for the next verdict. Repeat until 👍.
+   - Reply before resolving, and say what you actually did. A resolved thread
+     with no reply is indistinguishable from one dismissed without reading.
+     Where a finding is right about the problem but wrong about the fix, say
+     so and explain what you did instead — and where you disagree, say that
+     too rather than resolving quietly.
+   - Findings carry a priority badge. Treat P1 as blocking. It is worth
+     arguing with: three rounds on #214 turned a hostname check into an
+     environment marker because each round rejected the previous fix for a
+     concrete reason, and each rejection was correct.
+   - Do not confuse your own replies with a new review. Replying creates
+     review objects under your name; only a review by
+     `chatgpt-codex-connector[bot]` **on the current head SHA** is a verdict.
+   - `@codex review` in a comment re-triggers it without a push, for when a
+     round needed no code change.
+
 9. **Commit after approval.** Commit only after verification and code review
    are complete. Use Conventional Commits:
 
@@ -178,7 +208,8 @@ Chart and other browser-interactive components need `'use client'`.
      pull requests unless the user explicitly asks for a draft.
 
 11. **Merge only clean, passing pull requests.** Merge only after GitHub
-    reports a clean merge state and every configured check passes. Never bypass
+    reports a clean merge state, every configured check passes, and Codex has
+    reacted 👍 on the pull request with no unresolved review threads. Never bypass
     a failing or pending required check. Self-merges are allowed when these
     conditions are met. Use squash merge for short-lived development branches
     to keep `main` linear, then delete the merged branch.
