@@ -4,6 +4,7 @@ import '@testing-library/jest-dom';
 import FlightBookingForm from '@/components/ui/flightBookingForm';
 import { bookFlightAction, searchFlightsAction } from '@/app/actions';
 import type { FlightSearchCriteria } from '@/lib/flightSearchUrl';
+import { addDaysToIsoDate } from '@/lib/dates';
 
 // Mock server actions
 jest.mock('@/app/actions', () => ({
@@ -104,6 +105,145 @@ const renderForm = (initialSearch?: FlightSearchCriteria, unusableLink = false) 
         unusableLink={unusableLink}
     />
 );
+
+describe('changing the route', () => {
+    beforeEach(() => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-07-14T12:00:00.000Z'));
+        jest.clearAllMocks();
+        mockSearch.mockResolvedValue(searchSuccess(mockFlights));
+    });
+    afterEach(() => jest.useRealTimers());
+
+    it('never shows a return date belonging to the previous route', () => {
+        // The two dates were set by separate effects: one put the new route's
+        // departure on screen, a second later derived the return from it. In
+        // between, a committed render held the new departure beside the old
+        // route's return — visible to a customer, and the reason a spec
+        // reading the two inputs in that gap captured a stale value (#181).
+        //
+        // Every commit is inspected rather than the end state, because the end
+        // state was always right.
+        const commits: Array<{ departure: string; returnDate: string }> = [];
+        const record = () => {
+            const departure = document.querySelector<HTMLInputElement>('#depart');
+            const returnInput = document.querySelector<HTMLInputElement>('#returnDate');
+            if (departure && returnInput) {
+                commits.push({ departure: departure.value, returnDate: returnInput.value });
+            }
+        };
+
+        render(
+            <React.Profiler id="form" onRender={record}>
+                <FlightBookingForm
+                    routes={routes}
+                    minimumDepartureDate="2026-07-14"
+                    maximumDepartureDate="2027-07-14"
+                />
+            </React.Profiler>
+        );
+
+        commits.length = 0;
+        fireEvent.change(screen.getByLabelText('From', { exact: true }), {
+            target: { value: 'New York, USA' },
+        });
+
+        expect(commits.length).toBeGreaterThan(0);
+        for (const { departure, returnDate } of commits) {
+            // A return date is either absent or exactly a week after the
+            // departure showing beside it.
+            if (returnDate === '') continue;
+            expect(returnDate).toBe(addDaysToIsoDate(departure, 7));
+        }
+
+        // And it moved. Without this the invariant above is satisfied by a
+        // route effect that does nothing at all, since the pair it started
+        // with was consistent too.
+        expect(commits.at(-1)).toEqual({ departure: '2026-07-18', returnDate: '2026-07-25' });
+    });
+
+    it('clamps the return against the new origin\'s window, not the old one\'s', () => {
+        // The route effect used to read a ref that a *later* effect refreshes,
+        // so on a route change across timezones it clamped against the previous
+        // origin's last bookable date. Reachable only when the destination is
+        // unchanged, because then the route effect runs in the same flush as
+        // the origin change — which is why the case above cannot catch it.
+        //
+        // At 20:00 UTC it is still the 14th in Seattle and already the 15th in
+        // Tokyo, so their windows end a day apart.
+        jest.setSystemTime(new Date('2026-07-14T20:00:00.000Z'));
+        const sharedDestination = [
+            { from: 'Seattle, USA', to: 'London, UK', nextOperatingDate: '2026-07-15' },
+            { from: 'Tokyo, Japan', to: 'London, UK', nextOperatingDate: '2027-07-12' },
+        ];
+
+        render(
+            <FlightBookingForm
+                routes={sharedDestination}
+                minimumDepartureDate="2026-07-14"
+                maximumDepartureDate="2027-07-14"
+            />
+        );
+
+        fireEvent.change(screen.getByLabelText('From', { exact: true }), {
+            target: { value: 'Tokyo, Japan' },
+        });
+
+        // 2027-07-12 + 7 is past the end of the window either way, so the value
+        // is whichever maximum the clamp used. Tokyo's is the right one.
+        expect(screen.getByLabelText('Return', { exact: true })).toHaveValue('2027-07-15');
+    });
+
+    it('clears the return date on a one-way trip, and brings it back', () => {
+        renderForm();
+
+        fireEvent.click(screen.getByLabelText('One Way'));
+        expect(screen.getByLabelText('Return', { exact: true })).toHaveValue('');
+
+        fireEvent.click(screen.getByLabelText('Round Trip'));
+        expect(screen.getByLabelText('Return', { exact: true }))
+            .toHaveValue(addDaysToIsoDate(
+                (screen.getByLabelText('Depart', { exact: true }) as HTMLInputElement).value, 7,
+            ));
+    });
+
+    it('leaves the return empty when a suggested date is taken one-way', async () => {
+        // `handleNearbyDateSearch` derives the return the same way the route
+        // effect does. It is the third caller of that rule, and the one whose
+        // one-way branch nothing exercised.
+        mockSearch
+            .mockResolvedValueOnce(searchSuccess([], ['2026-07-17']))
+            .mockResolvedValueOnce(searchSuccess(mockFlights));
+
+        const returnsSeen: string[] = [];
+        const record = () => {
+            const returnInput = document.querySelector<HTMLInputElement>('#returnDate');
+            if (returnInput) returnsSeen.push(returnInput.value);
+        };
+
+        render(
+            <React.Profiler id="form" onRender={record}>
+                <FlightBookingForm
+                    routes={routes}
+                    minimumDepartureDate="2026-07-14"
+                    maximumDepartureDate="2027-07-14"
+                />
+            </React.Profiler>
+        );
+        fireEvent.click(screen.getByLabelText('One Way'));
+        fireEvent.click(screen.getByText('Find your trip'));
+
+        const suggestion = await screen.findByRole('button', { name: /Jul 17/ });
+        returnsSeen.length = 0;
+        await act(async () => { fireEvent.click(suggestion); });
+
+        expect(screen.getByLabelText('Depart', { exact: true })).toHaveValue('2026-07-17');
+        // Every commit, not just the last: setting it and letting a later
+        // effect clear it again would leave a date on screen for a trip that
+        // has no return leg.
+        expect(returnsSeen.length).toBeGreaterThan(0);
+        expect(returnsSeen.filter((value) => value !== '')).toEqual([]);
+    });
+});
 
 describe('a link the page could not honour', () => {
     beforeEach(() => {

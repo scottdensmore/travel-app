@@ -105,6 +105,19 @@ const LegSelectButton: React.FC<{
     </button>
 );
 
+/**
+ * The return date a departure implies: a week later, never past the end of the
+ * booking window, and nothing at all on a one-way trip.
+ *
+ * Shared so the two places that set it cannot drift -- a route change sets both
+ * dates together, and editing the departure alone re-derives this one (#181).
+ */
+function defaultReturnDate(departureDate: string, isOneWay: boolean, latestDate: string): string {
+    if (isOneWay || !departureDate) return '';
+
+    return clampToMaximumDate(addDaysToIsoDate(departureDate, 7), latestDate);
+}
+
 const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     routes = [],
     minimumDepartureDate = earliestBookableDateIso(),
@@ -370,12 +383,9 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     };
 
     const handleNearbyDateSearch = async (suggestedDate: string) => {
-        const suggestedReturnDate = isOneWay
-            ? ''
-            : clampToMaximumDate(
-                addDaysToIsoDate(suggestedDate, 7),
-                latestBookingDateRef.current,
-            );
+        const suggestedReturnDate = defaultReturnDate(
+            suggestedDate, isOneWay, latestBookingDateRef.current,
+        );
         setDepartureDate(suggestedDate);
         setReturnDate(suggestedReturnDate);
         await performSearch({
@@ -429,8 +439,27 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         );
         if (!route) return;
 
+        // Both dates, in one pass. Setting only the departure and letting the
+        // effect below derive the return from it committed a render in
+        // between that showed the new route's departure beside the previous
+        // route's return -- briefly wrong on screen, and long enough for a
+        // spec reading the two inputs to capture the stale one (#181).
+        //
+        // Claiming the return effect's guard is what stops it running again
+        // and recomputing the same value.
+        // The window is computed for the new origin rather than read from the
+        // ref: the effect that refreshes that ref is declared below this one,
+        // so it runs afterwards, and on a route change across timezones the
+        // ref still holds the previous origin's last bookable date.
+        const { latestDate } = bookingWindowIsoDates(new Date(), airportTimeZoneFor(fromLocation));
+
         setDepartureDate(route.nextOperatingDate);
-    }, [fromLocation, routes, toLocation]);
+        setReturnDate(defaultReturnDate(route.nextOperatingDate, isOneWay, latestDate));
+        previousReturnDefaultsRef.current = {
+            departureDate: route.nextOperatingDate,
+            isOneWay,
+        };
+    }, [fromLocation, isOneWay, routes, toLocation]);
 
     // Selectable dates are calendar days at the origin airport, so the window
     // is recomputed when the origin changes and rolls over at that airport's
@@ -464,14 +493,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         ) return;
         previousReturnDefaultsRef.current = { departureDate, isOneWay };
 
-        const proposedReturnDate = departureDate
-            ? addDaysToIsoDate(departureDate, 7)
-            : '';
-        setReturnDate(
-            isOneWay
-                ? ''
-                : clampToMaximumDate(proposedReturnDate, latestBookingDateRef.current)
-        );
+        setReturnDate(defaultReturnDate(departureDate, isOneWay, latestBookingDateRef.current));
     }, [departureDate, isOneWay]);
 
     useEffect(() => {
