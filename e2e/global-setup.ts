@@ -81,6 +81,22 @@ async function warmAuthRoutes(baseURL: string): Promise<void> {
 const DISPOSABLE_HOSTS = new Set(['localhost', '127.0.0.1', '::1', 'db']);
 
 /**
+ * The environment stating, of itself, that its data is expendable.
+ *
+ * Host and name cannot carry this. `db/travel_app` is what `docker-compose.yml`
+ * gives the *application*, so a checkout pointed at a running deployment --
+ * or at its published Postgres port -- looks exactly like a developer's own
+ * database. The difference is not in the address; it is in whether whoever set
+ * that environment up considers the contents disposable.
+ *
+ * So it has to be said, in the environment rather than on the command line: a
+ * flag on the invocation is set by whoever runs the tests, and the question is
+ * about the database, not about them. `.env.example` and CI set it; nothing
+ * that deploys this application does.
+ */
+const DISPOSABLE_MARKER = 'DATABASE_IS_DISPOSABLE';
+
+/**
  * Database names this suite owns.
  *
  * A host on its own is not identity: `postgresql://…@localhost/production` is
@@ -112,11 +128,23 @@ function assertDisposableDatabase(): void {
     throw new Error('Refusing to clear bookings: DATABASE_URL is not set.');
   }
 
+  if (process.env[DISPOSABLE_MARKER] !== 'true') {
+    throw new Error(
+      `Refusing to clear bookings: ${DISPOSABLE_MARKER} is not set to "true" in this `
+      + 'environment. This suite deletes every booking in the database it is pointed at, '
+      + `so the environment has to say the data is expendable. Add ${DISPOSABLE_MARKER}=true `
+      + 'to the .env you use for development and testing -- and never to one that deploys '
+      + 'this application.'
+    );
+  }
+
   let host: string;
   let name: string;
   try {
     const parsed = new URL(databaseUrl);
-    host = parsed.hostname;
+    // Node returns the IPv6 literal with its brackets, which would never match
+    // a bare `::1`.
+    host = parsed.hostname.replace(/^\[|\]$/g, '');
     name = parsed.pathname.replace(/^\//, '');
   } catch {
     throw new Error('Refusing to clear bookings: DATABASE_URL is not a URL this can check.');
