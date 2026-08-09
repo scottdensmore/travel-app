@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "0cfcc299419c",
+  "strategy": "manual-commit",
+  "branch": "test/run-isolation",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "AGENTS.md",
+    "__tests__/components/titlebar.test.tsx",
+    "__tests__/e2e/runIsolation.database.test.ts",
+    "components/ui/titlebar.tsx",
+    "e2e/admin.spec.ts",
+    "e2e/global-setup.ts",
+    "playwright.config.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0c/fcc299419c/0/metadata.json",
+      "transcript": "/0c/fcc299419c/0/full.jsonl",
+      "compact_transcript": "/0c/fcc299419c/0/transcript.jsonl",
+      "content_hash": "/0c/fcc299419c/0/content_hash.txt",
+      "prompt": "/0c/fcc299419c/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2984,
+    "cache_creation_tokens": 5148681,
+    "cache_read_tokens": 613771677,
+    "output_tokens": 890353,
+    "api_call_count": 1302
+  }
+}
