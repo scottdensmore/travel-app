@@ -16,11 +16,18 @@ const testsRoot = path.resolve(__dirname, '..');
  * test rather than a note: the cost only shows up once the project is big
  * enough for it to matter, by which point it is several files to fix.
  */
+/**
+ * The same extensions the database project runs, from `jest.config.js`. Matching
+ * only `.ts` would let a `.database.test.tsx` run serially and skip this guard —
+ * which is the shape of hole `DATABASE_TESTS` exists to close on the other side.
+ */
+const DATABASE_TEST = /\.database\.test\.[jt]sx?$/;
+
 function databaseTestFiles(directory: string): string[] {
     return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
         const entryPath = path.join(directory, entry.name);
         if (entry.isDirectory()) return databaseTestFiles(entryPath);
-        return entry.name.endsWith('.database.test.ts') ? [entryPath] : [];
+        return DATABASE_TEST.test(entry.name) ? [entryPath] : [];
     });
 }
 
