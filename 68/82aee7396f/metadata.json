@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "6882aee7396f",
+  "strategy": "manual-commit",
+  "branch": "fix/route-change-dates",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "__tests__/components/flightBookingForm.test.tsx",
+    "components/ui/flightBookingForm.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/68/82aee7396f/0/metadata.json",
+      "transcript": "/68/82aee7396f/0/full.jsonl",
+      "compact_transcript": "/68/82aee7396f/0/transcript.jsonl",
+      "content_hash": "/68/82aee7396f/0/content_hash.txt",
+      "prompt": "/68/82aee7396f/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3272,
+    "cache_creation_tokens": 5317007,
+    "cache_read_tokens": 716140813,
+    "output_tokens": 1004531,
+    "api_call_count": 1457
+  }
+}
