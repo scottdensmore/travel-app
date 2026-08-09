@@ -154,6 +154,28 @@ Chart and other browser-interactive components need `'use client'`.
    findings cause changes, rerun the appropriate tests and the `verifier`, then
    obtain fresh review approval for the changed state.
 
+   **Codex reviews pull requests, and its verdict is a merge gate.** It runs on
+   the pull request, so this belongs after step 10 has opened one.
+
+   - It reacts 👀 on the pull request while reading and 👍 when it is satisfied.
+     The reactions are on the pull request itself:
+     `gh api repos/<owner>/<repo>/issues/<pr>/reactions`.
+   - Findings are inline review threads, invisible to
+     `gh pr view --json comments`. Read them through GraphQL `reviewThreads`,
+     which gives the body, the `isResolved` state the merge gate turns on, and
+     the thread id needed to resolve it — the REST comments endpoint carries
+     none of the last two. Page it: a missed page reads as a finding that is
+     not there.
+   - The loop: address the findings, re-run steps 6 to 9 for what changed,
+     push, reply to each thread saying what changed, resolve it, wait for the
+     next verdict. Repeat until 👍. Treat P1 as blocking, and where a finding
+     is right about the problem but wrong about the fix, say so rather than
+     resolving quietly.
+   - **Only a 👍 you watched arrive counts.** The old one survives a push, and
+     survives a later review that had findings, so the reaction sitting there
+     may be about a commit two revisions back. Watch it go 👀 and then 👍
+     after your push; never read the one that was already there as approval.
+
 9. **Commit after approval.** Commit only after verification and code review
    are complete. Use Conventional Commits:
 
@@ -178,7 +200,8 @@ Chart and other browser-interactive components need `'use client'`.
      pull requests unless the user explicitly asks for a draft.
 
 11. **Merge only clean, passing pull requests.** Merge only after GitHub
-    reports a clean merge state and every configured check passes. Never bypass
+    reports a clean merge state, every configured check passes, and Codex has
+    approved the current head with no unresolved review threads. Never bypass
     a failing or pending required check. Self-merges are allowed when these
     conditions are met. Use squash merge for short-lived development branches
     to keep `main` linear, then delete the merged branch.
