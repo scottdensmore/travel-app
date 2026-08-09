@@ -258,3 +258,11 @@ I am now using the code code review bot on all prs. The trigger is on every push
 ---
 
 Yes merge 214 then open the workflow doc pr. That will be a good test of the updated workflow
+
+---
+
+Yes we can merge
+
+---
+
+First do one more pass on @AGENTS.md and review to ensure it is correct and makes sense
