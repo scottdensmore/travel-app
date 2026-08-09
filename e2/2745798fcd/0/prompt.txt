@@ -202,3 +202,27 @@ Ok can you add the extraknown marketplace for this repo?
 ---
 
 I don't want to run that myself. I want it to happen automatically in the workflow
+
+---
+
+I want to make sure that when we clone the marketplace and plugin is installed and also that if it is not avaiable then it falls back to the original code reviewer sub agent
+
+---
+
+Ok lets undo all of this and remove the plugin and marketplace entries
+
+---
+
+are we on main and clean?
+
+---
+
+can remove those as well please
+
+---
+
+Ok what is the next thing to work on?
+
+---
+
+yep lets get started with the search url
