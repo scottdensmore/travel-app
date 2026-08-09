@@ -168,8 +168,9 @@ Chart and other browser-interactive components need `'use client'`.
      not there.
    - The loop: address the findings, re-run steps 6 to 9 for what changed,
      push, reply to each thread saying what changed, resolve it, wait for the
-     next verdict. Repeat until 👍. Treat P1 as blocking, and where a finding is right about the problem
-     but wrong about the fix, say so rather than resolving quietly.
+     next verdict. Repeat until 👍. Treat P1 as blocking, and where a finding
+     is right about the problem but wrong about the fix, say so rather than
+     resolving quietly.
    - **Only a 👍 you watched arrive counts.** The old one survives a push, and
      survives a later review that had findings, so the reaction sitting there
      may be about a commit two revisions back. Watch it go 👀 and then 👍
