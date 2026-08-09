@@ -36,7 +36,18 @@ export default defineConfig({
   webServer: {
     command: 'npm run dev',
     url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
+    // Never reuse a server this run did not start.
+    //
+    // Reusing one silently served stale output: a healthy branch failed three
+    // runs out of three and looked like a regression, and the bisect that
+    // followed was worthless because `npm run build` changes nothing when the
+    // server is `next dev`. The mirror case is worse -- a stale server can
+    // report a pass for code that is not the code under test (#196).
+    //
+    // The cost is that a dev server already on this port now stops the suite
+    // rather than being borrowed. That is the point: a loud refusal beats a
+    // quiet wrong answer.
+    reuseExistingServer: false,
     stdout: 'ignore',
     stderr: 'pipe',
     timeout: 120000,

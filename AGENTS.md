@@ -15,7 +15,7 @@ npx tsc --noEmit            # typecheck (no npm script)
 npm test                    # Jest, both projects — needs a running Postgres (see Gotchas)
 npm run test:unit           # the parallel project; takes flags, e.g. -- -t 'name'
 npm run test:database       # the *.database.test.ts project, serialised
-npx playwright test         # E2E; auto-starts the dev server
+npx playwright test         # E2E; starts its own dev server, so free port 3000 first
 npm run build               # next build + scripts/sanitize-standalone.mjs
 ```
 

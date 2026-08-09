@@ -36,6 +36,65 @@ describe('TitleBar', () => {
         mockGetUserNotifications.mockReturnValue(new Promise(() => { }));
     });
 
+    describe('when a notifications poll is cut short', () => {
+        // A navigation aborts whatever the 3s poll had in flight. That is not a
+        // failure, and reporting it as one made the only console error the e2e
+        // suite ever sees -- which then failed a spec that asserts the console
+        // is clean (#195).
+        let consoleError: jest.SpyInstance;
+
+        beforeEach(() => {
+            // Installed here rather than in the describe body: declared there it
+            // is created at collection time and torn down by this block's
+            // `afterAll`, so moving this describe below the others would
+            // silently strip `console.error` from all of them.
+            consoleError = jest.spyOn(console, 'error').mockImplementation(() => { });
+            // The poll only runs for a signed-in visitor.
+            (require('next-auth/react').useSession as jest.Mock).mockReturnValue({
+                data: { user: { role: 'USER', email: 'user@example.com' } },
+            });
+        });
+
+        afterEach(() => consoleError.mockRestore());
+
+        it.each([
+            ['a fetch torn down by navigation', new TypeError('Failed to fetch')],
+            ['a network error', new TypeError('NetworkError when attempting to fetch resource.')],
+            ['an explicit abort', Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' })],
+            // What Chromium actually reports for a server action cut short by a
+            // navigation, and the string the e2e suite sees.
+            ['a server action torn down mid-flight', new TypeError('network error')],
+            // Safari's wording. The suite runs chromium only, so nothing else
+            // here can reach it.
+            ['a WebKit teardown', new TypeError('Load failed')],
+        ])('stays quiet about %s', async (_name, error) => {
+            mockGetUserNotifications.mockRejectedValue(error);
+
+            render(<TitleBar />);
+            await waitFor(() => expect(mockGetUserNotifications).toHaveBeenCalled());
+
+            expect(consoleError).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            ['an authorization failure', 'Unauthorized'],
+            // In development Next forwards a server error's message verbatim,
+            // so these arrive at this catch exactly as written. A substring
+            // match on "aborted" or "network error" silenced all three.
+            ['a poisoned Postgres transaction', 'current transaction is aborted, commands ignored until end of transaction block'],
+            ['a closed Prisma transaction', 'Transaction API error: Transaction already closed: Transaction aborted.'],
+            ['a database reachability error', 'A network error occurred while reaching the database'],
+        ])('still reports %s', async (_name, message) => {
+            mockGetUserNotifications.mockRejectedValue(new Error(message));
+
+            render(<TitleBar />);
+            await waitFor(() => expect(consoleError).toHaveBeenCalledWith(
+                'Failed to load notifications:',
+                expect.objectContaining({ message }),
+            ));
+        });
+    });
+
     it('renders the correct title when pathname is /book', () => {
         (usePathname as jest.Mock).mockReturnValue('/book');
 

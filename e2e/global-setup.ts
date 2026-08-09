@@ -48,11 +48,41 @@ async function warmAuthRoutes(baseURL: string): Promise<void> {
   );
 }
 
+/**
+ * Everything a previous run booked.
+ *
+ * The suite books seat 11A on a seeded flight, and nothing removed it, so the
+ * seat map rendered 11A as taken and three specs failed on that database from
+ * then on -- permanently, until somebody reseeded by hand. CI never saw it
+ * because CI seeds a fresh database every time; a developer's database rotted
+ * after one run (#173).
+ *
+ * `Booking` is the only delete needed: `Passenger`, `ItineraryLeg` and
+ * `SeatAssignment` all cascade from it, and a held seat is what the next run
+ * needs back.
+ *
+ * Deliberately not `User`, and deliberately not `Notification`: the seed
+ * creates neither, so every row belongs either to a previous run or to whoever
+ * is developing here, and this cannot tell them apart. Leftover accounts and
+ * notifications are harmless -- the specs mint fresh emails and assert against
+ * their own rows -- while deleting someone's manual test login is not.
+ *
+ * The trade this does make, and it is a real one: a booking made by hand in the
+ * development database goes too, and it goes before the specs run rather than
+ * after, so it is gone quietly. Nothing here can tell that booking from the
+ * one a previous run left holding 11A.
+ */
+export async function clearPreviousRunBookings(): Promise<void> {
+  await prisma.booking.deleteMany();
+}
+
 async function globalSetup(config: FullConfig): Promise<void> {
   loadEnvConfig(process.cwd());
 
   const baseURL = config.projects[0]?.use?.baseURL ?? 'http://localhost:3000';
   await warmAuthRoutes(baseURL);
+
+  await clearPreviousRunBookings();
 
   // Last, so that nothing this file asked for can leave a counted attempt
   // behind for the first test to trip over.
