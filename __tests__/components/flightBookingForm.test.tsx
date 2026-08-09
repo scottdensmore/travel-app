@@ -95,14 +95,71 @@ const mockEnhancedFlights = [
     }
 ];
 
-const renderForm = (initialSearch?: FlightSearchCriteria) => render(
+const renderForm = (initialSearch?: FlightSearchCriteria, unusableLink = false) => render(
     <FlightBookingForm
         routes={routes}
         minimumDepartureDate="2026-07-14"
         maximumDepartureDate="2027-07-14"
         initialSearch={initialSearch}
+        unusableLink={unusableLink}
     />
 );
+
+describe('a link the page could not honour', () => {
+    beforeEach(() => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-07-14T12:00:00.000Z'));
+        jest.clearAllMocks();
+        // A restored search runs on mount, so it needs an answer -- otherwise
+        // it settles through the error branch outside `act` and the fixture
+        // models a failed search rather than a link that worked.
+        mockSearch.mockResolvedValue(searchSuccess(mockFlights));
+        window.history.replaceState(null, '', '/');
+    });
+    afterEach(() => jest.useRealTimers());
+
+    it('says the link was not used, rather than looking like a first visit', () => {
+        // Without this the address bar names one trip and the form shows
+        // another, with nothing to tell them apart (#73).
+        renderForm(undefined, true);
+
+        expect(screen.getByRole('alert')).toHaveTextContent(/not one we can show/i);
+    });
+
+    it('says nothing when the traveller simply opened the page', () => {
+        renderForm();
+
+        expect(screen.queryByText(/not one we can show/i)).not.toBeInTheDocument();
+    });
+
+    it('stops saying it once the traveller runs a search of their own', async () => {
+        // The search rewrites the URL through `replaceState`, which never
+        // re-renders the server component -- so a notice read straight from
+        // the prop would sit above results that contradict it (#73).
+        renderForm(undefined, true);
+        expect(screen.getByRole('alert')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByText('Find your trip'));
+        await waitFor(() => expect(screen.getByText('Available Flights')).toBeInTheDocument());
+
+        expect(screen.queryByText(/not one we can show/i)).not.toBeInTheDocument();
+    });
+
+    it('says nothing when the link worked', async () => {
+        renderForm({
+            from: 'Seattle, USA',
+            to: 'Detroit, USA',
+            departureDate: '2026-07-15',
+            returnDate: '',
+            tripType: 'one-way',
+            cabinClass: 'ECONOMY' as const,
+        });
+
+        // A restored search runs on mount; awaiting it keeps its state updates
+        // inside `act` and makes this assert against the settled page.
+        await waitFor(() => expect(screen.getByText('Available Flights')).toBeInTheDocument());
+        expect(screen.queryByText(/not one we can show/i)).not.toBeInTheDocument();
+    });
+});
 
 describe('FlightBookingForm', () => {
     beforeEach(() => {
@@ -238,8 +295,9 @@ describe('FlightBookingForm', () => {
 
         await waitFor(() => expect(screen.getByText('Available Flights')).toBeInTheDocument());
         const params = new URLSearchParams(window.location.search);
-        expect(params.get('from')).toBe('Seattle, USA');
-        expect(params.get('to')).toBe('Detroit, USA');
+        // The link names airports by code; the form goes on showing words (#73).
+        expect(params.get('from')).toBe('SEA');
+        expect(params.get('to')).toBe('DTW');
         expect(params.get('depart')).toBe('2026-07-15');
         expect(params.get('return')).toBe('2026-07-22');
         expect(params.get('trip')).toBe('round-trip');
