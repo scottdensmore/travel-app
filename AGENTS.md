@@ -161,9 +161,11 @@ Chart and other browser-interactive components need `'use client'`.
      The reactions are on the pull request itself:
      `gh api repos/<owner>/<repo>/issues/<pr>/reactions`.
    - Findings are inline review threads, invisible to
-     `gh pr view --json comments`. Read them with
-     `gh api --paginate repos/<owner>/<repo>/pulls/<pr>/comments` — that
-     endpoint pages, and a missed page reads as a finding that is not there.
+     `gh pr view --json comments`. Read them through GraphQL `reviewThreads`,
+     which gives the body, the `isResolved` state the merge gate turns on, and
+     the thread id needed to resolve it — the REST comments endpoint carries
+     none of the last two. Page it: a missed page reads as a finding that is
+     not there.
    - The loop: address the findings, run the tests, push, reply to each thread
      saying what changed, resolve it, wait for the next verdict. Repeat until
      👍. Treat P1 as blocking, and where a finding is right about the problem
