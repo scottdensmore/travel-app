@@ -169,6 +169,12 @@ Chart and other browser-interactive components need `'use client'`.
    - Every push re-triggers it. So the loop is: address the findings, run the
      tests, push, reply to each thread saying what changed and why, resolve
      the thread, then wait for the next verdict. Repeat until 👍.
+   - **It does not always start on its own.** It picked up #214 within a minute
+     of the pull request opening and again on every push, but ignored #216 —
+     a documentation-only change — for ten minutes, then reviewed it inside a
+     minute of being asked. So a quiet pull request means "ask", not
+     "approved": comment `@codex review` and wait, rather than reading the
+     absence of a 👀 as a verdict.
    - Reply before resolving, and say what you actually did. A resolved thread
      with no reply is indistinguishable from one dismissed without reading.
      Where a finding is right about the problem but wrong about the fix, say
@@ -181,8 +187,8 @@ Chart and other browser-interactive components need `'use client'`.
    - Do not confuse your own replies with a new review. Replying creates
      review objects under your name; only a review by
      `chatgpt-codex-connector[bot]` **on the current head SHA** is a verdict.
-   - `@codex review` in a comment re-triggers it without a push, for when a
-     round needed no code change.
+   - `@codex review` in a comment triggers it without a push — for a round
+     that needed no code change, and for a pull request it never picked up.
 
 9. **Commit after approval.** Commit only after verification and code review
    are complete. Use Conventional Commits:
