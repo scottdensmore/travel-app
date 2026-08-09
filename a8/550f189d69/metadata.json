@@ -1,0 +1,24 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "a8550f189d69",
+  "strategy": "manual-commit",
+  "branch": "refactor/search-url-airport-codes",
+  "checkpoints_count": 9,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/a8/550f189d69/0/metadata.json",
+      "transcript": "/a8/550f189d69/0/full.jsonl",
+      "compact_transcript": "/a8/550f189d69/0/transcript.jsonl",
+      "content_hash": "/a8/550f189d69/0/content_hash.txt",
+      "prompt": "/a8/550f189d69/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2822,
+    "cache_creation_tokens": 5065009,
+    "cache_read_tokens": 567524989,
+    "output_tokens": 835374,
+    "api_call_count": 1215
+  }
+}
