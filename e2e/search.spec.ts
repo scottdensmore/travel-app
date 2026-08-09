@@ -32,8 +32,14 @@ test.describe('Flight search', () => {
 
     await page.getByLabel('From', { exact: true }).selectOption({ label: 'New York, USA' });
     await expect(page.getByLabel('To', { exact: true })).toHaveValue('London, UK');
-    const departureDate = await page.getByLabel('Depart', { exact: true }).inputValue();
-    const returnDate = await page.getByLabel('Return', { exact: true }).inputValue();
+    // Both values in one evaluation. Read separately they are two round trips,
+    // and the route change commits between them — producing a pair the form
+    // never actually held, which the URL assertion below then waits for
+    // forever. Reproduced at about 4% before this, and 0 in 50 after (#181).
+    const { departureDate, returnDate } = await page.evaluate(() => ({
+      departureDate: (document.querySelector('#depart') as HTMLInputElement).value,
+      returnDate: (document.querySelector('#returnDate') as HTMLInputElement).value,
+    }));
 
     await page.getByRole('button', { name: 'Find your trip' }).click();
     await expect(page.getByRole('heading', { name: 'Available Flights' })).toBeVisible();
