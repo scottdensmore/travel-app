@@ -162,7 +162,8 @@ Chart and other browser-interactive components need `'use client'`.
      `gh api repos/<owner>/<repo>/issues/<pr>/reactions`.
    - Findings are inline review threads, invisible to
      `gh pr view --json comments`. Read them with
-     `gh api repos/<owner>/<repo>/pulls/<pr>/comments`.
+     `gh api --paginate repos/<owner>/<repo>/pulls/<pr>/comments` — that
+     endpoint pages, and a missed page reads as a finding that is not there.
    - The loop: address the findings, run the tests, push, reply to each thread
      saying what changed, resolve it, wait for the next verdict. Repeat until
      👍. Treat P1 as blocking, and where a finding is right about the problem
