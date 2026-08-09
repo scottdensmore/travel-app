@@ -2,7 +2,15 @@
 import fs from 'fs';
 import path from 'path';
 
-const testsRoot = path.resolve(__dirname, '..');
+const repositoryRoot = path.resolve(__dirname, '../..');
+
+/**
+ * Directories Jest never looks in, so neither does this. Everything else is
+ * fair game, because the database project's `testMatch` is repository-wide —
+ * a suite colocated beside the code it exercises runs serially like any other
+ * and has to meet the same obligation.
+ */
+const SKIP = new Set(['node_modules', '.next', '.git']);
 
 /**
  * Every database test file releases its client.
@@ -25,6 +33,7 @@ const DATABASE_TEST = /\.database\.test\.[jt]sx?$/;
 
 function databaseTestFiles(directory: string): string[] {
     return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+        if (SKIP.has(entry.name)) return [];
         const entryPath = path.join(directory, entry.name);
         if (entry.isDirectory()) return databaseTestFiles(entryPath);
         return DATABASE_TEST.test(entry.name) ? [entryPath] : [];
@@ -32,7 +41,7 @@ function databaseTestFiles(directory: string): string[] {
 }
 
 describe('database test files', () => {
-    const files = databaseTestFiles(testsRoot);
+    const files = databaseTestFiles(repositoryRoot);
 
     it('finds the suites it claims to check', () => {
         // A recursive scan that matched nothing would assert nothing, quietly
@@ -40,7 +49,7 @@ describe('database test files', () => {
         expect(files.length).toBeGreaterThan(5);
     });
 
-    it.each(files.map((file) => [path.relative(testsRoot, file), file]))(
+    it.each(files.map((file) => [path.relative(repositoryRoot, file), file]))(
         '%s disconnects its Prisma client',
         (_name, file) => {
             expect(fs.readFileSync(file, 'utf8')).toContain('prisma.$disconnect()');
