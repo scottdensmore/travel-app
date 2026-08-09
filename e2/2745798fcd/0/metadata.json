@@ -1,0 +1,136 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "e22745798fcd",
+  "session_id": "94121201-47c3-4281-aeff-7838379a510d",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-09T00:56:06.752186285Z",
+  "branch": "refactor/search-url-airport-codes",
+  "checkpoints_count": 9,
+  "save_step_count": 5,
+  "files_touched": [
+    "__tests__/components/flightBookingForm.test.tsx",
+    "__tests__/lib/flightSearchUrl.test.ts",
+    "app/page.tsx",
+    "components/ui/flightBookingForm.tsx",
+    "e2e/search.spec.ts",
+    "lib/airports.ts",
+    "lib/flightSearchUrl.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-5",
+  "turn_id": "184253f5928b",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 2819,
+    "cache_creation_tokens": 5063659,
+    "cache_read_tokens": 566541251,
+    "output_tokens": 834080,
+    "api_call_count": 1213
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "claude-skill-toolu_01PoA31daKg2DhkuJoCobHR5",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "frontend-design"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "184253f5928b",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 1584,
+        "end": 1585,
+        "entry_ids": [
+          "32469cfe-0ad7-433a-b3ed-8fe51c184595"
+        ],
+        "tool_use_id": "toolu_01PoA31daKg2DhkuJoCobHR5"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01PoA31daKg2DhkuJoCobHR5"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: frontend-design",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 36
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-09T00:56:03.135643749Z",
+    "agent_lines": 248,
+    "agent_removed": 32,
+    "human_added": 143,
+    "human_modified": 15,
+    "human_removed": 0,
+    "total_committed": 406,
+    "total_lines_changed": 438,
+    "agent_percentage": 63.926940639269404,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 49,
+      "user_lines_removed": 28,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".claude/settings.json": 21,
+        "AGENTS.md": 28
+      },
+      "user_removed_per_file": {
+        ".claude/settings.json": 18,
+        "AGENTS.md": 10
+      }
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 21,
+      "user_lines_removed": 18,
+      "agent_lines_added": 28,
+      "agent_lines_removed": 10,
+      "user_added_per_file": {
+        ".claude/settings.json": 21
+      },
+      "user_removed_per_file": {
+        ".claude/settings.json": 18
+      }
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 12,
+      "user_lines_removed": 0,
+      "agent_lines_added": 88,
+      "agent_lines_removed": 11,
+      "user_added_per_file": {
+        ".claude/settings.json": 12
+      }
+    },
+    {
+      "checkpoint_number": 5,
+      "user_lines_added": 12,
+      "user_lines_removed": 0,
+      "agent_lines_added": 88,
+      "agent_lines_removed": 11,
+      "user_added_per_file": {
+        ".claude/settings.json": 12
+      }
+    },
+    {
+      "checkpoint_number": 6,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
