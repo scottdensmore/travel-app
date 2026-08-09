@@ -154,41 +154,24 @@ Chart and other browser-interactive components need `'use client'`.
    findings cause changes, rerun the appropriate tests and the `verifier`, then
    obtain fresh review approval for the changed state.
 
-   **Codex reviews every pull request, and its verdict is a merge gate.** It
-   runs on the pull request rather than the working tree, so this loop belongs
-   after step 10 has opened one. Do not merge until it approves.
+   **Codex reviews pull requests, and its verdict is a merge gate.** It runs on
+   the pull request, so this belongs after step 10 has opened one.
 
-   - It reacts 👀 on the pull request while it is reading, and posts inline
-     review comments if it finds anything. When it is satisfied it removes the
-     👀 and reacts 👍. Both reactions are on the **pull request itself**, not on
-     a comment: `gh api repos/<owner>/<repo>/issues/<pr>/reactions`.
-   - Its findings are inline review threads, not issue comments. They are
-     invisible to `gh pr view --json comments`; read them with
-     `gh api repos/<owner>/<repo>/pulls/<pr>/comments`, or through GraphQL
-     `reviewThreads` when you need the thread IDs to resolve them.
-   - Every push re-triggers it. So the loop is: address the findings, run the
-     tests, push, reply to each thread saying what changed and why, resolve
-     the thread, then wait for the next verdict. Repeat until 👍.
-   - **It does not always start on its own.** It picked up #214 within a minute
-     of the pull request opening and again on every push, but ignored #216 —
-     a documentation-only change — for ten minutes, then reviewed it inside a
-     minute of being asked. So a quiet pull request means "ask", not
-     "approved": comment `@codex review` and wait, rather than reading the
-     absence of a 👀 as a verdict.
-   - Reply before resolving, and say what you actually did. A resolved thread
-     with no reply is indistinguishable from one dismissed without reading.
-     Where a finding is right about the problem but wrong about the fix, say
-     so and explain what you did instead — and where you disagree, say that
-     too rather than resolving quietly.
-   - Findings carry a priority badge. Treat P1 as blocking. It is worth
-     arguing with: three rounds on #214 turned a hostname check into an
-     environment marker because each round rejected the previous fix for a
-     concrete reason, and each rejection was correct.
-   - Do not confuse your own replies with a new review. Replying creates
-     review objects under your name; only a review by
-     `chatgpt-codex-connector[bot]` **on the current head SHA** is a verdict.
-   - `@codex review` in a comment triggers it without a push — for a round
-     that needed no code change, and for a pull request it never picked up.
+   - It reacts 👀 on the pull request while reading and 👍 when it is satisfied.
+     The reactions are on the pull request itself:
+     `gh api repos/<owner>/<repo>/issues/<pr>/reactions`.
+   - Findings are inline review threads, invisible to
+     `gh pr view --json comments`. Read them with
+     `gh api repos/<owner>/<repo>/pulls/<pr>/comments`.
+   - The loop: address the findings, run the tests, push, reply to each thread
+     saying what changed, resolve it, wait for the next verdict. Repeat until
+     👍. Treat P1 as blocking, and where a finding is right about the problem
+     but wrong about the fix, say so rather than resolving quietly.
+   - **A 👍 only counts for the commit it was given for.** It survives a later
+     push while the new head is still being reviewed, so check for a review by
+     `chatgpt-codex-connector[bot]` whose `commit_id` is the current head —
+     not the reaction alone. Your own replies create reviews under your name,
+     so filter by author too.
 
 9. **Commit after approval.** Commit only after verification and code review
    are complete. Use Conventional Commits:
@@ -215,7 +198,7 @@ Chart and other browser-interactive components need `'use client'`.
 
 11. **Merge only clean, passing pull requests.** Merge only after GitHub
     reports a clean merge state, every configured check passes, and Codex has
-    reacted 👍 on the pull request with no unresolved review threads. Never bypass
+    approved the current head with no unresolved review threads. Never bypass
     a failing or pending required check. Self-merges are allowed when these
     conditions are met. Use squash merge for short-lived development branches
     to keep `main` linear, then delete the merged branch.
