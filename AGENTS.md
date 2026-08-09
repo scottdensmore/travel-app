@@ -170,11 +170,10 @@ Chart and other browser-interactive components need `'use client'`.
      push, reply to each thread saying what changed, resolve it, wait for the
      next verdict. Repeat until 👍. Treat P1 as blocking, and where a finding is right about the problem
      but wrong about the fix, say so rather than resolving quietly.
-   - **A 👍 only counts for the commit it was given for.** It survives a later
-     push while the new head is still being reviewed, so check for a review by
-     `chatgpt-codex-connector[bot]` whose `commit_id` is the current head —
-     not the reaction alone. Your own replies create reviews under your name,
-     so filter by author too.
+   - **Only a 👍 you watched arrive counts.** The old one survives a push, and
+     survives a later review that had findings, so the reaction sitting there
+     may be about a commit two revisions back. Watch it go 👀 and then 👍
+     after your push; never read the one that was already there as approval.
 
 9. **Commit after approval.** Commit only after verification and code review
    are complete. Use Conventional Commits:
