@@ -1,0 +1,24 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "705c330a1d21",
+  "strategy": "manual-commit",
+  "branch": "docs/codex-review-loop",
+  "checkpoints_count": 1,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/70/5c330a1d21/0/metadata.json",
+      "transcript": "/70/5c330a1d21/0/full.jsonl",
+      "compact_transcript": "/70/5c330a1d21/0/transcript.jsonl",
+      "content_hash": "/70/5c330a1d21/0/content_hash.txt",
+      "prompt": "/70/5c330a1d21/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3164,
+    "cache_creation_tokens": 5249311,
+    "cache_read_tokens": 674743795,
+    "output_tokens": 963819,
+    "api_call_count": 1399
+  }
+}
