@@ -107,6 +107,38 @@ describe('TitleBar', () => {
             expect(consoleError).not.toHaveBeenCalled();
         });
 
+        it('reports again after the page comes back from the cache', async () => {
+            // `pagehide` fires for the back-forward cache too, where this
+            // component is kept alive. Without resetting on `pageshow`, one
+            // Back would silence every later failure for good.
+            const useSession = require('next-auth/react').useSession as jest.Mock;
+            const signedInAs = (email: string) => ({ data: { user: { role: 'USER', email } } });
+            mockGetUserNotifications.mockRejectedValue(new TypeError('Failed to fetch'));
+            useSession.mockReturnValue(signedInAs('a@example.com'));
+
+            const { rerender } = render(<TitleBar />);
+            await waitFor(() => expect(consoleError).toHaveBeenCalled());
+
+            // Into the back-forward cache: `pagehide` fires, the component and
+            // its effects survive.
+            await act(async () => { window.dispatchEvent(new Event('pagehide')); });
+            consoleError.mockClear();
+
+            // ...and back out again, which fires `pageshow` rather than
+            // remounting anything.
+            await act(async () => { window.dispatchEvent(new Event('pageshow')); });
+
+            // A fresh poll. Changing the session re-runs the polling effect,
+            // which is deterministic where waiting out the 3s interval is not.
+            useSession.mockReturnValue(signedInAs('b@example.com'));
+            rerender(<TitleBar />);
+
+            await waitFor(() => expect(consoleError).toHaveBeenCalledWith(
+                'Failed to load notifications:',
+                expect.objectContaining({ message: 'Failed to fetch' }),
+            ));
+        });
+
         it('stays quiet when the poll outlives the component', async () => {
             let reject: (error: Error) => void = () => { };
             mockGetUserNotifications.mockReturnValue(new Promise((_, r) => { reject = r; }));

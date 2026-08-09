@@ -47,8 +47,19 @@ const TitleBar: React.FC = () => {
 
     useEffect(() => {
         const onPageHide = () => { leavingPage.current = true; };
+        // `pagehide` also fires when the document goes into the back-forward
+        // cache, where this component and its effects are kept alive. Coming
+        // back with Back fires `pageshow` rather than remounting, so without
+        // this the flag would stay set and silence every later failure for the
+        // rest of the page's life.
+        const onPageShow = () => { leavingPage.current = false; };
+
         window.addEventListener('pagehide', onPageHide);
-        return () => window.removeEventListener('pagehide', onPageHide);
+        window.addEventListener('pageshow', onPageShow);
+        return () => {
+            window.removeEventListener('pagehide', onPageHide);
+            window.removeEventListener('pageshow', onPageShow);
+        };
     }, []);
 
     // Fetch immediately on mount / route change, and set up 3s polling interval

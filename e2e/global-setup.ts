@@ -81,6 +81,20 @@ async function warmAuthRoutes(baseURL: string): Promise<void> {
 const DISPOSABLE_HOSTS = new Set(['localhost', '127.0.0.1', '::1', 'db']);
 
 /**
+ * Database names this suite owns.
+ *
+ * A host on its own is not identity: `postgresql://…@localhost/production` is
+ * local, and so is a production database reached through an SSH tunnel or a
+ * proxy. The name has to say what it is.
+ *
+ * `travel_app` is the only name the repository configures -- `.env.example`,
+ * `docker-compose.yml` and CI all use it. Anything else has to be named
+ * `*_test`, or added here deliberately where the addition is reviewed.
+ */
+const DISPOSABLE_DATABASES = new Set(['travel_app']);
+const DISPOSABLE_DATABASE_PATTERN = /_test$/;
+
+/**
  * Refuse to delete anything on a database this suite does not own.
  *
  * The deletion below is unqualified by design -- it has to be, since it cannot
@@ -99,18 +113,31 @@ function assertDisposableDatabase(): void {
   }
 
   let host: string;
+  let name: string;
   try {
-    host = new URL(databaseUrl).hostname;
+    const parsed = new URL(databaseUrl);
+    host = parsed.hostname;
+    name = parsed.pathname.replace(/^\//, '');
   } catch {
     throw new Error('Refusing to clear bookings: DATABASE_URL is not a URL this can check.');
   }
 
   if (!DISPOSABLE_HOSTS.has(host)) {
     throw new Error(
-      `Refusing to clear bookings: DATABASE_URL points at "${host}", which is not a `
-      + `database this suite is allowed to destroy data on `
-      + `(${[...DISPOSABLE_HOSTS].join(', ')}). `
+      `Refusing to clear bookings: DATABASE_URL points at host "${host}", which is not one `
+      + `this suite may destroy data on (${[...DISPOSABLE_HOSTS].join(', ')}). `
       + 'Point DATABASE_URL at a local or Compose database before running the tests.'
+    );
+  }
+
+  // Being local is not the same as being disposable. A tunnel or a proxy puts
+  // any database on localhost, so the name has to identify it too.
+  if (!DISPOSABLE_DATABASES.has(name) && !DISPOSABLE_DATABASE_PATTERN.test(name)) {
+    throw new Error(
+      `Refusing to clear bookings: DATABASE_URL names database "${name}", which this suite `
+      + `does not own. Expected ${[...DISPOSABLE_DATABASES].join(', ')} or a name ending in `
+      + '"_test". Being reachable on localhost is not enough -- a tunnel or a proxy puts a '
+      + 'real database there too.'
     );
   }
 }
