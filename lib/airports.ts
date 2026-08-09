@@ -59,6 +59,22 @@ export function airportCodeFor(label: string): string | null {
     return codesByLabel.get(label) ?? null;
 }
 
+const labelsByCode = new Map(AirportData.map((airport) => [airport.iataCode, airport.label]));
+
+/**
+ * The words for the airport a code identifies.
+ *
+ * The inverse of `airportCodeFor`, and the reason the search URL can name a
+ * place by code while the form and the results name it in words (#73). A label
+ * is prose that can be reworded; a code is the thing a link should survive on.
+ *
+ * Null when no airport carries the code, which a caller reading a URL must
+ * treat as an unusable link rather than defaulting to somewhere else.
+ */
+export function airportLabelFor(iataCode: string): string | null {
+    return labelsByCode.get(iataCode) ?? null;
+}
+
 /**
  * The pair of airport references a flight on this route needs.
  *

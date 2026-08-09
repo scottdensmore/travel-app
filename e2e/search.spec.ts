@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { airportLocalDate, airportTimeZoneFor } from '../lib/airports';
+import { airportCodeFor, airportLocalDate, airportTimeZoneFor } from '../lib/airports';
 
 async function waitForSearchReady(page: Page) {
   await expect(page.locator('[data-search-ready="true"]')).toBeVisible();
@@ -48,8 +48,10 @@ test.describe('Flight search', () => {
         trip: params.get('trip'),
       };
     }).toEqual({
-      from: 'New York, USA',
-      to: 'London, UK',
+      // The link carries the airports' codes; the form above still shows the
+      // words they stand for (#73).
+      from: 'JFK',
+      to: 'LHR',
       depart: departureDate,
       returnDate,
       trip: 'round-trip',
@@ -96,10 +98,38 @@ test.describe('Flight search', () => {
     await expect(page.getByRole('heading', { name: 'Available Flights' })).toBeVisible();
   });
 
+  test('A shared link names airports by code, and restores the words', async ({ page }) => {
+    await openSearchPage(page);
+    await page.getByRole('button', { name: 'Find your trip' }).click();
+    await expect(page.getByRole('heading', { name: 'Available Flights' })).toBeVisible();
+
+    const origin = await page.getByLabel('From', { exact: true }).inputValue();
+    const shared = new URL(page.url());
+
+    // Three letters, and none of the prose the form is showing (#73).
+    expect(shared.searchParams.get('from')).toMatch(/^[A-Z]{3}$/);
+    expect(shared.searchParams.get('to')).toMatch(/^[A-Z]{3}$/);
+    // Not `encodeURIComponent`: `URLSearchParams.toString()` writes '+' for a
+    // space and that never matches, so the check would pass in a label-format
+    // world too. Comparing against the query string's own encoding is what
+    // makes it mean something.
+    const asWritten = new URLSearchParams({ origin }).toString().slice('origin='.length);
+    expect(shared.search).not.toContain(asWritten);
+
+    await page.goto(`${shared.pathname}${shared.search}`);
+    await waitForSearchReady(page);
+
+    await expect(page.getByLabel('From', { exact: true })).toHaveValue(origin);
+    await expect(page.getByRole('heading', { name: 'Available Flights' })).toBeVisible();
+  });
+
   test('Invalid shared criteria fall back to valid defaults', async ({ page }) => {
     await openSearchPage(
       page,
-      '/?from=Seattle%2C+USA&to=London%2C+UK&depart=2020-01-01&return=2020-01-08&trip=round-trip'
+      // Airport codes, so this exercises the rejection it is named for -- an
+      // unflown route and a past date. Written as labels it would be refused
+      // for carrying the pre-#73 format instead, and still pass.
+      '/?from=SEA&to=LHR&depart=2020-01-01&return=2020-01-08&trip=round-trip'
     );
 
     await expect.poll(async () => ({
@@ -111,6 +141,29 @@ test.describe('Flight search', () => {
     });
     await expect(page.getByLabel('Depart', { exact: true })).not.toHaveValue('2020-01-01');
     await expect(page.getByRole('heading', { name: 'Available Flights' })).toHaveCount(0);
+    // Falling back is right; falling back in silence is not. The address bar
+    // still names the trip the page refused (#73).
+    await expect(page.getByRole('alert').filter({ hasText: /not one we can show/i })).toBeVisible();
+  });
+
+  test('A link in the pre-airport-code format is refused, and says so', async ({ page }) => {
+    // The format the URL used before #73. There is deliberately no shim, so
+    // this is a link people may still hold rather than a malformed one.
+    // Derived, not hard-coded: a fixed date eventually falls outside the
+    // booking window, and then this passes because the date is wrong rather
+    // than because the format is.
+    const departure = airportLocalDate(airportTimeZoneFor('Seattle, USA')!, new Date(Date.now() + 7 * 86_400_000));
+    await openSearchPage(
+      page,
+      `/?from=Seattle%2C+USA&to=Detroit%2C+USA&depart=${departure}&trip=one-way`
+    );
+
+    await expect(page.getByRole('alert').filter({ hasText: /not one we can show/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Available Flights' })).toHaveCount(0);
+    // And the form is usable rather than stuck: the origin is a real choice,
+    // not blank or a raw code.
+    await expect(page.getByLabel('From', { exact: true })).not.toHaveValue('');
+    await expect(page.getByLabel('From', { exact: true })).not.toHaveValue(/^[A-Z]{3}$/);
   });
 
   test('Date controls reject past departures and invalid return order', async ({ page }) => {
@@ -267,7 +320,9 @@ test.describe('Flight search', () => {
         departure: params.get('depart'),
         returnDate: params.get('return'),
       };
-    }).toEqual({ from, to, departure, returnDate });
+      // The criteria the retry preserved are the same ones; the URL states
+      // them as airport codes while the form states them in words (#73).
+    }).toEqual({ from: airportCodeFor(from), to: airportCodeFor(to), departure, returnDate });
   });
 });
 

@@ -1,4 +1,5 @@
 import type { FlightRoute } from '@/lib/flightSearch';
+import { airportCodeFor, airportLabelFor } from '@/lib/airports';
 
 export type FlightSearchTripType = 'one-way' | 'round-trip';
 
@@ -55,8 +56,13 @@ export function parseFlightSearchParams(
         return undefined;
     }
 
-    const from = singleParam(params, 'from');
-    const to = singleParam(params, 'to');
+    // The URL names airports by code. Resolving to the label here keeps the
+    // representation change at this boundary: the form, the routes list and the
+    // results all still work in words (#73).
+    const fromCode = singleParam(params, 'from');
+    const toCode = singleParam(params, 'to');
+    const from = fromCode === undefined ? undefined : airportLabelFor(fromCode) ?? undefined;
+    const to = toCode === undefined ? undefined : airportLabelFor(toCode) ?? undefined;
     const departureDate = singleParam(params, 'depart') ?? '';
     const returnDate = singleParam(params, 'return') ?? '';
     const tripType = singleParam(params, 'trip');
@@ -117,9 +123,13 @@ export function buildFlightSearchUrl(
     criteria: FlightSearchCriteria,
     pathname: string,
 ): string {
+    // A link outlives the words it was built from, so it carries the codes.
+    // An unknown place cannot produce a usable link; the empty string keeps the
+    // parameter present and unparseable rather than silently dropping an end of
+    // the route.
     const params = new URLSearchParams({
-        from: criteria.from,
-        to: criteria.to,
+        from: airportCodeFor(criteria.from) ?? '',
+        to: airportCodeFor(criteria.to) ?? '',
     });
 
     if (criteria.departureDate) {
@@ -136,4 +146,26 @@ export function buildFlightSearchUrl(
     }
 
     return `${pathname}?${params.toString()}`;
+}
+
+/** Every parameter that means "this link is asking for a particular search". */
+const SEARCH_PARAMS = ['from', 'to', 'depart', 'return', 'trip', 'cabin'] as const;
+
+/**
+ * The link asked for a search and this page could not honour it.
+ *
+ * Distinguishes a refusal from a plain visit, which otherwise look identical:
+ * both land on the default form. Without it the address bar names one trip
+ * while the page shows another, and nothing says so (#73).
+ *
+ * Gated on any search parameter rather than on `from`/`to`, so a link refused
+ * for its date or its cabin is reported too.
+ */
+export function isUnusableSearchLink(
+    params: FlightSearchParamRecord,
+    parsed: FlightSearchCriteria | undefined,
+): boolean {
+    if (parsed !== undefined) return false;
+
+    return SEARCH_PARAMS.some((name) => params[name] !== undefined);
 }

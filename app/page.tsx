@@ -3,9 +3,10 @@ import { BRAND, pageTitle } from '@/lib/brand';
 import React from "react";
 import FlightBookingForm from "../components/ui/flightBookingForm";
 import { getFlightRoutesAction } from "./actions";
-import { airportTimeZoneFor } from "@/lib/airports";
+import { airportLabelFor, airportTimeZoneFor } from "@/lib/airports";
 import { bookingWindowIsoDates } from "@/lib/dates";
 import {
+  isUnusableSearchLink,
   parseFlightSearchParams,
   type FlightSearchParamRecord,
 } from "@/lib/flightSearchUrl";
@@ -59,7 +60,12 @@ export default async function Home({ searchParams }: HomeProps) {
   // to be resolved before the window. A shared link carries its own origin; the
   // form otherwise opens on the first available one. The client recomputes this
   // whenever the traveller changes origin.
-  const sharedOrigin = typeof requestedSearch.from === 'string' ? requestedSearch.from : undefined;
+  // The link names the origin by airport code, so it resolves to words before
+  // it can be compared with a route or looked up for a timezone (#73). An
+  // unknown code falls through to the first route the same way a missing one
+  // does -- `parseFlightSearchParams` is what rejects the link itself.
+  const sharedOriginCode = typeof requestedSearch.from === 'string' ? requestedSearch.from : undefined;
+  const sharedOrigin = sharedOriginCode === undefined ? undefined : airportLabelFor(sharedOriginCode) ?? undefined;
   const initialOrigin = sharedOrigin ?? routes[0]?.from;
   const { earliestDate, latestDate } = bookingWindowIsoDates(
     new Date(),
@@ -70,12 +76,24 @@ export default async function Home({ searchParams }: HomeProps) {
     routes,
     { earliestDate, latestDate },
   );
+  const unusableLink = isUnusableSearchLink(requestedSearch, initialSearch);
+
+  // A refused link must not keep its grip on the booking window. The origin
+  // above was resolved before parsing, because the window is what parsing
+  // validates dates against -- so when parsing then rejects the link, the
+  // selectable dates have to come back to the origin the form is actually
+  // showing (#73).
+  const window = unusableLink && sharedOrigin
+    ? bookingWindowIsoDates(new Date(), routes[0]?.from ? airportTimeZoneFor(routes[0].from) : null)
+    : { earliestDate, latestDate };
+
   return (
     <FlightBookingForm
       routes={routes}
-      minimumDepartureDate={earliestDate}
-      maximumDepartureDate={latestDate}
+      minimumDepartureDate={window.earliestDate}
+      maximumDepartureDate={window.latestDate}
       initialSearch={initialSearch}
+      unusableLink={unusableLink}
     />
   );
 }

@@ -32,6 +32,15 @@ interface FlightBookingFormProps {
     minimumDepartureDate?: string;
     maximumDepartureDate?: string;
     initialSearch?: FlightSearchCriteria;
+    /**
+     * The link named a search this page could not honour, so the form opened on
+     * its own defaults instead.
+     *
+     * Worth saying out loud: without it the address bar asserts one trip while
+     * the page shows another, and a traveller following a stale link has no way
+     * to tell (#73).
+     */
+    unusableLink?: boolean;
 }
 
 type BookingState = {
@@ -101,6 +110,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     minimumDepartureDate = earliestBookableDateIso(),
     maximumDepartureDate = latestBookableDateIso(),
     initialSearch,
+    unusableLink = false,
 }) => {
     const [bookingWindow, setBookingWindow] = useState({
         earliestDate: minimumDepartureDate,
@@ -113,6 +123,12 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     // Origins are the distinct departure cities; destinations depend on the
     // selected origin so only reachable routes can be chosen.
     const origins = useMemo(() => Array.from(new Set(routes.map((r) => r.from))), [routes]);
+    // Held in state rather than read straight from the prop: the search rewrites
+    // the URL with `replaceState`, which never re-renders the server component,
+    // so the prop would go on claiming a refusal over results that are now on
+    // screen and a URL that now describes them (#73).
+    const [linkRefused, setLinkRefused] = useState(unusableLink);
+
     const [fromLocation, setFromLocation] = useState(
         initialSearch?.from ?? origins[0] ?? ''
     );
@@ -265,6 +281,9 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                     '',
                     buildFlightSearchUrl(criteria, window.location.pathname),
                 );
+                // The address bar now describes what is on screen, so the
+                // refusal no longer describes anything.
+                setLinkRefused(false);
             }
             setSearchResults(results.flights);
             setNearbyDates(results.nearbyDates);
@@ -641,6 +660,22 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                         </ul>
                     </nav>
                 </div>
+
+                {linkRefused && (
+                    <div
+                        role="alert"
+                        style={{
+                            margin: '0 auto 1rem', maxWidth: '800px', width: '100%',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444',
+                            color: '#fca5a5', padding: '12px 16px', borderRadius: '8px',
+                            textAlign: 'center',
+                        }}
+                    >
+                        That link&apos;s trip is not one we can show — it may name a route we no
+                        longer fly, a date outside booking, or an airport we do not serve. Here is
+                        a search you can change instead.
+                    </div>
+                )}
 
                 <div className="fields-container">
                     <label htmlFor="from">From</label>
