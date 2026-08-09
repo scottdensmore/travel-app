@@ -11,6 +11,7 @@ describe('authentication tokens in PostgreSQL', () => {
         await prisma.verificationToken.deleteMany({
             where: { identifier: { endsWith: `:${email}` } }
         });
+        await prisma.$disconnect();
     });
 
     it('allows exactly one concurrent consumer and rejects replay', async () => {
