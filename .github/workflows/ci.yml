@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/travel_app
+      # CI's database is created and thrown away with the job.
+      DATABASE_IS_DISPOSABLE: 'true'
       NEXTAUTH_SECRET: ci-only-nextauth-secret-at-least-32-characters
       NEXTAUTH_URL: http://localhost:3000
       PASSENGER_DATA_ENCRYPTION_KEYS: ci-v1:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=

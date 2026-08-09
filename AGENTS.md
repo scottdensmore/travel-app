@@ -15,7 +15,7 @@ npx tsc --noEmit            # typecheck (no npm script)
 npm test                    # Jest, both projects — needs a running Postgres (see Gotchas)
 npm run test:unit           # the parallel project; takes flags, e.g. -- -t 'name'
 npm run test:database       # the *.database.test.ts project, serialised
-npx playwright test         # E2E; auto-starts the dev server
+npx playwright test         # E2E; starts its own dev server, so free port 3000 first
 npm run build               # next build + scripts/sanitize-standalone.mjs
 ```
 
@@ -35,6 +35,13 @@ npx prisma migrate deploy && npx prisma db seed
 
 `lib/env.ts` validates all eight required variables fail-closed at boot (via
 `instrumentation.ts`). A malformed key ring crashes startup rather than degrading.
+
+`.env.example` also carries `DATABASE_IS_DISPOSABLE=true`. The test suites delete
+every booking in the database they are pointed at, and refuse to start without it —
+host and name cannot tell a developer's database from a deployment, since Compose
+gives the application the same pair. Never set it where this application is
+deployed.
+
 Local verification and recovery email lands in Mailpit at http://localhost:8025.
 
 Never commit a secret value or pass one on the command line. Every environment

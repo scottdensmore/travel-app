@@ -1,7 +1,7 @@
 "use client"
 
 import { BRAND } from '@/lib/brand';
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
@@ -41,25 +41,60 @@ const TitleBar: React.FC = () => {
     const userAvatar = session?.user?.image || "/img/my-profile-photo.jpg";
     const isAdmin = session?.user?.role === 'ADMIN' && session.user.staffMfaVerified;
 
-    const fetchNotifications = useCallback(async () => {
-        if (session?.user) {
-            try {
-                const notifs = await getUserNotificationsAction();
-                setNotifications(notifs as Notification[]);
-            } catch (err) {
-                console.error("Failed to load notifications:", err);
-            }
-        } else {
-            setNotifications([]);
-        }
-    }, [session]);
+    // Set while the document is going away, so a poll that dies with it can be
+    // told apart from one that failed on its own.
+    const leavingPage = useRef(false);
+
+    useEffect(() => {
+        const onPageHide = () => { leavingPage.current = true; };
+        // `pagehide` also fires when the document goes into the back-forward
+        // cache, where this component and its effects are kept alive. Coming
+        // back with Back fires `pageshow` rather than remounting, so without
+        // this the flag would stay set and silence every later failure for the
+        // rest of the page's life.
+        const onPageShow = () => { leavingPage.current = false; };
+
+        window.addEventListener('pagehide', onPageHide);
+        window.addEventListener('pageshow', onPageShow);
+        return () => {
+            window.removeEventListener('pagehide', onPageHide);
+            window.removeEventListener('pageshow', onPageShow);
+        };
+    }, []);
 
     // Fetch immediately on mount / route change, and set up 3s polling interval
     useEffect(() => {
-        fetchNotifications();
-        const interval = setInterval(fetchNotifications, 3000);
-        return () => clearInterval(interval);
-    }, [fetchNotifications, pathname]);
+        // Whether *this* poll's result is still wanted. A server action takes no
+        // abort signal, so the teardown is what gets tracked rather than the
+        // request -- which is the distinction that matters: a rejection arriving
+        // after the effect was cleaned up, or while the page is being replaced,
+        // lost nothing and is not news. Anything else is (#195, #212).
+        //
+        // Matching the rejection's message instead could not tell a navigation
+        // from a dead server: browsers say `Failed to fetch` for both.
+        let active = true;
+
+        const poll = async () => {
+            if (!session?.user) {
+                setNotifications([]);
+                return;
+            }
+            try {
+                const notifs = await getUserNotificationsAction();
+                if (active) setNotifications(notifs as Notification[]);
+            } catch (err) {
+                if (!active || leavingPage.current) return;
+                console.error("Failed to load notifications:", err);
+            }
+        };
+
+        poll();
+        const interval = setInterval(poll, 3000);
+        return () => {
+            active = false;
+            clearInterval(interval);
+        };
+    }, [session, pathname]);
 
     // Click outside to close notifications drawer
     useEffect(() => {

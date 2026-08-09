@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import TitleBar from '@/components/ui/titlebar';
 import { usePathname } from 'next/navigation';
@@ -32,8 +32,128 @@ const mockMarkAllNotificationsAsRead = markAllNotificationsAsReadAction as jest.
 
 describe('TitleBar', () => {
     beforeEach(() => {
+        // `clearAllMocks` clears call history but leaves implementations in
+        // place, so a nested block that signs a visitor in leaves every later
+        // sibling rendering as that user. Re-establishing the anonymous default
+        // here keeps each test's session its own business, rather than a
+        // function of the order they run in.
         jest.clearAllMocks();
+        (require('next-auth/react').useSession as jest.Mock).mockReturnValue({ data: null });
         mockGetUserNotifications.mockReturnValue(new Promise(() => { }));
+    });
+
+    describe('when a notifications poll fails', () => {
+        let consoleError: jest.SpyInstance;
+
+        beforeEach(() => {
+            // Installed here rather than in the describe body: declared there it
+            // is created at collection time and torn down by this block's
+            // teardown, so moving this describe below the others would silently
+            // strip `console.error` from all of them.
+            consoleError = jest.spyOn(console, 'error').mockImplementation(() => { });
+            (require('next-auth/react').useSession as jest.Mock).mockReturnValue({
+                data: { user: { role: 'USER', email: 'user@example.com' } },
+            });
+        });
+
+        afterEach(() => consoleError.mockRestore());
+
+        it('reports it, even when it reads like a torn-down request', async () => {
+            // The message cannot tell a navigation from a dead server -- a
+            // browser says `Failed to fetch` for both. Suppressing on the
+            // message meant a signed-in user whose server had gone away saw
+            // nothing at all, in the console or on the page (#212).
+            mockGetUserNotifications.mockRejectedValue(new TypeError('Failed to fetch'));
+
+            render(<TitleBar />);
+
+            await waitFor(() => expect(consoleError).toHaveBeenCalledWith(
+                'Failed to load notifications:',
+                expect.objectContaining({ message: 'Failed to fetch' }),
+            ));
+        });
+
+        it.each([
+            ['a poisoned Postgres transaction', 'current transaction is aborted, commands ignored until end of transaction block'],
+            ['a closed Prisma transaction', 'Transaction API error: Transaction already closed: Transaction aborted.'],
+            ['an authorization failure', 'Unauthorized'],
+        ])('reports %s', async (_name, message) => {
+            mockGetUserNotifications.mockRejectedValue(new Error(message));
+
+            render(<TitleBar />);
+
+            await waitFor(() => expect(consoleError).toHaveBeenCalledWith(
+                'Failed to load notifications:',
+                expect.objectContaining({ message }),
+            ));
+        });
+
+        it('stays quiet when the page is being replaced', async () => {
+            // The one case that is genuinely not a failure: the document is
+            // going away and this poll's answer was never going to be used.
+            // It was the only console error the e2e suite ever produced (#195).
+            let reject: (error: Error) => void = () => { };
+            mockGetUserNotifications.mockReturnValue(new Promise((_, r) => { reject = r; }));
+
+            render(<TitleBar />);
+            await waitFor(() => expect(mockGetUserNotifications).toHaveBeenCalled());
+
+            window.dispatchEvent(new Event('pagehide'));
+            await act(async () => {
+                reject(new TypeError('Failed to fetch'));
+                await Promise.resolve();
+            });
+
+            expect(consoleError).not.toHaveBeenCalled();
+        });
+
+        it('reports again after the page comes back from the cache', async () => {
+            // `pagehide` fires for the back-forward cache too, where this
+            // component is kept alive. Without resetting on `pageshow`, one
+            // Back would silence every later failure for good.
+            const useSession = require('next-auth/react').useSession as jest.Mock;
+            const signedInAs = (email: string) => ({ data: { user: { role: 'USER', email } } });
+            mockGetUserNotifications.mockRejectedValue(new TypeError('Failed to fetch'));
+            useSession.mockReturnValue(signedInAs('a@example.com'));
+
+            const { rerender } = render(<TitleBar />);
+            await waitFor(() => expect(consoleError).toHaveBeenCalled());
+
+            // Into the back-forward cache: `pagehide` fires, the component and
+            // its effects survive.
+            await act(async () => { window.dispatchEvent(new Event('pagehide')); });
+            consoleError.mockClear();
+
+            // ...and back out again, which fires `pageshow` rather than
+            // remounting anything.
+            await act(async () => { window.dispatchEvent(new Event('pageshow')); });
+
+            // A fresh poll. Changing the session re-runs the polling effect,
+            // which is deterministic where waiting out the 3s interval is not.
+            useSession.mockReturnValue(signedInAs('b@example.com'));
+            rerender(<TitleBar />);
+
+            await waitFor(() => expect(consoleError).toHaveBeenCalledWith(
+                'Failed to load notifications:',
+                expect.objectContaining({ message: 'Failed to fetch' }),
+            ));
+        });
+
+        it('stays quiet when the poll outlives the component', async () => {
+            let reject: (error: Error) => void = () => { };
+            mockGetUserNotifications.mockReturnValue(new Promise((_, r) => { reject = r; }));
+
+            const { unmount } = render(<TitleBar />);
+            await waitFor(() => expect(mockGetUserNotifications).toHaveBeenCalled());
+
+            unmount();
+            await act(async () => {
+                reject(new TypeError('Failed to fetch'));
+                await Promise.resolve();
+            });
+
+            expect(consoleError).not.toHaveBeenCalled();
+        });
     });
 
     it('renders the correct title when pathname is /book', () => {

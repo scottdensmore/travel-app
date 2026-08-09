@@ -236,6 +236,16 @@ test.describe('Admin Control Journey', () => {
     await expect(statusSelect).toBeVisible();
     await statusSelect.selectOption('DELAYED');
 
+    // `selectOption` returns when the change event dispatches, not when the
+    // server action behind it has committed. The selector disables itself for
+    // the transition and re-renders from the server afterwards, so a select
+    // that is enabled *and* showing the new status is the signal that the write
+    // landed and the page has caught up. Navigating on the change event alone
+    // raced the commit, and `/flights` is `force-dynamic` — it rendered
+    // whatever the database held at that instant (#182).
+    await expect(statusSelect).toBeEnabled();
+    await expect(statusSelect).toHaveValue('DELAYED');
+
     // Navigate to user-facing flight board
     await page.goto('/flights');
 
