@@ -1,0 +1,24 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "165c4c19b817",
+  "strategy": "manual-commit",
+  "branch": "docs/agents-review-pass",
+  "checkpoints_count": 3,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/16/5c4c19b817/0/metadata.json",
+      "transcript": "/16/5c4c19b817/0/full.jsonl",
+      "compact_transcript": "/16/5c4c19b817/0/transcript.jsonl",
+      "content_hash": "/16/5c4c19b817/0/content_hash.txt",
+      "prompt": "/16/5c4c19b817/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3205,
+    "cache_creation_tokens": 5276716,
+    "cache_read_tokens": 689959618,
+    "output_tokens": 977317,
+    "api_call_count": 1421
+  }
+}
