@@ -41,6 +41,7 @@ every booking in the database they are pointed at, and refuse to start without i
 host and name cannot tell a developer's database from a deployment, since Compose
 gives the application the same pair. Never set it where this application is
 deployed.
+
 Local verification and recovery email lands in Mailpit at http://localhost:8025.
 
 Never commit a secret value or pass one on the command line. Every environment
