@@ -166,9 +166,9 @@ Chart and other browser-interactive components need `'use client'`.
      the thread id needed to resolve it — the REST comments endpoint carries
      none of the last two. Page it: a missed page reads as a finding that is
      not there.
-   - The loop: address the findings, run the tests, push, reply to each thread
-     saying what changed, resolve it, wait for the next verdict. Repeat until
-     👍. Treat P1 as blocking, and where a finding is right about the problem
+   - The loop: address the findings, re-run steps 6 to 9 for what changed,
+     push, reply to each thread saying what changed, resolve it, wait for the
+     next verdict. Repeat until 👍. Treat P1 as blocking, and where a finding is right about the problem
      but wrong about the fix, say so rather than resolving quietly.
    - **A 👍 only counts for the commit it was given for.** It survives a later
      push while the new head is still being reviewed, so check for a review by
