@@ -36,11 +36,11 @@ npx prisma migrate deploy && npx prisma db seed
 `lib/env.ts` validates all eight required variables fail-closed at boot (via
 `instrumentation.ts`). A malformed key ring crashes startup rather than degrading.
 
-`.env.example` also carries `DATABASE_IS_DISPOSABLE=true`. The test suites delete
-every booking in the database they are pointed at, and refuse to start without it —
-host and name cannot tell a developer's database from a deployment, since Compose
-gives the application the same pair. Never set it where this application is
-deployed.
+`.env.example` also carries `DATABASE_IS_DISPOSABLE=true`. A Playwright run and the
+database Jest project delete every booking in the database they are pointed at, and
+refuse to start without it — host and name cannot tell a developer's database from a
+deployment, since Compose gives the application the same pair. Never set it where
+this application is deployed.
 
 Local verification and recovery email lands in Mailpit at http://localhost:8025.
 
@@ -73,7 +73,10 @@ that runs this application injects configuration at runtime.
   several assert against whole tables, so running them beside each other counted one
   file's fixtures in another file's scan (#155). `npm test` runs the unit project
   first and stops if it fails, so pass flags to `test:unit`/`test:database` directly
-  rather than to `npm test`, which does not forward them
+  rather than to `npm test`, which does not forward them. What serialises them is
+  `--runInBand` in the `test:database` script, not the config — `npx jest
+  --selectProjects database` looks equivalent and runs them in parallel, which
+  reproduces exactly the interference the split removed (#215)
 - Node-environment tests need `/** @jest-environment node */` (jsdom is the Jest default)
 - Playwright runs `workers: 1, fullyParallel: false` on purpose — parallel runs collide on the DB
 - Always `npm run build`, never bare `next build`: the sanitize step strips `.env` files from
@@ -143,38 +146,19 @@ Chart and other browser-interactive components need `'use client'`.
    - The `PreToolUse` hooks in `.claude/settings.json` review the diff
      automatically and block on `git push` and `gh pr create`. They run
      without being asked; do not work around a block by pushing differently.
-   - For a full review, use the built-in `/code-review` command. Against a
-     pull request it runs unattended and posts its findings as a PR comment.
-     `/code-review ultra` is a deeper multi-agent review, but it is
-     user-triggered and billed — an agent cannot launch it.
+   - `/code-review` gives a fuller pass, and against a pull request it runs
+     unattended and posts its findings as a comment. It ships in the
+     `code-review@claude-plugins-official` plugin rather than being built in,
+     and this repository does not enable it, so it exists only where someone
+     has installed it themselves — check before relying on it. Step 11 is what
+     reviews every pull request. `/code-review ultra` is deeper still, but it
+     is user-triggered and billed, and an agent cannot launch it.
 
    Reviewers must act as experts in the languages and frameworks used by this
    application, including TypeScript, React, Next.js, Prisma, PostgreSQL, Jest,
    and Playwright. Address every actionable finding before committing. If review
    findings cause changes, rerun the appropriate tests and the `verifier`, then
    obtain fresh review approval for the changed state.
-
-   **Codex reviews pull requests, and its verdict is a merge gate.** It runs on
-   the pull request, so this belongs after step 10 has opened one.
-
-   - It reacts 👀 on the pull request while reading and 👍 when it is satisfied.
-     The reactions are on the pull request itself:
-     `gh api repos/<owner>/<repo>/issues/<pr>/reactions`.
-   - Findings are inline review threads, invisible to
-     `gh pr view --json comments`. Read them through GraphQL `reviewThreads`,
-     which gives the body, the `isResolved` state the merge gate turns on, and
-     the thread id needed to resolve it — the REST comments endpoint carries
-     none of the last two. Page it: a missed page reads as a finding that is
-     not there.
-   - The loop: address the findings, re-run steps 6 to 9 for what changed,
-     push, reply to each thread saying what changed, resolve it, wait for the
-     next verdict. Repeat until 👍. Treat P1 as blocking, and where a finding
-     is right about the problem but wrong about the fix, say so rather than
-     resolving quietly.
-   - **Only a 👍 you watched arrive counts.** The old one survives a push, and
-     survives a later review that had findings, so the reaction sitting there
-     may be about a commit two revisions back. Watch it go 👀 and then 👍
-     after your push; never read the one that was already there as approval.
 
 9. **Commit after approval.** Commit only after verification and code review
    are complete. Use Conventional Commits:
@@ -187,19 +171,41 @@ Chart and other browser-interactive components need `'use client'`.
    useful, and do not combine unrelated work.
 
 10. **Create pull requests from the reviewed state.**
-   - Confirm that local verification remains valid.
-   - Rerun code review only if the reviewed state changed after the pre-commit
-     review.
-   - A changed state includes code, tests, documentation, generated files,
-     conflict resolution, or any other staged, unstaged, or untracked content.
-   - Do not repeat code review when the already-reviewed diff and worktree
-     remain unchanged.
-   - Push and create the pull request only after local verification and any
-     required code review are complete.
-   - Open a normal, ready-for-review pull request by default. Do not open draft
-     pull requests unless the user explicitly asks for a draft.
+    - Confirm that local verification remains valid.
+    - Rerun code review only if the reviewed state changed after the pre-commit
+      review.
+    - A changed state includes code, tests, documentation, generated files,
+      conflict resolution, or any other staged, unstaged, or untracked content.
+    - Do not repeat code review when the already-reviewed diff and worktree
+      remain unchanged.
+    - Push and create the pull request only after local verification and any
+      required code review are complete.
+    - Open a normal, ready-for-review pull request by default. Do not open draft
+      pull requests unless the user explicitly asks for a draft.
 
-11. **Merge only clean, passing pull requests.** Merge only after GitHub
+11. **Let Codex review the pull request, and answer it.** It reviews every
+    push, and its verdict gates the merge.
+
+    - It reacts 👀 on the pull request while reading and 👍 when it is satisfied.
+      The reactions are on the pull request itself:
+      `gh api repos/<owner>/<repo>/issues/<pr>/reactions`.
+    - Findings are inline review threads, invisible to
+      `gh pr view --json comments`. Read them through GraphQL `reviewThreads`,
+      which gives the body, the `isResolved` state the merge gate turns on, and
+      the thread id needed to resolve it — the REST comments endpoint carries
+      none of the last two. Page it: a missed page reads as a finding that is
+      not there.
+    - The loop: address the findings, re-run steps 6 to 9 for what changed,
+      push, reply to each thread saying what changed, resolve it, wait for the
+      next verdict. Repeat until 👍. Treat P1 as blocking, and where a finding
+      is right about the problem but wrong about the fix, say so rather than
+      resolving quietly.
+    - **Only a 👍 you watched arrive counts.** The old one survives a push, and
+      survives a later review that had findings, so the reaction sitting there
+      may be about a commit two revisions back. Watch it go 👀 and then 👍
+      after your push; never read the one that was already there as approval.
+
+12. **Merge only clean, passing pull requests.** Merge only after GitHub
     reports a clean merge state, every configured check passes, and Codex has
     approved the current head with no unresolved review threads. Never bypass
     a failing or pending required check. Self-merges are allowed when these
