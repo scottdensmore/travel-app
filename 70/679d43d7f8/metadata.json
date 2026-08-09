@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "70679d43d7f8",
+  "strategy": "manual-commit",
+  "branch": "test/serialise-database-project",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "AGENTS.md",
+    "jest.config.js"
+  ],
+  "sessions": [
+    {
+      "metadata": "/70/679d43d7f8/0/metadata.json",
+      "transcript": "/70/679d43d7f8/0/full.jsonl",
+      "compact_transcript": "/70/679d43d7f8/0/transcript.jsonl",
+      "content_hash": "/70/679d43d7f8/0/content_hash.txt",
+      "prompt": "/70/679d43d7f8/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3393,
+    "cache_creation_tokens": 6856044,
+    "cache_read_tokens": 765674728,
+    "output_tokens": 1047392,
+    "api_call_count": 1526
+  }
+}
