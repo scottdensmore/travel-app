@@ -273,7 +273,13 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                             <div style={{ borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '1.5rem' }}>
                                 <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)' }}>Confirmed</span>
                                 <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#10b981' }}>
-                                    {manifestPassengers.filter(p => p.bookingStatus !== 'CANCELLED').length}
+                                    {manifestPassengers.filter(p => p.bookingStatus === 'CONFIRMED').length}
+                                </div>
+                            </div>
+                            <div style={{ borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '1.5rem' }}>
+                                <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)' }}>Disrupted</span>
+                                <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#fbbf24' }}>
+                                    {manifestPassengers.filter(p => p.bookingStatus === 'DISRUPTED').length}
                                 </div>
                             </div>
                             <div style={{ borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '1.5rem' }}>
@@ -315,11 +321,19 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                                                     </td>
                                                     <td style={{ padding: '10px 12px' }}>
                                                         <span style={{
-                                                            color: isCancelled ? '#ef4444' : '#10b981',
+                                                            color: isCancelled
+                                                                ? '#ef4444'
+                                                                : passenger.bookingStatus === 'DISRUPTED'
+                                                                    ? '#fbbf24'
+                                                                    : '#10b981',
                                                             fontWeight: 'bold',
                                                             fontSize: '0.8rem'
                                                         }}>
-                                                            {isCancelled ? 'Cancelled' : 'Confirmed'}
+                                                            {isCancelled
+                                                                ? 'Cancelled'
+                                                                : passenger.bookingStatus === 'DISRUPTED'
+                                                                    ? 'Disrupted'
+                                                                    : 'Confirmed'}
                                                         </span>
                                                     </td>
                                                 </tr>

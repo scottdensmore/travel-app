@@ -11,7 +11,7 @@ import { hasVerifiedStaffAccess } from '@/lib/staffAuthorization';
 import type { Flight } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { assertSeatAvailableForCabin, validateSeatingLayout } from '@/lib/seatLayout';
-import { lockFlightForUpdate } from '@/lib/flightLock';
+import { lockBookingsOnFlightForUpdate, lockFlightForUpdate } from '@/lib/flightLock';
 import { updateFlightSeatingLayout } from '@/lib/FlightSeatLayoutService';
 import { actionValidationFailure, actionValidationFailures } from '@/lib/actionResult';
 import {
@@ -403,6 +403,16 @@ export async function submitCityGuideReviewAction(cityGuideId: number, rating: n
     });
 }
 
+const DEPARTED_MESSAGE =
+    'This booking cannot be cancelled because the flight has already departed.';
+
+/**
+ * Thrown from inside the cancellation transaction so it rolls back, and turned
+ * into the same refusal the early check gives. A policy answer rather than a
+ * fault, but it has to unwind the transaction to be one.
+ */
+class BookingDepartedError extends Error {}
+
 export async function cancelBookingAction(bookingId: number) {
     const session = await getServerSession(authOptions);
     const userId = session?.user?.id;
@@ -431,18 +441,17 @@ export async function cancelBookingAction(bookingId: number) {
         throw new Error("Unauthorized");
     }
 
-    const outcome = cancellationOutcome(cancellableBooking(booking), new Date());
-    if (!outcome.allowed) {
+    if (!cancellationOutcome(cancellableBooking(booking), new Date()).allowed) {
         // A refusal the customer can act on rather than a thrown error: this is
         // a policy answer, not a fault. Cancelling a flight that has departed
         // would free a seat that was used and take back the status points for a
         // trip they took (#76).
-        return actionValidationFailure(
-            'This booking cannot be cancelled because the flight has already departed.'
-        );
+        return actionValidationFailure(DEPARTED_MESSAGE);
     }
 
-    const updated = await prisma.$transaction(async (tx) => {
+    let updated;
+    try {
+        updated = await prisma.$transaction(async (tx) => {
         // Lock in ascending flight order, matching FlightBookingService. Leg
         // order would deadlock two itineraries that cover the same flights in
         // opposite directions.
@@ -452,12 +461,31 @@ export async function cancelBookingAction(bookingId: number) {
         for (const flightId of lockOrder) {
             await lockFlightForUpdate(tx, flightId);
         }
+        // Re-read under the locks, and decide again from what is there now.
+        //
+        // The decision above was taken from an unlocked read, and staff can
+        // cancel a flight in between -- which moves this booking to DISRUPTED
+        // and makes it fully refundable. Deciding once, before the lock, would
+        // charge the customer a fee for the airline's cancellation. The read
+        // outside is what refuses early and cheaply; this is the one that
+        // counts (#76).
         const lockedBooking = await tx.booking.findUnique({
             where: { id: bookingId },
-            select: { status: true }
+            include: {
+                legs: {
+                    include: {
+                        flight: true,
+                        seatAssignments: { select: { cabinClass: true } },
+                    },
+                    orderBy: { sequence: 'asc' },
+                },
+            },
         });
         if (!lockedBooking) throw new Error("Booking not found");
         if (lockedBooking.status === "CANCELLED") throw new Error("Booking is already cancelled");
+
+        const settled = cancellationOutcome(cancellableBooking(lockedBooking), new Date());
+        if (!settled.allowed) throw new BookingDepartedError();
 
         // What the cancellation owed back, recorded on the history row the
         // status change writes. Transaction-local, so it cannot leak onto the
@@ -465,8 +493,8 @@ export async function cancelBookingAction(bookingId: number) {
         // transaction as the update or it would expire before the trigger read
         // it (#76). No money moves here: #75 owns that, and will have this
         // figure rather than re-deriving one from rules that may have moved.
-        await tx.$executeRaw`SELECT set_config('app.booking_refund_cents', ${String(outcome.refundCents)}, true)`;
-        await tx.$executeRaw`SELECT set_config('app.booking_status_reason', ${cancellationNote(outcome)}, true)`;
+        await tx.$executeRaw`SELECT set_config('app.booking_refund_cents', ${String(settled.refundCents)}, true)`;
+        await tx.$executeRaw`SELECT set_config('app.booking_status_reason', ${cancellationNote(settled)}, true)`;
 
         // The seats are released by the status change below, not here: a
         // cancelled booking never holds one, so the database does it rather
@@ -477,7 +505,13 @@ export async function cancelBookingAction(bookingId: number) {
             where: { id: bookingId },
             data: { status: "CANCELLED" }
         });
-    });
+        });
+    } catch (error) {
+        // The transaction rolls back, so nothing was cancelled and nothing
+        // refunded; the customer gets the same answer as the early refusal.
+        if (error instanceof BookingDepartedError) return actionValidationFailure(DEPARTED_MESSAGE);
+        throw error;
+    }
 
     try {
         const flight = outboundFlight(booking);
@@ -532,6 +566,20 @@ export async function changeBookingSeatsAction(
     // the booking rather than trusted from the client: a leg id from another
     // booking would otherwise move a stranger's seat.
     const legsById = new Map(booking.legs.map(leg => [leg.id, leg]));
+
+    // A seat on a flight the airline cancelled is not a seat to move. The
+    // profile keeps "Change Seats" on a disrupted round trip because the other
+    // leg may still be flown, so the guard has to be per leg and it has to be
+    // here rather than in the component (#76).
+    const grounded = seatChanges
+        .map(change => legsById.get(change.legId))
+        .filter(leg => leg?.flight?.status === 'CANCELLED');
+    if (grounded.length > 0) {
+        return actionValidationFailure(
+            'That flight has been cancelled by the airline, so its seats cannot be changed. '
+            + 'Cancel the booking for a full refund instead.'
+        );
+    }
     for (const change of seatChanges) {
         if (!legsById.has(change.legId)) {
             throw new Error(`Leg ${change.legId} does not belong to booking ${bookingId}`);
@@ -1009,29 +1057,113 @@ export async function updateFlightStatusAction(flightId: number, status: 'ON_TIM
     if (!parsedStatus.ok) return parsedStatus;
     flightId = parsedId.data;
     status = parsedStatus.data;
-    const withAirports = await prisma.flight.update({
-        where: { id: flightId },
-        data: { status },
-        include: flightRouteInclude,
+    const actorId = session?.user?.id ?? null;
+
+    // The status and what it does to the bookings move together, under the
+    // flight's own lock. Cancelling a flight used to change only the flight:
+    // the bookings stayed CONFIRMED, holding their seats, and the customer kept
+    // a boarding pass for a flight that was not operating (#76).
+    const { withAirports, outcomes } = await prisma.$transaction(async (tx) => {
+        // No explicit flight lock: the update below takes the row's write lock
+        // and holds it to commit, which is what a `SELECT ... FOR UPDATE` here
+        // would have done a statement earlier. What needed locking was the
+        // bookings, and that happens after (#76).
+        const withAirports = await tx.flight.update({
+            where: { id: flightId },
+            data: { status },
+            include: flightRouteInclude,
+        });
+
+        // Who is answerable for the change, on every history row it writes.
+        if (actorId) {
+            await tx.$executeRaw`SELECT set_config('app.booking_status_actor', ${actorId}, true)`;
+        }
+        await tx.$executeRaw`SELECT set_config('app.booking_status_reason', ${
+            status === 'CANCELLED'
+                ? `Flight ${withAirports.flightNumber} cancelled by the airline.`
+                : `Flight ${withAirports.flightNumber} is operating again.`
+        }, true)`;
+
+        // Locked before anything is decided about them, because what each
+        // booking should become depends on the other legs' flights -- rows this
+        // transaction does not hold. See `lockBookingsOnFlightForUpdate`.
+        const bookingIds = await lockBookingsOnFlightForUpdate(tx, flightId);
+
+        const bookings = await tx.booking.findMany({
+            where: { id: { in: bookingIds } },
+            select: {
+                id: true,
+                status: true,
+                userId: true,
+                legs: { select: { flight: { select: { status: true } } } },
+            },
+        });
+
+        // Decided per booking from what its own legs now say, rather than by a
+        // predicate over rows that may be mid-change. One cancelled leg
+        // disrupts the whole itinerary: half a trip is not a usable trip.
+        const changed = bookings.filter(booking => {
+            const grounded = booking.legs.some(leg => leg.flight?.status === 'CANCELLED');
+            return booking.status !== (grounded ? 'DISRUPTED' : 'CONFIRMED');
+        });
+
+        for (const booking of changed) {
+            const grounded = booking.legs.some(leg => leg.flight?.status === 'CANCELLED');
+            await tx.booking.update({
+                where: { id: booking.id },
+                // DISRUPTED rather than CANCELLED: the customer keeps the
+                // choice and keeps the seat while they decide, and a staff
+                // misclick can be taken back.
+                data: { status: grounded ? 'DISRUPTED' : 'CONFIRMED' },
+            });
+        }
+
+        // Everyone holding a live booking on this flight hears about it --
+        // a delay is the main thing this action announces, and only a
+        // cancellation moves anybody's status. What each is told depends on
+        // where their own trip ended up.
+        // One message per person per outcome, not per booking: the text does
+        // not name a booking, so two identical notices would just be noise.
+        // Two bookings that ended differently do each earn a word.
+        const outcomes = [...new Map(
+            bookings
+                .filter(booking => booking.userId)
+                .map(booking => {
+                    const stillGrounded = booking.legs.some(
+                        leg => leg.flight?.status === 'CANCELLED',
+                    );
+                    return [
+                        `${booking.userId}:${stillGrounded}`,
+                        { userId: booking.userId as string, stillGrounded },
+                    ] as const;
+                }),
+        ).values()];
+
+        return { withAirports, outcomes };
     });
+
     // The relation objects would otherwise ride this return value across to
     // the client, which reads it only to check for a validation failure.
     const updated = withRouteLabels(withAirports);
 
     try {
-        const bookings = await prisma.booking.findMany({
-            where: { legs: { some: { flightId } }, status: "CONFIRMED" },
-            select: { userId: true }
-        });
-
-        const uniqueUserIds = Array.from(new Set(bookings.map(b => b.userId).filter(Boolean))) as string[];
-
-        if (uniqueUserIds.length > 0) {
+        if (outcomes.length > 0) {
+            const route = `${updated.flightNumber} from ${updated.from} to ${updated.to}`;
             await prisma.notification.createMany({
-                data: uniqueUserIds.map(targetUserId => ({
+                data: outcomes.map(({ userId: targetUserId, stillGrounded }) => ({
                     userId: targetUserId,
                     title: `Flight Update: ${updated.airline} ${updated.flightNumber}`,
-                    message: `Your upcoming flight ${updated.flightNumber} from ${updated.from} to ${updated.to} is now ${status.replace('_', ' ')}.`,
+                    message: status === 'CANCELLED'
+                        // Says what to do about it, because "cancelled" alone
+                        // leaves the customer holding a booking with no
+                        // obvious next step.
+                        ? `Your flight ${route} has been cancelled by the airline. Your seat is held while you decide; cancel the booking from your profile for a full refund.`
+                        : stillGrounded
+                            // Their trip is still broken by another leg, so
+                            // "is now ON TIME" would read as good news it is
+                            // not.
+                            ? `Your flight ${route} is operating again, but another flight in this booking is still cancelled.`
+                            : `Your upcoming flight ${route} is now ${status.replace('_', ' ')}.`,
                     type: "FLIGHT_STATUS"
                 }))
             });

@@ -119,6 +119,7 @@ describe('ProfileClient interactive dashboard', () => {
                 reviews={sampleReviews}
                 activityData={[]}
                 monthlyHistory={[]}
+                renderedAt={new Date('2026-06-01T00:00:00Z').getTime()}
             />
         );
 
@@ -150,6 +151,7 @@ describe('ProfileClient interactive dashboard', () => {
                 reviews={[]}
                 activityData={[]}
                 monthlyHistory={[]}
+                renderedAt={new Date('2026-06-01T00:00:00Z').getTime()}
             />
         );
 
@@ -176,6 +178,7 @@ describe('ProfileClient interactive dashboard', () => {
                 reviews={[]}
                 activityData={[]}
                 monthlyHistory={[]}
+                renderedAt={new Date('2026-06-01T00:00:00Z').getTime()}
             />
         );
 
@@ -201,6 +204,7 @@ describe('ProfileClient interactive dashboard', () => {
                 reviews={sampleReviews}
                 activityData={[]}
                 monthlyHistory={[]}
+                renderedAt={new Date('2026-06-01T00:00:00Z').getTime()}
             />
         );
 
@@ -229,6 +233,7 @@ describe('ProfileClient interactive dashboard', () => {
                 reviews={[]}
                 activityData={[]}
                 monthlyHistory={[]}
+                renderedAt={new Date('2026-06-01T00:00:00Z').getTime()}
             />
         );
 
@@ -284,6 +289,7 @@ describe('ProfileClient interactive dashboard', () => {
                 reviews={[]}
                 activityData={[]}
                 monthlyHistory={[]}
+                renderedAt={new Date('2026-06-01T00:00:00Z').getTime()}
             />
         );
 
@@ -346,6 +352,7 @@ describe('ProfileClient interactive dashboard', () => {
                     reviews={[]}
                     activityData={[]}
                     monthlyHistory={[]}
+                    renderedAt={new Date('2026-06-01T00:00:00Z').getTime()}
                 />
             );
 
@@ -477,6 +484,70 @@ describe('ProfileClient interactive dashboard', () => {
             const legs = within(screen.getByTestId('booking-row-202')).getAllByTestId(/^booking-leg-/);
             expect(legs[0]).toHaveTextContent('Jane (Not assigned)');
             expect(legs[0]).not.toHaveTextContent('12A');
+        });
+
+        /** The inbound is the one the airline cancelled. */
+        const disruptedRoundTrip = {
+            ...roundTripBooking,
+            status: 'DISRUPTED',
+            legs: roundTripBooking.legs.map((leg, index) => ({
+                ...leg,
+                flight: { ...leg.flight, status: index === 1 ? 'CANCELLED' : 'ON_TIME' },
+            })),
+        };
+
+        it('names the leg the airline cancelled, not whichever came first', () => {
+            // The status cell sits beside leg 1, so it used to mark the
+            // outbound whatever had actually been cancelled -- telling a
+            // customer their departing flight was off when it was the return.
+            renderBookings([disruptedRoundTrip]);
+
+            const row = screen.getByTestId('booking-row-202');
+            expect(row).toHaveTextContent('GA900 cancelled by airline');
+            expect(row).not.toHaveTextContent('GA101 cancelled by airline');
+        });
+
+        it('says the seat is held and the refund is whole', () => {
+            renderBookings([disruptedRoundTrip]);
+
+            const row = screen.getByTestId('booking-row-202');
+            expect(row).toHaveTextContent(/full refund/i);
+            expect(row).toHaveTextContent(/no cancellation fee/i);
+        });
+
+        it('keeps the seat change available while another leg still flies', () => {
+            // The cancelled leg has nothing to choose; the one beside it may
+            // still be flown, and the customer may still want a different seat.
+            renderBookings([disruptedRoundTrip]);
+
+            const row = within(screen.getByTestId('booking-row-202'));
+            expect(row.getByRole('button', { name: /change seats/i })).toBeInTheDocument();
+            expect(row.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
+        });
+
+        it('stops promising a refund once the flight has gone', () => {
+            // Cancelling a departed booking is refused, so the row must not
+            // offer a refund it cannot produce, nor a button that can only
+            // fail.
+            render(
+                <ProfileClient
+                    userName="Jane Doe"
+                    userAvatar="avatar.png"
+                    currentStatus="Gold"
+                    currentPoints={4200}
+                    bookings={[disruptedRoundTrip] as never}
+                    favorites={[]}
+                    reviews={[]}
+                    activityData={[]}
+                    monthlyHistory={[]}
+                    renderedAt={new Date('2026-07-01T00:00:00Z').getTime()}
+                />
+            );
+
+            const row = screen.getByTestId('booking-row-202');
+            expect(row).toHaveTextContent(/did not operate/i);
+            expect(row).not.toHaveTextContent(/full refund/i);
+            expect(within(row).queryByRole('button', { name: /cancel/i })).not.toBeInTheDocument();
         });
 
         it('marks a released seat rather than printing the seat somebody else may now hold', () => {

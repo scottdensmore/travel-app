@@ -19,6 +19,9 @@ interface Flight {
     to: string;
     departureDate: Date | string;
     priceCents: number;
+    /// Whether this leg is operating. A disrupted booking names the leg the
+    /// airline cancelled, which on a round trip is often not the first (#76).
+    status?: string;
     firstClassRows?: number | null;
     businessRows?: number | null;
     premiumEconomyRows?: number | null;
@@ -50,7 +53,7 @@ interface BookingLeg {
 interface Booking {
     id: number;
     createdAt: Date | string;
-    status: string; // "CONFIRMED" or "CANCELLED"
+    status: string; // "CONFIRMED", "DISRUPTED" or "CANCELLED"
     totalPriceCents: number | null;
     // The itinerary. One leg today; a round trip adds the inbound (#69).
     legs: BookingLeg[];
@@ -89,6 +92,12 @@ interface ProfileClientProps {
     reviews: Review[];
     activityData: PointsActivityDisplayData[];
     monthlyHistory: PointsActivityDisplayData[];
+    /// The server's clock at render time. Deciding "has this departed" from
+    /// `Date.now()` in the component would make the first client render
+    /// disagree with the markup it hydrates. Required rather than defaulted:
+    /// a default of zero makes every flight look upcoming, which is the
+    /// departed guard quietly switched off with nothing to notice it.
+    renderedAt: number;
 }
 
 export default function ProfileClient({
@@ -100,7 +109,8 @@ export default function ProfileClient({
     favorites,
     reviews,
     activityData,
-    monthlyHistory
+    monthlyHistory,
+    renderedAt,
 }: ProfileClientProps) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
@@ -160,8 +170,13 @@ export default function ProfileClient({
         setModalError(null);
     }, [selectedBooking]);
 
-    const handleCancelBooking = (bookingId: number, flightNumber: string) => {
-        if (!confirm(`Are you sure you want to cancel booking for flight ${flightNumber}? This will release your seats.`)) return;
+    const handleCancelBooking = (bookingId: number, flightNumber: string, disrupted = false) => {
+        // A disruption is the airline's doing, so the prompt says what the
+        // customer gets rather than warning them off (#76).
+        const question = disrupted
+            ? `Cancel your booking for flight ${flightNumber} and take a full refund?`
+            : `Are you sure you want to cancel booking for flight ${flightNumber}? This will release your seats.`;
+        if (!confirm(question)) return;
 
         startTransition(async () => {
             let refusal: string | null = null;
@@ -341,6 +356,24 @@ export default function ProfileClient({
                                 {bookings.map((booking) => {
                                     const legs = orderedLegs(booking).filter(leg => leg.flight);
                                     const isCancelled = booking.status === 'CANCELLED';
+                                    // The airline cancelled the flight. The seat
+                                    // is still held and the choice is the
+                                    // customer's, so the row says what happened
+                                    // and what cancelling now is worth (#76).
+                                    const isDisrupted = booking.status === 'DISRUPTED';
+                                    // The leg that was actually cancelled, which
+                                    // on a round trip is often not the first one:
+                                    // marking leg 1 told a customer their
+                                    // outbound was cancelled when it was the
+                                    // return, the exact inverse of the truth.
+                                    const cancelledLeg = legs.find(leg => leg.flight?.status === 'CANCELLED') ?? legs[0];
+                                    // Decided from a clock the server sent, so
+                                    // the first render agrees with the markup it
+                                    // hydrates.
+                                    const departed = legs[0]?.flight
+                                        ? new Date(legs[0].flight.departureDate).getTime() <= renderedAt
+                                        : false;
+                                    const cancellable = !isCancelled && !departed;
                                     // Every leg is a row of its own, so the browser
                                     // keeps each flight aligned with its route and
                                     // date at any width. Booking-level cells span
@@ -384,15 +417,34 @@ export default function ProfileClient({
                                                             }</td>
                                                             <td className="py-2 align-top" rowSpan={legRows.length}>
                                                                 <span style={{
-                                                                    color: isCancelled ? '#ef4444' : '#10b981',
+                                                                    color: isCancelled ? '#ef4444' : isDisrupted ? '#fbbf24' : '#10b981',
                                                                     fontWeight: 'bold',
                                                                     fontSize: '0.85rem'
                                                                 }}>
-                                                                    {isCancelled ? 'Cancelled' : 'Confirmed'}
+                                                                    {isCancelled
+                                                                        ? 'Cancelled'
+                                                                        : isDisrupted
+                                                                            ? `${cancelledLeg?.flight?.flightNumber ?? 'Flight'} cancelled by airline`
+                                                                            : 'Confirmed'}
                                                                 </span>
+                                                                {isDisrupted && (
+                                                                    <p style={{
+                                                                        margin: '4px 0 0',
+                                                                        fontSize: '0.75rem',
+                                                                        color: 'rgba(255,255,255,0.75)',
+                                                                        maxWidth: '14rem',
+                                                                    }}>
+                                                                        {departed
+                                                                            // The flight did not operate and the date has
+                                                                            // passed, so cancelling is refused: promising a
+                                                                            // refund here would be a promise nothing can keep.
+                                                                            ? 'This flight did not operate. Contact support about a refund.'
+                                                                            : 'Your seat is held. Cancel for a full refund, with no cancellation fee.'}
+                                                                    </p>
+                                                                )}
                                                             </td>
                                                             <td className="py-2 text-right align-top" rowSpan={legRows.length}>
-                                                                {!isCancelled && (
+                                                                {cancellable && (
                                                                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                                                                         <button
                                                                             onClick={() => setSelectedBooking(booking)}
@@ -412,7 +464,7 @@ export default function ProfileClient({
                                                                             Change Seats
                                                                         </button>
                                                                         <button
-                                                                            onClick={() => handleCancelBooking(booking.id, legs[0]?.flight?.flightNumber || '')}
+                                                                            onClick={() => handleCancelBooking(booking.id, cancelledLeg?.flight?.flightNumber || '', isDisrupted)}
                                                                             disabled={isPending}
                                                                             style={{
                                                                                 backgroundColor: '#ef4444',

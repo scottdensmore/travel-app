@@ -51,6 +51,26 @@ const mockFlights = [
                 ]
             },
             {
+                id: 12,
+                createdAt: '2026-06-18T12:00:00.000Z',
+                // The airline cancelled this flight, so the booking is
+                // disrupted rather than cancelled: the seat is still held and
+                // the customer has not decided yet (#76).
+                status: 'DISRUPTED',
+                totalPriceCents: 20000,
+                passengers: [
+                    {
+                        id: 'p3',
+                        firstName: 'Grace',
+                        lastName: 'Hopper',
+                        gender: 'F',
+                        seatNumber: '14B',
+                        releasedAt: null,
+                        cabinClass: 'ECONOMY',
+                    }
+                ]
+            },
+            {
                 id: 11,
                 createdAt: '2026-06-18T11:00:00.000Z',
                 status: 'CANCELLED',
@@ -121,13 +141,17 @@ describe('AdminFlightsTable', () => {
     it('calculates and displays booking stats and occupancy rates correctly', () => {
         render(<AdminFlightsTable initialFlights={mockFlights} />);
 
-        // Flight 1: 1 Active, 1 Cancelled
-        expect(screen.getByText('1 Active')).toBeInTheDocument();
+        // Flight 1: two bookings still holding seats -- one confirmed, one
+        // disrupted by the airline -- and one the customer cancelled. A
+        // disrupted booking is counted as active because its seat is genuinely
+        // still held (#76).
+        expect(screen.getByText('2 Active')).toBeInTheDocument();
         expect(screen.getByText('(1 Cancelled)')).toBeInTheDocument();
         
         // Flight 1 Occupancy: 1 active passenger out of 180 (0.6% full)
-        expect(screen.getByText('1 / 180')).toBeInTheDocument();
-        expect(screen.getByText('0.6% full')).toBeInTheDocument();
+        // Two travellers hold seats: the confirmed one and the disrupted one.
+        expect(screen.getByText('2 / 180')).toBeInTheDocument();
+        expect(screen.getByText('1.1% full')).toBeInTheDocument();
 
         // Flight 2: 0 Active, no Cancelled text
         expect(screen.getByText('0 Active')).toBeInTheDocument();
@@ -156,35 +180,44 @@ describe('AdminFlightsTable', () => {
         expect(screen.getByText('Passenger Manifest')).toBeInTheDocument();
         expect(screen.getByText(/Test Airlines FL101 \| JFK → LAX/i)).toBeInTheDocument();
 
-        // Manifest Stats summary
+        // Manifest Stats summary: three travellers, one in each state.
         expect(screen.getByText('Total Booked')).toBeInTheDocument();
-        expect(screen.getByText('2')).toBeInTheDocument();
-        
+        expect(screen.getByText('3')).toBeInTheDocument();
+
         const confirmedLabels = screen.getAllByText('Confirmed');
         expect(confirmedLabels.length).toBeGreaterThanOrEqual(2);
-        
+
         const cancelledLabels = screen.getAllByText('Cancelled');
         expect(cancelledLabels.length).toBeGreaterThanOrEqual(2);
 
-        // Let's assert confirmed/cancelled counts. Since there's '1 Active' and '(1 Cancelled)', we can verify count number exists
-        // Confirm text is '1' under Confirmed and '1' under Cancelled
+        // One under each of Confirmed, Disrupted and Cancelled. Counting
+        // everything not cancelled as confirmed reported the disrupted
+        // traveller as holding a live seat on a flight the airline had
+        // cancelled (#76).
         const numericValues = screen.getAllByText('1');
-        expect(numericValues.length).toBeGreaterThanOrEqual(2);
+        expect(numericValues.length).toBeGreaterThanOrEqual(3);
 
         // Passenger rows in table
         expect(screen.getByText('John Doe')).toBeInTheDocument();
         expect(screen.getByText('M')).toBeInTheDocument();
         expect(screen.queryByText('P123')).not.toBeInTheDocument();
-        expect(screen.getByText('Economy')).toBeInTheDocument();
+        expect(screen.getAllByText('Economy').length).toBeGreaterThanOrEqual(1);
         expect(screen.getByText('Seat 12A')).toBeInTheDocument();
         
         expect(screen.getByText('Jane Smith')).toBeInTheDocument();
-        expect(screen.getByText('F')).toBeInTheDocument();
+        // Two travellers share a gender cell value now.
+        expect(screen.getAllByText('F').length).toBe(2);
         expect(screen.queryByText('P456')).not.toBeInTheDocument();
         expect(screen.queryByText('DOB')).not.toBeInTheDocument();
         expect(screen.queryByText('Passport')).not.toBeInTheDocument();
         expect(screen.getByText('Business')).toBeInTheDocument();
         expect(screen.getByText('Released')).toBeInTheDocument();
+        // A disrupted passenger is neither confirmed nor cancelled: staff were
+        // told a passenger on a flight the airline had cancelled was
+        // "Confirmed", holding a live seat on it (#76).
+        // Twice: the tally heading, and the traveller's own status.
+        expect(screen.getAllByText('Disrupted').length).toBe(2);
+        expect(screen.getByText('Seat 14B')).toBeInTheDocument();
 
         // Status column labels
         const confirmedBadges = screen.getAllByText('Confirmed');
