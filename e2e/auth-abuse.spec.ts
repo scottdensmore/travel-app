@@ -33,6 +33,12 @@ test.describe('Authentication abuse protection', () => {
 
   test.afterAll(async () => {
     await prisma.user.deleteMany({ where: { email: normalizedEmail } });
+    // Registration issues one, and it outlives the account it belongs to: no
+    // foreign key ties them, so deleting the user leaves the token behind and
+    // 20 had accumulated (#213).
+    await prisma.verificationToken.deleteMany({
+      where: { identifier: { endsWith: `:${normalizedEmail}` } }
+    });
     await prisma.authRateLimit.deleteMany({
       where: { key: { in: rateLimitKeys } }
     });

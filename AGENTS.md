@@ -80,6 +80,13 @@ that runs this application injects configuration at runtime.
   reproducing the interference the split removed (#215)
 - Node-environment tests need `/** @jest-environment node */` (jsdom is the Jest default)
 - Playwright runs `workers: 1, fullyParallel: false` on purpose — parallel runs collide on the DB
+- A Playwright run fails in `global-teardown` if it left accounts, tokens, reviews,
+  favorites, notifications, flights or schedules behind. `global-setup` cannot delete
+  those — it cannot tell a run's account from a developer's — so each spec deletes what
+  it created in a `test.afterAll`, and the teardown compares snapshots to catch the ones
+  that do not (#213). Two things trip it that are not a leak: a failing or interrupted
+  test, whose `afterAll` never finished, and anything else writing to the same database
+  during the run. Fix the failure, or run the suite alone, rather than the report
 - Always `npm run build`, never bare `next build`: the sanitize step strips `.env` files from
   standalone output, and CI asserts no secret survives in any image layer
 - Staff mutations gate on `hasVerifiedStaffAccess(session)` — a session alone is not enough;
