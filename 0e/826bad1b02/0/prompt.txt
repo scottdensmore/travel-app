@@ -1,0 +1,9 @@
+Ok lets submit the pr and see if we get feedback
+
+---
+
+I don't understand... the codex review bot should have added the eyes.. you don't have to do anything. It happens by itself
+
+---
+
+lets just merge it then lets do a test pr to ensure that codex reviews are working
