@@ -1,3 +1,5 @@
+import type { BookingStatus } from '@prisma/client';
+
 /**
  * When a seat counts as taken.
  *
@@ -20,11 +22,15 @@
 /**
  * The status a booking carries once it is cancelled.
  *
- * `Booking.status` is a bare `String` column with no enum and no check
- * constraint, so this literal is the whole definition. Typing those states in
- * the database is the remaining task of #73.
+ * This literal was the whole definition of the domain until #76 typed the
+ * column; it now names a value the database enforces, which is what makes the
+ * filter below trustworthy rather than hopeful.
+ *
+ * `DISRUPTED` is deliberately not included. A booking on a flight the airline
+ * cancelled keeps its seat until the customer chooses a refund or a rebooking,
+ * so it is still held.
  */
-export const CANCELLED_BOOKING = 'CANCELLED';
+export const CANCELLED_BOOKING: BookingStatus = 'CANCELLED';
 
 const HELD_SEAT = {
     leg: { booking: { status: { not: CANCELLED_BOOKING } } },

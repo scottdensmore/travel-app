@@ -1,4 +1,5 @@
 /** @jest-environment node */
+import type { BookingStatus } from '@prisma/client';
 import { airportCodesForRoute } from '@/lib/airports';
 import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
@@ -21,7 +22,7 @@ let flightId: number;
 let confirmedSeat: string;
 let cancelledSeat: string;
 
-async function bookSeat(status: string, seatNumber: string) {
+async function bookSeat(status: BookingStatus, seatNumber: string) {
     const user = await prisma.user.create({
         data: {
             name: 'Occupancy',
