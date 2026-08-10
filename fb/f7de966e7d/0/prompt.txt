@@ -771,3 +771,119 @@ No defect follows from it: `document.scrollWidth === clientWidth` at 390, 768, 1
 - Left in the database for inspection: `flyer@example.com` and `ops@example.com` (password `Password123!`, `ops` has staff MFA enrolled, secret in the scratchpad `secret.txt`), four bookings including **2510 in `DISRUPTED`**, and flight 27 (MA304, 8/16) left `CANCELLED`.</result>
 <usage><subagent_tokens>160057</subagent_tokens><tool_uses>117</tool_uses><duration_ms>2537604</duration_ms></usage>
 </task-notification>
+
+---
+
+<task-notification>
+<task-id>a261708b09f1fa759</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/a261708b09f1fa759.output</output-file>
+<status>completed</status>
+<summary>Agent "Verify the disruption slice" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>## What I ran (final results, on the settled tree as of 11:14)
+
+| Check | Result |
+|---|---|
+| `npx tsc --noEmit` | clean |
+| `npm run lint` | 0 errors, 8 pre-existing warnings *(was 1 error at 11:05 — see #11)* |
+| `npm test` | 714 unit + 89 database, all pass |
+| `npm run build` (after `rm -rf .next` + `prisma generate`) | pass, "Removed 1 environment files from standalone output" |
+| `npx playwright test` | 30/30 passed (3.1m) |
+| `migrate deploy` + `db seed` on an empty scratch DB | pass (no migration in this slice; run anyway because the change leans on the enum + history trigger). Scratch DB dropped. Migration guards: none in this slice, so nothing to exercise in both directions. |
+| New DB test file, isolated, run 3× | 8/8 each time; `staff-disruption`, the `disruption-*` users, `DSR-*` flights and their notifications are all gone afterwards |
+
+Plus a purpose-built concurrency harness (temporary files, since deleted; `git status` restored and `app/actions.ts` verified byte-identical by sha256).
+
+---
+
+## Findings, most severe first
+
+### 1. REGRESSION — two flights of one itinerary changing status concurrently leave the booking `CONFIRMED` on a cancelled flight
+
+**27 of 30** unassisted rounds — a plain `Promise.all` of two `updateFlightStatusAction` calls, no artificial blockers. With the two flight locks held and released together, 17 of 25.
+
+Setup: booking on legs A+B, A already `CANCELLED` (booking `DISRUPTED`), B operating. Concurrently reinstate A and cancel B. Final state observed: booking `CONFIRMED`, flight B `CANCELLED`.
+
+Mechanism, under READ COMMITTED with each transaction holding only *its own* flight's lock (`/home/scottdensmore/Developer/scottdensmore/travel-app/app/actions.ts:1053`):
+
+- cancel-B's `updateMany` filters `status: 'CONFIRMED'`; its statement snapshot still sees the booking as `DISRUPTED`, so it does not match and is never row-locked — no blocking, no serialisation.
+- reinstate-A's `updateMany` evaluates `NOT: { legs: { some: { flight: { status: 'CANCELLED' } } } }` against a snapshot where B is still `ON_TIME` (cancel-B uncommitted), so the sibling guard passes and the booking goes `CONFIRMED`.
+
+Both commit. Sequentially, in *either* order, the outcome is correct — this only appears concurrently. The lock is correct for the flight it takes; the predicates read rows belonging to flights it does not lock. Result is precisely the defect the slice exists to remove: a live boarding pass on a flight that is not operating, no `DISRUPTED` history row, no notification, and the customer later pays the 20% Economy fee to cancel.
+
+### 2. REGRESSION — the mirror: reinstating both legs at once strands the booking `DISRUPTED` while both flights operate
+
+**19 of 20** rounds. Booking `DISRUPTED` on A+B, both cancelled; reinstate both concurrently: each `updateMany`'s sibling guard sees the other flight still `CANCELLED`, both skip, booking stays `DISRUPTED` with both flights `ON_TIME`.
+
+Same root cause. Worse to recover from than #1: the admin select already reads `ON_TIME`, so no `onChange` fires and staff cannot repair it without deliberately toggling to `CANCELLED` and back. Meanwhile the profile offers the customer "Cancel for a full refund, with no cancellation fee" on two flights that are running — a real refund on an undisrupted trip.
+
+Both #1 and #2 need two overlapping status changes on two legs of one itinerary. Each row in `/home/scottdensmore/Developer/scottdensmore/travel-app/app/admin/flights/FlightStatusSelector.tsx` has its own `useTransition` and disables only its own `&lt;select&gt;`, so one admin changing two rows, or two admins, is enough.
+
+### 3. REGRESSION — a `DELAYED` flight no longer notifies anybody holding a confirmed booking
+
+Verified against the database: `updateFlightStatusAction(flight, 'DELAYED')` on a flight with a `CONFIRMED` booking produces **0 notifications**. On `main` it produced one — the notify query was `status: "CONFIRMED"` for every status. Now (`app/actions.ts:1071`) it is `status === 'CANCELLED' ? 'CONFIRMED' : 'DISRUPTED'`, so for `DELAYED` it selects only bookings that are already disrupted. Delay notifications are the main use of that status, and nothing in issue #76's decision record asks for this.
+
+This is locked in vacuously. `__tests__/app/actions.test.ts:1585` now asserts the `status: 'DISRUPTED'` filter, and the same test still asserts that "is now DELAYED" notifications go to `user-1`/`user-2` — but `mockTx.booking.findMany` is mocked to return those users regardless of the `where`, so the assertion passes on a query that returns nothing in reality. Green suite, dead feature.
+
+### 4. COVERAGE GAP — the flight lock in the status action is not exercised by anything
+
+Mutation results (each applied alone, full unit + database suite):
+
+| Mutation | Verdict |
+|---|---|
+| remove the actor `set_config` | **killed** — `cancelling a flight › records who did it and why, on the history` |
+| reinstatement also revives `CANCELLED` bookings | **killed** — `does not resurrect a booking the customer cancelled in the meantime` |
+| disruption updates every booking, not only `CONFIRMED` | **killed** — `leaves a booking the customer already cancelled alone` |
+| drop the still-cancelled-sibling guard | **killed** — `leaves a trip whose other leg is still cancelled disrupted` |
+| decide the refund from the stale pre-lock read | **killed** — 1 unit test (`prices the cancellation from the read taken under the lock`); **no database test catches it** |
+| **remove `lockFlightForUpdate` from `updateFlightStatusAction`** | **SURVIVES** — 712 unit + 89 database all pass |
+
+The lock is the load-bearing half of this slice and deleting it is invisible. I did verify by construction that it works: parking the customer's transaction on leg A's lock, cancelling leg B in between, then releasing, records `refundCents = 20000` (full) where the control case records `8000` (20% kept) — but that construction lives only in my scratch harness.
+
+### 5. Notifications: two smaller divergences (behaviour, no test)
+
+- **Reinstatement notifies bookings it does not reinstate.** The notify set is read before the update as "`DISRUPTED` on this flight", but the update excludes bookings with another still-cancelled leg. Observed: booking stays `DISRUPTED`, customer receives "Your upcoming flight … is now ON TIME."
+- **A second cancelled leg notifies nobody.** Cancel A then cancel B on the same booking: one notification, naming A only. The customer is never told B is off.
+- Repeated toggling does **not** duplicate: cancelling an already-cancelled flight sends nothing (no `CONFIRMED` bookings remain), and cancel→reinstate→cancel sends one message per real transition. No `refundCents` leaks onto the disruption history rows.
+
+### 6. `BookingDepartedError` — clean, confirmed empirically
+
+Constructed with a flight departing 2.5s out and the transaction parked on the flight lock past that instant. Result: `{ ok: false, error: { code: 'VALIDATION_ERROR', message: 'This booking cannot be cancelled because the flight has already departed.' } }` — returned, not thrown, so no 500. Booking still `CONFIRMED`, only the `null-&gt;CONFIRMED` creation history row, 0 notifications, seat still held. **Prisma does not retry**: instrumented the callback and it entered exactly once.
+
+### 7. Deadlock — looked for, not found
+
+`updateFlightStatusAction` takes one lock; `FlightBookingService`, `cancelBookingAction` and `changeBookingSeatsAction` take theirs in ascending flight id. There is no cycle available from lock *order*. The residual risk was `updateMany` row-locking order across two staff transactions on two flights sharing bookings: 20 forced rounds with 6 round-trip bookings on both flights, plus 25 rounds of the mixed scenario — **0 deadlocks**. Not a proof (the plan could differ under other statistics), but nothing observed.
+
+Customer-vs-staff on the *same* flight is properly serialised: 12/12 concurrent rounds ended `CANCELLED` with a refund consistent with the recorded path — `10000` (full) where the history shows `-&gt;DISRUPTED` first, `8000` where it does not. No interleaving produced a wrong amount.
+
+### 8. Every other reader of `Booking.status`
+
+- `lib/PointsActivityService.ts:39,75,141` — all three branches key off `=== 'CANCELLED'`, so a `DISRUPTED` booking still earns and still shows as a plain credit. That matches your expectation; nothing to change, but nothing tests it either.
+- `lib/seatOccupancy.ts` — occupancy is `releasedAt: null`, not status, and the release trigger fires only into `CANCELLED`. `DISRUPTED` keeps its seat. Correct, and asserted by the new test.
+- `app/admin/flights/AdminFlightsTable.tsx` — updated in the latest edits: separate "Disrupted" count and per-passenger "Disrupted" label. Note line 128 still counts `b.status !== 'CANCELLED'` as "active bookings" in the row summary, so a disrupted booking reads as active there.
+- `lib/FlightBookingService.ts:188` and `app/actions.ts:215/245` are *flight* status, not booking status — unaffected.
+- `changeBookingSeatsAction` (`app/actions.ts:594`) refuses only `CANCELLED`. Now that the newest UI deliberately keeps "Change Seats" on a disrupted round trip, the server has no leg-level guard: a customer can move their seat on the leg the airline cancelled. No test either way.
+
+### 9. Robustness — new failure mode from moving the status change into a transaction
+
+`updateFlightStatusAction` now waits for the flight lock *inside* a `prisma.$transaction` with the default 5s timeout. A cancellation holding that lock longer than that turns a staff status change into a thrown `P2028`, which `FlightStatusSelector` shows as an `alert`. Previously the status write never blocked. Low likelihood, worth knowing.
+
+### 10. `renderedAt = 0` silently disables the departed guard
+
+`components/ui/ProfileClient.tsx:111` defaults the prop to `0`, which makes `departed` false for every real date. If a caller ever omits it, the "did not operate / no cancel button" branch vanishes with no type error and no test failure — the four new ProfileClient tests that do not pass it exercise only the non-departed branch. `lib/serverClock.ts` has no test of its own.
+
+### 11. Environment / process notes (not defects in the change)
+
+- **The working tree moved under me.** After my first full pass, `app/admin/flights/AdminFlightsTable.tsx`, `app/profile/page.tsx`, `components/ui/ProfileClient.tsx` and two test files were edited between 10:52 and 11:05, and `lib/serverClock.ts` appeared. My **first** Playwright run overlapped those edits and is not a trustworthy signal; everything in the table above is a re-run after the tree went quiet. The slice is also no longer what your brief described — "hides Change Seats for DISRUPTED" has become "keeps Change Seats when another leg still flies."
+- **Transient lint error, since fixed.** At 11:05 `npm run lint` failed with `app/profile/page.tsx:95 Cannot call impure function during render` on `renderedAt={Date.now()}`. The 11:05:09 edit introducing `serverRenderTime()` fixed it; lint is clean now. Flagging it only so you know it was real and that the fix is what I verified.
+- I deleted `.next` for a clean build while a dev server held port 3000; that server restarted (new pid). If the `ui-review` agent saw an odd reload around then, that was me.
+- `app/actions.ts` was restored from backup after mutation testing and verified `sha256 OK`; I never wrote any other file in the repo.
+
+---
+
+## What I would want before this ships
+
+Findings 1 and 2 are the same bug and it is the one this slice is about: the flight lock does not cover the rows the predicates read. Finding 3 is a silent feature loss with a test that certifies it. Finding 4 says the lock could be deleted tomorrow and CI would applaud. I did not fix any of them.</result>
+<usage><subagent_tokens>155796</subagent_tokens><tool_uses>106</tool_uses><duration_ms>4018172</duration_ms></usage>
+</task-notification>
