@@ -6,6 +6,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { flightRouteInclude, withLegRouteLabels } from "@/lib/flightRoute";
 import ProfileClient from "@/components/ui/ProfileClient";
+import { serverRenderTime } from "@/lib/serverClock";
 import { safePassengerSelect } from "@/lib/passengerDataAccess";
 
 export const metadata: Metadata = {
@@ -17,6 +18,8 @@ export const dynamic = 'force-dynamic';
 
 export default async function ProfilePage() {
   const session = await getServerSession(authOptions);
+  // Read rather than called in the markup below: see lib/serverClock.
+  const renderedAt = await serverRenderTime();
 
   if (!session?.user) {
     return <div className="p-8 text-center text-xl" style={{ marginTop: '100px', color: 'black' }}>Please log in to view your profile.</div>;
@@ -92,6 +95,7 @@ export default async function ProfilePage() {
       reviews={userReviews}
       activityData={activityData}
       monthlyHistory={monthlyHistory}
+      renderedAt={renderedAt}
     />
   );
 }

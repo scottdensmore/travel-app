@@ -54,7 +54,9 @@ const mockTx = {
     },
     booking: {
         findUnique: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
         update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
     flight: {
         findUnique: jest.fn(),
@@ -833,7 +835,20 @@ describe('cancelBookingAction', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         mockTx.passenger.findMany.mockResolvedValue([]);
-        mockTx.booking.findUnique.mockResolvedValue({ status: 'CONFIRMED' });
+        // The action re-reads and re-decides under the flight locks, so the
+        // locked row needs the same shape the policy reads (#76).
+        mockTx.booking.findUnique.mockResolvedValue({
+            status: 'CONFIRMED', totalPriceCents: 20000, legs: [{
+                sequence: 1,
+                flight: {
+                    flightNumber: 'GA101',
+                    airline: 'Gemini Airways',
+                    priceCents: 20000,
+                    departureDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                },
+                seatAssignments: [{ cabinClass: 'ECONOMY' }],
+            }],
+        });
         mockTx.booking.update.mockReset();
     });
 
@@ -929,7 +944,19 @@ describe('cancelBookingAction', () => {
                 seatAssignments: [{ cabinClass: 'ECONOMY' }],
             }],
         });
-        mockTx.booking.findUnique.mockResolvedValue({ id: 1, status: 'CONFIRMED', flightId: 7 });
+        mockTx.booking.findUnique.mockResolvedValue({
+            id: 1, status: 'CONFIRMED', flightId: 7, totalPriceCents: 20000,
+            legs: [{
+                sequence: 1,
+                flight: {
+                    flightNumber: 'GA101',
+                    airline: 'Gemini Airways',
+                    priceCents: 20000,
+                    departureDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                },
+                seatAssignments: [{ cabinClass: 'ECONOMY' }],
+            }],
+        });
         mockTx.passenger.findMany.mockResolvedValue([{ id: 'p-9' }]);
         mockTx.booking.update.mockResolvedValue({ id: 1 });
 
@@ -972,6 +999,23 @@ describe('cancelBookingAction', () => {
             }],
         });
         mockTx.booking.update.mockResolvedValue({ id: 1 });
+        // The amount comes from the read taken under the lock, not the one
+        // above it, so this is the row that decides.
+        mockTx.booking.findUnique.mockResolvedValue({
+            id: 1,
+            status: 'CONFIRMED',
+            totalPriceCents: 10000,
+            legs: [{
+                sequence: 1,
+                flight: {
+                    flightNumber: 'GA101',
+                    airline: 'Gemini Airways',
+                    priceCents: 10000,
+                    departureDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                },
+                seatAssignments: [{ cabinClass: 'ECONOMY' }],
+            }],
+        });
 
         await cancelBookingAction(1);
 
@@ -991,6 +1035,42 @@ describe('cancelBookingAction', () => {
         // Transaction-local, or it would attach to whatever the next booking on
         // this connection does.
         for (const setting of settings) expect(setting.sql).toContain('true');
+    });
+
+    it('prices the cancellation from the read taken under the lock', async () => {
+        // Staff can cancel the flight between the first read and the lock,
+        // which moves the booking to DISRUPTED and makes it fully refundable.
+        // Deciding once, before the lock, would charge the customer the fee for
+        // the airline's own cancellation (#76).
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        const leg = (status: string) => ({
+            id: 1,
+            userId: 'user-123',
+            status,
+            totalPriceCents: 10000,
+            legs: [{
+                sequence: 1,
+                flight: {
+                    flightNumber: 'GA101',
+                    airline: 'Gemini Airways',
+                    priceCents: 10000,
+                    departureDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                },
+                seatAssignments: [{ cabinClass: 'ECONOMY' }],
+            }],
+        });
+        // Read before the lock: an ordinary booking, so a fifth would be kept.
+        mockedBookingFindUnique.mockResolvedValue(leg('CONFIRMED'));
+        // Read under it: the airline got there first.
+        mockTx.booking.findUnique.mockResolvedValue(leg('DISRUPTED'));
+        mockTx.booking.update.mockResolvedValue({ id: 1 });
+
+        await cancelBookingAction(1);
+
+        const refund = mockTx.$executeRaw.mock.calls
+            .map(call => ({ sql: (call[0] as unknown as string[]).join('?'), values: call.slice(1) }))
+            .find(setting => setting.sql.includes('app.booking_refund_cents'));
+        expect(refund!.values).toContain('10000');
     });
 
     it('refuses to cancel a booking whose flight has departed', async () => {
@@ -1461,7 +1541,9 @@ describe('admin flight schedule actions', () => {
 
         it('allows admin to update status and creates flight update notifications for affected users', async () => {
             mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
-            mockedFlightUpdate.mockResolvedValue({
+            // The status and what it does to the bookings move together under
+            // the flight's lock now, so both happen on the transaction client.
+            mockTx.flight.update.mockResolvedValue({
                 id: 99,
                 airline: 'Gemini Airways',
                 flightNumber: 'GA101',
@@ -1473,16 +1555,20 @@ describe('admin flight schedule actions', () => {
                 toAirport: { label: 'Detroit, USA' },
                 status: 'DELAYED'
             });
-            mockedBookingFindMany.mockResolvedValue([
-                { userId: 'user-1' },
-                { userId: 'user-2' },
-                { userId: null },
-                { userId: 'user-1' }
+            // The bookings are row-locked first, then read with their legs:
+            // what each becomes depends on whether any leg is cancelled.
+            mockTx.$queryRaw.mockResolvedValue([{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }]);
+            const operating = { legs: [{ flight: { status: 'DELAYED' } }], status: 'CONFIRMED' };
+            mockTx.booking.findMany.mockResolvedValue([
+                { id: 1, userId: 'user-1', ...operating },
+                { id: 2, userId: 'user-2', ...operating },
+                { id: 3, userId: null, ...operating },
+                { id: 4, userId: 'user-1', ...operating },
             ]);
 
             const result = await updateFlightStatusAction(99, 'DELAYED');
 
-            expect(mockedFlightUpdate).toHaveBeenCalledWith({
+            expect(mockTx.flight.update).toHaveBeenCalledWith({
                 where: { id: 99 },
                 data: { status: 'DELAYED' },
                 include: {
@@ -1498,10 +1584,21 @@ describe('admin flight schedule actions', () => {
             expect(result).not.toHaveProperty('fromAirport');
             expect(result).not.toHaveProperty('toAirport');
 
-            expect(mockedBookingFindMany).toHaveBeenCalledWith({
-                where: { legs: { some: { flightId: 99 } }, status: 'CONFIRMED' },
-                select: { userId: true }
+            // Everyone holding a live booking on the flight is told about a
+            // delay, which is the main thing this action announces. Narrowing
+            // the read to disrupted bookings silently stopped delay
+            // notifications altogether (#76).
+            expect(mockTx.booking.findMany).toHaveBeenCalledWith({
+                where: { id: { in: [1, 2, 3, 4] } },
+                select: {
+                    id: true,
+                    status: true,
+                    userId: true,
+                    legs: { select: { flight: { select: { status: true } } } },
+                },
             });
+            // A delay moves nobody's booking status.
+            expect(mockTx.booking.update).not.toHaveBeenCalled();
 
             expect(mockedNotificationCreateMany).toHaveBeenCalledWith({
                 data: [
