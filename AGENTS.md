@@ -1,4 +1,4 @@
-# travel-app
+# AGENTS
 
 Next.js 16 App Router + Prisma/PostgreSQL + NextAuth. TypeScript strict, Tailwind, shadcn/ui.
 
