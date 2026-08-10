@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "d17d0e263711",
+  "strategy": "manual-commit",
+  "branch": "docs/audit-current-guidance",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "README.md",
+    "SECURITY.md",
+    "docs/PASSENGER_DATA_POLICY.md",
+    "prisma/schema.prisma",
+    "readme-images/booking-page.png",
+    "readme-images/profile-page.png",
+    "readme-images/travel-guide-admin-page.png",
+    "readme-images/travel-guide-page.png"
+  ],
+  "sessions": [
+    {
+      "metadata": "/d1/7d0e263711/0/metadata.json",
+      "transcript": "/d1/7d0e263711/0/full.jsonl",
+      "compact_transcript": "/d1/7d0e263711/0/transcript.jsonl",
+      "content_hash": "/d1/7d0e263711/0/content_hash.txt",
+      "prompt": "/d1/7d0e263711/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 316928,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 5989248,
+    "output_tokens": 21805,
+    "api_call_count": 52
+  }
+}
