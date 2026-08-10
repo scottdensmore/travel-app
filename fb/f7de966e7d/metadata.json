@@ -1,0 +1,34 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "fbf7de966e7d",
+  "strategy": "manual-commit",
+  "branch": "feat/flight-disruption",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "__tests__/app/actions.test.ts",
+    "__tests__/app/flightDisruption.database.test.ts",
+    "__tests__/components/AdminFlightsTable.test.tsx",
+    "__tests__/components/ProfileClient.test.tsx",
+    "app/actions.ts",
+    "app/admin/flights/AdminFlightsTable.tsx",
+    "app/profile/page.tsx",
+    "components/ui/ProfileClient.tsx",
+    "lib/serverClock.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/fb/f7de966e7d/0/metadata.json",
+      "transcript": "/fb/f7de966e7d/0/full.jsonl",
+      "compact_transcript": "/fb/f7de966e7d/0/transcript.jsonl",
+      "content_hash": "/fb/f7de966e7d/0/content_hash.txt",
+      "prompt": "/fb/f7de966e7d/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 4221,
+    "cache_creation_tokens": 7779003,
+    "cache_read_tokens": 911525292,
+    "output_tokens": 1371228,
+    "api_call_count": 1968
+  }
+}
