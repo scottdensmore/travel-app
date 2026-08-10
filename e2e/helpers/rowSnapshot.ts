@@ -27,8 +27,9 @@ const owned = (id: string, email: string | null) => `${id} (${email ?? 'no email
  *
  * `Booking` is absent on purpose -- `global-setup` clears every booking before
  * each run, so one left behind is corrected rather than accumulated, and the
- * seat it held comes back (#173). `Passenger`, `ItineraryLeg` and
- * `SeatAssignment` cascade from it, `Account` and `Session` cascade from `User`
+ * seat it held comes back (#173). `Passenger`, `ItineraryLeg`,
+ * `SeatAssignment` and `BookingStatusChange` cascade from it, `Account` and
+ * `Session` cascade from `User`
  * (and stay empty anyway, since sessions are JWTs), `AuthRateLimit` is cleared
  * at both ends of a run, and `Airport` and `CityGuide` are seed reference data
  * no spec writes. Nothing clears the tables below, so a row left in one is
