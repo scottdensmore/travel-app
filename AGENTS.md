@@ -151,9 +151,12 @@ Chart and other browser-interactive components need `'use client'`.
      unattended and posts its findings as a comment. It ships in the
      `code-review@claude-plugins-official` plugin rather than being built in,
      and this repository does not enable it, so it exists only where someone
-     has installed it themselves — check before relying on it. Step 11 is what
-     reviews every pull request. `/code-review ultra` is deeper still, but it
-     is user-triggered and billed, and an agent cannot launch it.
+     has installed it themselves — check before relying on it.
+     `/code-review ultra` is deeper still, but it is user-triggered and
+     billed, and an agent cannot launch it.
+
+   Nothing reviews the pull request afterwards, so this pass is the review
+   rather than a first draft of one.
 
    Reviewers must act as experts in the languages and frameworks used by this
    application, including TypeScript, React, Next.js, Prisma, PostgreSQL, Jest,
@@ -184,37 +187,18 @@ Chart and other browser-interactive components need `'use client'`.
     - Open a normal, ready-for-review pull request by default. Do not open draft
       pull requests unless the user explicitly asks for a draft.
 
-11. **Let Codex review the pull request, and answer it.** Automatic Codex
-    review is expected after each push, and its verdict gates the merge.
-
-    - It reacts 👀 on the pull request while reading and 👍 when it is satisfied.
-      The reactions are on the pull request itself:
-      `gh api repos/<owner>/<repo>/issues/<pr>/reactions`.
-    - Findings are inline review threads, invisible to
-      `gh pr view --json comments`. Read them through GraphQL `reviewThreads`,
-      which gives the body, the `isResolved` state the merge gate turns on, and
-      the thread id needed to resolve it — the REST comments endpoint carries
-      none of the last two. Page it: a missed page reads as a finding that is
-      not there.
-    - The loop: address the findings, re-run steps 6 to 9 for what changed,
-      push, reply to each thread saying what changed, resolve it, wait for the
-      next verdict. Repeat until 👍. Treat P1 as blocking, and where a finding
-      is right about the problem but wrong about the fix, say so rather than
-      resolving quietly.
-    - **Only a 👍 you watched arrive counts.** The old one survives a push, and
-      survives a later review that had findings, so the reaction sitting there
-      may be about a commit two revisions back. Watch it go 👀 and then 👍
-      after your push; never read the one that was already there as approval.
-      Silence is pending, never approval. If no new review run starts, stop
-      before merging and report it as pending; do not post `@codex review`
-      unless the user explicitly requests it.
+11. **Answer whatever review the pull request attracts.** No automated
+    reviewer gates a merge here. Where a human or a bot does leave findings,
+    address them, re-run steps 6 to 9 for whatever changed, push, and reply
+    saying what changed — and where a finding is right about the problem but
+    wrong about the fix, say so rather than resolving it quietly.
 
 12. **Merge only clean, passing pull requests.** Merge only after GitHub
-    reports a clean merge state, every configured check passes, and Codex has
-    approved the current head with no unresolved review threads. Never bypass
-    a failing or pending required check. Self-merges are allowed when these
-    conditions are met. Use squash merge for short-lived development branches
-    to keep `main` linear, then delete the merged branch.
+    reports a clean merge state, every configured check passes, and no review
+    thread is left unresolved. Never bypass a failing or pending required
+    check. Self-merges are allowed when these conditions are met. Use squash
+    merge for short-lived development branches to keep `main` linear, then
+    delete the merged branch.
 
 ## Testing Expectations
 
