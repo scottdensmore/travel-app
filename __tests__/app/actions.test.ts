@@ -886,7 +886,7 @@ describe('cancelBookingAction', () => {
         });
     });
 
-    it('releases the seat on the assignment so it can be booked again', async () => {
+    it('leaves the seat assignment alone, because the database releases it', async () => {
         // The assignment's unique index is the only thing holding the seat now
         // that the traveller row no longer carries one (#137), so releasing it
         // there releases it outright.
@@ -900,10 +900,13 @@ describe('cancelBookingAction', () => {
 
         await cancelBookingAction(1);
 
-        expect(mockTx.seatAssignment.updateMany).toHaveBeenCalledWith({
-            where: { passengerId: 'p-9' },
-            data: { seatNumber: 'CANCELLED-p-9' }
-        });
+        // The seat is released by the status change, in the database, so this
+        // action does not touch the assignment at all -- and in particular does
+        // not overwrite the seat number, which is now kept. That the release
+        // actually happens is asserted against Postgres in
+        // `__tests__/lib/seatRelease.database.test.ts`; a mock cannot fire a
+        // trigger.
+        expect(mockTx.seatAssignment.updateMany).not.toHaveBeenCalled();
         // The traveller row holds no seat to release.
         expect(mockTx.passenger.update).not.toHaveBeenCalled();
     });
@@ -1730,7 +1733,7 @@ describe('admin flight schedule actions', () => {
                     where: { id: 42 },
                     include: {
                         seatAssignments: {
-                            where: { leg: { booking: { status: { not: 'CANCELLED' } } } },
+                            where: { releasedAt: null, },
                             select: { seatNumber: true, cabinClass: true }
                         }
                     }

@@ -479,14 +479,14 @@ describe('ProfileClient interactive dashboard', () => {
             expect(legs[0]).not.toHaveTextContent('12A');
         });
 
-        it('marks a released seat rather than printing the cancellation marker', () => {
+        it('marks a released seat rather than printing the seat somebody else may now hold', () => {
             renderBookings([
                 {
                     ...roundTripBooking,
                     legs: roundTripBooking.legs.map((leg, index) => ({
                         ...leg,
                         seatAssignments: index === 0
-                            ? [{ passengerId: 'p-1', seatNumber: 'CANCELLED-202-1' }]
+                            ? [{ passengerId: 'p-1', seatNumber: '11A', releasedAt: new Date() }]
                             : leg.seatAssignments,
                     })),
                 },
@@ -494,7 +494,10 @@ describe('ProfileClient interactive dashboard', () => {
 
             const legs = within(screen.getByTestId('booking-row-202')).getAllByTestId(/^booking-leg-/);
             expect(legs[0]).toHaveTextContent('Jane (Released)');
-            expect(legs[0]).not.toHaveTextContent('CANCELLED-202-1');
+            // The number is kept on the row now, and is exactly what must not
+            // be shown: the seat is free and may already belong to somebody
+            // else (#76).
+            expect(legs[0]).not.toHaveTextContent('11A');
         });
     });
 });

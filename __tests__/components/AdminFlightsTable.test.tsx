@@ -41,7 +41,11 @@ const mockFlights = [
                         firstName: 'John',
                         lastName: 'Doe',
                         gender: 'M',
+                        // The same seat as the released one below, which is now
+                        // a state the database allows and the manifest must not
+                        // report as two people in 12A (#76).
                         seatNumber: '12A',
+                        releasedAt: null,
                         cabinClass: 'ECONOMY',
                     }
                 ]
@@ -57,9 +61,13 @@ const mockFlights = [
                         firstName: 'Jane',
                         lastName: 'Smith',
                         gender: 'F',
-                        // A cancelled booking's seat is parked under a
-                        // placeholder, which the manifest reads as "Released".
-                        seatNumber: 'CANCELLED-p2',
+                        // A released seat keeps the number the traveller
+                        // actually held -- the same 12A the confirmed traveller
+                        // above now holds. The manifest has to read the
+                        // release, not the number, or it reports two people in
+                        // one seat (#76).
+                        seatNumber: '12A',
+                        releasedAt: new Date('2026-08-09T12:00:00Z'),
                         // A different cabin from the other traveller: the
                         // manifest lists the cabin held on this leg, per
                         // traveller, rather than one cabin for the flight.

@@ -226,10 +226,12 @@ test.describe('Admin Control Journey', () => {
     }
     expect(manifestText).not.toContain('Passport');
     expect(manifestText).not.toContain('DOB');
+    expect(manifestText).toContain('Seat 11A');
 
     // Close manifest modal
     await page.locator('button:has-text("Close")').click();
     await expect(page.locator('h2:has-text("Passenger Manifest")')).not.toBeVisible();
+
 
     // Select the newly generated flight's live status selector and change to "Delayed"
     const statusSelect = populatedFlightRow.locator('select').first();
@@ -245,6 +247,28 @@ test.describe('Admin Control Journey', () => {
     // whatever the database held at that instant (#182).
     await expect(statusSelect).toBeEnabled();
     await expect(statusSelect).toHaveValue('DELAYED');
+
+    // A released seat must not read as a live one here.
+    //
+    // Releasing keeps the real seat number on the row now, so the manifest has
+    // to load `releasedAt` and render from it. Without both halves this screen
+    // says two people hold 11A -- the cancelled traveller and whoever was sold
+    // the seat next -- with only a coloured word in another column to separate
+    // them, on the tool used to board a flight (#76).
+    await prisma.booking.updateMany({
+      where: { userId: admin.id, legs: { some: { flightId: activeOccurrence.id } } },
+      data: { status: 'CANCELLED' },
+    });
+    await page.reload();
+    await page.locator('tr', { hasText: activeOccurrence.flightNumber })
+      .locator('button:has-text("Manifest")').first().click();
+    const releasedManifest = await page.getByRole('dialog', { name: 'Passenger Manifest' }).innerText();
+    expect(releasedManifest).toContain('Released');
+    expect(releasedManifest).not.toContain('Seat 11A');
+    await page.locator('button:has-text("Close")').click();
+    await expect(page.locator('h2:has-text("Passenger Manifest")')).not.toBeVisible();
+
+    await page.goto('/admin/flights');
 
     // Navigate to user-facing flight board
     await page.goto('/flights');

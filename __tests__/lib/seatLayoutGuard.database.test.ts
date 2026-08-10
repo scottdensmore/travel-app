@@ -117,12 +117,13 @@ describe('updateFlightSeatingLayout with a round trip on the flight', () => {
         expect(updated.economyRows).toBe(15);
     });
     it('ignores a seat whose booking was cancelled', async () => {
-        // This is the one place the occupancy rule has teeth. Elsewhere a
-        // cancellation is invisible anyway, because it renames the seat to a
-        // CANCELLED-<passengerId> placeholder that can never match a real seat
-        // id. Here the stored seat number is *interpreted* rather than matched,
-        // so without the rule the placeholder is read back as an occupied seat
-        // and every layout change on the flight is refused forever (#143).
+        // This is where the occupancy rule has teeth, and it has more of them
+        // than it used to. A released seat used to be parked under a
+        // CANCELLED-<passengerId> placeholder that could never match a real
+        // seat id, so a reader that forgot the rule got away with it nearly
+        // everywhere. The row now keeps the seat the traveller actually held
+        // (#76), so a forgotten rule reads 20F back as occupied and refuses
+        // every layout change on the flight forever (#143).
         const suffix = `${Date.now()}c`;
         const flight = await createFlight(`C${suffix}`, 'Seattle, USA', 'Detroit, USA', '2027-12-02');
         const user = await prisma.user.create({
@@ -153,15 +154,14 @@ describe('updateFlightSeatingLayout with a round trip on the flight', () => {
         created.bookingIds.push(booking.id);
 
         // Exactly what cancelBookingAction leaves behind: the booking marked
-        // cancelled and the seat parked under a placeholder.
-        const held = await prisma.seatAssignment.findFirstOrThrow({
+        // cancelled, and the seat released by the database while keeping its
+        // number.
+        await prisma.booking.update({ where: { id: booking.id }, data: { status: 'CANCELLED' } });
+        const released = await prisma.seatAssignment.findFirstOrThrow({
             where: { leg: { bookingId: booking.id } },
         });
-        await prisma.booking.update({ where: { id: booking.id }, data: { status: 'CANCELLED' } });
-        await prisma.seatAssignment.update({
-            where: { id: held.id },
-            data: { seatNumber: `CANCELLED-${held.passengerId}` },
-        });
+        expect(released.seatNumber).toBe('20F');
+        expect(released.releasedAt).not.toBeNull();
 
         await updateFlightSeatingLayout(flight.id, { ...ROOMY, economyRows: 15 });
         const updated = await prisma.flight.findUniqueOrThrow({ where: { id: flight.id } });
