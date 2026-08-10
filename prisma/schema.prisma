@@ -234,9 +234,9 @@ model Notification {
   @@index([userId, isRead])
 }
 
-/// Reference data for the places routes fly between. `label` is a transitional
-/// join key carrying the free-text value `Flight.from` and `Flight.to` hold
-/// today; routes will reference airports directly once #73 lands.
+/// Reference data for the places routes fly between. Flights use IATA codes as
+/// foreign keys; `label` is the customer-facing city and country text used by
+/// search controls and route displays.
 model Airport {
   iataCode String @id
   label    String @unique
