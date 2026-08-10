@@ -41,6 +41,10 @@ interface HeldSeat {
     passengerId: string;
     seatNumber: string;
     cabinClass: string;
+    /// Set once the seat was let go. Carried through so a reader can tell a
+    /// live seat from one somebody else may now hold: the row keeps the real
+    /// number either way (#76).
+    releasedAt?: Date | string | null;
 }
 
 /**
@@ -58,7 +62,7 @@ interface HeldSeat {
 export function passengersSeatedOnLeg<TPassenger extends { id: string }>(
     leg: { seatAssignments: HeldSeat[] },
     passengers: TPassenger[]
-): Array<TPassenger & { seatNumber: string; cabinClass: string }> {
+): Array<TPassenger & { seatNumber: string; releasedAt: Date | string | null; cabinClass: string }> {
     return passengers.map((passenger) => {
         const held = leg.seatAssignments.find((seat) => seat.passengerId === passenger.id);
         return {
@@ -67,19 +71,27 @@ export function passengersSeatedOnLeg<TPassenger extends { id: string }>(
             // the whole table by seatAssignmentCoverage.database.test.ts. A leg
             // with no seat for someone is a defect, not a shape to render.
             seatNumber: held?.seatNumber ?? 'Not assigned',
+            releasedAt: held?.releasedAt ?? null,
             cabinClass: held?.cabinClass ?? 'ECONOMY',
         };
     });
 }
 
 /**
- * How a seat reads to the customer. A cancellation parks the seat under a
- * placeholder so the unique index stays satisfied; that marker is bookkeeping,
- * not something to print on someone's booking.
+ * How a seat reads to the customer.
+ *
+ * A released seat says so rather than showing a number, because the number is
+ * no longer the customer's — somebody else may be sitting in it. It reads the
+ * release rather than the seat number: releasing used to overwrite the number
+ * with a `CANCELLED-` placeholder, so this had to recognise the placeholder and
+ * a real seat number beginning with those letters would have been mistaken for
+ * one (#76).
  */
-export function seatLabel(seatNumber: string | null | undefined): string {
-    if (!seatNumber) return 'Not assigned';
-    return seatNumber.startsWith('CANCELLED') ? 'Released' : seatNumber;
+export function seatLabel(
+    seat: { seatNumber: string; releasedAt?: Date | string | null } | null | undefined,
+): string {
+    if (!seat?.seatNumber) return 'Not assigned';
+    return seat.releasedAt ? 'Released' : seat.seatNumber;
 }
 
 const CABIN_NAMES: Record<string, string> = {

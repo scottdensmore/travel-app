@@ -201,7 +201,7 @@ describe('FlightBookingService', () => {
         expect(mockTx.seatAssignment.findMany).toHaveBeenCalledWith({
             where: {
                 flightId: 7,
-                leg: { booking: { status: { not: "CANCELLED" } } },
+                releasedAt: null,
             },
             select: { seatNumber: true },
         });

@@ -37,7 +37,14 @@ export default async function AdminFlightsPage() {
                     // sits somewhere else on the other leg, so the manifest has
                     // to read the assignment rather than Passenger.seatNumber.
                     seatAssignments: {
-                        select: { passengerId: true, seatNumber: true, cabinClass: true }
+                        select: {
+                            passengerId: true,
+                            seatNumber: true,
+                            cabinClass: true,
+                            // Without this the manifest prints a released seat
+                            // as a live one, and lists two travellers in it.
+                            releasedAt: true,
+                        }
                     },
                     booking: {
                         include: {

@@ -13,6 +13,10 @@ interface Passenger {
     /// Added by passengersSeatedOnLeg: where this traveller sits on the leg
     /// being listed, which is a property of the assignment, not the person.
     seatNumber: string;
+    /// Set once the seat was let go. The row keeps the real seat number, so
+    /// without this the manifest reads a released seat as a live one and lists
+    /// two travellers in it (#76).
+    releasedAt: Date | string | null;
     cabinClass: string;
 }
 
@@ -306,7 +310,7 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                                                     <td style={{ padding: '10px 12px', fontSize: '0.85rem' }}>
                                                         <div>{cabinLabel(passenger.cabinClass)}</div>
                                                         <div style={{ color: isCancelled ? '#ef4444' : '#34d399', fontWeight: 'bold', fontSize: '0.75rem' }}>
-                                                            {passenger.seatNumber.startsWith('CANCELLED') ? 'Released' : `Seat ${passenger.seatNumber}`}
+                                                            {passenger.releasedAt ? 'Released' : `Seat ${passenger.seatNumber}`}
                                                         </div>
                                                     </td>
                                                     <td style={{ padding: '10px 12px' }}>

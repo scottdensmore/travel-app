@@ -74,8 +74,14 @@ test.describe('Authoritative booking persistence', () => {
 
     expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
     expect(results.filter(result => result.status === 'rejected')).toHaveLength(1);
-    // Exactly one seat assignment holds 1A on this flight: SeatAssignment's
-    // unique index is now the sole guard against selling a seat twice (#137).
+    // Exactly one seat assignment holds 1A on this flight.
+    //
+    // What this actually exercises is the flight lock: both bookings take it,
+    // so the loser's occupancy check rejects it before any index is consulted,
+    // and this would pass with no unique index at all. The index is the guard
+    // behind that (#137), and the case it alone answers -- two customers
+    // racing for a seat a cancellation just freed -- is driven against Postgres
+    // in `__tests__/lib/seatRelease.database.test.ts` (#76).
     expect(await prisma.seatAssignment.count({
         where: { flightId: flight.id, seatNumber: '1A' },
     })).toBe(1);

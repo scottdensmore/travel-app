@@ -338,9 +338,18 @@ model SeatAssignment {
   flight      Flight       @relation(fields: [flightId], references: [id])
   seatNumber  String
   cabinClass  CabinClass
+  /// When the seat was let go, and null while it is still held. Cancelling used
+  /// to overwrite `seatNumber` instead, because the unique index could not tell
+  /// a held seat from a released one and so held it forever (#76).
+  releasedAt  DateTime?
 
-  /// The guard against two customers acquiring the same seat.
-  @@unique([flightId, seatNumber])
   /// A traveller sits in exactly one seat on any given leg.
   @@unique([passengerId, legId])
+  /// The guard against two customers acquiring the same seat is a *partial*
+  /// unique index on (flightId, seatNumber) WHERE "releasedAt" IS NULL, which
+  /// Prisma cannot express and therefore does not manage. It is created in
+  /// `20260810050000_release_seats_without_renaming`. Declaring the
+  /// unconditional form here would recreate exactly the constraint that
+  /// migration removes.
+  @@index([flightId, releasedAt])
 }

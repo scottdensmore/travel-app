@@ -37,6 +37,7 @@ interface SeatAssignment {
     passengerId: string;
     seatNumber: string;
     cabinClass: string;
+    releasedAt?: Date | string | null;
 }
 
 interface BookingLeg {
@@ -337,7 +338,7 @@ export default function ProfileClient({
                                     const legRows = legs.length > 0 ? legs : [null];
                                     const seatFor = (leg: BookingLeg | null, passengerId: string) =>
                                         seatLabel(
-                                            leg?.seatAssignments?.find(seat => seat.passengerId === passengerId)?.seatNumber
+                                            leg?.seatAssignments?.find(seat => seat.passengerId === passengerId)
                                         );
                                     return (
                                         <tbody key={booking.id} data-testid={`booking-row-${booking.id}`} className="border-b">

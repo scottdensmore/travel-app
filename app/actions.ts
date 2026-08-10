@@ -442,21 +442,11 @@ export async function cancelBookingAction(bookingId: number) {
         if (!lockedBooking) throw new Error("Booking not found");
         if (lockedBooking.status === "CANCELLED") throw new Error("Booking is already cancelled");
 
-        const passengers = await tx.passenger.findMany({
-            where: { bookingId },
-            select: { id: true },
-        });
-
-        for (const passenger of passengers) {
-            // The seat is released by renaming it, so the unique index on
-            // SeatAssignment stops holding it. That index is now the only guard
-            // against selling a seat twice, so releasing it there releases it.
-            await tx.seatAssignment.updateMany({
-                where: { passengerId: passenger.id },
-                data: { seatNumber: `CANCELLED-${passenger.id}` }
-            });
-        }
-
+        // The seats are released by the status change below, not here: a
+        // cancelled booking never holds one, so the database does it rather
+        // than every caller that knows both facts. Releasing now sets
+        // `releasedAt` and keeps the seat number, where the old code overwrote
+        // the number with a placeholder and lost where the traveller sat (#76).
         return await tx.booking.update({
             where: { id: bookingId },
             data: { status: "CANCELLED" }

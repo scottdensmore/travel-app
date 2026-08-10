@@ -22,6 +22,15 @@ let flightId: number;
 let confirmedSeat: string;
 let cancelledSeat: string;
 
+/**
+ * Books a seat, and cancels afterwards rather than inserting a booking that was
+ * born cancelled.
+ *
+ * The order matters now. Releasing a seat is its own fact on the assignment
+ * row, written when the booking *moves* to CANCELLED -- so a fixture that
+ * inserts the cancellation and then adds a seat produces a held seat on a
+ * cancelled booking, which is a state the application cannot reach (#76).
+ */
 async function bookSeat(status: BookingStatus, seatNumber: string) {
     const user = await prisma.user.create({
         data: {
@@ -36,7 +45,6 @@ async function bookSeat(status: BookingStatus, seatNumber: string) {
     const booking = await prisma.booking.create({
         data: {
             userId: user.id,
-            status,
             legs: { create: [{ sequence: 1, flightId }] },
             passengers: {
                 create: [{
@@ -60,6 +68,10 @@ async function bookSeat(status: BookingStatus, seatNumber: string) {
             cabinClass: 'ECONOMY',
         },
     });
+
+    if (status !== 'CONFIRMED') {
+        await prisma.booking.update({ where: { id: booking.id }, data: { status } });
+    }
 
     return booking;
 }

@@ -72,8 +72,8 @@ describe('booking itinerary', () => {
             };
 
             expect(passengersSeatedOnLeg(inbound, [ada, grace])).toEqual([
-                { id: 'p-1', firstName: 'Ada', seatNumber: '20F', cabinClass: 'BUSINESS' },
-                { id: 'p-2', firstName: 'Grace', seatNumber: '20E', cabinClass: 'BUSINESS' },
+                { id: 'p-1', firstName: 'Ada', seatNumber: '20F', releasedAt: null, cabinClass: 'BUSINESS' },
+                { id: 'p-2', firstName: 'Grace', seatNumber: '20E', releasedAt: null, cabinClass: 'BUSINESS' },
             ]);
         });
 
@@ -84,7 +84,7 @@ describe('booking itinerary', () => {
             // somewhere else (#137).
             const leg = { seatAssignments: [] };
             expect(passengersSeatedOnLeg(leg, [ada])).toEqual([
-                { ...ada, seatNumber: 'Not assigned', cabinClass: 'ECONOMY' },
+                { ...ada, seatNumber: 'Not assigned', releasedAt: null, cabinClass: 'ECONOMY' },
             ]);
         });
 
