@@ -184,8 +184,8 @@ Chart and other browser-interactive components need `'use client'`.
     - Open a normal, ready-for-review pull request by default. Do not open draft
       pull requests unless the user explicitly asks for a draft.
 
-11. **Let Codex review the pull request, and answer it.** It reviews every
-    push, and its verdict gates the merge.
+11. **Let Codex review the pull request, and answer it.** Automatic Codex
+    review is expected after each push, and its verdict gates the merge.
 
     - It reacts 👀 on the pull request while reading and 👍 when it is satisfied.
       The reactions are on the pull request itself:
@@ -205,6 +205,9 @@ Chart and other browser-interactive components need `'use client'`.
       survives a later review that had findings, so the reaction sitting there
       may be about a commit two revisions back. Watch it go 👀 and then 👍
       after your push; never read the one that was already there as approval.
+      Silence is pending, never approval. If no new review run starts, stop
+      before merging and report it as pending; do not post `@codex review`
+      unless the user explicitly requests it.
 
 12. **Merge only clean, passing pull requests.** Merge only after GitHub
     reports a clean merge state, every configured check passes, and Codex has
