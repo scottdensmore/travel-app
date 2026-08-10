@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "5cdb3cfecb25",
+  "strategy": "manual-commit",
+  "branch": "feat/booking-status-enum",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "__tests__/lib/bookingStatus.database.test.ts",
+    "__tests__/lib/seatOccupancy.database.test.ts",
+    "e2e/helpers/rowSnapshot.ts",
+    "lib/seatOccupancy.ts",
+    "prisma/migrations/20260810040000_type_booking_status/migration.sql",
+    "prisma/schema.prisma"
+  ],
+  "sessions": [
+    {
+      "metadata": "/5c/db3cfecb25/0/metadata.json",
+      "transcript": "/5c/db3cfecb25/0/full.jsonl",
+      "compact_transcript": "/5c/db3cfecb25/0/transcript.jsonl",
+      "content_hash": "/5c/db3cfecb25/0/content_hash.txt",
+      "prompt": "/5c/db3cfecb25/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3742,
+    "cache_creation_tokens": 7128360,
+    "cache_read_tokens": 804513915,
+    "output_tokens": 1186435,
+    "api_call_count": 1712
+  }
+}
