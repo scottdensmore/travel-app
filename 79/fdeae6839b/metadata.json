@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "79fdeae6839b",
+  "strategy": "manual-commit",
+  "branch": "test/e2e-account-leaks",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "AGENTS.md",
+    "__tests__/e2e/rowSnapshot.database.test.ts",
+    "__tests__/e2e/rowSnapshot.test.ts",
+    "e2e/auth-abuse.spec.ts",
+    "e2e/auth.spec.ts",
+    "e2e/global-setup.ts",
+    "e2e/global-teardown.ts",
+    "e2e/helpers/rowSnapshot.ts",
+    "e2e/helpers/runBaseline.ts",
+    "e2e/travelguide.spec.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/79/fdeae6839b/0/metadata.json",
+      "transcript": "/79/fdeae6839b/0/full.jsonl",
+      "compact_transcript": "/79/fdeae6839b/0/transcript.jsonl",
+      "content_hash": "/79/fdeae6839b/0/content_hash.txt",
+      "prompt": "/79/fdeae6839b/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3591,
+    "cache_creation_tokens": 7020446,
+    "cache_read_tokens": 785629222,
+    "output_tokens": 1123907,
+    "api_call_count": 1631
+  }
+}
