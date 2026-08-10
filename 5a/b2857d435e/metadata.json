@@ -1,0 +1,44 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "5ab2857d435e",
+  "strategy": "manual-commit",
+  "branch": "refactor/seat-release",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "__tests__/app/actions.test.ts",
+    "__tests__/components/AdminFlightsTable.test.tsx",
+    "__tests__/components/ProfileClient.test.tsx",
+    "__tests__/lib/FlightBookingService.test.ts",
+    "__tests__/lib/bookingItinerary.test.ts",
+    "__tests__/lib/seatLayoutGuard.database.test.ts",
+    "__tests__/lib/seatOccupancy.database.test.ts",
+    "__tests__/lib/seatOccupancy.test.ts",
+    "__tests__/lib/seatRelease.database.test.ts",
+    "app/actions.ts",
+    "app/admin/flights/AdminFlightsTable.tsx",
+    "app/admin/flights/page.tsx",
+    "app/profile/page.tsx",
+    "components/ui/ProfileClient.tsx",
+    "e2e/booking.spec.ts",
+    "lib/bookingItinerary.ts",
+    "lib/seatOccupancy.ts",
+    "prisma/migrations/20260810050000_release_seats_without_renaming/migration.sql",
+    "prisma/schema.prisma"
+  ],
+  "sessions": [
+    {
+      "metadata": "/5a/b2857d435e/0/metadata.json",
+      "transcript": "/5a/b2857d435e/0/full.jsonl",
+      "compact_transcript": "/5a/b2857d435e/0/transcript.jsonl",
+      "content_hash": "/5a/b2857d435e/0/content_hash.txt",
+      "prompt": "/5a/b2857d435e/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3935,
+    "cache_creation_tokens": 7235579,
+    "cache_read_tokens": 839236508,
+    "output_tokens": 1255489,
+    "api_call_count": 1815
+  }
+}

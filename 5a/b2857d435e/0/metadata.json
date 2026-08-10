@@ -1,0 +1,114 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "5ab2857d435e",
+  "session_id": "94121201-47c3-4281-aeff-7838379a510d",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-10T05:33:42.065363005Z",
+  "branch": "refactor/seat-release",
+  "checkpoints_count": 4,
+  "save_step_count": 3,
+  "files_touched": [
+    "__tests__/app/actions.test.ts",
+    "__tests__/components/AdminFlightsTable.test.tsx",
+    "__tests__/components/ProfileClient.test.tsx",
+    "__tests__/lib/FlightBookingService.test.ts",
+    "__tests__/lib/bookingItinerary.test.ts",
+    "__tests__/lib/seatLayoutGuard.database.test.ts",
+    "__tests__/lib/seatOccupancy.database.test.ts",
+    "__tests__/lib/seatOccupancy.test.ts",
+    "__tests__/lib/seatRelease.database.test.ts",
+    "app/actions.ts",
+    "app/admin/flights/AdminFlightsTable.tsx",
+    "app/admin/flights/page.tsx",
+    "app/profile/page.tsx",
+    "components/ui/ProfileClient.tsx",
+    "e2e/booking.spec.ts",
+    "lib/bookingItinerary.ts",
+    "lib/seatOccupancy.ts",
+    "prisma/migrations/20260810050000_release_seats_without_renaming/migration.sql",
+    "prisma/schema.prisma"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-5",
+  "turn_id": "e116c8948c00",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 3935,
+    "cache_creation_tokens": 7235579,
+    "cache_read_tokens": 839236508,
+    "output_tokens": 1255489,
+    "api_call_count": 1815
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "claude-skill-toolu_01PoA31daKg2DhkuJoCobHR5",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "frontend-design"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "e116c8948c00",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 1584,
+        "end": 1585,
+        "entry_ids": [
+          "32469cfe-0ad7-433a-b3ed-8fe51c184595"
+        ],
+        "tool_use_id": "toolu_01PoA31daKg2DhkuJoCobHR5"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01PoA31daKg2DhkuJoCobHR5"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: frontend-design",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 7
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-10T05:33:37.673421539Z",
+    "agent_lines": 457,
+    "agent_removed": 92,
+    "human_added": 129,
+    "human_modified": 13,
+    "human_removed": 0,
+    "total_committed": 599,
+    "total_lines_changed": 693,
+    "agent_percentage": 79.22077922077922,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 432,
+      "agent_lines_removed": 65
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 470,
+      "agent_lines_removed": 92
+    }
+  ]
+}
