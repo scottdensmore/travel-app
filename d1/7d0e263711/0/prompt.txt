@@ -1,9 +1,1 @@
-lets just merge it then lets do a test pr to ensure that codex reviews are working
-
----
-
-Why do we need the docs in the @docs directory?
-
----
-
-Ok go through the codebase and review all the docs and make sure that they are needed and updated. I feel like some of these docs might be outdated or unneccary
+Ok lets commit and push a pr and monitor for the codex review
