@@ -43,7 +43,8 @@ marketing, or routine customer-support work.
   non-sensitive booking, passenger, and seat history.
 - A verified customer erasure request can call the server-only
   `purgePassengerDataForUser` operation immediately. The customer-facing
-  export/deletion workflow remains tracked separately under P5.3.
+  export/deletion workflow remains tracked separately under
+  [#89](https://github.com/scottdensmore/travel-app/issues/89), P5.3.
 - Deleting a booking deletes its passenger rows through the existing database
   cascade. Database backups follow the deployment backup-retention policy and
   must age out before a retired decryption key is destroyed.

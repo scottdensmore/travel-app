@@ -1,143 +1,144 @@
-This is the website for Mona Airways. Fly with the Octocat!
+# Mona Airways
 
-## Getting Started
+Mona Airways is a full-stack airline booking application built with Next.js 16,
+Prisma, PostgreSQL, NextAuth, Tailwind CSS, and shadcn/ui. It is a demonstration
+application, not a production airline service.
 
-This project uses Node.js 22 across local development, CI, and container
-builds. [mise](https://mise.jdx.dev/) is the recommended version manager. With
-`mise` activated in your shell, entering this repository automatically selects
-the latest installed Node 22 release declared in `mise.toml`. Install it after
-a fresh checkout with:
+## What the application supports
+
+- One-way and round-trip flight search with shareable search URLs, live
+  inventory, nearby-date suggestions, cabin-aware fares, sorting, and filters.
+- Authenticated checkout with server-authoritative pricing, per-leg seat
+  selection, encrypted passenger identity data, and duplicate-booking
+  protection.
+- Customer booking management, including itinerary review, seat changes,
+  cancellation, points activity, and flight notifications.
+- Account registration, email verification, sign-in throttling, password reset,
+  and recovery email through Mailpit locally or Postmark in deployments.
+- Travel guides with maps, favorites, and customer reviews.
+- Staff administration for flight schedules, generated flight inventory,
+  status updates, passenger manifests, users, and travel guides. Staff access
+  requires TOTP enrollment and verification.
+
+Product hardening work and known gaps are tracked in
+[GitHub issues labelled `roadmap`](https://github.com/scottdensmore/travel-app/issues?q=is%3Aissue%20label%3Aroadmap).
+
+## Prerequisites
+
+- Node.js 22. The repository enforces this major through `package.json` and
+  `.npmrc`.
+- npm.
+- Docker with Docker Compose for the recommended local stack. Podman and
+  podman-compose can be used as a fallback.
+
+The repository includes both `mise.toml` and `.nvmrc`. With mise activated,
+entering the repository selects Node 22 automatically after:
 
 ```bash
 mise install
 node --version
 ```
 
-If you use `nvm` instead, the matching `.nvmrc` supports the equivalent setup:
+The nvm equivalent is:
 
 ```bash
 nvm install
 nvm use
 ```
 
-npm is configured to reject dependency installation under other Node.js major
-versions so local verification stays aligned with CI.
+## Local setup
 
-Copy the safe environment template before starting the application:
+Copy the local environment template:
 
 ```bash
 cp .env.example .env
 ```
 
-Replace `NEXTAUTH_SECRET` with a securely generated value of at least 32
-characters. Generate the active passenger-data key with
-`openssl rand -base64 32` and set it as
-`PASSENGER_DATA_ENCRYPTION_KEYS=local-v1:<generated-value>`. Generate a
-different 32-byte key for staff authenticator secrets and set it as
-`STAFF_MFA_ENCRYPTION_KEYS=local-v1:<different-generated-value>`. Local
-non-container development may leave
-`AUTH_TRUSTED_PROXY_HOPS` at `0`. The recommended Compose deployment supplies
-its own safe value; other deployments must set it to the exact number of
-trusted right-most proxy entries. Deployed environments must inject all secret
-configuration at runtime; never bake `.env` into an image. See
-[SECURITY.md](SECURITY.md) for rotation and incident guidance.
+Before starting the application, edit `.env` and populate three independent
+secrets:
 
-Staff accounts must enroll a TOTP authenticator before using any admin page or
-mutation. See [docs/STAFF_ACCOUNT_POLICY.md](docs/STAFF_ACCOUNT_POLICY.md) for
-the enrollment, reset, and key-rotation procedures.
+- `NEXTAUTH_SECRET`: a cryptographically random value at least 32 characters
+  long.
+- `PASSENGER_DATA_ENCRYPTION_KEYS`: `local-v1:<base64-key>`, where the key is
+  32 random bytes generated with `openssl rand -base64 32`.
+- `STAFF_MFA_ENCRYPTION_KEYS`: the same format, using a different random key.
 
-### Using Docker (Recommended)
+Never commit `.env` or reuse its local values in a deployment.
 
-To quickly get the application running with a database and demo data, use Docker:
-
-```bash
-docker compose up --build
-```
-
-This automatically starts the database, local Mailpit test inbox, runs
-migrations, seeds data, and serves
-the app at [http://localhost:3000](http://localhost:3000). Compose exposes the
-app only through a bundled reverse proxy. The proxy replaces any incoming
-`X-Forwarded-For` value with the connecting address before forwarding the
-request, so clients cannot choose the identity used by authentication limits.
-Verification and recovery messages are visible only on the same machine at
-[http://localhost:8025](http://localhost:8025). Mailpit is for local testing;
-deployed environments must set `AUTH_EMAIL_PROVIDER=postmark`, use Postmark's
-HTTPS email endpoint, and inject `AUTH_EMAIL_API_TOKEN` from a secret manager.
-
-### Manual Setup
-
-If you prefer to run the application manually, install the locked dependencies:
+Install the locked dependencies:
 
 ```bash
 npm ci
 ```
 
-Then run the development server:
+### Full Compose stack
+
+The recommended command starts PostgreSQL, Mailpit, the reverse proxy, the app,
+and the inventory scheduler. It also applies migrations and seeds the database:
 
 ```bash
+docker compose up --build
+```
+
+The app is available at [http://localhost:3000](http://localhost:3000), and
+verification and recovery messages appear in Mailpit at
+[http://localhost:8025](http://localhost:8025). Mailpit binds to loopback and is
+only for local development.
+
+### App process on the host
+
+To run Next.js on the host while keeping its backing services in Compose:
+
+```bash
+docker compose up -d db mailpit
+npx prisma migrate deploy
+npx prisma db seed
 npm run dev
 ```
 
-For local verification and recovery email, start only the loopback test inbox
-with `docker compose up -d mailpit`; the `.env.example` values already target
-its HTTP API. Alternatively, configure the Postmark provider settings described
-in [SECURITY.md](SECURITY.md).
+The seed command creates the reference data and flight inventory needed by
+search. Deployments that do not run the Compose scheduler must invoke
+`npm run inventory:generate` on their own schedule and monitor
+`npm run inventory:check`.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result. You may need to set up a local Postgres database and run migrations manually (`npx prisma migrate deploy` and `npx prisma db seed`) if using this method.
+## Verification
 
-## Features
+The standard checks are:
 
-### Booking Page
+```bash
+npm run lint
+npx tsc --noEmit
+npm test
+npx playwright test
+npm run build
+```
 
-_Note: Only the UI behaviour is implemented - no functionality required_
+PostgreSQL and Mailpit must be running for the full Jest and Playwright suites.
+Use `npm run build`, not a bare `next build`; the npm script also removes local
+environment files from the standalone output.
 
-Users should be able to:
-- Select a From location and Departure Date
-- Check the "One-way" checkbox which will disable the To and Return Date fields
-- If not one-way, select a To location and Return Date
-- Select a Travel Class
-- Check the Search reward flights option
-- Click Search
+The database Jest project and Playwright setup delete every booking in their
+configured database. They refuse to run unless `DATABASE_IS_DISPOSABLE=true`.
+The supplied `.env.example` enables that guard for local development only;
+never set it in a deployed environment or against data that must be retained.
 
-![Booking Page](readme-images/booking-page.png)
+## Repository guide
 
-## Travel Guide Page
+- `app/actions.ts`: primary server mutation entry point.
+- `app/api/`: authentication routes.
+- `lib/*Service.ts`: business and data-access services.
+- `lib/validation.ts`: shared Zod validation schemas.
+- `prisma/schema.prisma` and `prisma/migrations/`: database model and
+  hand-authored migrations.
+- `e2e/` and `__tests__/`: browser, unit, integration, and database coverage.
+- `AGENTS.md`: contributor and automated-agent workflow.
 
-_Note: This page should function as expected_
+## Security and operational policy
 
-Users should be able to:
-- See a world map with pins on each city
-- See a list of locations, descriptions, and highlights on the right (optional)
-- Click on a pin on the map - this should highlight the appropriate city guide and scroll to it if it's not currently visible on the page
-- (Alternatively) When a pin is clicked, show the appropriate city guide
+- [Security policy and vulnerability reporting](SECURITY.md)
+- [Passenger identity data policy](docs/PASSENGER_DATA_POLICY.md)
+- [Staff account protection policy](docs/STAFF_ACCOUNT_POLICY.md)
 
-![Travel Guide Page](readme-images/travel-guide-page.png)
-
-
-## Travel Guide Admin Page
-
-_Note: Only the UI and lat/long lookup should work on this page. No back-end functionality required._
-
-⚠️ _Demo Note: We'll be asking Copilot Workspace to help add an image upload to this page. We only really need to see the UI end product, but expect other (e.g. data retrieval) files will need to change._
-
-Users should be able to:
-- Type a City and Country
-- When both City and Country are filled, show the latitude and longitude for that city below. If invalid, show an error.
-- Add a plain text long-form description for the city
-- Add a list of travel highlights for the city (tourist attractions)
-
-![Travel Guide Admin Page](readme-images/travel-guide-admin-page.png)
-
-### Profile Page
-
-_Note: This page should function as expected_
-
-⚠️ _Demo Note: We will be using Copilot in VS Code to add a line graph showing monthly points changes below the table_
-
-Users should be able to:
-- See their profile picture, current status, and status points
-- See a visualisation of their progress towards the next status level
-- See a table of recent points activity
-
-![Profile page](readme-images/profile-page.png)
+Deployed environments must inject configuration at runtime, use Postmark for
+transactional email, and sit behind an ingress whose forwarded-address behavior
+matches `AUTH_TRUSTED_PROXY_HOPS`. See the security policy for the full contract.

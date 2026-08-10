@@ -120,5 +120,7 @@ which is why no existing check caught it at the time.
 ## Reporting a vulnerability
 
 Do not open a public issue containing credentials, personal data, or exploit
-details. Contact the repository owner privately with the affected component,
-reproduction steps, impact, and any suggested mitigation.
+details. Use the repository's
+[private vulnerability reporting form](https://github.com/scottdensmore/travel-app/security/advisories/new)
+with the affected component, reproduction steps, impact, and any suggested
+mitigation.
