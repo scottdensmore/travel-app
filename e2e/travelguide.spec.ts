@@ -12,6 +12,15 @@ test.describe('Travel Guide Journey', () => {
     await registerAndSignIn(page, { name, email: uniqueEmail, password });
   });
 
+  test.afterAll(async () => {
+    // The review and the favorite cascade from the account, so deleting it
+    // takes all three. Nothing else does: `global-setup` clears bookings but
+    // deliberately not accounts, since it cannot tell this one from a
+    // developer's -- so without this the run left a set behind every time, and
+    // 25 had accumulated (#213).
+    await prisma.user.deleteMany({ where: { email: uniqueEmail } });
+  });
+
   test('User can select a city, write a review, and toggle favorite', async ({ page }) => {
     const renderingErrors: string[] = [];
     page.on('console', message => {

@@ -1,10 +1,21 @@
 import { test, expect } from '@playwright/test';
 import { createVerifiedAccount, registerAndSignIn, signInWithCredentials } from './helpers/auth';
+import { prisma } from '../lib/prisma';
 
 test.describe('Authentication Journey', () => {
   const uniqueEmail = `test-${Date.now()}@example.com`;
+  // Declared here rather than in the test that uses it so that the cleanup can
+  // see it too.
+  const loginEmail = `login-test-${Date.now()}@example.com`;
   const name = 'Test User';
   const password = 'Password123!';
+
+  test.afterAll(async () => {
+    // Two accounts per run, deleted by nothing: 42 had accumulated. The other
+    // specs already do this; this one was missed because it never touched the
+    // database directly (#213).
+    await prisma.user.deleteMany({ where: { email: { in: [uniqueEmail, loginEmail] } } });
+  });
 
   test('Authentication and recovery remain usable at phone, tablet, and desktop widths', async ({ page }) => {
     for (const width of [320, 768, 1280]) {
@@ -56,8 +67,6 @@ test.describe('Authentication Journey', () => {
   });
 
   test('User can log out and log in again', async ({ page }) => {
-    const loginEmail = `login-test-${Date.now()}@example.com`;
-
     // Register a user specifically for this test to isolate state
     await registerAndSignIn(page, { name, email: loginEmail, password });
 

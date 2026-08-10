@@ -1,6 +1,8 @@
 import { loadEnvConfig } from '@next/env';
 import type { FullConfig } from '@playwright/test';
 import { prisma } from '../lib/prisma';
+import { captureRowSnapshot } from './helpers/rowSnapshot';
+import { recordRunBaseline } from './helpers/runBaseline';
 
 /**
  * The dev server compiles a route the first time something asks for it, and
@@ -178,6 +180,17 @@ export async function clearPreviousRunBookings(): Promise<void> {
 
 async function globalSetup(config: FullConfig): Promise<void> {
   loadEnvConfig(process.cwd());
+
+  // The destination check comes first, before anything reads or writes. The
+  // snapshot below is read-only, but a checkout misaimed at a real database
+  // should be refused by the check rather than get as far as listing every
+  // account in it.
+  assertDisposableDatabase();
+
+  // Then the baseline, before anything this file changes, so that what
+  // `global-teardown` compares against is the database as the run found it
+  // (#213).
+  recordRunBaseline(await captureRowSnapshot());
 
   const baseURL = config.projects[0]?.use?.baseURL ?? 'http://localhost:3000';
   await warmAuthRoutes(baseURL);
