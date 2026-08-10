@@ -1,13 +1,1 @@
-Look at the agents.md file and scrutinize it. I want to make sure that the workflow about the codex code review bot on PRS is correct
-
----
-
-I am not sure what the +1 is about
-
----
-
-I also don't think we should do the @codex review because then we could double up
-
----
-
-Ok lets make that change
+Ok lets submit the pr and see if we get feedback
