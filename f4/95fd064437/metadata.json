@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "f495fd064437",
+  "strategy": "manual-commit",
+  "branch": "test/disruption-journeys",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "e2e/disruption.spec.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/f4/95fd064437/0/metadata.json",
+      "transcript": "/f4/95fd064437/0/full.jsonl",
+      "compact_transcript": "/f4/95fd064437/0/transcript.jsonl",
+      "content_hash": "/f4/95fd064437/0/content_hash.txt",
+      "prompt": "/f4/95fd064437/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 4279,
+    "cache_creation_tokens": 7821189,
+    "cache_read_tokens": 929557856,
+    "output_tokens": 1397969,
+    "api_call_count": 1999
+  }
+}
