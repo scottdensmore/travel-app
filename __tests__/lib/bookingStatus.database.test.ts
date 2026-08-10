@@ -268,6 +268,52 @@ describe('the status history', () => {
         expect(cancellation).toMatchObject({ reason: null, actorUserId: null });
     });
 
+    it('records what a change refunded, including a refund of nothing', async () => {
+        // Zero is a real answer and a different one from "did not refund": a
+        // cancellation inside the cut-off owes nothing, and the row has to say
+        // so rather than leaving it null (#76).
+        const booking = await aBooking();
+
+        await prisma.$transaction(async (tx) => {
+            await tx.$executeRaw`SELECT set_config('app.booking_refund_cents', '0', true)`;
+            await tx.booking.update({ where: { id: booking.id }, data: { status: 'CANCELLED' } });
+        });
+
+        const change = await prisma.bookingStatusChange.findFirst({
+            where: { bookingId: booking.id, to: 'CANCELLED' },
+        });
+        expect(change!.refundCents).toBe(0);
+
+        // The row for the booking coming into existence refunded nothing at
+        // all, and stays null rather than reading as a refund of zero.
+        const created = await prisma.bookingStatusChange.findFirst({
+            where: { bookingId: booking.id, from: null },
+        });
+        expect(created!.refundCents).toBeNull();
+    });
+
+    it('orders two changes made in one transaction', async () => {
+        // `createdAt` is transaction start time, so both of these carry the
+        // same instant and a random uuid each. Without the sequence, "the
+        // latest status change" is unanswerable by ORDER BY.
+        const booking = await aBooking();
+
+        await prisma.$transaction(async (tx) => {
+            await tx.booking.update({ where: { id: booking.id }, data: { status: 'DISRUPTED' } });
+            await tx.booking.update({ where: { id: booking.id }, data: { status: 'CANCELLED' } });
+        });
+
+        const history = await prisma.bookingStatusChange.findMany({
+            where: { bookingId: booking.id },
+            orderBy: { sequence: 'asc' },
+        });
+
+        expect(history.map(entry => entry.to)).toEqual(['CONFIRMED', 'DISRUPTED', 'CANCELLED']);
+        // The premise: the timestamps cannot separate the last two.
+        expect(history[1].createdAt).toEqual(history[2].createdAt);
+        expect(history[1].sequence < history[2].sequence).toBe(true);
+    });
+
     it('has an entry for every booking in the database', async () => {
         // The invariant the backfill exists to make true. Asserted over the
         // whole table rather than the fixtures above, because a reader that has

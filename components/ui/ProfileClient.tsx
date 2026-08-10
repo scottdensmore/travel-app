@@ -164,12 +164,22 @@ export default function ProfileClient({
         if (!confirm(`Are you sure you want to cancel booking for flight ${flightNumber}? This will release your seats.`)) return;
 
         startTransition(async () => {
+            let refusal: string | null = null;
             try {
                 const result = await cancelBookingAction(bookingId);
-                if (isActionValidationFailure(result)) throw new Error(result.error.message);
+                if (isActionValidationFailure(result)) {
+                    // A policy answer, not a fault: a flight that has departed
+                    // cannot be cancelled however many times it is tried, so
+                    // saying "please try again" invites a retry that can never
+                    // work. Show what the server actually said (#76).
+                    refusal = result.error.message;
+                    return;
+                }
                 router.refresh();
-            } catch (error) {
-                alert('Failed to cancel booking. Please try again.');
+            } catch {
+                refusal = 'Failed to cancel booking. Please try again.';
+            } finally {
+                if (refusal) alert(refusal);
             }
         });
     };

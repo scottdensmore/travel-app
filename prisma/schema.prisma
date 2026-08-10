@@ -144,6 +144,15 @@ model BookingStatusChange {
   from        BookingStatus?
   to          BookingStatus
   reason      String?
+  /// What this change owed the customer back, in minor units. Null where the
+  /// change did not refund; zero is a different and real answer, since a
+  /// cancellation inside the cut-off refunds nothing (#76).
+  refundCents Int?
+  /// Orders changes made in the same transaction, which `createdAt` cannot:
+  /// it is transaction start time, so two changes there share an instant.
+  /// A `BigInt` in the client, so a row handed straight to a client component
+  /// fails to serialise -- select what you need rather than the whole row.
+  sequence    BigInt         @default(autoincrement())
   /// Who caused it. Null for a customer acting on their own booking, and for a
   /// change nothing attributes.
   actorUserId String?
@@ -151,6 +160,7 @@ model BookingStatusChange {
   createdAt   DateTime       @default(now())
 
   @@index([bookingId, createdAt])
+  @@index([bookingId, sequence])
 }
 
 model Passenger {

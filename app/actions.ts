@@ -22,6 +22,7 @@ import {
     type CabinClass,
 } from '@/lib/bookingPricing';
 import { bookingFlights, outboundFlight } from '@/lib/bookingItinerary';
+import { cancellableBooking, cancellationNote, cancellationOutcome } from '@/lib/cancellationPolicy';
 import { buildFlightRoutes, findNearbyOperatingDates } from '@/lib/flightSearch';
 import { airportCodeFor, airportCodesForRoute, airportTimeZoneFor } from '@/lib/airports';
 import { flightRouteInclude, flightRouteWhere, withRouteLabels } from '@/lib/flightRoute';
@@ -414,7 +415,12 @@ export async function cancelBookingAction(bookingId: number) {
         where: { id: bookingId },
         include: {
             legs: {
-                include: { flight: true },
+                include: {
+                    flight: true,
+                    // The cabin is held per traveller per leg, and the fee is a
+                    // percentage of each traveller's own fare (#76).
+                    seatAssignments: { select: { cabinClass: true } },
+                },
                 orderBy: { sequence: 'asc' },
             },
         }
@@ -423,6 +429,17 @@ export async function cancelBookingAction(bookingId: number) {
 
     if (!hasVerifiedStaffAccess(session) && booking.userId !== userId) {
         throw new Error("Unauthorized");
+    }
+
+    const outcome = cancellationOutcome(cancellableBooking(booking), new Date());
+    if (!outcome.allowed) {
+        // A refusal the customer can act on rather than a thrown error: this is
+        // a policy answer, not a fault. Cancelling a flight that has departed
+        // would free a seat that was used and take back the status points for a
+        // trip they took (#76).
+        return actionValidationFailure(
+            'This booking cannot be cancelled because the flight has already departed.'
+        );
     }
 
     const updated = await prisma.$transaction(async (tx) => {
@@ -441,6 +458,15 @@ export async function cancelBookingAction(bookingId: number) {
         });
         if (!lockedBooking) throw new Error("Booking not found");
         if (lockedBooking.status === "CANCELLED") throw new Error("Booking is already cancelled");
+
+        // What the cancellation owed back, recorded on the history row the
+        // status change writes. Transaction-local, so it cannot leak onto the
+        // next booking to use this connection, and set inside the same
+        // transaction as the update or it would expire before the trigger read
+        // it (#76). No money moves here: #75 owns that, and will have this
+        // figure rather than re-deriving one from rules that may have moved.
+        await tx.$executeRaw`SELECT set_config('app.booking_refund_cents', ${String(outcome.refundCents)}, true)`;
+        await tx.$executeRaw`SELECT set_config('app.booking_status_reason', ${cancellationNote(outcome)}, true)`;
 
         // The seats are released by the status change below, not here: a
         // cancelled booking never holds one, so the database does it rather

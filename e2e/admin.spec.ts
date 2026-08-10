@@ -260,8 +260,11 @@ test.describe('Admin Control Journey', () => {
       data: { status: 'CANCELLED' },
     });
     await page.reload();
-    await page.locator('tr', { hasText: activeOccurrence.flightNumber })
-      .locator('button:has-text("Manifest")').first().click();
+    // Located by the cancellation, not just the flight number: several E2E606
+    // occurrences exist by now and only this one holds the booking.
+    await page.locator('table').nth(1)
+      .locator(`tr:has-text("${activeOccurrence.flightNumber}"):has-text("(1 Cancelled)")`)
+      .locator('button:has-text("Manifest")').click();
     const releasedManifest = await page.getByRole('dialog', { name: 'Passenger Manifest' }).innerText();
     expect(releasedManifest).toContain('Released');
     expect(releasedManifest).not.toContain('Seat 11A');
