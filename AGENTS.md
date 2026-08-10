@@ -1,4 +1,4 @@
-# travel-app (Mona Airways)
+# travel-app
 
 Next.js 16 App Router + Prisma/PostgreSQL + NextAuth. TypeScript strict, Tailwind, shadcn/ui.
 
