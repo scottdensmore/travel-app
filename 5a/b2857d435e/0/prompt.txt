@@ -469,3 +469,128 @@ One residual edge, unchanged by this branch: a step-4 pass left open in one tab 
 `lib/seatOccupancy.ts:33` still exports `CANCELLED_BOOKING`; after `HELD_SEAT` stopped joining to booking status it has no non-test consumer left in `app/`, `lib/` or `components/`.</result>
 <usage><subagent_tokens>137128</subagent_tokens><tool_uses>87</tool_uses><duration_ms>1236061</duration_ms></usage>
 </task-notification>
+
+---
+
+<task-notification>
+<task-id>a193ee947895747eb</task-id>
+<tool-use-id>toolu_01WskszyLuq5q8ToNQJjFbTd</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/a193ee947895747eb.output</output-file>
+<status>completed</status>
+<summary>Agent "Verify seat release slice" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>All checks green on a settled tree, scratch databases dropped, dev database intact, no drift, working tree exactly as I found it (plus the main agent's own edits).
+
+## Important: the tree moved twice during this run
+
+My first full battery ran against the state you described. While it was running, the main agent began editing `app/admin/flights/AdminFlightsTable.tsx`, `app/admin/flights/page.tsx`, `lib/bookingItinerary.ts` and two test files (mtimes 22:00–22:04) — fixing the regression described in finding 1. That overlapped my Playwright run, so the first `30 passed` is not a clean signal for either revision. Three transient Jest failures I saw during that window were half-applied edits, **not** regressions.
+
+I re-ran everything against the settled tree, fingerprinting `git diff` before and after each run (`f6d132428b1daa47`, unchanged throughout).
+
+## What I ran, against the settled tree
+
+| Check | Result |
+|---|---|
+| `npx tsc --noEmit` | clean |
+| `npm run lint` | 0 errors, 8 warnings (all pre-existing, in `pointsActivityTable.tsx`, `titlebar.tsx`, `travelGuideForm.tsx` — untouched by the diff) |
+| `npm run test:unit` | 683 passed / 67 suites |
+| `npm run test:database` | 78 passed / 19 suites |
+| `npm run build` | success, `Removed 1 environment files from standalone output` |
+| `npx playwright test` | 30 passed (3.4m) |
+| `prisma migrate diff` vs `travel_app` and vs a fresh `migrate deploy` database | `-- This is an empty migration.` (no drift) |
+
+Migration work, on scratch databases built from the **pre-migration** migration set:
+
+- Backfill against real placeholder data: a booking cancelled with **no** `BookingStatusChange` rows (pre-#228) dated correctly from `Booking.createdAt`; one with a recorded change dated from the change. Live booking untouched.
+- Guard fired: message reproduced exactly, `P3018`/`P0001`. Rollback was **whole** — no `releasedAt` column, no partial index, no trigger left behind, old unique index intact.
+- Repair → `migrate resolve --rolled-back` → `migrate deploy` succeeded.
+- Full trigger path end-to-end: cancel released `14B`, a second booking then acquired `14B`, giving two rows sharing a seat number on one flight.
+- Documented reversal run against exactly that state: succeeded, left a working schema with the unconditional index restored, and `migrate deploy` re-applied cleanly afterwards.
+
+## Findings
+
+### 1. Regression — admin manifest read the `CANCELLED-` prefix (fixed mid-run, now verified)
+
+`/home/scottdensmore/Developer/scottdensmore/travel-app/app/admin/flights/AdminFlightsTable.tsx:309` was:
+
+```tsx
+{passenger.seatNumber.startsWith('CANCELLED') ? 'Released' : `Seat ${passenger.seatNumber}`}
+```
+
+and `/home/scottdensmore/Developer/scottdensmore/travel-app/app/admin/flights/page.tsx` selected only `{ passengerId, seatNumber, cabinClass }`. Once a cancelled booking keeps its real seat number, the boarding manifest printed `Seat 12A` for the cancelled traveller **and** `Seat 12A` for the live one who now holds it. Two people in one seat, on the tool ops uses to board a flight. This was the answer to "does anything still depend on the `CANCELLED-` convention" — one live code path did.
+
+Its test passed vacuously: the fixture in `/home/scottdensmore/Developer/scottdensmore/travel-app/__tests__/components/AdminFlightsTable.test.tsx` hardcoded `seatNumber: 'CANCELLED-p2'`, a value the application can no longer produce, so `expect(screen.getByText('Released'))` asserted a dead branch. I confirmed by substituting the shape the app now produces — the test failed.
+
+The current tree fixes both sides (`passenger.releasedAt ? 'Released' : ...`, `releasedAt` selected, carried through `passengersSeatedOnLeg`, and the fixture rewritten to give both travellers `12A`). Verified green above. This is the only reader I found that neither filtered `releasedAt` nor called `heldSeats()`.
+
+### 2. Coverage gap — the "only place that knows the rule" guard is now vacuous
+
+`/home/scottdensmore/Developer/scottdensmore/travel-app/__tests__/lib/seatOccupancy.test.ts` still greps for the old shape:
+
+```ts
+.filter((file) =&gt; /booking:\s*\{\s*status:\s*\{\s*not:/.test(fs.readFileSync(file, 'utf8')))
+```
+
+That pattern no longer exists anywhere in `app`, `lib` or `components`, and it is no longer a pattern anyone could plausibly write. The re-inlining that is now possible — `where: { flightId, releasedAt: null }` in place of `heldSeats({ flightId })` — slips straight past. The guard fires on nothing. A regex over `releasedAt:\s*null` (excluding `lib/seatOccupancy.ts`) would be meaningful and green today: I checked, and `releasedAt: null` occurs exactly once across `app`, `lib` and `components`, at `lib/seatOccupancy.ts:21`.
+
+Related: `CANCELLED_BOOKING` has been dropped from `lib/seatOccupancy.ts` and is now referenced nowhere in the repository. Intentional or not, it means the file's remaining prose about `DISRUPTED` no longer sits next to anything that enforces it.
+
+### 3. Coverage gap — nothing joins the database fact to the customer-facing label
+
+Mutation: delete `releasedAt: true` from the select in `/home/scottdensmore/Developer/scottdensmore/travel-app/app/profile/page.tsx`. It **survives** `tsc --noEmit` and all 683 unit tests. The result would be a profile page printing the real seat number of a seat the customer no longer holds — precisely the bug #76 exists to prevent. The ProfileClient test supplies `releasedAt` in its own fixture, so it can never catch a page that fails to select it; Playwright's cancel flow (`/home/scottdensmore/Developer/scottdensmore/travel-app/e2e/booking.spec.ts:198-215`) asserts the Cancelled badge and the points deduction, never the seat label.
+
+The admin fix in finding 1 has now introduced the identical unguarded seam at `app/admin/flights/page.tsx`.
+
+### 4. Coverage gap — `cancelBookingAction` is never exercised against a real database
+
+The unit assertion is now purely negative (`expect(mockTx.seatAssignment.updateMany).not.toHaveBeenCalled()`), and `seatRelease.database.test.ts` drives `prisma.booking.update` directly rather than the action. Both halves are covered; the seam is not. Risk is low — I confirmed `/home/scottdensmore/Developer/scottdensmore/travel-app/app/actions.ts:450` is the **only** writer of `Booking.status = CANCELLED` in the repository, and the trigger is row-level `AFTER UPDATE OF status`, so it would fire for `updateMany` or raw SQL too.
+
+### 5. Mutation results
+
+| Mutation | Outcome |
+|---|---|
+| Drop the release trigger | **dies** — 7 tests, 4 suites |
+| Trigger body without `AND sa."releasedAt" IS NULL` | **dies** — exactly 1: `what releases a seat › once, keeping the time it was first let go` |
+| Drop `SeatAssignment_flightId_releasedAt_idx` | **survives** (expected — pure performance index) |
+| Drop the partial unique index | **dies** — 3 tests, 2 suites |
+| `heldSeats()` returns `{}` | **dies** — 4 unit + 4 database |
+| Delete the backfill `UPDATE` from the migration | **survives all tests**, but the migration's own guard rejects the deploy (see 6) |
+| Remove `releasedAt: true` from the profile page select | **survives everything** (finding 3) |
+
+My first attempt at the trigger-body mutation appeared to survive; it had not applied (`docker exec` without `-i`). I verified `prosrc` before and after every subsequent database mutation. Everything was restored: the dev database has all four expected indexes, both triggers, the guard clause back in the function, and no drift.
+
+### 6. Observation — the backfill guard is unreachable through the schema's own constraints
+
+`SeatAssignment.legId` → `ItineraryLeg(id, flightId)` FK; `ItineraryLeg.bookingId` is `NOT NULL` FK to `Booking`; `Booking.createdAt` is `NOT NULL`. The `COALESCE` fallback therefore cannot return NULL and `stranded` cannot exceed 0. I could only make it fire by dropping `SeatAssignment_legId_flightId_fkey` first. Belt-and-braces is defensible, but note the message is the wrong diagnosis for the failure mode that *can* actually reach it: when I deleted the backfill `UPDATE`, the guard correctly refused the deploy but reported *"Their legs have no booking, which should be impossible"* for two rows whose legs were perfectly fine.
+
+### 7. Concurrency — safe, and I proved it rather than reasoning about it
+
+`lockFlightForUpdate` still covers the new path. All four seat-mutating entry points take the `Flight` row lock, including `cancelBookingAction`, and the trigger's `UPDATE` runs inside that same locked transaction — so the release is at least as well serialised as the old rename. The lock coverage is in fact *stronger* than before: the fact now lives on the row the index covers, rather than on a `Booking` row that the flight lock never protected.
+
+Three interleavings driven directly against Postgres at READ COMMITTED, bypassing the application lock entirely:
+
+- **Cancellation commits between a rival's occupancy check and its insert** — the rival's insert is accepted. Correct: the seat genuinely is free. The stale read said "occupied", so the application would have refused — a spurious rejection, never a double sale.
+- **Two rivals both take the freshly released seat** — T2's insert blocks on the partial index while T1 is uncommitted, then fails `23505 duplicate key value violates unique constraint "SeatAssignment_flightId_seatNumber_held_key"`. Exactly one held row survives.
+- **Rival inserts while the cancellation is still uncommitted** — T2 blocks; T1 rolls back; T2 is correctly rejected `23505` and the original holder keeps the seat. No phantom, no lost release.
+
+The partial index behaves identically to the unconditional one over the held-row set. This is the load-bearing result and it holds.
+
+**But** the E2E contested-seat test tests the lock, not the index. `/home/scottdensmore/Developer/scottdensmore/travel-app/e2e/booking-authority.spec.ts:33` starts from an empty flight; with the flight lock held, the loser's occupancy check alone rejects it, so the test would pass with no unique index at all — consistent with the partial-index mutation killing only Jest database tests, none of the E2E. Its comment ("SeatAssignment's unique index is now the sole guard against selling a seat twice") overstates what it verifies. And no test anywhere contests a seat that a cancellation just freed — the race this change actually creates.
+
+### 8. The reversal works, with one undocumented hazard
+
+Verified end to end against a database holding both a released `14B` and a live `14B` on the same flight: reversal succeeded, reimposed the placeholders (`14B` → `CANCELLED-p4`, lossy as documented), recreated the unconditional index, and `migrate deploy` re-applied cleanly afterwards, re-deriving correct release dates from `BookingStatusChange`.
+
+Not documented: `'CANCELLED-' || "passengerId"` is only unique per flight if a passenger holds at most one released assignment per flight. An itinerary with two legs on the same flight would produce a duplicate and the `CREATE UNIQUE INDEX` would fail. The `BEGIN`/`COMMIT` wrapper makes that safe — the whole reversal rolls back — but it is worth a line in the header comment, since the reversal is the one place the header promises to have thought this through.
+
+### 9. Vacuity review
+
+`/home/scottdensmore/Developer/scottdensmore/travel-app/__tests__/lib/seatRelease.database.test.ts` — no vacuous assertions found. All five tests are load-bearing: three die when the index is dropped or weakened, two when the trigger is dropped or its idempotence clause removed. The `rejects.toThrow(/Unique constraint|duplicate key/i)` assertions are pinned to the right error rather than to any throw. Its only limitation is the one in finding 4: it drives `prisma.booking.update`, not the action.
+
+`/home/scottdensmore/Developer/scottdensmore/travel-app/__tests__/lib/seatLayoutGuard.database.test.ts` — the rewritten fixture does test what its comment claims, and claims correctly. The comment says a forgotten rule now reads `20F` back as occupied; the fixture asserts `released.seatNumber === '20F'` and `releasedAt !== null` before calling `updateFlightSeatingLayout`, so the layout change is genuinely being asked to ignore a row carrying a real, interpretable seat number. This is one of the two tests killed by making the index unconditional, so it has teeth. Building the state via `booking.update` + trigger rather than a hand-written placeholder is also what makes it match reality now.
+
+### 10. Housekeeping — transient, resolved
+
+During the run two untracked files appeared at the repository root, `scratch-admin-ui.ts` and `scratch-totp.ts`, apparently from the `ui-review` agent; the latter contained a hardcoded TOTP secret. Both are typechecked (`tsconfig.json` includes `**/*.ts`) and both would have been swept in by a `git add -A` during that window. They are gone from the working tree now — flagging only so nobody recreates the pattern.</result>
+<usage><subagent_tokens>129423</subagent_tokens><tool_uses>91</tool_uses><duration_ms>2138155</duration_ms></usage>
+</task-notification>
