@@ -46,6 +46,8 @@ jest.mock('@/lib/TravelGuideService', () => {
 
 const mockTx = {
     $queryRaw: jest.fn(),
+    // `set_config` for the reason and refund the status-change trigger reads.
+    $executeRaw: jest.fn(),
     passenger: {
         findMany: jest.fn(),
         update: jest.fn(),
@@ -854,8 +856,20 @@ describe('cancelBookingAction', () => {
             id: 1,
             userId: 'user-123',
             totalPriceCents: 6997,
+            status: 'CONFIRMED',
             flightId: 10,
-            legs: [{ sequence: 1, flight: { flightNumber: 'GA101', airline: 'Gemini Airways', priceCents: 20000 } }]
+            legs: [{
+                sequence: 1,
+                flight: {
+                    flightNumber: 'GA101',
+                    airline: 'Gemini Airways',
+                    priceCents: 20000,
+                    // Comfortably past the refund cut-off, so this exercises
+                    // the ordinary path rather than an edge of the policy.
+                    departureDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                },
+                seatAssignments: [{ cabinClass: 'ECONOMY' }],
+            }]
         });
         mockTx.booking.update.mockResolvedValue({ id: 1 });
 
@@ -865,7 +879,10 @@ describe('cancelBookingAction', () => {
             where: { id: 1 },
             include: {
                 legs: {
-                    include: { flight: true },
+                    include: {
+                        flight: true,
+                        seatAssignments: { select: { cabinClass: true } },
+                    },
                     orderBy: { sequence: 'asc' },
                 },
             }
@@ -892,7 +909,25 @@ describe('cancelBookingAction', () => {
         // there releases it outright.
         mockedGetServerSession.mockResolvedValue({ user: { id: 'u1', role: 'USER' } });
         mockedBookingFindUnique.mockResolvedValue({
-            id: 1, userId: 'u1', status: 'CONFIRMED', flightId: 7, legs: [],
+            id: 1,
+            userId: 'u1',
+            status: 'CONFIRMED',
+            totalPriceCents: 20000,
+            flightId: 7,
+            // A real future leg: with none, the policy reads the booking as
+            // already departed and refuses before the transaction opens, and
+            // every assertion below about what the transaction did holds
+            // trivially (#76).
+            legs: [{
+                sequence: 1,
+                flight: {
+                    flightNumber: 'GA101',
+                    airline: 'Gemini Airways',
+                    priceCents: 20000,
+                    departureDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                },
+                seatAssignments: [{ cabinClass: 'ECONOMY' }],
+            }],
         });
         mockTx.booking.findUnique.mockResolvedValue({ id: 1, status: 'CONFIRMED', flightId: 7 });
         mockTx.passenger.findMany.mockResolvedValue([{ id: 'p-9' }]);
@@ -900,6 +935,8 @@ describe('cancelBookingAction', () => {
 
         await cancelBookingAction(1);
 
+        // The transaction really ran, so what follows is not vacuous.
+        expect(mockTx.booking.update).toHaveBeenCalled();
         // The seat is released by the status change, in the database, so this
         // action does not touch the assignment at all -- and in particular does
         // not overwrite the seat number, which is now kept. That the release
@@ -911,14 +948,102 @@ describe('cancelBookingAction', () => {
         expect(mockTx.passenger.update).not.toHaveBeenCalled();
     });
 
+    it('records the refund the policy decided, on the transaction that cancels', async () => {
+        // The seam between the rules and the database. Both halves were tested
+        // and the join between them was not: dropping the `set_config` calls,
+        // or recording a flat zero, passed the whole suite while every
+        // cancellation was written down as refunding nothing (#76).
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        mockedBookingFindUnique.mockResolvedValue({
+            id: 1,
+            userId: 'user-123',
+            // One Economy traveller on a 10,000 fare: 20% is kept.
+            totalPriceCents: 10000,
+            status: 'CONFIRMED',
+            legs: [{
+                sequence: 1,
+                flight: {
+                    flightNumber: 'GA101',
+                    airline: 'Gemini Airways',
+                    priceCents: 10000,
+                    departureDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                },
+                seatAssignments: [{ cabinClass: 'ECONOMY' }],
+            }],
+        });
+        mockTx.booking.update.mockResolvedValue({ id: 1 });
+
+        await cancelBookingAction(1);
+
+        // Tagged-template calls arrive as (strings, ...values), so the amount
+        // is a bound parameter rather than text in the statement.
+        const settings = mockTx.$executeRaw.mock.calls.map(call => ({
+            sql: (call[0] as unknown as string[]).join('?'),
+            values: call.slice(1),
+        }));
+        const refund = settings.find(setting => setting.sql.includes('app.booking_refund_cents'));
+        expect(refund).toBeDefined();
+        expect(refund!.values).toContain('8000');
+
+        const reason = settings.find(setting => setting.sql.includes('app.booking_status_reason'));
+        expect(String(reason!.values[0])).toMatch(/2000 minor units of the booking currency retained/);
+
+        // Transaction-local, or it would attach to whatever the next booking on
+        // this connection does.
+        for (const setting of settings) expect(setting.sql).toContain('true');
+    });
+
+    it('refuses to cancel a booking whose flight has departed', async () => {
+        // One of the two defects #76 names. Cancelling a flown flight released
+        // a seat that was used and deducted the status points for a trip the
+        // customer actually took, and nothing stopped it.
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        mockedBookingFindUnique.mockResolvedValue({
+            id: 1,
+            userId: 'user-123',
+            totalPriceCents: 20000,
+            status: 'CONFIRMED',
+            legs: [{
+                sequence: 1,
+                flight: {
+                    flightNumber: 'GA101',
+                    airline: 'Gemini Airways',
+                    priceCents: 20000,
+                    departureDate: new Date(Date.now() - 60 * 60 * 1000),
+                },
+                seatAssignments: [{ cabinClass: 'ECONOMY' }],
+            }],
+        });
+
+        const result = await cancelBookingAction(1);
+
+        // A refusal the customer can act on, not a thrown fault.
+        expect(result).toMatchObject({
+            ok: false,
+            error: { code: 'VALIDATION_ERROR', message: expect.stringMatching(/already departed/i) },
+        });
+        expect(mockTx.booking.update).not.toHaveBeenCalled();
+        expect(mockedNotificationCreate).not.toHaveBeenCalled();
+    });
+
     it('allows an admin to cancel any booking', async () => {
         mockedGetServerSession.mockResolvedValue({ user: { id: 'admin-123', role: 'ADMIN', staffMfaVerified: true } });
         mockedBookingFindUnique.mockResolvedValue({
             id: 1,
             userId: 'some-user',
             totalPriceCents: 20000,
+            status: 'CONFIRMED',
             flightId: 10,
-            legs: [{ sequence: 1, flight: { flightNumber: 'GA101', airline: 'Gemini Airways', priceCents: 20000 } }]
+            legs: [{
+                sequence: 1,
+                flight: {
+                    flightNumber: 'GA101',
+                    airline: 'Gemini Airways',
+                    priceCents: 20000,
+                    departureDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                },
+                seatAssignments: [{ cabinClass: 'ECONOMY' }],
+            }]
         });
         mockTx.booking.update.mockResolvedValue({ id: 1 });
 
