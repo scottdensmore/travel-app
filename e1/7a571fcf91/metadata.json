@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "e17a571fcf91",
+  "strategy": "manual-commit",
+  "branch": "docs/verifier-owns-full-suite",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "AGENTS.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/e1/7a571fcf91/0/metadata.json",
+      "transcript": "/e1/7a571fcf91/0/full.jsonl",
+      "compact_transcript": "/e1/7a571fcf91/0/transcript.jsonl",
+      "content_hash": "/e1/7a571fcf91/0/content_hash.txt",
+      "prompt": "/e1/7a571fcf91/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 4665,
+    "cache_creation_tokens": 8621871,
+    "cache_read_tokens": 1076955805,
+    "output_tokens": 1532775,
+    "api_call_count": 2205
+  }
+}
