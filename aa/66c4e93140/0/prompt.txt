@@ -1134,3 +1134,157 @@ Tolerable for this slice, but wider than the brief states. The search result car
 Screenshots: `/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/94121201-47c3-4281-aeff-7838379a510d/scratchpad/shots/` — `board-{phone,tablet,desktop}.png` (as shipped), `preview-{phone,tablet,desktop}.png` (intended arrival line), `card-{phone,tablet,desktop}.png` (form field), `search-desktop.png`.</result>
 <usage><subagent_tokens>125850</subagent_tokens><tool_uses>75</tool_uses><duration_ms>1428029</duration_ms></usage>
 </task-notification>
+
+---
+
+<task-notification>
+<task-id>a6025fdff041b4404</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/a6025fdff041b4404.output</output-file>
+<status>completed</status>
+<summary>Agent "Verify the duration slice" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>No drift. Here is the report.
+
+---
+
+# Verification: `feat/flight-arrival-times`
+
+**Important context first:** the working tree changed **twice while I was verifying it**. A `ui-review` pass landed changes to `app/flights/page.tsx`, `app/globals.css`, `components/ui/FlightStatusBoard.tsx`, `components/ui/flightScheduleForm.tsx` and two test files partway through my first battery, and a further edit to `__tests__/components/flightScheduleForm.test.tsx` landed after my second. I discarded the first battery and re-ran everything. **All results below are for the final state**, which I confirmed stable (unchanged over a 30s window after the last run). There are no commits on the branch — everything is uncommitted working-tree state plus one untracked migration.
+
+## What I ran
+
+| Check | Result |
+|---|---|
+| `npx tsc --noEmit` | clean |
+| `npm run lint` | 0 errors, 8 warnings (all pre-existing: `react-hooks/incompatible-library`, `no-img-element`) |
+| `npm test` (unit) | 69 suites, **743 passed** |
+| `npm test` (database) | 21 suites, **94 passed** |
+| `npm run build` (after `rm -rf .next`) | success, `Removed 1 environment files from standalone output` |
+| `npx playwright test` | **33 passed** (4.1m), no retries, no flakes |
+| `prisma migrate diff` (migrations vs schema) | `No difference detected` |
+| Migration on a pre-migration database, guard both directions | see below |
+| Fresh empty database: `migrate deploy` + `db seed` | 1416 flights, **0 without a duration**, 9 schedules |
+| 15 mutations | 8 died, **7 survived** |
+
+Build and Playwright ran against the state immediately before the final test-file-only edit; that edit touches neither the build output nor `e2e/`, so those results carry.
+
+No flakes. Nothing failed for a reason connected to the diff.
+
+## Migration, exercised on real pre-migration data
+
+I built a scratch database at the pre-migration migration set and populated it with `Airport`, `FlightSchedule` and `Flight` rows lacking the column, including two schedules on routes the table does not cover (`Seattle, USA → London, UK` active, `Paris, France → Tokyo, Japan` **inactive**) and a flight on an uncovered route.
+
+- **Guard fires**, naming both offenders including the inactive one — correct, since `NOT NULL` applies regardless of `isActive`.
+- **Rollback is whole**: after the failure, neither column exists, neither CHECK exists, and the `route_block_minutes` temp table is gone.
+- `P3009` on retry, `migrate resolve --rolled-back`, then a clean second run — the documented recovery path works end to end.
+- **Guard passes** once the uncovered schedules are removed: all 9 schedules backfilled correctly, 3 covered flights backfilled, the uncovered flight left `NULL`, `NOT NULL` on `FlightSchedule`, both CHECKs present.
+- CHECKs verified live: `0` and `-5` rejected on both tables; `NULL` accepted only on `Flight`.
+
+## Findings
+
+### 1. The arrival never rendered on the only page that uses the board — fixed mid-run (regression, now resolved)
+
+`app/flights/page.tsx` picks columns explicitly and the `select` omitted `durationMinutes`. `FlightStatusBoard`'s prop is `durationMinutes?: number | null`, so TypeScript did not object, and `flight.durationMinutes ? … : null` silently produced nothing.
+
+I measured it two ways before the fix: the page's query returned rows whose keys were `id, flightNumber, airline, departureDate, priceCents, status, from, to` with `'durationMinutes' in row === false`, and the live rendered `/flights` had **27 flight rows and 0 arrival markers**. The entire user-visible half of the slice was dead.
+
+This was fixed while I was verifying, together with a test in the direction the existing pinned-select test could not see. I re-verified on the final state: **27/27 rows now render an arrival, 12 with a next-day marker**, header `Departure / Arrival`. Spot-checked against the destination zone — all nine routes correct, e.g. `Tokyo → San Francisco 15:00 GMT+9 → Arrives 08:35 PDT, 9h 35m` (no marker) and `Chicago → Paris 17:45 CDT → Arrives 09:15 GMT+2 (next day), 8h 30m`.
+
+Flagging it because the parent agent should know the seam existed: a component test hands props directly, so a page that stops selecting a field the component reads fails nothing. The new `__tests__/app/flightsPage.test.ts` case closes it, and I confirmed removing `durationMinutes: true` from the page now kills 2 tests.
+
+### 2. The duration requirement is enforced at three layers and tested at none (coverage gap)
+
+You asked whether a schedule can still be saved without a duration. It cannot — but nothing proves it, so nothing will notice when it can again. Three mutations, all surviving 743/743:
+
+- `lib/validation.ts` — appending `.optional()` to `durationMinutes`: **survives**.
+- `lib/validation.ts` — deleting `.int(…)`, `.min(1, …)` and `.max(3 * 24 * 60, …)` outright: **survives**. All three custom messages are unreachable from any test.
+- `components/ui/flightScheduleForm.tsx` — removing `!durationMinutes` from the required-fields check: **survives**.
+
+Every new test supplies `durationMinutes: 245`; none omits it, none goes out of range. Note also that the action's own server-side guard at `app/actions.ts:752` (`if (!data.flightNumber || … || !data.price)`) does not include `durationMinutes`, so Zod is the only thing standing there.
+
+### 3. `FlightScheduleService` can stop inheriting the duration and nothing fails (coverage gap)
+
+Deleting `durationMinutes: schedule.durationMinutes` from the `flight.create` in `lib/FlightScheduleService.ts:114`: **743 unit + 94 database tests all pass**. This is the path the seed and the horizon generator use — it produced all 1416 seeded flights. Its twin in `generateFlightOccurrencesAction` (`app/actions.ts:1007`) *is* covered: the same deletion there kills a test. The asymmetry is worth closing, since the service is the higher-volume path.
+
+### 4. Both CHECK constraints can be dropped with no test failing (coverage gap)
+
+Dropped `FlightSchedule_durationMinutes_positive` and `Flight_durationMinutes_positive` from a freshly seeded database and ran the database project: **94/94 pass**. The constraints work — I verified directly — but nothing observes them. Combined with finding 2, if the Zod bounds regressed, a non-positive duration would be caught only by Postgres, and only in production.
+
+### 5. The negative day marker is unreachable by any test (coverage gap)
+
+`LocalArrival`'s doc says "a westbound crossing of the date line can be negative", and the board now renders `(previous day)` for it. Removing that branch: **743/743 pass**.
+
+It is reachable from admin-authored data: Tokyo → San Francisco departing before roughly 06:25 JST. I confirmed `00:30 JST + 9h35 → Aug 16, 18:05 PDT, dayOffset = -1`. The seeded 15:00 JST departure gives 0, so the seed never produces it. This is the row a reader most needs the marker on — the arrival appears to be on an earlier date than the departure.
+
+### 6. The guard's suggested remedy is impossible to follow (migration)
+
+&gt; `Add the route to this migration, or give those schedules a duration first.`
+
+The second half cannot be done. When the guard fires, `FlightSchedule.durationMinutes` does not yet exist — the migration creates it — so there is nowhere to put a duration. I tried the obvious workaround (add the column by hand, backfill, re-run) and the migration fails at its own `ADD COLUMN`:
+
+```
+Database error code: 42701
+ERROR: column "durationMinutes" of relation "FlightSchedule" already exists
+```
+
+The only workable remedies are adding the route to the table, or removing/retiring the offending schedules. The first clause is correct; the second sends an operator down a path that leaves them with a second failed migration to unwind.
+
+### 7. Editing a schedule's duration does not reach flights already generated (behaviour, pre-existing pattern)
+
+`saveFlightScheduleAction` skips any occurrence that already exists, so a corrected `durationMinutes` reaches only future generations. Identical to how `priceCents` behaves, so it is a pre-existing pattern rather than something this change invented — but the consequence is new and larger: at 157 rows per route across the booking horizon, a duration typed wrong once puts a wrong arrival time on every one of them, and there is no Duration column in the admin schedule list and no page wiring `initialSchedule` into the form, so nothing surfaces it. The comment added to the form-reset test acknowledges exactly this. Worth an issue rather than widening the slice.
+
+## On the derivation decision — your reading is right
+
+Deriving is defensible, and I could not find anything that needs a stored arrival instant.
+
+- **Nothing today filters or sorts by arrival.** I grepped every Prisma call; no `where` or `orderBy` touches it, and no raw SQL does.
+- **The obvious future caller is expressible in SQL.** #84's task 8 ("separate upcoming, departed, **arrived**, delayed, cancelled") needs "has it landed", which is `"departureDate" + make_interval(mins =&gt; "durationMinutes") &lt;= now()`. Prisma's query builder cannot express that, so it would need `$queryRaw` — but Postgres will also accept it as `GENERATED ALWAYS AS (…) STORED`, since `timestamptz + interval` is immutable, and that column is indexable. A derived arrival therefore does not corner the design; it defers the choice rather than foreclosing it, and a generated column is still one answer rather than two.
+- **One caveat for whoever writes that predicate**: `Flight.durationMinutes` is nullable, so it needs an explicit NULL policy — a flight with no stated duration can never be "arrived", and `NULL` in that comparison yields unknown, which silently drops rows from both sides of a naive split.
+
+The precedent you cite (#135, #137, #73) is the right one, and the reasoning is recorded in the migration header and the schema comments where the next reader will find it. I would not store the instant.
+
+## Edge cases: I could not break `flightArrival` or `calendarDaysBetween`
+
+Every case you named, exercised against the real airport data. All correct:
+
+- **Date line westbound** SFO→HND 11:00 PDT → `+1`; departing 23:59 PDT → `+2`, correctly printed as `(+2 days)`.
+- **Date line eastbound** HND→SFO 15:00 JST → same date, `0`; 00:30 JST → `-1`; 23:59 JST → `0`.
+- **Landing exactly at local midnight** SEA→DTW departing 16:55 PDT → `00:00 EDT`, `dayOffset 1`. One minute earlier → `23:59 EDT`, `0`. No off-by-one at the boundary.
+- **Departing exactly at local midnight** → `07:05 EDT`, `0`.
+- **DST at the destination mid-flight**, both directions: SEA→DTW over the 2026-11-01 fall-back → `04:35 EST`, `+1` (wall-clock difference 6h05, elapsed still 4h05); over the 2027-03-14 spring-forward → `05:35 EDT`, `+1`; JFK→LHR over the 2026-10-25 UK fall-back → `06:30 GMT`, `+1`. The marker stays right because it never touches elapsed time.
+- **DST at the origin**: a departure inside the skipped hour (02:30 PDT) lands past the gap at 03:30 — pre-existing documented behaviour, and the arrival follows correctly.
+- **Same-zone routes** SEA→SFO (both `America/Los_Angeles`) 23:00 + 2h → `+1`; JFK→MIA (both `America/New_York`) across the fall-back → `0`.
+- **No-DST destination** MIA→GIG and GIG→MIA both correct.
+- **`calendarDaysBetween`** is sound: both dates are parsed as UTC midnights and `Math.round`ed, so DST cannot perturb it and negatives work.
+
+The two mutations you already killed, I re-confirmed on the final state: reading the arrival in the origin's zone kills 5 tests, computing `dayOffset` from elapsed time kills 4.
+
+**Nothing infers a duration or an arrival by subtracting local times.** I grepped `app/`, `lib/` and `components/` for `getTime()` subtraction, `getHours`/`getMinutes`, and `HH:MM` splitting. The seven hits are unrelated (date-range width, points-month sorting, rate-limit backoff, the cancellation policy's hours-to-departure). No `split(':')` does time arithmetic.
+
+## Seeded block times: self-consistent and plausible
+
+All ten entries in the migration's `route_block_minutes` match `lib/data/FlightData.ts` exactly. Both directions are present for all five routes, and every eastbound leg is shorter than its westbound pair — SEA/DTW 245 vs 285, JFK/LHR 420 vs 485, HND/SFO 575 vs 680, ORD/CDG 510 vs 560, GIG/MIA 500 vs 525 — which is what prevailing winds do. All are within about 20 minutes of real-world block times.
+
+Two notes: `GIG → MIA` is in the migration table but `FlightScheduleData` has no Rio → Miami return schedule, so the entry is unused (harmless, and the asymmetry is pre-existing in the seed). And nothing keeps the migration's table and `FlightData.ts` in sync — the header says they are the same numbers, but no test asserts it, unlike the `AirportData` ↔ `Airport` drift test. Low severity, since a migration is one-shot.
+
+## Housekeeping
+
+- Seven scratch databases from an earlier verification pass are still on the server: `tav_pre`, `tav_guard`, `tav_m1`, `tav_m2`, `tav_m3`, `tav_seed`, `tav_shadow`, about 60 MB total. Mine are all dropped.
+- Early in my run a grep matched `__tests__/lib/zz-scratch-arrival.test.ts` (containing `flightArrival(c as any)`); it was gone minutes later and is not in the tree now. Mentioning it only so it does not reappear in a commit.
+- I left the tree byte-identical to the state I verified, and the dev database untouched (1416 flights, 0 null durations).
+
+## Files
+
+- `/home/scottdensmore/Developer/scottdensmore/travel-app/prisma/migrations/20260811040000_flight_elapsed_duration/migration.sql` — finding 6
+- `/home/scottdensmore/Developer/scottdensmore/travel-app/lib/validation.ts` — finding 2
+- `/home/scottdensmore/Developer/scottdensmore/travel-app/lib/FlightScheduleService.ts` — finding 3
+- `/home/scottdensmore/Developer/scottdensmore/travel-app/components/ui/FlightStatusBoard.tsx` — finding 5
+- `/home/scottdensmore/Developer/scottdensmore/travel-app/components/ui/flightScheduleForm.tsx` — finding 2
+- `/home/scottdensmore/Developer/scottdensmore/travel-app/app/actions.ts` — finding 7
+- `/home/scottdensmore/Developer/scottdensmore/travel-app/app/flights/page.tsx` — finding 1 (resolved)
+- `/home/scottdensmore/Developer/scottdensmore/travel-app/lib/flightTime.ts` — no defects found
+
+Findings 2 through 5 are all coverage, and all in the same shape: the enforcement exists, the test does not. Findings 6 and 7 are worth acting on before the pull request — 6 is a two-line edit to the guard's message, 7 is an issue to file.</result>
+<usage><subagent_tokens>154501</subagent_tokens><tool_uses>109</tool_uses><duration_ms>2816158</duration_ms></usage>
+</task-notification>
