@@ -24,6 +24,65 @@ beyond this pointer.
 `;
 
 /**
+ * A sub-agent definition is injected into the sub-agent's context when the
+ * session first spawns it, and is not refreshed when the file changes. Four
+ * `verifier` invocations in one session all received the version current at the
+ * first spawn, and the agent reported instructions that had been deleted two
+ * rounds earlier (#246).
+ *
+ * So the definitions carry no instructions. Each is a pointer at a file in
+ * `docs/`, which is read fresh on every run and cannot be stale. Telling the
+ * agent *in its definition* to read from disk cannot fix this on its own: an
+ * agent whose injected copy predates that instruction never sees it.
+ *
+ * `entire-search.md` is generated and marked ENTIRE-MANAGED, so it is not
+ * listed here -- edits to it are overwritten.
+ *
+ * The pointers share one template, which is the point: the instructions path is
+ * the only thing that may differ. A third sub-agent wanting different wording
+ * is a fork in the road with a silent option -- leaving it out of this list
+ * rather than changing the template for all of them. Change the template.
+ */
+const AGENT_DEFINITION_POINTERS: ReadonlyArray<readonly [string, string]> = [
+    ['.claude/agents/verifier.md', 'docs/VERIFIER.md'],
+    ['.claude/agents/ui-review.md', 'docs/UI_REVIEW.md'],
+];
+
+/**
+ * The whole body a pointer is allowed to have, pinned the way CLAUDE.md is.
+ *
+ * A line count was the first attempt and it only ever constrained shape. At a
+ * limit of 16 against an 11-line body, four lines of appended instructions
+ * passed; tightening to 11 caught appends but left substitution wide open --
+ * eleven lines saying "do not run the build, the main agent owns it now" scored
+ * exactly the same. Counting lines cannot distinguish a pointer from a
+ * countermand of the same length, so this compares the text.
+ */
+const pointerBody = (instructions: string) => `
+Your instructions are in \`${instructions}\`. **Read that file first**, before
+\`git status\` or any check, and follow it rather than this.
+
+Almost nothing is written here on purpose. This definition is injected into your
+context when the session first spawns you and is never refreshed, so anything
+stated here can already be wrong by the time you read it — four runs in one
+session followed instructions that had been deleted two rounds earlier (#246).
+The file on disk cannot go stale that way.
+
+If you cannot read it, say so and stop. Working from what you remember of this
+role is the failure this indirection exists to prevent.
+`.trim();
+
+/** Tools the instructions state the sub-agents do not have. */
+const TOOLS_THE_INSTRUCTIONS_RULE_OUT = ['Edit', 'Write', 'Task'];
+
+/** Everything after the closing `---` of the YAML frontmatter. */
+function bodyOf(definition: string): string {
+    const frontmatterEnd = definition.indexOf('\n---', definition.indexOf('---') + 3);
+    if (frontmatterEnd < 0) throw new Error('No YAML frontmatter to read past.');
+    return definition.slice(frontmatterEnd + 4);
+}
+
+/**
  * Step 7 splits the checks between the main agent and the `verifier` sub-agent.
  * The verifier runs only what its own definition tells it to, so a check named
  * in one file and absent from the other is owned by nobody and silently never
@@ -54,9 +113,11 @@ const CHECKS_THE_VERIFIER_OWNS: ReadonlyArray<readonly [string, RegExp]> = [
     ["an audit of the main agent's mutation claims", /mutant/],
     ['a re-run of lint on the final state', /npm run lint/],
     ['a re-run of the typecheck on the final state', /tsc --noEmit/],
+    ['the full unit and database projects', /database project/],
 ];
 
 const STEP_SEVEN_ANCHOR = '**The verifier owns the slow checks';
+const VERIFIER_INSTRUCTIONS = 'docs/VERIFIER.md';
 const VERIFIER_INSTRUCTIONS_ANCHOR = '## The checks';
 
 /**
@@ -122,7 +183,7 @@ function instructionsTheVerifierFollows(verifier: string): string {
     const anchor = verifier.indexOf(VERIFIER_INSTRUCTIONS_ANCHOR);
     if (anchor < 0) {
         throw new Error(
-            `.claude/agents/verifier.md no longer has a "${VERIFIER_INSTRUCTIONS_ANCHOR}" `
+            `${VERIFIER_INSTRUCTIONS} no longer has a "${VERIFIER_INSTRUCTIONS_ANCHOR}" `
             + 'heading. Everything above it is commentary, so this reads from it down.',
         );
     }
@@ -170,6 +231,66 @@ describe('agent instruction files', () => {
         }
     });
 
+    it.each(AGENT_DEFINITION_POINTERS)(
+        'keeps %s a pointer, because its injected copy goes stale',
+        (definition, instructions) => {
+            expect(bodyOf(readRepositoryFile(definition)).trim())
+                .toBe(pointerBody(instructions));
+        },
+    );
+
+    it.each(AGENT_DEFINITION_POINTERS)(
+        'points %s at instructions that exist and say something',
+        (_definition, instructions) => {
+            // The pointer is only an improvement if what it points at is the
+            // real thing; an empty file would leave the agent with neither.
+            expect(readRepositoryFile(instructions).trim().split('\n').length)
+                .toBeGreaterThan(20);
+        },
+    );
+
+    it.each(AGENT_DEFINITION_POINTERS)(
+        'gives %s no tool its instructions say it does not have',
+        (definition, instructions) => {
+            // The instructions assert their own toolset -- "you have no Edit or
+            // Write tool", "you have no Task tool", and the rules built on
+            // them. Granting one in the frontmatter leaves the doc confidently
+            // wrong with nothing to notice.
+            const declared = readRepositoryFile(definition).match(/^tools:(.*)$/m);
+            if (!declared) {
+                throw new Error(
+                    `${definition} has no \`tools:\` line. Without one the sub-agent `
+                    + 'inherits every tool, including the ones its instructions state '
+                    + 'it does not have.',
+                );
+            }
+
+            const granted = declared[1].split(',').map(tool => tool.trim());
+
+            // Written as a YAML sequence the capture is empty, `granted` is
+            // [''], and every assertion below passes while Edit sits on the
+            // next line. Requiring a tool that is definitely there proves the
+            // list was actually read -- the third time in this slice that a
+            // check quietly declined to arm.
+            expect(granted).toContain('Read');
+
+            // Unconditional and one at a time, both on purpose. Deciding per
+            // tool whether the doc "mentions" it disarms itself -- `no Edit or
+            // Write tool` contains "no Edit" and never "no Write". And
+            // `not.arrayContaining` is a superset check, so it only fails when
+            // *every* barred tool is granted; adding just Write walked past it.
+            for (const tool of TOOLS_THE_INSTRUCTIONS_RULE_OUT) {
+                expect(granted).not.toContain(tool);
+            }
+            expect(readRepositoryFile(instructions)).toMatch(/you have no|cannot delegate/i);
+        },
+    );
+
+    it('refuses a definition it cannot find frontmatter in', () => {
+        expect(() => bodyOf('name: verifier\n\nNo frontmatter delimiters.\n'))
+            .toThrow(/frontmatter/);
+    });
+
     it('names the anchor it lost rather than reporting every check as missing', () => {
         // slice(-1) on a missed indexOf is one character, which no pattern
         // matches -- fail-closed by accident, and unreadable when it happens.
@@ -198,12 +319,12 @@ describe('agent instruction files', () => {
     });
 
     it.each(CHECKS_THE_VERIFIER_OWNS)(
-        'gives the verifier %s in step 7 and instructs it in the verifier definition',
+        'gives the verifier %s in step 7 and instructs it in docs/VERIFIER.md',
         (_check, pattern) => {
             expect(checksAssignedToTheVerifier(readRepositoryFile('AGENTS.md')))
                 .toMatch(pattern);
             expect(instructionsTheVerifierFollows(
-                readRepositoryFile('.claude/agents/verifier.md'),
+                readRepositoryFile(VERIFIER_INSTRUCTIONS),
             )).toMatch(pattern);
         },
     );

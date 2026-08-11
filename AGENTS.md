@@ -198,6 +198,15 @@ Chart and other browser-interactive components need `'use client'`.
    the branch. **Say what is failing on `main`** when invoking it, or the
    classification is a guess dressed as a result.
 
+   The sub-agents' instructions live in `docs/VERIFIER.md` and `docs/UI_REVIEW.md`.
+   The definitions under `.claude/agents/` are pointers at them and carry no
+   rules, because a definition is injected into a sub-agent's context when the
+   session first spawns it and is never refreshed: four verifier runs in one
+   session followed instructions deleted two rounds earlier (#246). Edit the
+   files in `docs/`. A sub-agent still cannot see that its *own* pointer or
+   toolset changed mid-session, so **say so in the invocation** when a slice
+   touches `.claude/agents/`.
+
    **Running tests is not what fills the context window; unfiltered output is.**
    A whole unit run reduced to `| grep -E '^Tests:'` costs about fifty tokens for
    seven hundred tests, so the split above is about wall clock and contention,
