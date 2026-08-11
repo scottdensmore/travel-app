@@ -1319,3 +1319,71 @@ CHECKS COMPLETE</event>
 ---
 
 Ok what should we do next?
+
+---
+
+<task-notification>
+<task-id>a795f154cdbce9337</task-id>
+<tool-use-id>toolu_016Au2NxAAvYenxy3FHZFjYF</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/a795f154cdbce9337.output</output-file>
+<status>completed</status>
+<summary>Agent "UI review of the phone fixes" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Dev server stopped, fixture data removed, working tree untouched (only the seven changed files).
+
+## How I exercised it
+
+The MCP browser wanted Chrome at `/opt/google/chrome/chrome`, which isn't installed, so I drove the repo's bundled Chromium through Playwright scripts instead (headless, DPR 2). I seeded a real user with a confirmed round trip (2 passengers), a **disrupted round trip whose return leg is the cancelled one**, a cancelled booking with a released seat, an unseated booking, and 8 notifications. Screenshots are in
+`/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/94121201-47c3-4281-aeff-7838379a510d/scratchpad/shots/`.
+
+## Both issues are genuinely fixed
+
+**#208 — yes.** At 390x844 the panel is **419px tall and 419px of it visible**, fully inside the viewport, not covering the bell (bell bottom 106, panel top 116), list scrolls (853px into 340px), outside click closes, item click does not, "Mark all read" clears the badge and leaves the panel open (`drawer-390-open.png`, `drawer-390-empty.png`). Anchoring holds: page scroll to 600 moved it 116→114, tracking the header's own shrink; scrolling the phone `header nav` sideways — the exact overflow that caused #208 — put the panel's right edge at 244.6 against a bell right edge of 244.6, exact. Tablet and desktop are clean (`drawer-768-unread.png`, `drawer-1440-unread.png`). At 844x390 landscape the outer `maxHeight` binds correctly: 283px panel, list shrinks to 204 and scrolls. No console errors or React warnings on `/`, `/book`, `/flights`, `/travelguide`, `/profile` with the drawer opened at each.
+
+**#229 — yes.** At 390 the phone copy is visible in the first cell for all three states, no sideways scroll needed (`bookings-390.png`). At 768 and 1440 the `sm:hidden` copy is `display:none` and only the column renders — no visible duplication (`bookings-768.png`, `bookings-1440.png`). No page-level horizontal scroll at any of the three widths. Contrast all passes: seat line **9.82:1** (from 3.80), green 9.57, amber 11.02, red 6.65. The region's focus ring is real — pixel-diffed white (255,255,255) against rgb(24,20,32), maxDelta 235.
+
+## Blocking
+
+**1. Portalling the panel broke keyboard and screen-reader order** — `components/ui/titlebar.tsx:258,375` — 390/768/1440, drawer open.
+The panel paints under the bell but its DOM home is the end of `document.body`. Measured tab sequence after opening with the keyboard at 390: avatar link → Sign Out → bookings region → Change Seats → Cancel → Change Seats. "Mark all read" is never reached; it is the last focusable element in the document. Escape does not close it (verified: still open after `Escape`). The bell carries no `aria-expanded`, `aria-haspopup` or `aria-controls`, the panel has no role or accessible name, and focus is neither moved in nor restored. Before this change the panel sat immediately after the bell in the same `li`, so tab order was bell → Mark all read. A keyboard user now opens a drawer and has to traverse the entire page to reach its one control, with no way to dismiss it except a mouse click elsewhere. WCAG 2.4.3. Fix together: `aria-expanded`/`aria-controls` on the bell, `role="dialog"` + `aria-label` on the panel, an Escape handler, focus into the panel on open and back to the bell on close.
+
+**2. The bell has no visible focus indicator** — `components/ui/titlebar.tsx:232` (`outline: 'none'`) — all viewports.
+Computed styles are byte-identical focused and unfocused (`outline: ... none 3px`, same box-shadow). Pre-existing, not introduced here, but it is the entry point to the feature this change exists to fix and it is in the changed file: keyboard users cannot see where they are when they arrive at the bell. WCAG 2.4.7.
+
+## Non-blocking findings
+
+**3. A phone user can now learn about the disruption but still cannot act on it** — `components/ui/ProfileClient.tsx:345-354,485` — 390x844.
+Measured: the Status column starts at x=380 and every Change Seats/Cancel button spans x=471–633, all beyond the region's right edge at 353. So the inline copy says "UIR400 cancelled by airline", but "Your seat is held. Cancel for a full refund, with no cancellation fee." and the Cancel button stay behind a horizontal scroll with no visible affordance — `offsetHeight === clientHeight` (no scrollbar gutter), and `app/globals.css:1146` paints the thumb `#2b2640` on a `#0d0c14` track, roughly 1.4:1, invisible even where a scrollbar is drawn. The slice's goal is met; the follow-through is not. Worth filing rather than widening the slice.
+
+**4. The scroll region is a tab stop that lies at ≥640** — `components/ui/ProfileClient.tsx:345-354` — 768 and 1440.
+Measured `scrollWidth === clientWidth` (662 and 997): nothing scrolls, yet `tabIndex={0}` still creates a stop and the landmark is still named "Your bookings, scrollable". Condition both on real overflow (ResizeObserver), or drop "scrollable" from the name. At 390, where it does overflow, the order is good: it lands after Sign Out and before the row buttons.
+
+**5. Stale-anchor flash on reopen** — `components/ui/titlebar.tsx:116-136,258`.
+`anchor` survives close and `place()` runs in `useEffect`, i.e. after paint. With the bell moved (nav scrolled sideways) while closed, reopening painted the panel at the previous position (right 355.6) for two frames before settling at 244.6. `useLayoutEffect`, and clearing `anchor` on close, removes both.
+
+**6. The 340px list cap now fights the measurement that was just added** — `components/ui/titlebar.tsx:317`.
+At 768x1024 and 1440x900 the panel is 388px tall with 600+px of free viewport, showing 3 of 8 notifications while the badge says 8 — and with the scrollbar styling above, nothing indicates more exists. Let the outer `maxHeight: calc(100vh - top - 16px)` govern.
+
+**7. `seat released` is the odd one out, and the comment's premise is wrong** — `lib/bookingItinerary.ts:90-98`.
+"Ada (Seat 11A)" and "Alan (No seat assigned)" read well; "Bob (seat released)" beside them reads like a typo, and it is the only lowercase form. The comment says it matches the admin manifest, but `app/admin/flights/AdminFlightsTable.tsx:320` renders `Released` — the two surfaces now disagree on this exact string. "Seat released" in both, or have admin call `seatLabel`, would make the claim true.
+
+**8. 0.4-alpha text still in the drawer this change rewrites** — `components/ui/titlebar.tsx:347` (timestamps, measured **3.78:1**) and `:368` ("You're all caught up!", same alpha). That is the same defect just corrected on the seat line (3.80 → 9.82), one file over, in the panel this change moved.
+
+**9. The status expression is written twice** — `components/ui/ProfileClient.tsx:433-437` and `:463-467`. Identical conditionals that must always agree; an edit to one is precisely the "names one flight while listing another leg's data" failure mode. Extract to a single variable above the return.
+
+## Nothing to report
+
+- **Layout / horizontal scroll**: `documentElement.scrollWidth === clientWidth` at all three widths, on all five routes.
+- **Console**: zero errors and zero React warnings across the whole journey.
+- **Contrast of everything this change touched**: all pass AA, most pass AAA (numbers above).
+- **Status duplication at ≥640**: does not occur; the phone copy is `display:none` and correctly `aria-hidden`, so assistive technology hears the status once.
+- **First-cell layout**: not wrecked. It is cramped at 390 — the column is 83px, so "UIR400 cancelled by airline" wraps to three lines — but that is the pre-existing table cramping, and the wrapping is legible.
+
+## Gaps in this review
+
+- Headless Chromium only. Real-device touch behaviour was not exercised: iOS overlay scrollbars, and whether a tap reliably synthesises the `mousedown` the outside-click close depends on (`titlebar.tsx:152`).
+- The admin header variant (`pathname.startsWith('/admin')`, white text) was not exercised — the fixture user is not staff and staff access gates on TOTP enrollment. The drawer markup is shared, so I expect parity, but I did not see it.
+- No pre-change measurement of the 16px-of-389px state: confirming it would have meant stashing your uncommitted work. The "before" numbers are from #208 and #229; every "now" number above is measured.
+- The `e2e/*.spec.ts` edits were read, not run — you asked me not to start Playwright while my dev server was up. The `.filter({ visible: true })` additions are the right shape for a 1280-wide default viewport where the phone copy is in the DOM but hidden; proving that is the verifier's pass.</result>
+<usage><subagent_tokens>134856</subagent_tokens><tool_uses>81</tool_uses><duration_ms>1558708</duration_ms></usage>
+</task-notification>
