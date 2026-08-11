@@ -1,0 +1,1751 @@
+Ok lets do 152
+
+---
+
+What is the workflow now?
+
+---
+
+Ok what should we pick up next?
+
+---
+
+What is the best path to fix this flake?
+
+---
+
+Yes go ahead and implement
+
+---
+
+Ok lets do 153
+
+---
+
+Ok lets do 158
+
+---
+
+Ok lets do 160
+
+---
+
+Ok act as a great designer and come up with a logo and images for 140
+
+---
+
+What call is needed on 154
+
+---
+
+Yes take it on and lets go with your recommendation
+
+---
+
+Yes lets do 169
+
+---
+
+What is your recommendation on 143
+
+---
+
+Yes lets do that extraction
+
+---
+
+Lets post the 143 status and continue finishing this up
+
+---
+
+Ok lets do the same treatment for Flight.status
+
+---
+
+what is the recoomendaiton on shared search URLs
+
+---
+
+Ok lets go with your Recommendations
+
+---
+
+Ok since we have not launched this yet there is no worry of links being shared anywhere
+
+---
+
+Yep lets do it
+
+---
+
+Ok lets do step 2
+
+---
+
+<task-notification>
+<task-id>a8d7d3ec157ba4950</task-id>
+<tool-use-id>toolu_01XU5WzzYpWmxCB4twmfLmQ5</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/03223f67-2849-410e-b635-fa0a918e683d/tasks/a8d7d3ec157ba4950.output</output-file>
+<status>failed</status>
+<summary>Agent "UI review of route rendering" failed: Agent terminated early due to an API error: API Error: Unable to connect to API (ENOTIMP)</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Now let me write a Playwright driver script that exercises the journeys at all three viewports.</result>
+</task-notification>
+
+---
+
+The ethernet not working?
+
+---
+
+try again
+
+---
+
+<task-notification>
+<task-id>a8d7d3ec157ba4950</task-id>
+<tool-use-id>toolu_01XcMCUDcdE3f7TSoW34tjvS</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/03223f67-2849-410e-b635-fa0a918e683d/tasks/a8d7d3ec157ba4950.output</output-file>
+<status>completed</status>
+<summary>Agent "UI review of route rendering" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Environment restored (review users/bookings/notifications deleted, flight 17 back to `ON_TIME`, drifted airport label restored, baseline tree removed, working tree untouched — only the reviewed diff remains).
+
+## What I did
+
+Read the diff first, then drove the running app with Playwright's bundled Chromium (the Playwright MCP server wants a Chrome install that is not present on this machine, so I scripted the browser directly). I also stood up a **second dev server on :3100 running the pre-change `HEAD` tree**, ran the identical journeys against both, and diffed the extracted text and the screenshots pixel-by-pixel. That is the evidence for "zero user-visible change".
+
+Note: the dev server already listening on :3000 was hung (no response in &gt;2 minutes); I killed it and started a fresh `npm run dev`, which is what is running now.
+
+Seeded data check first: 1414 flights, **0** rows where `Airport.label` disagrees with `Flight.from`/`Flight.to`, and every `FlightSchedule` and `Flight` place string exists in `lib/data/AirportData`. So identical rendering is the expected outcome, and any difference would have been a code defect.
+
+## Result: no blocking defects
+
+**Text:** the extracted text of every journey at every viewport is byte-identical between the changed app and pre-change `HEAD`. The only diffs in the whole capture set were the console noise below and a computed `outline` width on one focus probe.
+
+**Pixels:** 47 of 51 matched screenshot pairs differ by 0.000%. The four that differ (0.04–0.4%) are focus/hover timing — I cropped each diff region to confirm: a focus ring on the Passport Number input, and a hovered row on the status board. No route string differs in spacing, casing, or truncation anywhere.
+
+Journeys **rendered** at 390x844, 768x1024 and 1440x900:
+
+1. Home search → results, one-way and round trip with return date, cabin filter `BUSINESS` — `changed-j1a-oneway-*.png`, `changed-j1b-roundtrip-*.png`
+2. Date with no flights → nearest-operating-dates (`Try a nearby date: Sat, Aug 8 / Tue, Aug 11`) — `changed-j2-nodates-*.png`
+3. `/flights` status board, the `select`-with-spread-relations shape, plus its text filter and its empty state — `changed-j3-flights-*.png`, `changed-j3-filter-*.png`, `changed-j3-filter-empty-*.png`
+4. `/checkout` — leg switcher, seat step, review step, and a completed booking to the e-ticket — `changed-j4-step1/-step2-seats/-step2-seated/-step3-review-*.png`, `changed-j4-eticket-desktop.png`
+5. `/profile` booking history and points activity, plus the empty-profile state — `changed-j5-profile-*.png`, `changed-j5-profile-empty-*.png`
+6. `/admin` recent bookings Route column — `changed-j6-admin-*.png`
+7. `/admin/flights` schedules table, occurrences table, and the manifest dialog — `changed-j7-adminflights-*.png`, `changed-j7-drawer-*.png`
+
+Extras the diff also touches: the booking-confirmed notification (`app/actions.ts:316`) and the flight-status notification (`app/actions.ts:1018`), both rendered in the bell panel — `changed-notifications-booked-desktop.png`, `changed-notifications-delayed-desktop.png`. Both read the airports: *"Successfully booked flight MA203 from London, UK to New York, USA"* and *"Your upcoming flight MA203 from London, UK to New York, USA is now DELAYED."*
+
+"Does it say the true thing" held everywhere I could check pairing: the checkout review lists `MA203 / London, UK → New York, USA` and `MA202 / New York, USA → London, UK` under DEPARTING/RETURNING respectively; `/profile` shows the same two legs with per-leg seats; `/admin` shows the outbound leg only, correctly.
+
+## Findings (none blocking)
+
+**1. Latent — the search resolves the route through compiled data, the results render it from the database.** `flightRouteWhere` (`/home/scottdensmore/Developer/scottdensmore/travel-app/lib/flightRoute.ts:60-66`) maps the requested place to a code via `airportCodeFor` (`lib/airports.ts:58`, backed by `lib/data/AirportData`), while the words rendered now come from the `Airport` row. The origin/destination dropdown is a third source: `FlightSchedule.from`/`to` prose (`app/actions.ts:268-281`). If those ever disagree, the form and the results name different places.
+
+I proved this is reachable by editing one `Airport` row (`DTW.label` → `Detroit Metro, USA`) and rendering both builds. Desktop, `/?from=Seattle, USA&amp;to=Detroit, USA&amp;depart=2026-08-10&amp;trip=one-way`:
+
+- changed: `#to` select still reads `Detroit, USA`, result card reads `Seattle, USA ------&gt; Detroit Metro, USA`
+- pre-change: card reads `Detroit, USA`, matching the form
+
+Evidence: `drift-changed-search-desktop.png` / `drift-baseline-search-desktop.png`, and the same on `/flights` (`drift-*-board-desktop.png`). I restored the label immediately.
+
+This is the intended direction of #73 (the airport row is the truth), and no code path in the app can create the drift today — only the seed writes `Airport`, and `scheduleSchema` rejects a place `airportCodeFor` does not know (`app/actions.ts:706-714`). So it is a coupling to record, not a live defect. Worth a note in `lib/flightRoute.ts` or an issue: while both readers exist, the search's label→code map and the render's code→label map must not drift.
+
+**2. `?from=Atlantis` never reaches the changed code, and says nothing.** `parseFlightSearchParams` (`lib/flightSearchUrl.ts:74-77`) rejects a `from`/`to` pair absent from `routes`, so `initialSearch` is `undefined`, no search runs, and the page renders the default form (Chicago → Paris) with no results and no message that the link was not understood. No error, no crash, no `undefined` — `changed-j2b-atlantis-{phone,tablet,desktop}.png`, and identical to pre-change. The silent fallback is pre-existing, not introduced here; flagging it only because the brief asked for that URL specifically.
+
+Since the browser cannot reach the new `route === null` branch (`app/actions.ts:97-98` and `207-208`), I exercised it at the action level against the live DB on both builds. Four unknown-place shapes, including a round trip: both return `{flights: 0, nearbyDates: [], inbound: ...}` with no throw, byte-identical between changed and pre-change.
+
+**3. Pre-existing — `/checkout` scrolls horizontally at 390px.** On the Seats step, `document.scrollWidth` is 419 against a 390 client width. Measured identically on pre-change `HEAD` (419 both), so this change did not cause it and did not fix it. The overflowing subtree is the signed-in top nav (`UL` right edge 485px) plus the seat grid. Worth its own issue if it is not already tracked.
+
+**4. Nit, pre-existing — the e-ticket truncates the route at the first comma.** `components/ui/BookingCheckoutWizard.tsx:1434` renders `legFlight.from.split(',')[0]`, so the ticket says `ROUTE London to New York` where every other surface says `London, UK → New York, USA`. That string now originates from the `Airport` label rather than the `Flight` column, so the truncation is one more place quietly depending on the label's "City, Country" shape.
+
+**5. Console noise, both builds.** `Failed to load notifications: TypeError: Failed to fetch` / `network error` when a navigation aborts the notifications server action in flight. Present on pre-change `HEAD` too. No React warnings, no `pageerror`, no hydration mismatches on any journey.
+
+## Headings with nothing to report
+
+- **Keyboard and focus:** results `Select` buttons are reachable with visible focus rings and accessible names (`Select flight MA203 as the departing leg`); the manifest dialog opens with Enter from the trigger, `role="dialog" aria-modal="true"`, focus lands inside it, Escape closes it, and focus returns to the Manifest button. Verified at phone, tablet and desktop.
+- **Contrast against the dark theme:** the route text this change renders measures 5.32:1 on the search card (12px, `rgba(255,255,255,0.5)` composited over the card and page layers) and 18.4:1 in the status board cells. Both pass AA. No CSS is in the diff and the pixel diff is zero, so contrast could not have moved.
+- **Empty and loading states:** empty profile ("You have no bookings yet.", points activity showing only "Starting Points"), empty board filter ("🔍 No flights found"), and the no-flights search all render correctly with the airports resolved or absent as appropriate.
+- **Layout:** no horizontal page scroll at any viewport on journeys 1, 2, 3, 5, 6, 7. The admin tables overflow inside their `overflow-x: auto` wrappers, which is the intended containment.
+
+## What I could not exercise
+
+- **The `route === null` branch through the UI** — unreachable by design (see finding 2); covered at the action level instead.
+- **A leg with a null flight** (`withLegRouteLabels`'s null branch, `lib/flightRoute.ts:45-47`, rendering `—` in `ProfileClient.tsx:365`) — `ItineraryLeg.flightId` is required, so I could not produce one without corrupting the schema. Not exercised.
+- **The degraded inbound state** (`data-testid="inbound-unavailable"`, when the return-leg query fails while the outbound succeeds) — needs an injected query failure. `searchOneDirection` is on the changed path, so this is a real gap; the unit tests in `__tests__/app/actions.test.ts` cover it, but I did not see it rendered.
+- **The in-flight search spinner** — I waited fixed intervals rather than capturing the transient loading state. The markup is unchanged by the diff.
+- **Browsers other than Chromium**, and any real device.</result>
+<usage><subagent_tokens>181188</subagent_tokens><tool_uses>38</tool_uses><duration_ms>905740</duration_ms></usage>
+</task-notification>
+
+---
+
+Ok lets do 2c
+
+---
+
+Update the workflow for this app so the code review portion runs /codex:adversarial-review as the code reviewer.
+
+---
+
+Update the workflow for this app so the code review portion runs /codex:adversarial-review as the code reviewer.
+
+---
+
+yes lets do that
+
+---
+
+Ok can you add the extraknown marketplace for this repo?
+
+---
+
+I don't want to run that myself. I want it to happen automatically in the workflow
+
+---
+
+I want to make sure that when we clone the marketplace and plugin is installed and also that if it is not avaiable then it falls back to the original code reviewer sub agent
+
+---
+
+Ok lets undo all of this and remove the plugin and marketplace entries
+
+---
+
+are we on main and clean?
+
+---
+
+can remove those as well please
+
+---
+
+Ok what is the next thing to work on?
+
+---
+
+yep lets get started with the search url
+
+---
+
+Address the comments by codex on the pr and resovle them
+
+---
+
+Look again it now has comments
+
+---
+
+Ok there are none so you can squash merge
+
+---
+
+Let do the test infra cleanup
+
+---
+
+/statusline
+
+---
+
+/statusline
+
+---
+
+I am now using the code code review bot on all prs. The trigger is on every push. It starts by putting a set of eyes on the PR and that says it is looking. It then comments or changes the emoji to a thumbs up that it is done. We need to address all the comments and resovle them and then loop on this until the thumbs up. Once we figure this out we should update the workflow. Test on the open pr
+
+---
+
+Yes merge 214 then open the workflow doc pr. That will be a good test of the updated workflow
+
+---
+
+Yes we can merge
+
+---
+
+First do one more pass on @AGENTS.md and review to ensure it is correct and makes sense
+
+---
+
+Ok lets merge. Then we can do 181. You can automatically merge now once all the reiview bot is done and all checks have passed
+
+---
+
+for 181 did you wait for the codex review on the PR?
+
+---
+
+/statusline
+
+---
+
+/statusline
+
+---
+
+/statusline
+
+---
+
+how do I set what is in the status line
+
+---
+
+lets just set statusline back to the out of box normal one
+
+---
+
+Ok lets do the remainging test-infrastructure cleanup
+
+---
+
+lets do 215 first
+
+---
+
+Lets so 212
+
+---
+
+Ok what should we do next
+
+---
+
+<task-notification>
+<task-id>b48gd7rlc</task-id>
+<summary>Monitor event: "CI checks on PRs 226 and 227"</summary>
+<event>PR 226 verify: pass</event>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>b48gd7rlc</task-id>
+<summary>Monitor event: "CI checks on PRs 226 and 227"</summary>
+<event>PR 227 verify: pass</event>
+</task-notification>
+
+---
+
+What is your recommendation on 76
+
+---
+
+whoops.. keep going wrong key
+
+---
+
+<task-notification>
+<task-id>b01snlggt</task-id>
+<summary>Monitor event: "CI checks on PR 228"</summary>
+<event>PR 228 verify: pass
+CHECKS COMPLETE</event>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>b01snlggt</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/b01snlggt.output</output-file>
+<status>completed</status>
+<summary>Monitor "CI checks on PR 228" stream ended</summary>
+</task-notification>
+
+---
+
+Ok lets take that next
+
+---
+
+<task-notification>
+<task-id>a8d2b9ee6150350a3</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/a8d2b9ee6150350a3.output</output-file>
+<status>completed</status>
+<summary>Agent "UI review of released seat display" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Dev server stopped; worktree and database left as I found them (my two review accounts and their bookings deleted).
+
+## What changed and what it can reach
+
+`git diff` (all uncommitted on `refactor/seat-release`): `app/actions.ts`, `app/profile/page.tsx`, `components/ui/ProfileClient.tsx`, `lib/bookingItinerary.ts`, `lib/seatOccupancy.ts`, `prisma/schema.prisma`, a new migration `prisma/migrations/20260810050000_release_seats_without_renaming/`, plus six test files.
+
+Rendered surfaces the change can reach: the profile bookings table, every seat map fed by `heldSeats` (checkout step 2, the profile Change Seats modal), and — not listed in the brief but reached by the removal of the `CANCELLED-` convention — the admin passenger manifest.
+
+Exercised live at 390x844, 768x1024 and 1440x900 against `npm run dev` with the migration applied, seeded flights, real signup/booking/cancel round trips.
+
+---
+
+# Blocking
+
+## 1. Admin passenger manifest prints a released seat as a live seat, and lists two travellers in the same seat
+
+`/home/scottdensmore/Developer/scottdensmore/travel-app/app/admin/flights/AdminFlightsTable.tsx:309`
+
+```tsx
+{passenger.seatNumber.startsWith('CANCELLED') ? 'Released' : `Seat ${passenger.seatNumber}`}
+```
+
+That prefix can no longer occur. `/home/scottdensmore/Developer/scottdensmore/travel-app/app/admin/flights/page.tsx:39-41` does not select `releasedAt`, and `passengersSeatedOnLeg` (`/home/scottdensmore/Developer/scottdensmore/travel-app/lib/bookingItinerary.ts:40-44` and `:58-73`) has no field to carry it, so the manifest has nothing left to read a release from.
+
+Observed at desktop 1440x900, signed in as an ADMIN with staff MFA: booked seat 11A on MA405 (8/10/2026), cancelled it, then booked 11A again on a second booking. The manifest renders
+
+- `Grace Hopper — Economy / Seat 11A — Cancelled`
+- `Alan Turing — Economy / Seat 11A — Confirmed`
+
+Screenshot: `/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/94121201-47c3-4281-aeff-7838379a510d/scratchpad/shots/admin-manifest-reused-seat.png`. On `main` the first row read "Released".
+
+Staff impact: the manifest asserts the same seat is held twice, and the only thing separating a live claim from a dead one is a coloured status word in another column. This is the exact defect the profile fix exists to prevent, on the screen a gate agent would use.
+
+The component test does not catch it: `/home/scottdensmore/Developer/scottdensmore/travel-app/__tests__/components/AdminFlightsTable.test.tsx:62` feeds `seatNumber: 'CANCELLED-p2'`, a value the database can no longer produce, and asserts "Released" at line 179. Green test, wrong screen. Whatever fix lands should replace that fixture with `{ seatNumber: '11A', releasedAt: &lt;date&gt; }` and route the manifest through `seatLabel`.
+
+---
+
+# Suggestions
+
+## 2. The seat cell fails WCAG AA contrast
+
+`/home/scottdensmore/Developer/scottdensmore/travel-app/components/ui/ProfileClient.tsx:359` — `color: 'rgba(255,255,255,0.4)'` at `0.75rem`. Measured in page: `Grace (Released)` composites to **3.80:1** against `rgb(13,12,20)`; AA needs 4.5:1 for 12px regular. Same for `Ada (11A)`. Pre-existing colour, but "Released" is now the sole carrier of the seat's state, so it is worth raising to ~0.62 alpha or `#9ca3af`. Seen at all three viewports (`bookings-desktop.png`, `bookings-tablet.png`, `bookings-phone.png`).
+
+## 3. "Released" is not conveyed as seat information
+
+ARIA snapshot of the row (desktop):
+
+```
+row "One way Mona Airways MA405 Grace (Released) Paris, France → Chicago, USA 8/10/2026 $950 Cancelled":
+  cell "One way Mona Airways MA405 Grace (Released)"
+```
+
+There is no "Seat" word anywhere — visible or accessible — in that cell; the happy path reads `Ada (11A)`, equally unlabelled. A screen reader user hears "Grace (Released)" and gets no signal that the parenthetical is about a seat. Pre-existing and symmetric across both states, so not a regression, but it is the answer to the accessibility question asked: no. `ProfileClient.tsx:361` builds the string as `${p.firstName} (${seatFor(...)})`. The boarding pass already has the pattern to copy — the visually-hidden caption `CAPTION_FOR_SCREEN_READERS` in `components/ui/BookingCheckoutWizard.tsx`.
+
+Non-colour indication of the cancelled row: **present** at tablet and desktop. The status cell renders the literal word "Cancelled" and the Change Seats/Cancel buttons disappear. Colour is not the only carrier.
+
+## 4. At phone width the "Cancelled" status is scrolled out of view, leaving a bare "Released" as the only visible difference
+
+At 390x844 the bookings table's `overflow-x-auto` wrapper (`ProfileClient.tsx:319`) is 316px wide holding 490px of content. The Status cell sits at x 376–462 — entirely past the wrapper's visible right edge of 353. `bookings-phone.png` shows two MA405 bookings that look identical except one says `Alan (11A)` and the other `Grace (Released)`: no "Cancelled", no visible absence of buttons.
+
+The wrapper has no `tabindex` and no `role`, so a keyboard-only user cannot scroll it to reach the status at all (WCAG 2.1.1 for scrollable regions).
+
+This is pre-existing layout, not introduced here, but it is the concrete answer to "does the row communicate its status clearly enough that a bare 'Released' is not confusing": at phone width, no — "Released" carries it alone, at 3.8:1, unlabelled.
+
+## 5. Wording
+
+Beside a visible "Cancelled" (tablet, desktop) "Released" reads correctly and does not look like an error state. Alone (phone, per finding 4) it is airline jargon a customer could read as a failure. "Seat released" or "No seat (cancelled)" would survive being seen on its own. Unchanged from `main`, so purely a suggestion.
+
+---
+
+# Verified correct
+
+- **The seat cell says the true thing.** Round trip MA101/MA102 showed `Ada (11A)` and `Ada (11B)` per leg before cancellation — the right seat against the right leg — and `Ada (Released)` on both after. A real seat number never appeared for a released seat at any viewport. `before-cancel-{phone,tablet,desktop}.png`, `after-cancel-{phone,tablet,desktop}.png`, `bookings-{phone,tablet,desktop}.png`, `reuse-{phone,tablet,desktop}.png`.
+- **The number is retained in the row and not leaked.** Prisma read after cancel: `{ seat: '11A', releasedAt: 2026-08-10T04:44:40.517Z, status: 'CANCELLED' }`, while the UI showed "Released".
+- **The released seat really is free again, and the seat maps agree.** Checkout offered 11A after the release (button enabled, not styled occupied) and a second booking took it. The profile Change Seats map showed a separately-released 12A as free rather than occupied. `change-seats-modal.png`.
+- **No horizontal page scroll** at 390, 768 or 1440: `document.scrollWidth === clientWidth` in every case, before and after cancellation.
+- **No console errors or React warnings** across signup, booking, profile, cancel, rebook and the admin manifest. The only console output was two pre-existing Recharts `width(0) and height(0)` warnings from the profile charts, present regardless of this change.
+- **Points activity** correctly gained a `❌ Cancelled: Mona Airways MA405 … -950` row and returned to 1,300.
+
+---
+
+# Boarding pass / e-ticket (question 4): not applicable, and why
+
+The boarding pass exists only as step 4 of `/home/scottdensmore/Developer/scottdensmore/travel-app/components/ui/BookingCheckoutWizard.tsx` (the card view begins around line 1347; the Seat field is around line 1421). It is rendered from the wizard's own client state (`p.seatNumbers[legIndex]`) immediately after confirming, and there is no route or link that renders a boarding pass for an existing booking — `ProfileClient.tsx` contains no boarding-pass reference, and `/flightrecord` is a chart page. So a cancelled booking has no boarding pass view at all, and there is nothing for this change to get wrong there.
+
+One residual edge, unchanged by this branch: a step-4 pass left open in one tab while the booking is cancelled in another keeps showing `Seat 11A`, because it never reads `seatLabel` and never did.
+
+---
+
+# What I could not exercise
+
+- **"Not assigned".** Every passenger holds an assignment on every leg (asserted by `seatAssignmentCoverage.database.test.ts`), so rendering it means deleting a row by hand. Passenger names are encrypted at rest so I could not select the row by name, and before I could work around that, a concurrent `npx playwright test` started by another process (PID 2576142, 21:54) deleted every booking through its `global-setup`. The path is `!seat?.seatNumber → 'Not assigned'` in `lib/bookingItinerary.ts:88` and renders in the same place as the other two strings; unverified in a browser.
+- **Loading state of cancel.** `isPending` only disables the buttons — no spinner or text change — so there was nothing timeable to capture between click and refresh. Unchanged by this diff.
+- **Error state of cancel.** `alert('Failed to cancel booking. Please try again.')` at `ProfileClient.tsx:172` needs a forced action failure; not triggered. Unchanged by this diff.
+- **Focus after cancel.** The Cancel button is removed from the DOM when the row re-renders, so focus drops to `body`. Pre-existing behaviour of the cancel flow, untouched here; recorded rather than pursued.
+- The Change Seats modal seeds itself from the raw seat number without regard to `releasedAt` (`ProfileClient.tsx:154`), but the button is hidden for cancelled bookings so that path is unreachable — no finding.
+
+## One non-UI note
+
+`lib/seatOccupancy.ts:33` still exports `CANCELLED_BOOKING`; after `HELD_SEAT` stopped joining to booking status it has no non-test consumer left in `app/`, `lib/` or `components/`.</result>
+<usage><subagent_tokens>137128</subagent_tokens><tool_uses>87</tool_uses><duration_ms>1236061</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a193ee947895747eb</task-id>
+<tool-use-id>toolu_01WskszyLuq5q8ToNQJjFbTd</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/a193ee947895747eb.output</output-file>
+<status>completed</status>
+<summary>Agent "Verify seat release slice" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>All checks green on a settled tree, scratch databases dropped, dev database intact, no drift, working tree exactly as I found it (plus the main agent's own edits).
+
+## Important: the tree moved twice during this run
+
+My first full battery ran against the state you described. While it was running, the main agent began editing `app/admin/flights/AdminFlightsTable.tsx`, `app/admin/flights/page.tsx`, `lib/bookingItinerary.ts` and two test files (mtimes 22:00–22:04) — fixing the regression described in finding 1. That overlapped my Playwright run, so the first `30 passed` is not a clean signal for either revision. Three transient Jest failures I saw during that window were half-applied edits, **not** regressions.
+
+I re-ran everything against the settled tree, fingerprinting `git diff` before and after each run (`f6d132428b1daa47`, unchanged throughout).
+
+## What I ran, against the settled tree
+
+| Check | Result |
+|---|---|
+| `npx tsc --noEmit` | clean |
+| `npm run lint` | 0 errors, 8 warnings (all pre-existing, in `pointsActivityTable.tsx`, `titlebar.tsx`, `travelGuideForm.tsx` — untouched by the diff) |
+| `npm run test:unit` | 683 passed / 67 suites |
+| `npm run test:database` | 78 passed / 19 suites |
+| `npm run build` | success, `Removed 1 environment files from standalone output` |
+| `npx playwright test` | 30 passed (3.4m) |
+| `prisma migrate diff` vs `travel_app` and vs a fresh `migrate deploy` database | `-- This is an empty migration.` (no drift) |
+
+Migration work, on scratch databases built from the **pre-migration** migration set:
+
+- Backfill against real placeholder data: a booking cancelled with **no** `BookingStatusChange` rows (pre-#228) dated correctly from `Booking.createdAt`; one with a recorded change dated from the change. Live booking untouched.
+- Guard fired: message reproduced exactly, `P3018`/`P0001`. Rollback was **whole** — no `releasedAt` column, no partial index, no trigger left behind, old unique index intact.
+- Repair → `migrate resolve --rolled-back` → `migrate deploy` succeeded.
+- Full trigger path end-to-end: cancel released `14B`, a second booking then acquired `14B`, giving two rows sharing a seat number on one flight.
+- Documented reversal run against exactly that state: succeeded, left a working schema with the unconditional index restored, and `migrate deploy` re-applied cleanly afterwards.
+
+## Findings
+
+### 1. Regression — admin manifest read the `CANCELLED-` prefix (fixed mid-run, now verified)
+
+`/home/scottdensmore/Developer/scottdensmore/travel-app/app/admin/flights/AdminFlightsTable.tsx:309` was:
+
+```tsx
+{passenger.seatNumber.startsWith('CANCELLED') ? 'Released' : `Seat ${passenger.seatNumber}`}
+```
+
+and `/home/scottdensmore/Developer/scottdensmore/travel-app/app/admin/flights/page.tsx` selected only `{ passengerId, seatNumber, cabinClass }`. Once a cancelled booking keeps its real seat number, the boarding manifest printed `Seat 12A` for the cancelled traveller **and** `Seat 12A` for the live one who now holds it. Two people in one seat, on the tool ops uses to board a flight. This was the answer to "does anything still depend on the `CANCELLED-` convention" — one live code path did.
+
+Its test passed vacuously: the fixture in `/home/scottdensmore/Developer/scottdensmore/travel-app/__tests__/components/AdminFlightsTable.test.tsx` hardcoded `seatNumber: 'CANCELLED-p2'`, a value the application can no longer produce, so `expect(screen.getByText('Released'))` asserted a dead branch. I confirmed by substituting the shape the app now produces — the test failed.
+
+The current tree fixes both sides (`passenger.releasedAt ? 'Released' : ...`, `releasedAt` selected, carried through `passengersSeatedOnLeg`, and the fixture rewritten to give both travellers `12A`). Verified green above. This is the only reader I found that neither filtered `releasedAt` nor called `heldSeats()`.
+
+### 2. Coverage gap — the "only place that knows the rule" guard is now vacuous
+
+`/home/scottdensmore/Developer/scottdensmore/travel-app/__tests__/lib/seatOccupancy.test.ts` still greps for the old shape:
+
+```ts
+.filter((file) =&gt; /booking:\s*\{\s*status:\s*\{\s*not:/.test(fs.readFileSync(file, 'utf8')))
+```
+
+That pattern no longer exists anywhere in `app`, `lib` or `components`, and it is no longer a pattern anyone could plausibly write. The re-inlining that is now possible — `where: { flightId, releasedAt: null }` in place of `heldSeats({ flightId })` — slips straight past. The guard fires on nothing. A regex over `releasedAt:\s*null` (excluding `lib/seatOccupancy.ts`) would be meaningful and green today: I checked, and `releasedAt: null` occurs exactly once across `app`, `lib` and `components`, at `lib/seatOccupancy.ts:21`.
+
+Related: `CANCELLED_BOOKING` has been dropped from `lib/seatOccupancy.ts` and is now referenced nowhere in the repository. Intentional or not, it means the file's remaining prose about `DISRUPTED` no longer sits next to anything that enforces it.
+
+### 3. Coverage gap — nothing joins the database fact to the customer-facing label
+
+Mutation: delete `releasedAt: true` from the select in `/home/scottdensmore/Developer/scottdensmore/travel-app/app/profile/page.tsx`. It **survives** `tsc --noEmit` and all 683 unit tests. The result would be a profile page printing the real seat number of a seat the customer no longer holds — precisely the bug #76 exists to prevent. The ProfileClient test supplies `releasedAt` in its own fixture, so it can never catch a page that fails to select it; Playwright's cancel flow (`/home/scottdensmore/Developer/scottdensmore/travel-app/e2e/booking.spec.ts:198-215`) asserts the Cancelled badge and the points deduction, never the seat label.
+
+The admin fix in finding 1 has now introduced the identical unguarded seam at `app/admin/flights/page.tsx`.
+
+### 4. Coverage gap — `cancelBookingAction` is never exercised against a real database
+
+The unit assertion is now purely negative (`expect(mockTx.seatAssignment.updateMany).not.toHaveBeenCalled()`), and `seatRelease.database.test.ts` drives `prisma.booking.update` directly rather than the action. Both halves are covered; the seam is not. Risk is low — I confirmed `/home/scottdensmore/Developer/scottdensmore/travel-app/app/actions.ts:450` is the **only** writer of `Booking.status = CANCELLED` in the repository, and the trigger is row-level `AFTER UPDATE OF status`, so it would fire for `updateMany` or raw SQL too.
+
+### 5. Mutation results
+
+| Mutation | Outcome |
+|---|---|
+| Drop the release trigger | **dies** — 7 tests, 4 suites |
+| Trigger body without `AND sa."releasedAt" IS NULL` | **dies** — exactly 1: `what releases a seat › once, keeping the time it was first let go` |
+| Drop `SeatAssignment_flightId_releasedAt_idx` | **survives** (expected — pure performance index) |
+| Drop the partial unique index | **dies** — 3 tests, 2 suites |
+| `heldSeats()` returns `{}` | **dies** — 4 unit + 4 database |
+| Delete the backfill `UPDATE` from the migration | **survives all tests**, but the migration's own guard rejects the deploy (see 6) |
+| Remove `releasedAt: true` from the profile page select | **survives everything** (finding 3) |
+
+My first attempt at the trigger-body mutation appeared to survive; it had not applied (`docker exec` without `-i`). I verified `prosrc` before and after every subsequent database mutation. Everything was restored: the dev database has all four expected indexes, both triggers, the guard clause back in the function, and no drift.
+
+### 6. Observation — the backfill guard is unreachable through the schema's own constraints
+
+`SeatAssignment.legId` → `ItineraryLeg(id, flightId)` FK; `ItineraryLeg.bookingId` is `NOT NULL` FK to `Booking`; `Booking.createdAt` is `NOT NULL`. The `COALESCE` fallback therefore cannot return NULL and `stranded` cannot exceed 0. I could only make it fire by dropping `SeatAssignment_legId_flightId_fkey` first. Belt-and-braces is defensible, but note the message is the wrong diagnosis for the failure mode that *can* actually reach it: when I deleted the backfill `UPDATE`, the guard correctly refused the deploy but reported *"Their legs have no booking, which should be impossible"* for two rows whose legs were perfectly fine.
+
+### 7. Concurrency — safe, and I proved it rather than reasoning about it
+
+`lockFlightForUpdate` still covers the new path. All four seat-mutating entry points take the `Flight` row lock, including `cancelBookingAction`, and the trigger's `UPDATE` runs inside that same locked transaction — so the release is at least as well serialised as the old rename. The lock coverage is in fact *stronger* than before: the fact now lives on the row the index covers, rather than on a `Booking` row that the flight lock never protected.
+
+Three interleavings driven directly against Postgres at READ COMMITTED, bypassing the application lock entirely:
+
+- **Cancellation commits between a rival's occupancy check and its insert** — the rival's insert is accepted. Correct: the seat genuinely is free. The stale read said "occupied", so the application would have refused — a spurious rejection, never a double sale.
+- **Two rivals both take the freshly released seat** — T2's insert blocks on the partial index while T1 is uncommitted, then fails `23505 duplicate key value violates unique constraint "SeatAssignment_flightId_seatNumber_held_key"`. Exactly one held row survives.
+- **Rival inserts while the cancellation is still uncommitted** — T2 blocks; T1 rolls back; T2 is correctly rejected `23505` and the original holder keeps the seat. No phantom, no lost release.
+
+The partial index behaves identically to the unconditional one over the held-row set. This is the load-bearing result and it holds.
+
+**But** the E2E contested-seat test tests the lock, not the index. `/home/scottdensmore/Developer/scottdensmore/travel-app/e2e/booking-authority.spec.ts:33` starts from an empty flight; with the flight lock held, the loser's occupancy check alone rejects it, so the test would pass with no unique index at all — consistent with the partial-index mutation killing only Jest database tests, none of the E2E. Its comment ("SeatAssignment's unique index is now the sole guard against selling a seat twice") overstates what it verifies. And no test anywhere contests a seat that a cancellation just freed — the race this change actually creates.
+
+### 8. The reversal works, with one undocumented hazard
+
+Verified end to end against a database holding both a released `14B` and a live `14B` on the same flight: reversal succeeded, reimposed the placeholders (`14B` → `CANCELLED-p4`, lossy as documented), recreated the unconditional index, and `migrate deploy` re-applied cleanly afterwards, re-deriving correct release dates from `BookingStatusChange`.
+
+Not documented: `'CANCELLED-' || "passengerId"` is only unique per flight if a passenger holds at most one released assignment per flight. An itinerary with two legs on the same flight would produce a duplicate and the `CREATE UNIQUE INDEX` would fail. The `BEGIN`/`COMMIT` wrapper makes that safe — the whole reversal rolls back — but it is worth a line in the header comment, since the reversal is the one place the header promises to have thought this through.
+
+### 9. Vacuity review
+
+`/home/scottdensmore/Developer/scottdensmore/travel-app/__tests__/lib/seatRelease.database.test.ts` — no vacuous assertions found. All five tests are load-bearing: three die when the index is dropped or weakened, two when the trigger is dropped or its idempotence clause removed. The `rejects.toThrow(/Unique constraint|duplicate key/i)` assertions are pinned to the right error rather than to any throw. Its only limitation is the one in finding 4: it drives `prisma.booking.update`, not the action.
+
+`/home/scottdensmore/Developer/scottdensmore/travel-app/__tests__/lib/seatLayoutGuard.database.test.ts` — the rewritten fixture does test what its comment claims, and claims correctly. The comment says a forgotten rule now reads `20F` back as occupied; the fixture asserts `released.seatNumber === '20F'` and `releasedAt !== null` before calling `updateFlightSeatingLayout`, so the layout change is genuinely being asked to ignore a row carrying a real, interpretable seat number. This is one of the two tests killed by making the index unconditional, so it has teeth. Building the state via `booking.update` + trigger rather than a hand-written placeholder is also what makes it match reality now.
+
+### 10. Housekeeping — transient, resolved
+
+During the run two untracked files appeared at the repository root, `scratch-admin-ui.ts` and `scratch-totp.ts`, apparently from the `ui-review` agent; the latter contained a hardcoded TOTP secret. Both are typechecked (`tsconfig.json` includes `**/*.ts`) and both would have been swept in by a `git add -A` during that window. They are gone from the working tree now — flagging only so nobody recreates the pattern.</result>
+<usage><subagent_tokens>129423</subagent_tokens><tool_uses>91</tool_uses><duration_ms>2138155</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bzpwfds3z</task-id>
+<summary>Monitor event: "CI checks on PR 230"</summary>
+<event>PR 230 verify: pass
+CHECKS COMPLETE</event>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bzpwfds3z</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/bzpwfds3z.output</output-file>
+<status>completed</status>
+<summary>Monitor "CI checks on PR 230" stream ended</summary>
+</task-notification>
+
+---
+
+Ok lets go ahead
+
+---
+
+<task-notification>
+<task-id>be1ahak36</task-id>
+<summary>Monitor event: "CI checks on PR 231"</summary>
+<event>PR 231 verify: pass
+CHECKS COMPLETE</event>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>be1ahak36</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/be1ahak36.output</output-file>
+<status>completed</status>
+<summary>Monitor "CI checks on PR 231" stream ended</summary>
+</task-notification>
+
+---
+
+Lets keep going with slice 4
+
+---
+
+<task-notification>
+<task-id>ab4ca7fd5ca7f3c8c</task-id>
+<tool-use-id>toolu_01WPYpihqTho74Ug3Hfc21oo</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/ab4ca7fd5ca7f3c8c.output</output-file>
+<status>completed</status>
+<summary>Agent "UI review of the disrupted booking state" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Dev server stopped, port 3000 free.
+
+## What I reviewed
+
+`git diff main...HEAD` is empty — the work is uncommitted on `feat/flight-disruption`: `app/actions.ts`, `components/ui/ProfileClient.tsx`, two modified test files and one new database test. Both source files change rendered output, so a full rendered review applies.
+
+I drove the real journey against the seeded database at 390x844, 768x1024 and 1440x900: signed up a customer, booked a round trip (MA303+MA304), a one-way (MA202) and a one-way the customer cancelled themselves (MA505), signed in as an admin with staff TOTP, cancelled the flight from `/admin/flights`, and read `/profile` and the bell drawer. I also exercised reinstatement, the full-refund cancel, and the departed-flight refusal.
+
+Screenshots are in `/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/94121201-47c3-4281-aeff-7838379a510d/scratchpad/ui-review-shots/`.
+
+---
+
+## Blocking
+
+### 1. On a round trip the row names the flight that was *not* cancelled
+
+`components/ui/ProfileClient.tsx:395-413` renders the status cell inside `index === 0`, so the amber label always sits beside leg 1. `ProfileClient.tsx:440` builds the confirm prompt from `legs[0]?.flight?.flightNumber`.
+
+I booked MA303 (SFO→NRT) + MA304 (NRT→SFO) and cancelled **MA304** only. Desktop, 1440x900 (`desktop-inbound-cancelled.png`):
+
+```
+ROUND TRIP
+Mona Airways MA303   San Francisco → Tokyo   8/16/2026  $2,400  Flight cancelled by airline
+                                                                Your seat is held. Cancel for a full
+                                                                refund, with no cancellation fee.
+Mona Airways MA304   Tokyo → San Francisco   8/16/2026
+```
+
+The amber sits on MA303, which is operating. MA304, the flight the airline cancelled, carries no marking at all. The confirm dialog then says:
+
+&gt; `Cancel your booking for flight MA303 and take a full refund?`
+
+Meanwhile the bell (`desktop-drawer-inbound.png`) correctly says *"Your flight MA304 … has been cancelled by the airline."* The two surfaces contradict each other, and the one the customer acts from is the wrong one. A customer who reads only the profile believes their outbound is cancelled and their return is fine — the exact inverse of the truth. Present at all three viewports (at phone it is hidden entirely, see finding 2).
+
+### 2. At phone width the new state is invisible, and so is the notification that carries it
+
+Measured at 390x844: the `overflow-x-auto` wrapper (`ProfileClient.tsx:334`) is 316px wide holding 607px; the Status cell starts at x=391 against a visible right edge of 353. The wrapper has `tabIndex -1` and no `role`, so a keyboard-only user cannot scroll it either.
+
+In `profile-phone.png` the three bookings — cancelled, confirmed, disrupted — are visually identical apart from `Alan (Released)` on the cancelled one. **A disrupted booking looks exactly like a confirmed one on a phone.** The only visible trace is that its row is 285px tall instead of 156px: unexplained whitespace produced by text nobody can see. `phone-bookings-scrolled-right.png` shows what is hidden — the label wrapping over 3 lines and the explainer over 7, in a 67px-wide column.
+
+The container defect is pre-existing and filed as **#229**. What is new is the consequence: the fallback channel is also broken. The notification drawer at 390x844 renders behind the page (`document.elementFromPoint` at the notification returns `user-avatar`, not the drawer) — pre-existing, filed as **#208**. So on a phone there is currently **no path at all** by which a customer learns the airline cancelled their flight, and the seat stays held while they never act. Neither issue is caused by this diff, but this diff is what makes both load-bearing; that escalation should be recorded on #229 and #208 before this ships.
+
+### 3. The admin manifest calls a disrupted passenger "Confirmed"
+
+`app/admin/flights/AdminFlightsTable.tsx:322` renders `isCancelled ? 'Cancelled' : 'Confirmed'`, and `:276` counts `bookingStatus !== 'CANCELLED'` as Confirmed. `lib/cancellationPolicy.ts:193` states plainly that "nothing writes `DISRUPTED` at all" — this branch is the first writer, so those two `!== 'CANCELLED'` branches become wrong the moment it lands.
+
+Opening the manifest for MA304 immediately after cancelling it (`admin-manifest-MA304.png`, desktop):
+
+```
+Total Booked 2   Confirmed 1   Cancelled 1
+Katherine Johnson   Economy  Seat 13C   Confirmed   (green)
+```
+
+Staff cancel a flight and the manifest still reports a confirmed passenger holding a live seat on it. `:128-132` likewise count the booking as "1 Active" and toward occupancy — defensible for occupancy since the seat is genuinely held, but the green "Confirmed" is a factual misstatement.
+
+---
+
+## Non-blocking
+
+### 4. After the scheduled departure passes, the row promises a refund the server refuses
+
+With a disrupted booking whose flight time had passed, clicking Cancel produced:
+
+```
+confirm: Cancel your booking for flight MA303 and take a full refund?
+alert:   This booking cannot be cancelled because the flight has already departed.
+```
+
+The row still reads "Your seat is held. Cancel for a full refund, with no cancellation fee." and the only offered action can never succeed (`lib/cancellationPolicy.ts:205-210` checks departed before disrupted, deliberately). A customer who waits a day is left holding an uncancellable booking on a flight that never operated. Evidence: `desktop-departed-refusal.png`. The refusal itself is well-worded; it is the row's standing promise that is wrong.
+
+### 5. Wording — it does not read as a status, and the two "cancelled"s blur
+
+Under a column of one-word tokens (`Confirmed`, `Cancelled`), "Flight cancelled by airline" is a sentence, and at a glance it reads as *your booking is cancelled — nothing to do*. That is the opposite of the intent. The explanatory line rescues it on desktop; at tablet the label wraps to 3 lines and at phone it is not visible at all, so the rescue is unreliable.
+
+Suggestions: a short token that reads as a state and implies action ("Cancelled by airline", or "Action needed" with the detail beneath), and on a round trip the token must name the affected leg (finding 1).
+
+### 6. One disrupted booking reshapes the whole table
+
+Measured with and without the disrupted `tbody`:
+
+| viewport | Status col | Flight | Route |
+|---|---|---|---|
+| 768 | 91 → **116** | 100 → **91** | 127 → **111** |
+| 1280/1440 | 91 → **312** | unchanged | unchanged |
+
+The 18rem explainer widens Status for *every* row, so at tablet one disrupted booking makes the route wrap harder on all the others (`tablet-bookings.png`). Row height goes 138→285 at tablet, 93→151 at desktop, 156→285 at phone.
+
+No defect follows from it: `document.scrollWidth === clientWidth` at 390, 768, 1024, 1280 and 1440 — the page body never scrolls horizontally, and the table wrapper does not clip at any width from 1024 up. Recorded as a suggestion only.
+
+### 7. Change Seats disappears even when the other leg still flies
+
+`ProfileClient.tsx:420`. The comment says "nothing to choose on a flight that is not operating" — true of the cancelled leg, not of the one beside it. With only MA304 cancelled, the customer loses the ability to change their MA303 seat on a flight they may still intend to take.
+
+### 8. The notification tells the customer to go somewhere but does not take them there
+
+"cancel the booking from your profile for a full refund" — the drawer item is a `div`, not a link. One `href="/profile"` would close the loop. Also "Flight Update:" understates a cancellation in the title.
+
+---
+
+## Checked and clean
+
+- **Contrast** (composited against the real painted background `rgb(20,19,27)`): amber `#fbbf24` at 13.6px/700 = **11.02:1**; explainer `rgba(255,255,255,.75)` at 12px = **10.58:1**; red 4.89:1; green 7.25:1. All pass AA comfortably. The amber is the *highest*-contrast of the three states. Two nearby failures are pre-existing and untouched by this diff: the seat cell at 3.83:1 (already on #229) and the drawer timestamp at 3.79:1.
+- **Focus and keyboard.** Tab order through the table is Confirmed-row Change Seats → Confirmed-row Cancel → Disrupted-row Cancel — logical, no traps, no orphaned stops from the hidden button. The disrupted Cancel takes a visible white 3px outline (`desktop-focus-disrupted-cancel.png`). Native `confirm()` returns focus to the invoking button; verified after dismissing.
+- **Not colour-only at tablet/desktop.** The three states differ in text as well as hue, so the amber/green/red convergence under deuteranopia is not load-bearing — except at phone, where neither text nor colour is visible (finding 2).
+- **Accessible name.** The disrupted row exposes both parts: `… $2,400 Flight cancelled by airline Your seat is held. Cancel for a full refund, with no cancellation fee. Cancel`, with the explanation as a `paragraph` inside the Status cell. Announced usefully.
+- **Reinstatement.** Setting the flight back to On Time returned the row to green Confirmed with Change Seats restored (`desktop-after-reinstate.png`); taking the refund moved it to Cancelled with both legs showing `Ada (Released)` and points deducted (`desktop-after-refund.png`).
+- **Console.** Zero errors and zero React warnings across booking, disruption, reinstatement, refund and drawer, at all three viewports.
+
+## What I could not exercise
+
+- **Live announcement of the state change.** The row only changes on reload or `router.refresh()`; there is no live region, so a screen-reader user sitting on `/profile` when the airline cancels hears nothing. I did not test with a real screen reader, only the accessibility tree.
+- **Multi-passenger disrupted booking.** Every booking I made had one passenger; I did not see how the explainer behaves beside three passenger lines.
+- **Playwright E2E.** Not run — my dev server occupied port 3000, per your instruction.
+
+## Environment notes
+
+- The Turbopack dev cache was corrupt on first start (`Failed to open SST file … .next/dev/cache/turbopack/`); `rm -rf .next` and a restart fixed it.
+- **Something outside this session wiped every booking mid-review** — bookings, passengers and seat assignments went to zero while users and notifications survived, which is the signature of a Playwright `global-setup` or the database Jest project pointed at the same database. I rebuilt the data. Worth knowing if the parent agent is running tests concurrently.
+- Left in the database for inspection: `flyer@example.com` and `ops@example.com` (password `Password123!`, `ops` has staff MFA enrolled, secret in the scratchpad `secret.txt`), four bookings including **2510 in `DISRUPTED`**, and flight 27 (MA304, 8/16) left `CANCELLED`.</result>
+<usage><subagent_tokens>160057</subagent_tokens><tool_uses>117</tool_uses><duration_ms>2537604</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a261708b09f1fa759</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/a261708b09f1fa759.output</output-file>
+<status>completed</status>
+<summary>Agent "Verify the disruption slice" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>## What I ran (final results, on the settled tree as of 11:14)
+
+| Check | Result |
+|---|---|
+| `npx tsc --noEmit` | clean |
+| `npm run lint` | 0 errors, 8 pre-existing warnings *(was 1 error at 11:05 — see #11)* |
+| `npm test` | 714 unit + 89 database, all pass |
+| `npm run build` (after `rm -rf .next` + `prisma generate`) | pass, "Removed 1 environment files from standalone output" |
+| `npx playwright test` | 30/30 passed (3.1m) |
+| `migrate deploy` + `db seed` on an empty scratch DB | pass (no migration in this slice; run anyway because the change leans on the enum + history trigger). Scratch DB dropped. Migration guards: none in this slice, so nothing to exercise in both directions. |
+| New DB test file, isolated, run 3× | 8/8 each time; `staff-disruption`, the `disruption-*` users, `DSR-*` flights and their notifications are all gone afterwards |
+
+Plus a purpose-built concurrency harness (temporary files, since deleted; `git status` restored and `app/actions.ts` verified byte-identical by sha256).
+
+---
+
+## Findings, most severe first
+
+### 1. REGRESSION — two flights of one itinerary changing status concurrently leave the booking `CONFIRMED` on a cancelled flight
+
+**27 of 30** unassisted rounds — a plain `Promise.all` of two `updateFlightStatusAction` calls, no artificial blockers. With the two flight locks held and released together, 17 of 25.
+
+Setup: booking on legs A+B, A already `CANCELLED` (booking `DISRUPTED`), B operating. Concurrently reinstate A and cancel B. Final state observed: booking `CONFIRMED`, flight B `CANCELLED`.
+
+Mechanism, under READ COMMITTED with each transaction holding only *its own* flight's lock (`/home/scottdensmore/Developer/scottdensmore/travel-app/app/actions.ts:1053`):
+
+- cancel-B's `updateMany` filters `status: 'CONFIRMED'`; its statement snapshot still sees the booking as `DISRUPTED`, so it does not match and is never row-locked — no blocking, no serialisation.
+- reinstate-A's `updateMany` evaluates `NOT: { legs: { some: { flight: { status: 'CANCELLED' } } } }` against a snapshot where B is still `ON_TIME` (cancel-B uncommitted), so the sibling guard passes and the booking goes `CONFIRMED`.
+
+Both commit. Sequentially, in *either* order, the outcome is correct — this only appears concurrently. The lock is correct for the flight it takes; the predicates read rows belonging to flights it does not lock. Result is precisely the defect the slice exists to remove: a live boarding pass on a flight that is not operating, no `DISRUPTED` history row, no notification, and the customer later pays the 20% Economy fee to cancel.
+
+### 2. REGRESSION — the mirror: reinstating both legs at once strands the booking `DISRUPTED` while both flights operate
+
+**19 of 20** rounds. Booking `DISRUPTED` on A+B, both cancelled; reinstate both concurrently: each `updateMany`'s sibling guard sees the other flight still `CANCELLED`, both skip, booking stays `DISRUPTED` with both flights `ON_TIME`.
+
+Same root cause. Worse to recover from than #1: the admin select already reads `ON_TIME`, so no `onChange` fires and staff cannot repair it without deliberately toggling to `CANCELLED` and back. Meanwhile the profile offers the customer "Cancel for a full refund, with no cancellation fee" on two flights that are running — a real refund on an undisrupted trip.
+
+Both #1 and #2 need two overlapping status changes on two legs of one itinerary. Each row in `/home/scottdensmore/Developer/scottdensmore/travel-app/app/admin/flights/FlightStatusSelector.tsx` has its own `useTransition` and disables only its own `&lt;select&gt;`, so one admin changing two rows, or two admins, is enough.
+
+### 3. REGRESSION — a `DELAYED` flight no longer notifies anybody holding a confirmed booking
+
+Verified against the database: `updateFlightStatusAction(flight, 'DELAYED')` on a flight with a `CONFIRMED` booking produces **0 notifications**. On `main` it produced one — the notify query was `status: "CONFIRMED"` for every status. Now (`app/actions.ts:1071`) it is `status === 'CANCELLED' ? 'CONFIRMED' : 'DISRUPTED'`, so for `DELAYED` it selects only bookings that are already disrupted. Delay notifications are the main use of that status, and nothing in issue #76's decision record asks for this.
+
+This is locked in vacuously. `__tests__/app/actions.test.ts:1585` now asserts the `status: 'DISRUPTED'` filter, and the same test still asserts that "is now DELAYED" notifications go to `user-1`/`user-2` — but `mockTx.booking.findMany` is mocked to return those users regardless of the `where`, so the assertion passes on a query that returns nothing in reality. Green suite, dead feature.
+
+### 4. COVERAGE GAP — the flight lock in the status action is not exercised by anything
+
+Mutation results (each applied alone, full unit + database suite):
+
+| Mutation | Verdict |
+|---|---|
+| remove the actor `set_config` | **killed** — `cancelling a flight › records who did it and why, on the history` |
+| reinstatement also revives `CANCELLED` bookings | **killed** — `does not resurrect a booking the customer cancelled in the meantime` |
+| disruption updates every booking, not only `CONFIRMED` | **killed** — `leaves a booking the customer already cancelled alone` |
+| drop the still-cancelled-sibling guard | **killed** — `leaves a trip whose other leg is still cancelled disrupted` |
+| decide the refund from the stale pre-lock read | **killed** — 1 unit test (`prices the cancellation from the read taken under the lock`); **no database test catches it** |
+| **remove `lockFlightForUpdate` from `updateFlightStatusAction`** | **SURVIVES** — 712 unit + 89 database all pass |
+
+The lock is the load-bearing half of this slice and deleting it is invisible. I did verify by construction that it works: parking the customer's transaction on leg A's lock, cancelling leg B in between, then releasing, records `refundCents = 20000` (full) where the control case records `8000` (20% kept) — but that construction lives only in my scratch harness.
+
+### 5. Notifications: two smaller divergences (behaviour, no test)
+
+- **Reinstatement notifies bookings it does not reinstate.** The notify set is read before the update as "`DISRUPTED` on this flight", but the update excludes bookings with another still-cancelled leg. Observed: booking stays `DISRUPTED`, customer receives "Your upcoming flight … is now ON TIME."
+- **A second cancelled leg notifies nobody.** Cancel A then cancel B on the same booking: one notification, naming A only. The customer is never told B is off.
+- Repeated toggling does **not** duplicate: cancelling an already-cancelled flight sends nothing (no `CONFIRMED` bookings remain), and cancel→reinstate→cancel sends one message per real transition. No `refundCents` leaks onto the disruption history rows.
+
+### 6. `BookingDepartedError` — clean, confirmed empirically
+
+Constructed with a flight departing 2.5s out and the transaction parked on the flight lock past that instant. Result: `{ ok: false, error: { code: 'VALIDATION_ERROR', message: 'This booking cannot be cancelled because the flight has already departed.' } }` — returned, not thrown, so no 500. Booking still `CONFIRMED`, only the `null-&gt;CONFIRMED` creation history row, 0 notifications, seat still held. **Prisma does not retry**: instrumented the callback and it entered exactly once.
+
+### 7. Deadlock — looked for, not found
+
+`updateFlightStatusAction` takes one lock; `FlightBookingService`, `cancelBookingAction` and `changeBookingSeatsAction` take theirs in ascending flight id. There is no cycle available from lock *order*. The residual risk was `updateMany` row-locking order across two staff transactions on two flights sharing bookings: 20 forced rounds with 6 round-trip bookings on both flights, plus 25 rounds of the mixed scenario — **0 deadlocks**. Not a proof (the plan could differ under other statistics), but nothing observed.
+
+Customer-vs-staff on the *same* flight is properly serialised: 12/12 concurrent rounds ended `CANCELLED` with a refund consistent with the recorded path — `10000` (full) where the history shows `-&gt;DISRUPTED` first, `8000` where it does not. No interleaving produced a wrong amount.
+
+### 8. Every other reader of `Booking.status`
+
+- `lib/PointsActivityService.ts:39,75,141` — all three branches key off `=== 'CANCELLED'`, so a `DISRUPTED` booking still earns and still shows as a plain credit. That matches your expectation; nothing to change, but nothing tests it either.
+- `lib/seatOccupancy.ts` — occupancy is `releasedAt: null`, not status, and the release trigger fires only into `CANCELLED`. `DISRUPTED` keeps its seat. Correct, and asserted by the new test.
+- `app/admin/flights/AdminFlightsTable.tsx` — updated in the latest edits: separate "Disrupted" count and per-passenger "Disrupted" label. Note line 128 still counts `b.status !== 'CANCELLED'` as "active bookings" in the row summary, so a disrupted booking reads as active there.
+- `lib/FlightBookingService.ts:188` and `app/actions.ts:215/245` are *flight* status, not booking status — unaffected.
+- `changeBookingSeatsAction` (`app/actions.ts:594`) refuses only `CANCELLED`. Now that the newest UI deliberately keeps "Change Seats" on a disrupted round trip, the server has no leg-level guard: a customer can move their seat on the leg the airline cancelled. No test either way.
+
+### 9. Robustness — new failure mode from moving the status change into a transaction
+
+`updateFlightStatusAction` now waits for the flight lock *inside* a `prisma.$transaction` with the default 5s timeout. A cancellation holding that lock longer than that turns a staff status change into a thrown `P2028`, which `FlightStatusSelector` shows as an `alert`. Previously the status write never blocked. Low likelihood, worth knowing.
+
+### 10. `renderedAt = 0` silently disables the departed guard
+
+`components/ui/ProfileClient.tsx:111` defaults the prop to `0`, which makes `departed` false for every real date. If a caller ever omits it, the "did not operate / no cancel button" branch vanishes with no type error and no test failure — the four new ProfileClient tests that do not pass it exercise only the non-departed branch. `lib/serverClock.ts` has no test of its own.
+
+### 11. Environment / process notes (not defects in the change)
+
+- **The working tree moved under me.** After my first full pass, `app/admin/flights/AdminFlightsTable.tsx`, `app/profile/page.tsx`, `components/ui/ProfileClient.tsx` and two test files were edited between 10:52 and 11:05, and `lib/serverClock.ts` appeared. My **first** Playwright run overlapped those edits and is not a trustworthy signal; everything in the table above is a re-run after the tree went quiet. The slice is also no longer what your brief described — "hides Change Seats for DISRUPTED" has become "keeps Change Seats when another leg still flies."
+- **Transient lint error, since fixed.** At 11:05 `npm run lint` failed with `app/profile/page.tsx:95 Cannot call impure function during render` on `renderedAt={Date.now()}`. The 11:05:09 edit introducing `serverRenderTime()` fixed it; lint is clean now. Flagging it only so you know it was real and that the fix is what I verified.
+- I deleted `.next` for a clean build while a dev server held port 3000; that server restarted (new pid). If the `ui-review` agent saw an odd reload around then, that was me.
+- `app/actions.ts` was restored from backup after mutation testing and verified `sha256 OK`; I never wrote any other file in the repo.
+
+---
+
+## What I would want before this ships
+
+Findings 1 and 2 are the same bug and it is the one this slice is about: the flight lock does not cover the rows the predicates read. Finding 3 is a silent feature loss with a test that certifies it. Finding 4 says the lock could be deleted tomorrow and CI would applaud. I did not fix any of them.</result>
+<usage><subagent_tokens>155796</subagent_tokens><tool_uses>106</tool_uses><duration_ms>4018172</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bbdq7axab</task-id>
+<summary>Monitor event: "CI checks on PR 232"</summary>
+<event>PR 232 verify: pass
+CHECKS COMPLETE</event>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bbdq7axab</task-id>
+<tool-use-id>toolu_01Bn7o6YaRJ7fXstF3NuJV2W</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/bbdq7axab.output</output-file>
+<status>completed</status>
+<summary>Monitor "CI checks on PR 232" stream ended</summary>
+</task-notification>
+
+---
+
+Ok lets do slice 5
+
+---
+
+<task-notification>
+<task-id>bbetchtpw</task-id>
+<summary>Monitor event: "CI checks on PR 233"</summary>
+<event>PR 233 verify: pass
+CHECKS COMPLETE</event>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bbetchtpw</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/bbetchtpw.output</output-file>
+<status>completed</status>
+<summary>Monitor "CI checks on PR 233" stream ended</summary>
+</task-notification>
+
+---
+
+Lets do 84
+
+---
+
+<task-notification>
+<task-id>a26b793bc394b5572</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/a26b793bc394b5572.output</output-file>
+<status>completed</status>
+<summary>Agent "UI review of origin-zone times" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>I have finished. Dev server stopped (port 3000 free), review accounts and the `UIR900` schedule removed; the two `disrupt-*` bookings still in the DB predate this session (a prior Playwright run).
+
+## Blocking defects
+
+### 1. Search cannot find flights that leave late in the origin's evening — two routes are now unbookable
+
+`app/actions.ts:201-202`
+
+```ts
+const startOfDay = new Date(`${isoDate}T00:00:00.000Z`);
+const endOfDay = new Date(`${isoDate}T23:59:59.999Z`);
+```
+
+The window is still a UTC day, but `departureDate` is now a true instant. Whenever the origin-local date and the UTC date differ, the flight falls out of the day the customer asked for.
+
+Measured against the seeded data: **MA505 Miami → Rio is mismatched on 157 of 157 occurrences** (22:00 EDT = 02:00Z next day), and **MA202 New York → London on 57 of 158** (19:30 EST = 00:30Z, every winter date).
+
+What the user sees, desktop / tablet / phone, all three identical:
+
+- Miami → Rio, depart **Aug 12** (a real Wednesday operating day) → *"No flights found for your selected date. Try a nearby date: **Fri, Aug 14**"* (`miami-{desktop,tablet,phone}-empty-aug12-full.png`).
+- Click **Fri, Aug 14** → empty again, now suggesting **Wed, Aug 12** and **Sun, Aug 16** (`miami-desktop-after-nearby-click-full.png`). The suggestions are computed in origin-local terms from the schedule, so every one of them lands back in the same UTC hole. **The route is a closed loop with no reachable flight.**
+- Miami → Rio, depart **Aug 13** → one result, and the card reads **"Aug 12, 2026"** (`search-miami-utc-desktop-results-full.png`). The customer asked for the 13th and is handed a card dated the 12th, unexplained.
+- New York → London, depart **Nov 3** → empty. Depart **Nov 4** → a card reading **"Nov 3, 2026"**.
+
+This is a regression this branch introduces: before, the stored value was `2026-08-12T22:00:00Z` and the UTC window found it. Everything downstream is correct — I booked MA505 (id 7) directly via `/checkout?outbound=7` and checkout, review, e-ticket, profile, board and admin manifest all agree on **Aug 12**. Search is the only surface that disagrees, which places the fix squarely in the query, not the render layer.
+
+Related sites carrying the same UTC-day assumption: the cancelled-flight window at `app/actions.ts:246-249`, `lib/flightSearch.ts:37-45` (`getNextDeparture`, which feeds `route.nextOperatingDate` consumed at `components/ui/flightBookingForm.tsx:460`, a third entry into the same dead end), `app/admin/flights/page.tsx:20-32`, and `lib/FlightScheduleService.ts:47-49` (`isoDay`, not currently rendered anywhere).
+
+### 2. Two admin write paths still staple `Z` on, so staff create flights nine hours late
+
+`app/actions.ts:829` and `app/actions.ts:957`
+
+```ts
+const departureDate = new Date(`${dateStr}T${savedSchedule.departureTime}:00Z`);
+```
+
+`FlightScheduleService` and the seed were converted; `createOrUpdateFlightScheduleAction` and `generateFlightOccurrencesAction` were not.
+
+Reproduced in the running admin, desktop 1440x900: I created schedule `UIR900`, Tokyo → Seattle, **departing 08:00**. On one page, at the same time (`sched2-desktop-template.png`):
+
+- "Repeating flight templates" row: **UI Review Air UIR900 · Tokyo, Japan → Seattle, USA · Departs: 08:00**
+- "Active occurrences (Next 7 Days)", every generated row: **17:00 GMT+9**
+
+Same contradiction at phone and tablet. Nine hours late, and for any schedule departing 15:00–23:59 local the generated occurrence lands on the wrong *day* too. This also means an occurrence generated by staff and one generated by the scheduler for the same schedule and date get different `departureDate` values, so the `@@unique([flightNumber, departureDate])` guard does not stop them coexisting — two rows for one flight.
+
+### 3. `Aug 16, 2026` wraps the departure column at phone and tablet
+
+`components/ui/FlightStatusBoard.tsx:242-245`, `app/admin/flights/AdminFlightsTable.tsx:147-150`
+
+Neither div is `nowrap`, and both columns were already tight (#229, #200).
+
+- **Status board, 390x844** (`board2-phone-scrolled-right.png`): the cell renders on four lines — `Aug 11,` / `2026` / `15:00` / `GMT+9`. Previously two lines of `8/11/2026` and `3:00 PM`.
+- **Status board, 768x1024** (`board-tablet-all-full.png`): three lines — `Aug 11,` / `2026` / `15:00 GMT+9`, inflating every row.
+- **Admin occurrences, 390 and 768** (`admcrop-phone.png`, `admcrop-tablet.png`): `Aug 13,` / `2026`, with the time on its own line below.
+
+`Aug 11,` alone on a line is not a date; a scanning eye has to reassemble it. Both tables already sit in a horizontally-scrolling wrapper (board table is 681px wide inside a 356px viewport at phone), so `white-space: nowrap` costs nothing the page body pays for. The page body itself never scrolls horizontally at any viewport on any changed page — I checked `documentElement.scrollWidth` on all of them and the only overflow anywhere was the seat map at phone (419 &gt; 390), which is the seat grid's fixed width and pre-existing.
+
+Profile is fine: `ProfileClient.tsx:411` already has `whitespace-nowrap`, and the cell holds `Aug 16, 2026` on one line at 111px at all three widths (`prof-{phone,tablet,desktop}-bookings-full.png`).
+
+## Answers to what you asked
+
+**4. Hydration — clean, but four `suppressHydrationWarning` are now dead and should go with it.** No hydration warning, no React warning and no console error on `/flights`, `/profile`, `/admin/flights`, the search page, or any checkout step, at all three viewports, driven in four browser timezones (`Asia/Tokyo`, `America/New_York`, `America/Los_Angeles`, `Europe/London`). Rendering is genuinely viewer-independent: the identical journey produced `Aug 16, 2026` / `Aug 20, 2026` in Tokyo and in Los Angeles. The one console error I recorded was a 401 from my own TOTP code rolling over mid-window; re-run inside a stable window it does not appear.
+
+But you removed the attribute from one cell and left four:
+- `app/admin/flights/AdminFlightsTable.tsx:148` (the time+zone div, right beside the one you cleaned)
+- `app/admin/flights/AdminFlightsTable.tsx:244` (the manifest header)
+- `components/ui/flightBookingForm.tsx:1023` and `:1121` (both search-result dates)
+
+All four now render deterministically, so the attribute has stopped protecting anything and started hiding things — a genuine server/client mismatch in those subtrees would be silently swallowed. (`components/ui/titlebar.tsx:294` is notification `createdAt`, legitimately viewer-local; keep that one.)
+
+**5. Nothing else renders a flight time in the browser's timezone.** I swept every `toLocale*` call in `app/`, `components/` and `lib/`. The remainder are booking `createdAt` (`app/admin/page.tsx:118`), review `createdAt` (`ProfileClient.tsx:553`), notification `createdAt` (`titlebar.tsx:294`), points-activity dates (`lib/PointsActivityService.ts:56,79,85,91`) and numeric `toLocaleString`. None is a flight instant, and viewer-local is the right answer for all of them. Notification bodies (`app/actions.ts:1152`) carry no dates. All ten render sites you listed check out, and the manifest header, board, admin row, profile, checkout review and e-ticket all agree on the same flight — I verified MA304 reads `Aug 16, 2026 15:00 GMT+9` on the board, `Aug 16, 2026` + `15:00 GMT+9` in the admin row, `Aug 16, 2026 15:00 GMT+9` in the manifest header (`man-desktop-manifest-open-full.png`), and `Aug 16, 2026` on search, review, e-ticket and profile.
+
+**2. The zone label is legible where it appears; the mixed notation is the weak part.** Contrast measured with the translucent panel backgrounds composited: 5.30:1 on the board (14px) and 5.30:1 in the admin table (12.8px). Both pass AA. But the same column reads `PDT`, `EDT`, `CDT`, `GMT+9`, `GMT+1`, `GMT+2` — `Intl`'s `timeZoneName: 'short'` under `en-US` abbreviates North America and falls back to offsets everywhere else. Side by side that looks like an inconsistency rather than a fact about zones, and `GMT+1` for London in August is also less recognisable to a British traveller than `BST`. Consider a single notation for the column (`shortOffset` throughout, or the IATA code the flight already carries).
+
+**On the date-only surfaces, my judgement is that the missing zone is fine and the missing *time* is not.** The date shown is the origin's, which is the date the customer flies by, so `Aug 12, 2026` for a 22:00 Miami departure is the right answer even when the viewer's own calendar says the 13th. But a boarding pass with a `DATE` field and no time (`jt-desktop-07-step4-eticket-full.png`), a commit screen that says only `Departure: Aug 16, 2026` (`jt-desktop-06-step3-review-full.png`), and a results list that offers **"Sort: Departure: Earliest / Latest"** over cards that show no departure time at all (`jt-desktop-01-results-full.png`) are all worse for it. The absence is pre-existing in kind — the old code showed only `toLocaleDateString()` too — but `flightDeparture()` now hands you `time` and `zoneLabel` for free at every one of those call sites, which makes this the cheapest it will ever be to fix.
+
+## Suggestions
+
+- **Profile now shows two date formats on one screen** (`prof-phone-bookings-full.png`): "My Bookings" reads `Aug 16, 2026` while "Recent Points Activity" directly below reads `8/10/2026`, from `lib/PointsActivityService.ts:56,79,85,91`. Both were `M/D/YYYY` before, so the change created the mismatch even though the points date is not a flight instant.
+- **`lib/cancellationPolicy.ts:18-25` now asserts the opposite of the truth** — a long caveat explaining that `Flight.departureDate` "is not [a real instant]" and that both refund boundaries are wrong by the origin's offset. This branch is exactly what fixes that; the paragraph should become a note that it was fixed, or go.
+- `AdminFlightsTable.tsx:147-150` calls `flightDeparture(flight)` twice per row and `:245` calls it three times in one string; one `const departure = flightDeparture(...)` would read better and re-parse less.
+
+## Not applicable / not reached
+
+- **Keyboard, focus, accessible names on the changed elements:** not applicable — every changed site is static text inside a table cell or a summary block. No interactive element was added, removed or relabelled. I did verify the surrounding admin manifest dialog still behaves: `role="dialog"` + `aria-modal="true"` + `aria-labelledby`, opens on Enter from the Manifest button, focus lands on the close button, Escape closes it and focus returns to the trigger.
+- **Loading and error states:** not reached. The search's "Searching…" disabled state and the checkout's server-rejection path (`lib/FlightBookingService.ts:188`, which now compares real instants) are both reachable in principle but I did not drive them; the empty state I did exercise, and it is finding 1.
+- **Cancellation refund boundary:** not exercised. This change moves the 24-hour cut-off and the departed guard by the origin's offset — the point of the branch — but confirming the boundary needs clock control, which is verifier/test territory rather than rendered review.
+- **DST transitions:** no seeded flight sits inside a spring-forward gap that the UI can reach, so `airportLocalInstant`'s gap and fold handling stayed unit-test territory. I did confirm through the database that MA202 converts differently either side of the November transition (19:30 EDT vs 19:30 EST), which is the migration behaving correctly.
+- Pre-existing and outside this diff, recorded so they are not read as new: the passenger form's `&lt;label&gt;` elements at `BookingCheckoutWizard.tsx:703,722,752` have no `htmlFor`, so the fields have no accessible name; seat buttons use `title` rather than `aria-label` and are 26x26px; the seat map overflows the page body at 390px; the board's "On Time" pill wraps into an oval at phone; cancel confirmation uses native `confirm()`/`alert()`.
+
+Screenshots are in `/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/94121201-47c3-4281-aeff-7838379a510d/scratchpad/shots/` — prefixes `board-`, `board2-`, `miami-`, `search-miami-`, `nyc`, `sched2-`, `adm-`, `admcrop-`, `man-`, `jt-`, `prof-`, `sweepC-`.</result>
+<usage><subagent_tokens>167581</subagent_tokens><tool_uses>127</tool_uses><duration_ms>2127929</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>b0q2jlbff</task-id>
+<summary>Monitor event: "CI checks on PR 236"</summary>
+<event>PR 236 verify: pass
+CHECKS COMPLETE</event>
+</task-notification>
+
+---
+
+Ok lets continue with 84
+
+---
+
+<task-notification>
+<task-id>a8a3098fa6e081e25</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/a8a3098fa6e081e25.output</output-file>
+<status>completed</status>
+<summary>Agent "UI review of arrival times" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Dev server stopped, test data removed, repo unchanged (no scratch files left behind).
+
+## Blocking defects
+
+**1. The arrival never renders. The whole feature is invisible in the running app.**
+`app/flights/page.tsx:86-94` selects an explicit field list that omits `durationMinutes`:
+
+```ts
+select: { id: true, flightNumber: true, airline: true, departureDate: true,
+          priceCents: true, status: true, ...flightRouteInclude },
+```
+
+So `flight.durationMinutes` is `undefined` in `FlightStatusBoard.tsx:240`, `arrival` is always `null`, and no row gets an arrival line. Verified at all three viewports: every departure cell is 2 lines, no `→` anywhere (`shots/board-phone.png`, `board-tablet.png`, `board-desktop.png`). The comment above that select ("Only what the board renders") is exactly the trap — the board's needs changed and the select did not. Component tests pass props directly, so nothing caught it. User impact: the slice ships with no user-visible change at all.
+
+Everything below I assessed by injecting the exact markup the component builds, with strings computed from the real `lib/flightTime` (`shots/preview-*.png`). The library itself is correct on all three requested routes: Tokyo→SF `→ 08:35 PDT (9h 35m)` dayOffset 0, NY→London `→ 07:30 +1 GMT+1 (7h 00m)` dayOffset 1, Seattle→Detroit `→ 15:05 EDT (4h 05m)` dayOffset 0.
+
+**2. The duration input is white text on a white box — the typed value is invisible.**
+`components/ui/flightScheduleForm.tsx:290-300`. `app/globals.css:923` scopes the dark-field styling to `.admin-card input[type="text"], .admin-card textarea`; the new field is `type="number"`, so it gets none of it. Tailwind preflight gives it `color: inherit` (white) while the UA keeps the white background. Computed: `background rgb(255,255,255)`, `color rgb(255,255,255)` — 1:1 contrast. Also no border, no radius, `padding: 0`, height 24px against 49px for its neighbours, so it is vertically misaligned in its own grid row. Seen at all three viewports; `shots/card-desktop.png` and `card-tablet.png` show a bare white bar between the correctly styled Departure and Price fields, with `245` typed into it and unreadable. An admin cannot see what they are entering, and cannot check it before submitting.
+
+**3. `durationMinutes` is not cleared after a successful create, so the next schedule silently inherits the last one's block time.**
+`flightScheduleForm.tsx:168-182` resets flightNumber, airline, from, to, departureTime, price, daysOfWeek and the seating fields — but never calls `setDurationMinutes('')`. Verified live at 1440x900: after "✅ New schedule created successfully!", every field is `""` and `durationMinutes` is still `"245"`.
+
+This compounds with #2 and with the fact that the admin schedule list (`app/admin/flights/page.tsx:94-98`) has no Duration column and there is no edit route (only `DeleteScheduleButton`). So an admin creating a JFK→LHR schedule after a SEA→DTW one gets Seattle→Detroit's 245 minutes, cannot see it in the field, cannot see it in the list afterwards, and cannot edit it. Every generated flight on that route then carries a wrong arrival. That is the "says the true thing" failure, and it is the reason this one is blocking rather than cosmetic.
+
+**4. At 768x1024 the board newly starts scrolling horizontally, and Price is cut off.**
+Measured with and without the arrival line at each width:
+
+| viewport | table width without | with | wrapper |
+|---|---|---|---|
+| 390 | 697 | 785 | 356 |
+| 768 | **734** | **785** | **734** |
+| 1440 | 998 | 998 | 998 |
+
+At tablet the table fits exactly today and stops fitting once the nowrap arrival line widens the Departure column from 139px to 227px. Compare `shots/board-tablet.png` (all prices visible: $1,200, $850) against `shots/preview-tablet.png` (every price clipped to "$1,2", "$8"). A tablet user loses the fare — the thing they are comparing on — unless they discover the sideways scroll. Phone was already overflowing (pre-existing, #229/#200) and gets 88px worse; the page body itself never scrolls horizontally at any width, so the card's `overflowX: auto` is doing its job. Desktop absorbs it by shrinking every other column (Flight −15, From −18, To −20, Status −12, Price −10) and row height 87→108px; no wrapping with the seeded city labels, but the margin is thin.
+
+## Notation (question 2) — needs rework before it ships
+
+The line is `→ 07:30 +1 GMT+1 (7h 00m)`. Three problems, in order:
+
+- **`+1` immediately followed by `GMT+1` is genuinely unreadable.** The task brief assumed `BST`; the app renders `GMT+1`, so the day marker and the zone label collide into "+1 GMT+1". Same for Tokyo (`+1 GMT+9`) and Rio (`+1 GMT-3`). A reader has no way to know which `+1` means "next day". This alone rules out the current arrangement. (The `GMT+n` labels rather than `BST`/`JST`/`CEST` are pre-existing from the previous slice, but they were only in one place per row before; now there are two per row and one of them sits against the day marker.)
+- **The arrow is not enough, and for assistive tech it is nothing.** The column header is still "Departure" (`FlightStatusBoard.tsx:230`) while the cell now announces `Aug 11, 2026 / 19:30 EDT / → 07:30 +1 GMT+1 (7h 00m)`. `→` (U+2192) is dropped by some screen readers and read as "right arrow" by others, so the arrival can be announced as a bare second time under a header that says "Departure".
+- **The bracketed duration is the least ambiguous part** — `(7h 00m)` reads as elapsed time — but sitting fourth on a line that already has two numbers and a zone, it is easy to skim past.
+
+A clearer arrangement, keeping one row: split the column into `Departure` and `Arrival` headers, each cell `19:30 EDT` / `07:30 GMT+1` with `next day` (or `+1 day`) as a small separate marker rather than a bare `+1` adjacent to the zone, and move the duration to its own `Duration` column or under the flight number. If a second column is out of scope for this slice, at minimum: rename the header to `Departure / Arrival`, replace the bare `→` with the word `Arrives`, and separate the day marker from the zone (`Arrives 07:30 GMT+1 (next day) · 7h 00m`). Also give the arrival a different weight or colour from the departure — right now both are `rgba(255,255,255,0.5)` at 14px, so they look like one continuous fact.
+
+## Question 3 — inconsistency
+
+Tolerable for this slice, but wider than the brief states. The search result card (`shots/search-desktop.png`) shows only `Aug 13, 2026` — **no departure time at all**, let alone arrival. So a customer moving from the board to booking already loses the time; arrival is not the first thing missing. Because that gap is pre-existing rather than introduced here, it should not block this slice — but the search card is the surface where a time actually changes a purchase decision, and it should be the next thing to get one. File it rather than widen this slice.
+
+## Non-blocking findings
+
+- **The duration field has no inline error, unlike its siblings.** `from` and `to` render `&lt;p id="...-error"&gt;` with `aria-invalid` and `aria-describedby` (`flightScheduleForm.tsx:247-254, 266-273`); `durationMinutes` has none. Server messages are legible and correctly worded — empty → "Please fill in all required fields." (client check, does not name the field), `0` and `-5` → "Flight duration must be at least one minute.", `99999` → "Flight duration must be shorter than three days.", `1.5` → "Flight duration must be a whole number of minutes." — but they appear only in the top banner.
+- **Focus is not moved to the duration field on a validation failure.** The handler at `flightScheduleForm.tsx:153-162` is meant to focus the first bad field; after submitting `0`, `99999`, `1.5` and `-5`, `document.activeElement` was `BODY` every time. Keyboard users land at the top of the document with a banner, not on the field.
+- **Focus ring is the browser default.** Price focused: purple border `rgb(139,92,246)` plus glow. Duration focused: `outline: rgb(22,22,22) auto 1px` — a near-black ring on a white box. Same cause as #2.
+- **Missing input constraints.** `min={1}` only; no `max`, no `step`, no `inputMode`. Adding `max={4320}` and `step={1}` would let the browser and the spinner enforce what Zod already knows. Typing `e` into a number input yields `value === ''`, which surfaces as "Please fill in all required fields" on a field that looks filled.
+- **Tab order is correct**: Departure → Duration → Price, verified at 1440x900.
+- **The horizontal scroll container has no keyboard affordance** — `overflow-x: auto` with no `tabindex="0"`, `role="region"` or `aria-label` (`FlightStatusBoard.tsx:223`). Chrome makes scrollable boxes implicitly focusable so it did appear in my tab sequence, but Firefox and Safari do not. Pre-existing, newly relevant because tablet now overflows too.
+- **Console is clean** — no errors or React warnings on the board at any viewport, or on the admin form through the full create journey.
+
+## Headings with nothing to report
+
+- **Contrast**: passes. I measured the composited row background at `rgb(23,20,31)`; the arrival line at `rgba(255,255,255,0.5)`/14px gives **5.30:1**, above AA for normal text. No contrast failure introduced on the board. (The form field is a contrast failure, but at 1:1 it is a styling bug, reported as #2.)
+- **Page-level horizontal scroll**: none at 390, 768 or 1440, on either the board or the admin page.
+- **Loading and empty states**: the board's four-branch empty message and the `role="status"` count line are untouched by this diff and behaved correctly.
+
+## What I could not exercise
+
+- **The real arrival rendering**, because of defect #1. Everything in questions 1, 2 and 5 about the board is measured from injected markup that reproduces the component's exact output and inline styles. Re-run this review once the select is fixed.
+- **The "no arrival" fallback** (`durationMinutes` null). All 1,416 seeded flights have a duration and the migration's CHECK constraint forbids 0, so no seeded row reaches the `null` branch at `FlightStatusBoard.tsx:240`.
+- **The edit path.** `FlightScheduleForm` is only mounted without `initialSchedule` (`app/admin/flights/page.tsx:82`) and the list offers Delete only, so `initialSchedule?.durationMinutes` prefill at `flightScheduleForm.tsx:38-41` is unreachable through the UI.
+- **Playwright MCP** could not launch (`chrome` channel missing, `npx playwright install chrome` needs sudo). I drove the bundled Chromium with scripts instead — no `npx playwright test`, so nothing touched the booking data.
+
+Screenshots: `/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/94121201-47c3-4281-aeff-7838379a510d/scratchpad/shots/` — `board-{phone,tablet,desktop}.png` (as shipped), `preview-{phone,tablet,desktop}.png` (intended arrival line), `card-{phone,tablet,desktop}.png` (form field), `search-desktop.png`.</result>
+<usage><subagent_tokens>125850</subagent_tokens><tool_uses>75</tool_uses><duration_ms>1428029</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a6025fdff041b4404</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/a6025fdff041b4404.output</output-file>
+<status>completed</status>
+<summary>Agent "Verify the duration slice" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>No drift. Here is the report.
+
+---
+
+# Verification: `feat/flight-arrival-times`
+
+**Important context first:** the working tree changed **twice while I was verifying it**. A `ui-review` pass landed changes to `app/flights/page.tsx`, `app/globals.css`, `components/ui/FlightStatusBoard.tsx`, `components/ui/flightScheduleForm.tsx` and two test files partway through my first battery, and a further edit to `__tests__/components/flightScheduleForm.test.tsx` landed after my second. I discarded the first battery and re-ran everything. **All results below are for the final state**, which I confirmed stable (unchanged over a 30s window after the last run). There are no commits on the branch — everything is uncommitted working-tree state plus one untracked migration.
+
+## What I ran
+
+| Check | Result |
+|---|---|
+| `npx tsc --noEmit` | clean |
+| `npm run lint` | 0 errors, 8 warnings (all pre-existing: `react-hooks/incompatible-library`, `no-img-element`) |
+| `npm test` (unit) | 69 suites, **743 passed** |
+| `npm test` (database) | 21 suites, **94 passed** |
+| `npm run build` (after `rm -rf .next`) | success, `Removed 1 environment files from standalone output` |
+| `npx playwright test` | **33 passed** (4.1m), no retries, no flakes |
+| `prisma migrate diff` (migrations vs schema) | `No difference detected` |
+| Migration on a pre-migration database, guard both directions | see below |
+| Fresh empty database: `migrate deploy` + `db seed` | 1416 flights, **0 without a duration**, 9 schedules |
+| 15 mutations | 8 died, **7 survived** |
+
+Build and Playwright ran against the state immediately before the final test-file-only edit; that edit touches neither the build output nor `e2e/`, so those results carry.
+
+No flakes. Nothing failed for a reason connected to the diff.
+
+## Migration, exercised on real pre-migration data
+
+I built a scratch database at the pre-migration migration set and populated it with `Airport`, `FlightSchedule` and `Flight` rows lacking the column, including two schedules on routes the table does not cover (`Seattle, USA → London, UK` active, `Paris, France → Tokyo, Japan` **inactive**) and a flight on an uncovered route.
+
+- **Guard fires**, naming both offenders including the inactive one — correct, since `NOT NULL` applies regardless of `isActive`.
+- **Rollback is whole**: after the failure, neither column exists, neither CHECK exists, and the `route_block_minutes` temp table is gone.
+- `P3009` on retry, `migrate resolve --rolled-back`, then a clean second run — the documented recovery path works end to end.
+- **Guard passes** once the uncovered schedules are removed: all 9 schedules backfilled correctly, 3 covered flights backfilled, the uncovered flight left `NULL`, `NOT NULL` on `FlightSchedule`, both CHECKs present.
+- CHECKs verified live: `0` and `-5` rejected on both tables; `NULL` accepted only on `Flight`.
+
+## Findings
+
+### 1. The arrival never rendered on the only page that uses the board — fixed mid-run (regression, now resolved)
+
+`app/flights/page.tsx` picks columns explicitly and the `select` omitted `durationMinutes`. `FlightStatusBoard`'s prop is `durationMinutes?: number | null`, so TypeScript did not object, and `flight.durationMinutes ? … : null` silently produced nothing.
+
+I measured it two ways before the fix: the page's query returned rows whose keys were `id, flightNumber, airline, departureDate, priceCents, status, from, to` with `'durationMinutes' in row === false`, and the live rendered `/flights` had **27 flight rows and 0 arrival markers**. The entire user-visible half of the slice was dead.
+
+This was fixed while I was verifying, together with a test in the direction the existing pinned-select test could not see. I re-verified on the final state: **27/27 rows now render an arrival, 12 with a next-day marker**, header `Departure / Arrival`. Spot-checked against the destination zone — all nine routes correct, e.g. `Tokyo → San Francisco 15:00 GMT+9 → Arrives 08:35 PDT, 9h 35m` (no marker) and `Chicago → Paris 17:45 CDT → Arrives 09:15 GMT+2 (next day), 8h 30m`.
+
+Flagging it because the parent agent should know the seam existed: a component test hands props directly, so a page that stops selecting a field the component reads fails nothing. The new `__tests__/app/flightsPage.test.ts` case closes it, and I confirmed removing `durationMinutes: true` from the page now kills 2 tests.
+
+### 2. The duration requirement is enforced at three layers and tested at none (coverage gap)
+
+You asked whether a schedule can still be saved without a duration. It cannot — but nothing proves it, so nothing will notice when it can again. Three mutations, all surviving 743/743:
+
+- `lib/validation.ts` — appending `.optional()` to `durationMinutes`: **survives**.
+- `lib/validation.ts` — deleting `.int(…)`, `.min(1, …)` and `.max(3 * 24 * 60, …)` outright: **survives**. All three custom messages are unreachable from any test.
+- `components/ui/flightScheduleForm.tsx` — removing `!durationMinutes` from the required-fields check: **survives**.
+
+Every new test supplies `durationMinutes: 245`; none omits it, none goes out of range. Note also that the action's own server-side guard at `app/actions.ts:752` (`if (!data.flightNumber || … || !data.price)`) does not include `durationMinutes`, so Zod is the only thing standing there.
+
+### 3. `FlightScheduleService` can stop inheriting the duration and nothing fails (coverage gap)
+
+Deleting `durationMinutes: schedule.durationMinutes` from the `flight.create` in `lib/FlightScheduleService.ts:114`: **743 unit + 94 database tests all pass**. This is the path the seed and the horizon generator use — it produced all 1416 seeded flights. Its twin in `generateFlightOccurrencesAction` (`app/actions.ts:1007`) *is* covered: the same deletion there kills a test. The asymmetry is worth closing, since the service is the higher-volume path.
+
+### 4. Both CHECK constraints can be dropped with no test failing (coverage gap)
+
+Dropped `FlightSchedule_durationMinutes_positive` and `Flight_durationMinutes_positive` from a freshly seeded database and ran the database project: **94/94 pass**. The constraints work — I verified directly — but nothing observes them. Combined with finding 2, if the Zod bounds regressed, a non-positive duration would be caught only by Postgres, and only in production.
+
+### 5. The negative day marker is unreachable by any test (coverage gap)
+
+`LocalArrival`'s doc says "a westbound crossing of the date line can be negative", and the board now renders `(previous day)` for it. Removing that branch: **743/743 pass**.
+
+It is reachable from admin-authored data: Tokyo → San Francisco departing before roughly 06:25 JST. I confirmed `00:30 JST + 9h35 → Aug 16, 18:05 PDT, dayOffset = -1`. The seeded 15:00 JST departure gives 0, so the seed never produces it. This is the row a reader most needs the marker on — the arrival appears to be on an earlier date than the departure.
+
+### 6. The guard's suggested remedy is impossible to follow (migration)
+
+&gt; `Add the route to this migration, or give those schedules a duration first.`
+
+The second half cannot be done. When the guard fires, `FlightSchedule.durationMinutes` does not yet exist — the migration creates it — so there is nowhere to put a duration. I tried the obvious workaround (add the column by hand, backfill, re-run) and the migration fails at its own `ADD COLUMN`:
+
+```
+Database error code: 42701
+ERROR: column "durationMinutes" of relation "FlightSchedule" already exists
+```
+
+The only workable remedies are adding the route to the table, or removing/retiring the offending schedules. The first clause is correct; the second sends an operator down a path that leaves them with a second failed migration to unwind.
+
+### 7. Editing a schedule's duration does not reach flights already generated (behaviour, pre-existing pattern)
+
+`saveFlightScheduleAction` skips any occurrence that already exists, so a corrected `durationMinutes` reaches only future generations. Identical to how `priceCents` behaves, so it is a pre-existing pattern rather than something this change invented — but the consequence is new and larger: at 157 rows per route across the booking horizon, a duration typed wrong once puts a wrong arrival time on every one of them, and there is no Duration column in the admin schedule list and no page wiring `initialSchedule` into the form, so nothing surfaces it. The comment added to the form-reset test acknowledges exactly this. Worth an issue rather than widening the slice.
+
+## On the derivation decision — your reading is right
+
+Deriving is defensible, and I could not find anything that needs a stored arrival instant.
+
+- **Nothing today filters or sorts by arrival.** I grepped every Prisma call; no `where` or `orderBy` touches it, and no raw SQL does.
+- **The obvious future caller is expressible in SQL.** #84's task 8 ("separate upcoming, departed, **arrived**, delayed, cancelled") needs "has it landed", which is `"departureDate" + make_interval(mins =&gt; "durationMinutes") &lt;= now()`. Prisma's query builder cannot express that, so it would need `$queryRaw` — but Postgres will also accept it as `GENERATED ALWAYS AS (…) STORED`, since `timestamptz + interval` is immutable, and that column is indexable. A derived arrival therefore does not corner the design; it defers the choice rather than foreclosing it, and a generated column is still one answer rather than two.
+- **One caveat for whoever writes that predicate**: `Flight.durationMinutes` is nullable, so it needs an explicit NULL policy — a flight with no stated duration can never be "arrived", and `NULL` in that comparison yields unknown, which silently drops rows from both sides of a naive split.
+
+The precedent you cite (#135, #137, #73) is the right one, and the reasoning is recorded in the migration header and the schema comments where the next reader will find it. I would not store the instant.
+
+## Edge cases: I could not break `flightArrival` or `calendarDaysBetween`
+
+Every case you named, exercised against the real airport data. All correct:
+
+- **Date line westbound** SFO→HND 11:00 PDT → `+1`; departing 23:59 PDT → `+2`, correctly printed as `(+2 days)`.
+- **Date line eastbound** HND→SFO 15:00 JST → same date, `0`; 00:30 JST → `-1`; 23:59 JST → `0`.
+- **Landing exactly at local midnight** SEA→DTW departing 16:55 PDT → `00:00 EDT`, `dayOffset 1`. One minute earlier → `23:59 EDT`, `0`. No off-by-one at the boundary.
+- **Departing exactly at local midnight** → `07:05 EDT`, `0`.
+- **DST at the destination mid-flight**, both directions: SEA→DTW over the 2026-11-01 fall-back → `04:35 EST`, `+1` (wall-clock difference 6h05, elapsed still 4h05); over the 2027-03-14 spring-forward → `05:35 EDT`, `+1`; JFK→LHR over the 2026-10-25 UK fall-back → `06:30 GMT`, `+1`. The marker stays right because it never touches elapsed time.
+- **DST at the origin**: a departure inside the skipped hour (02:30 PDT) lands past the gap at 03:30 — pre-existing documented behaviour, and the arrival follows correctly.
+- **Same-zone routes** SEA→SFO (both `America/Los_Angeles`) 23:00 + 2h → `+1`; JFK→MIA (both `America/New_York`) across the fall-back → `0`.
+- **No-DST destination** MIA→GIG and GIG→MIA both correct.
+- **`calendarDaysBetween`** is sound: both dates are parsed as UTC midnights and `Math.round`ed, so DST cannot perturb it and negatives work.
+
+The two mutations you already killed, I re-confirmed on the final state: reading the arrival in the origin's zone kills 5 tests, computing `dayOffset` from elapsed time kills 4.
+
+**Nothing infers a duration or an arrival by subtracting local times.** I grepped `app/`, `lib/` and `components/` for `getTime()` subtraction, `getHours`/`getMinutes`, and `HH:MM` splitting. The seven hits are unrelated (date-range width, points-month sorting, rate-limit backoff, the cancellation policy's hours-to-departure). No `split(':')` does time arithmetic.
+
+## Seeded block times: self-consistent and plausible
+
+All ten entries in the migration's `route_block_minutes` match `lib/data/FlightData.ts` exactly. Both directions are present for all five routes, and every eastbound leg is shorter than its westbound pair — SEA/DTW 245 vs 285, JFK/LHR 420 vs 485, HND/SFO 575 vs 680, ORD/CDG 510 vs 560, GIG/MIA 500 vs 525 — which is what prevailing winds do. All are within about 20 minutes of real-world block times.
+
+Two notes: `GIG → MIA` is in the migration table but `FlightScheduleData` has no Rio → Miami return schedule, so the entry is unused (harmless, and the asymmetry is pre-existing in the seed). And nothing keeps the migration's table and `FlightData.ts` in sync — the header says they are the same numbers, but no test asserts it, unlike the `AirportData` ↔ `Airport` drift test. Low severity, since a migration is one-shot.
+
+## Housekeeping
+
+- Seven scratch databases from an earlier verification pass are still on the server: `tav_pre`, `tav_guard`, `tav_m1`, `tav_m2`, `tav_m3`, `tav_seed`, `tav_shadow`, about 60 MB total. Mine are all dropped.
+- Early in my run a grep matched `__tests__/lib/zz-scratch-arrival.test.ts` (containing `flightArrival(c as any)`); it was gone minutes later and is not in the tree now. Mentioning it only so it does not reappear in a commit.
+- I left the tree byte-identical to the state I verified, and the dev database untouched (1416 flights, 0 null durations).
+
+## Files
+
+- `/home/scottdensmore/Developer/scottdensmore/travel-app/prisma/migrations/20260811040000_flight_elapsed_duration/migration.sql` — finding 6
+- `/home/scottdensmore/Developer/scottdensmore/travel-app/lib/validation.ts` — finding 2
+- `/home/scottdensmore/Developer/scottdensmore/travel-app/lib/FlightScheduleService.ts` — finding 3
+- `/home/scottdensmore/Developer/scottdensmore/travel-app/components/ui/FlightStatusBoard.tsx` — finding 5
+- `/home/scottdensmore/Developer/scottdensmore/travel-app/components/ui/flightScheduleForm.tsx` — finding 2
+- `/home/scottdensmore/Developer/scottdensmore/travel-app/app/actions.ts` — finding 7
+- `/home/scottdensmore/Developer/scottdensmore/travel-app/app/flights/page.tsx` — finding 1 (resolved)
+- `/home/scottdensmore/Developer/scottdensmore/travel-app/lib/flightTime.ts` — no defects found
+
+Findings 2 through 5 are all coverage, and all in the same shape: the enforcement exists, the test does not. Findings 6 and 7 are worth acting on before the pull request — 6 is a two-line edit to the guard's message, 7 is an issue to file.</result>
+<usage><subagent_tokens>154501</subagent_tokens><tool_uses>109</tool_uses><duration_ms>2816158</duration_ms></usage>
+</task-notification>
+
+---
+
+I want to make sure that you are only running the tests created for the implementation and anything that was affected in the main agent. The full test suite should be run in verifier. That way we are not running all the tests in both
+
+---
+
+I hit the wrong key.. go ahead and continue
+
+---
+
+<task-notification>
+<task-id>b55xu629h</task-id>
+<summary>Monitor event: "CI checks on PR 239"</summary>
+<event>PR 239 verify: pass
+CHECKS COMPLETE</event>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>b55xu629h</task-id>
+<tool-use-id>toolu_01NcVHznWb6oXqUUfuW7Hrsq</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/b55xu629h.output</output-file>
+<status>completed</status>
+<summary>Monitor "CI checks on PR 239" stream ended</summary>
+</task-notification>
+
+---
+
+Ok what should we do next?
+
+---
+
+<task-notification>
+<task-id>a795f154cdbce9337</task-id>
+<tool-use-id>toolu_016Au2NxAAvYenxy3FHZFjYF</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/a795f154cdbce9337.output</output-file>
+<status>completed</status>
+<summary>Agent "UI review of the phone fixes" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Dev server stopped, fixture data removed, working tree untouched (only the seven changed files).
+
+## How I exercised it
+
+The MCP browser wanted Chrome at `/opt/google/chrome/chrome`, which isn't installed, so I drove the repo's bundled Chromium through Playwright scripts instead (headless, DPR 2). I seeded a real user with a confirmed round trip (2 passengers), a **disrupted round trip whose return leg is the cancelled one**, a cancelled booking with a released seat, an unseated booking, and 8 notifications. Screenshots are in
+`/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/94121201-47c3-4281-aeff-7838379a510d/scratchpad/shots/`.
+
+## Both issues are genuinely fixed
+
+**#208 — yes.** At 390x844 the panel is **419px tall and 419px of it visible**, fully inside the viewport, not covering the bell (bell bottom 106, panel top 116), list scrolls (853px into 340px), outside click closes, item click does not, "Mark all read" clears the badge and leaves the panel open (`drawer-390-open.png`, `drawer-390-empty.png`). Anchoring holds: page scroll to 600 moved it 116→114, tracking the header's own shrink; scrolling the phone `header nav` sideways — the exact overflow that caused #208 — put the panel's right edge at 244.6 against a bell right edge of 244.6, exact. Tablet and desktop are clean (`drawer-768-unread.png`, `drawer-1440-unread.png`). At 844x390 landscape the outer `maxHeight` binds correctly: 283px panel, list shrinks to 204 and scrolls. No console errors or React warnings on `/`, `/book`, `/flights`, `/travelguide`, `/profile` with the drawer opened at each.
+
+**#229 — yes.** At 390 the phone copy is visible in the first cell for all three states, no sideways scroll needed (`bookings-390.png`). At 768 and 1440 the `sm:hidden` copy is `display:none` and only the column renders — no visible duplication (`bookings-768.png`, `bookings-1440.png`). No page-level horizontal scroll at any of the three widths. Contrast all passes: seat line **9.82:1** (from 3.80), green 9.57, amber 11.02, red 6.65. The region's focus ring is real — pixel-diffed white (255,255,255) against rgb(24,20,32), maxDelta 235.
+
+## Blocking
+
+**1. Portalling the panel broke keyboard and screen-reader order** — `components/ui/titlebar.tsx:258,375` — 390/768/1440, drawer open.
+The panel paints under the bell but its DOM home is the end of `document.body`. Measured tab sequence after opening with the keyboard at 390: avatar link → Sign Out → bookings region → Change Seats → Cancel → Change Seats. "Mark all read" is never reached; it is the last focusable element in the document. Escape does not close it (verified: still open after `Escape`). The bell carries no `aria-expanded`, `aria-haspopup` or `aria-controls`, the panel has no role or accessible name, and focus is neither moved in nor restored. Before this change the panel sat immediately after the bell in the same `li`, so tab order was bell → Mark all read. A keyboard user now opens a drawer and has to traverse the entire page to reach its one control, with no way to dismiss it except a mouse click elsewhere. WCAG 2.4.3. Fix together: `aria-expanded`/`aria-controls` on the bell, `role="dialog"` + `aria-label` on the panel, an Escape handler, focus into the panel on open and back to the bell on close.
+
+**2. The bell has no visible focus indicator** — `components/ui/titlebar.tsx:232` (`outline: 'none'`) — all viewports.
+Computed styles are byte-identical focused and unfocused (`outline: ... none 3px`, same box-shadow). Pre-existing, not introduced here, but it is the entry point to the feature this change exists to fix and it is in the changed file: keyboard users cannot see where they are when they arrive at the bell. WCAG 2.4.7.
+
+## Non-blocking findings
+
+**3. A phone user can now learn about the disruption but still cannot act on it** — `components/ui/ProfileClient.tsx:345-354,485` — 390x844.
+Measured: the Status column starts at x=380 and every Change Seats/Cancel button spans x=471–633, all beyond the region's right edge at 353. So the inline copy says "UIR400 cancelled by airline", but "Your seat is held. Cancel for a full refund, with no cancellation fee." and the Cancel button stay behind a horizontal scroll with no visible affordance — `offsetHeight === clientHeight` (no scrollbar gutter), and `app/globals.css:1146` paints the thumb `#2b2640` on a `#0d0c14` track, roughly 1.4:1, invisible even where a scrollbar is drawn. The slice's goal is met; the follow-through is not. Worth filing rather than widening the slice.
+
+**4. The scroll region is a tab stop that lies at ≥640** — `components/ui/ProfileClient.tsx:345-354` — 768 and 1440.
+Measured `scrollWidth === clientWidth` (662 and 997): nothing scrolls, yet `tabIndex={0}` still creates a stop and the landmark is still named "Your bookings, scrollable". Condition both on real overflow (ResizeObserver), or drop "scrollable" from the name. At 390, where it does overflow, the order is good: it lands after Sign Out and before the row buttons.
+
+**5. Stale-anchor flash on reopen** — `components/ui/titlebar.tsx:116-136,258`.
+`anchor` survives close and `place()` runs in `useEffect`, i.e. after paint. With the bell moved (nav scrolled sideways) while closed, reopening painted the panel at the previous position (right 355.6) for two frames before settling at 244.6. `useLayoutEffect`, and clearing `anchor` on close, removes both.
+
+**6. The 340px list cap now fights the measurement that was just added** — `components/ui/titlebar.tsx:317`.
+At 768x1024 and 1440x900 the panel is 388px tall with 600+px of free viewport, showing 3 of 8 notifications while the badge says 8 — and with the scrollbar styling above, nothing indicates more exists. Let the outer `maxHeight: calc(100vh - top - 16px)` govern.
+
+**7. `seat released` is the odd one out, and the comment's premise is wrong** — `lib/bookingItinerary.ts:90-98`.
+"Ada (Seat 11A)" and "Alan (No seat assigned)" read well; "Bob (seat released)" beside them reads like a typo, and it is the only lowercase form. The comment says it matches the admin manifest, but `app/admin/flights/AdminFlightsTable.tsx:320` renders `Released` — the two surfaces now disagree on this exact string. "Seat released" in both, or have admin call `seatLabel`, would make the claim true.
+
+**8. 0.4-alpha text still in the drawer this change rewrites** — `components/ui/titlebar.tsx:347` (timestamps, measured **3.78:1**) and `:368` ("You're all caught up!", same alpha). That is the same defect just corrected on the seat line (3.80 → 9.82), one file over, in the panel this change moved.
+
+**9. The status expression is written twice** — `components/ui/ProfileClient.tsx:433-437` and `:463-467`. Identical conditionals that must always agree; an edit to one is precisely the "names one flight while listing another leg's data" failure mode. Extract to a single variable above the return.
+
+## Nothing to report
+
+- **Layout / horizontal scroll**: `documentElement.scrollWidth === clientWidth` at all three widths, on all five routes.
+- **Console**: zero errors and zero React warnings across the whole journey.
+- **Contrast of everything this change touched**: all pass AA, most pass AAA (numbers above).
+- **Status duplication at ≥640**: does not occur; the phone copy is `display:none` and correctly `aria-hidden`, so assistive technology hears the status once.
+- **First-cell layout**: not wrecked. It is cramped at 390 — the column is 83px, so "UIR400 cancelled by airline" wraps to three lines — but that is the pre-existing table cramping, and the wrapping is legible.
+
+## Gaps in this review
+
+- Headless Chromium only. Real-device touch behaviour was not exercised: iOS overlay scrollbars, and whether a tap reliably synthesises the `mousedown` the outside-click close depends on (`titlebar.tsx:152`).
+- The admin header variant (`pathname.startsWith('/admin')`, white text) was not exercised — the fixture user is not staff and staff access gates on TOTP enrollment. The drawer markup is shared, so I expect parity, but I did not see it.
+- No pre-change measurement of the 16px-of-389px state: confirming it would have meant stashing your uncommitted work. The "before" numbers are from #208 and #229; every "now" number above is measured.
+- The `e2e/*.spec.ts` edits were read, not run — you asked me not to start Playwright while my dev server was up. The `.filter({ visible: true })` additions are the right shape for a 1280-wide default viewport where the phone copy is in the DOM but hidden; proving that is the verifier's pass.</result>
+<usage><subagent_tokens>134856</subagent_tokens><tool_uses>81</tool_uses><duration_ms>1558708</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bj0ypxs2d</task-id>
+<summary>Monitor event: "CI checks on PR 243"</summary>
+<event>PR 243 verify: pass
+CHECKS COMPLETE</event>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bj0ypxs2d</task-id>
+<tool-use-id>toolu_01FyaFFQYAErLvzkLVuqwY6g</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/bj0ypxs2d.output</output-file>
+<status>completed</status>
+<summary>Monitor "CI checks on PR 243" stream ended</summary>
+</task-notification>
+
+---
+
+Thinking through our main agent vs sub agent verifier. I want to keep the main agent context as clean as possible. We are
+  doing tdd so we have to build and run tests. We also are doing user journey testing. How should we handle this? have the
+  main agent run the one and the verifier run the entire suite?
+
+---
+
+Yes lets add your recommendations
+
+---
+
+<task-notification>
+<task-id>a0a45fc457b6486dd</task-id>
+<tool-use-id>toolu_01Td4vADJWLjnutJ77oV93Vv</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/a0a45fc457b6486dd.output</output-file>
+<status>completed</status>
+<summary>Agent "Verify docs-only workflow change" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>I have everything I need. Here is the report.
+
+## What I ran
+
+| Check | Result |
+|---|---|
+| `npx jest --selectProjects unit` (×5) | 4 green (765/765); **1 red** — `UserAuthForm.test.tsx`, unrelated to the diff. 18.9s per run |
+| `npx jest --testPathPattern agentInstructions` | 3/3 pass |
+| `npx jest --testPathPattern UserAuthForm` (isolated) | 9/9 pass |
+| Mutation of the guard's inputs (in-memory copies, worktree untouched) | **All mutants survived** — see finding 3 |
+| `gh pr view 231` | Citation checks out |
+
+## What I skipped, and why
+
+The diff is two `.md` files. Nothing else in the worktree is modified (`git status` shows only `AGENTS.md` and `/home/scottdensmore/Developer/scottdensmore/travel-app/.claude/agents/verifier.md`).
+
+- **`npm run lint`** — the script is `eslint app components lib`. Neither file is in those directories and eslint does not process `.md`. Structurally cannot reach the diff.
+- **`npx tsc --noEmit`** — no `.ts`/`.tsx` changed. The only TypeScript that *reads* the changed files is the guard test, which I ran.
+- **`npm run test:database`** — no schema, service, or query touched; no database test reads either file.
+- **`npx playwright test`** — no route, component, or server action changed.
+- **`npm run build`** — `next build` neither compiles nor bundles `AGENTS.md` or `.claude/`. I want to flag this as the one skip with a non-obvious path to the diff: if `.claude/` ever entered the build context, the sanitize step would matter. `__tests__/security/containerSecrets.test.ts` asserts `.claude` is in `.dockerignore`, and that suite ran green inside the unit project, so the path is covered without spending the build.
+- **Migrations fresh/populated** — `prisma/` untouched.
+
+I agree these are unreachable. The full Playwright run in particular would have been the most expensive possible way to learn nothing.
+
+## Findings
+
+**1. `verifier.md` now instructs me to do something I have no tools for, and the obvious workaround is unsafe — contradiction, blocking**
+
+Line 11: *"You do not fix: you have no editing tools, and that is deliberate."*
+Line 88: *"break the line yourself, run the suite it named, confirm it goes red, and restore."*
+
+Frontmatter grants `Read, Grep, Glob, Bash`. The only way to break a line is `sed -i` or a heredoc through Bash, which (a) contradicts the no-editing design asserted 77 lines earlier, (b) has the verifier mutating the worktree during a run — exactly what AGENTS.md lines 190-193 forbids the main agent from doing *to* the verifier, and (c) specifies no restore discipline. There is no "restore even on failure" instruction, no `git stash`/`git checkout --` requirement. An interrupted run leaves an injected defect in the user's tree with no signal.
+
+The safe form exists but is unstated: mutate a copy. I used it on `AGENTS.md` above. It only works for pure-text guards though — to turn a Jest suite red you must mutate the file the module registry resolves, which means copying the repo to scratch. That is sound and expensive, and the document says neither.
+
+**2. Mutation ownership is stated three times, in two incompatible ways — contradiction**
+
+- Table, verifier column: *"An independent re-run of the mutation battery"*
+- AGENTS.md line 182, immediately below the table: *"Mutation testing stays with the main agent and stays focused: run the suite that should catch the mutant, not everything."*
+- `verifier.md` line 87: the verifier re-derives the mutant.
+
+Line 182 survives from the old text and now reads as an unqualified override of the table row directly above it. A main agent following it concludes the verifier does no mutation work. A main agent following the table concludes it re-runs a "battery" — which also fights line 182's "not everything". Neither matches what `verifier.md` actually asks for.
+
+**3. Nothing obliges the main agent to tell the verifier which mutants it killed — check owned by nobody**
+
+`verifier.md` line 87 is conditional: *"Where the main agent reports having killed a mutant"*. AGENTS.md step 7 requires mutation testing but never requires reporting the mutant and its suite in the verifier invocation. When the report is omitted, the verifier has nothing to re-derive and the check silently does not happen — no failure, no flag.
+
+This run demonstrates it: my task prompt described the split in detail and named no mutant, so the re-derivation clause was inert. This is the exact check that PR #231 exists to justify (its body: dropping both `set_config` calls *"passed the entire 781-test suite"*), so the failure mode is the one already observed. The fix belongs in AGENTS.md step 7, not in `verifier.md`.
+
+**4. "Cross-file regression sweeps" is assigned to me and defined nowhere — unactionable**
+
+It appears in the verifier column and in no other sentence of either document. `verifier.md` never mentions it. There is no command, no definition, no acceptance criterion. I cannot tell whether the full unit + database projects satisfy it or whether something additional is meant, so I cannot report honestly on whether I did it.
+
+**5. The unit project sits in both columns, under a heading that says not to do that — contradiction, minor**
+
+Heading: *"The verifier owns the slow checks; do not run them twice."* Main agent column: *"The whole unit project once a slice is done."* Verifier column: *"The full unit **and** database projects."* Same shape for `lint`/`tsc`, which are in the main-agent column yet appear in `verifier.md`'s checks block.
+
+`verifier.md` lines 27-29 resolve this deliberately and correctly. AGENTS.md does not, and AGENTS.md is the file the main agent reads. Add the one-clause carve-out to the prose under the table.
+
+**6. "It snapshots the worktree" is false, and the plausible misreading is the dangerous one — unactionable as written**
+
+I do not snapshot anything. I read from disk throughout, shelling out to `git`, `jest` and `next build` at different times. The real hazard is worse than staleness: a mid-run edit gives an *inconsistent* view where early checks ran against one tree and later ones against another, with nothing marking the boundary. A reader who believes a snapshot was taken could reasonably conclude that editing after launch is harmless. The instruction is right; the mechanism given for it inverts the conclusion.
+
+**7. `verifier.md` leads with a command that is empty at the moment it is invoked — minor**
+
+Line 16 says to read `git diff main...HEAD` first. On this branch that returns nothing: there are no commits, and the whole change is unstaged. Only the trailing "plus staged, unstaged and untracked" clause surfaced the diff. Since step 7 runs *before* step 9 commits, an empty `main...HEAD` is the normal state at invocation, not the exception. Reversing the sentence's emphasis would match how the rule is actually used.
+
+**8. The triage cap is asymmetric — the verifier has no bound and no delegate — coverage gap**
+
+AGENTS.md caps the main agent at two rounds and tells it to hand off to a sub-agent. The verifier has no Task tool, so it cannot delegate, and `verifier.md`'s "Flakes are findings" demands *"Report the mechanism, not just 'flaky'"* with no cap at all. Establishing the flake rate in finding 9 cost me five full unit runs — precisely the unbounded spend the main agent's cap exists to prevent.
+
+**9. `UserAuthForm.test.tsx` fails roughly 1 run in 5 in the full unit project — pre-existing, not from this diff**
+
+Fails only in the full run; passes standalone. No executable file is modified on this branch, so this is main's behaviour, not a regression. Mechanism, from `/home/scottdensmore/Developer/scottdensmore/travel-app/app/login/components/user-auth-form.tsx`:
+
+```ts
+setFormError({ message, fields });
+window.setTimeout(() =&gt; {
+    ...
+    document.getElementById(firstInvalidField)?.focus();
+}, 0);
+```
+
+Focus is moved from an unawaited macrotask outside React's `act()` scope. The test's `waitFor` (real timers, 1000ms default) asserts three things; the first two read committed React state and are true as soon as the error renders, so the failure always lands on the third:
+
+```
+&gt; 66 |             expect(screen.getByLabelText('Email')).toHaveFocus();
+     at checkRealTimersCallback (waitFor.js:118:16)
+```
+
+Under 69 suites saturating the workers, the `setTimeout(0)` callback can be starved past the budget. It is a race between an unawaited timer and the poll window, not order-dependence between fixtures.
+
+Relevant to this diff: the table puts the unit project in *both* columns, so this flake now has two chances per slice to produce a red that looks real and is not.
+
+**10. The diff is guarded by essentially nothing — coverage gap**
+
+`agentInstructions.test.ts` asserts only that `AGENTS.md` contains 8 heading strings. I ran the guard's assertions against mutated copies:
+
+| Mutant | Guard |
+|---|---|
+| Entire step-7 split section deleted (2,786 bytes) | **passes** |
+| Table ownership columns swapped (`\| Verifier \| Main agent \|`) | **passes** |
+| Workflow steps 6-12 deleted (7,211 bytes) | **passes** |
+
+So: this content is unguarded. Every word the diff adds could be deleted or inverted and the suite stays green. `.claude/agents/verifier.md` is worse — `grep` across `*.ts,tsx,mjs,js,yml,json` finds no reference to it anywhere, no test reads it, and lint cannot see it.
+
+I am not suggesting you pin the prose; a test that diffs paragraphs would fail on every edit and get deleted. But the answer to your question is unambiguous: **the guard pins headings only, and this content is unguarded.** If any part deserves an assertion, it is that the two documents agree on ownership — e.g. that every check named in the verifier column of the table also appears in `verifier.md`. That would have caught finding 4.
+
+**Minor:** table rows 164, 166, 169 exceed 100 characters against the file's ~80-column wrapping. Inherent to choosing a table; no linter gates it. Also worth noting the table's factual claims all check out — I measured 18.9s for the unit project ("about 18 seconds"), 765 tests ("seven hundred"), and `| grep -E '^Tests:'` yielded ~10 tokens per run against the "about fifty" estimate.</result>
+<usage><subagent_tokens>34645</subagent_tokens><tool_uses>20</tool_uses><duration_ms>414415</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a2f44b03de5974bbe</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/a2f44b03de5974bbe.output</output-file>
+<status>completed</status>
+<summary>Agent "Re-verify workflow split fixes" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>## What I ran
+
+| Check | Result |
+|---|---|
+| `npx tsc --noEmit` | **Pass** (exit 0). Covers the changed test file — `tsconfig.json` includes `**/*.ts` |
+| `npm run lint` | **Pass**, 0 errors, 8 warnings — all in `components/ui/{pointsActivityTable,titlebar,travelGuideForm}.tsx`, untouched by this diff, pre-existing |
+| `npm test` (unit + database) | **Pass.** Unit 69 suites / 769 tests; database 21 suites / 96 tests |
+| `npm run test:unit` (second run, for #244) | **Pass**, 769/769, 18.1s |
+
+Two full unit runs; the #244 `UserAuthForm` focus assertion did not fire in either. Not re-run further, per your instruction.
+
+**Skipped, with reason:**
+- `npm run build` — the diff is two Markdown files and one Jest test. Nothing in `app/`, `lib/`, `components/`, `scripts/` or `next.config` reads `AGENTS.md`, `CLAUDE.md` or `.claude/` (the only match is a prose comment in `lib/brand.ts:6`). The build cannot observe this change.
+- `npx playwright test` — no application code, no spec under `e2e/`, no `playwright.config.ts` change.
+- Migrations against fresh/populated databases — `prisma/` is untouched (`git status --short prisma` empty).
+
+`npm run lint` is `eslint app components lib`, so the changed test file is **not** linted by it; `tsc` is the only static check that reached it.
+
+## Mutant audit (from source, no edits)
+
+| Claim | Verdict |
+|---|---|
+| `populated` → `fresh` in AGENTS.md → 1 test red | **Confirmed.** `populated` occurs exactly once in AGENTS.md (line 167). The first `expect` in the `/populated/` case fails. 1 test |
+| `populated` → `empty` in verifier.md → 1 test red | **Confirmed.** Exactly once in verifier.md (line 54). Second `expect` in the same case fails. 1 test |
+| `mutant` → `claim` in verifier.md → **2 tests red** | **Dead, but the count is wrong — it is 1 test.** `/mutant/` is case-sensitive and matches verifier.md at line 97 only; line 106 is `Mutants` (capital M) and does not match. Only the `/mutant/` `it.each` case fails, and only on its second `expect`. No other test in the repo reads `.claude/agents/verifier.md` (`grep -rn 'verifier.md' __tests__` returns that one line) |
+
+The mutant is genuinely killed. The overcount is the finding: a "2 tests red" that is really 1 is the same reporting error class as #231, just benign this time.
+
+## Findings
+
+### 1. The new test cannot fail for the failure its docstring describes — coverage gap, most severe
+
+The docstring says it "fails loudly when one side drops a check the other still promises." For two of the four pairs it does not. Regex match sites:
+
+| Pattern | AGENTS.md | verifier.md | Load-bearing? |
+|---|---|---|---|
+| `/npm run build/` | 19, 96, **165** | 25, **42** | **No** — delete the table row 165 and lines 19 (Commands block) + 96 (Gotchas) still match; delete verifier.md's checks-block line 42 and line 25 still matches |
+| `/playwright test/` | 18, **166** | 25, **41** | **No** — line 18 is the Commands block, line 25 is the sentence saying the *main agent does not* run it |
+| `/populated/` | 167 only | 54 only | Yes |
+| `/mutant/` | **168**, 186, 189, 190 | 97 only | AGENTS.md side **no** (delete row 168, prose at 186–190 still matches); verifier.md side yes |
+
+So 5 of the 8 assertions are satisfied by prose outside any ownership statement. Concretely: `.claude/agents/verifier.md` line 25 reads
+
+```
+project, `npm run build` or the full `npx playwright test`, because a second
+```
+
+That is the sentence stating what the *main agent* skips. A verifier definition that never once tells me to build or to run Playwright still passes both of those assertions.
+
+Note also that the three mutants reported are exactly the three load-bearing assertions. The two that would have exposed this — delete the `npm run build` row, delete the `npx playwright test` row from the step 7 table — were not attempted, and both survive.
+
+Secondary: the test asserts presence in both files, never *which column*. A check moved from the verifier column to the main agent's column, with verifier.md unchanged, passes.
+
+**My honest answer on whether it should exist:** keep it, but anchored, or delete it. As written it is the assertion that gets deleted the first time it is inconvenient, because someone will hit it, see that it only proves a word appears somewhere in a 200-line file, and be right. Anchoring is cheap: extract the step 7 table block from AGENTS.md (between the `| Main agent | Verifier |` header and the following blank line) and match the pattern within *that* string, and match verifier.md within its `## The checks` / migrations / mutation-audit sections rather than whole-file. Then the maintenance cost buys something. If that is not worth doing, the honest move is to delete it rather than keep a list whose green tells you nothing about `npm run build`.
+
+### 2. My running definition is the previous version — environment
+
+The `.claude/agents/verifier.md` change is unstaged, and the definition in my system prompt is the pre-fix text: it still contains "re-derive it rather than taking the claim: break the line yourself, run the suite it named, confirm it goes red, and restore." I followed the on-disk version, as you asked. Worth knowing generally: edits to a sub-agent definition do not reach a sub-agent invoked in the same session — so any future "read your own definition" pass has to read the file, which is what I did.
+
+### 3. "You have no editing tools" is false as stated — coverage gap in the instruction
+
+Lines 11–12 and 98–99 both assert this as a capability fact. My tool list is `Read, Grep, Glob, Bash`. Bash can `sed -i`. The prohibition is a policy, not an enforcement, and stating it as enforcement invites an agent that discovers `sed -i` to conclude the sentence is stale and the rule with it. Phrase it as the rule it is: *do not modify any file in the worktree; Bash can write, do not use it to.* You asked me to confirm no instruction now requires an edit — **confirmed**, nothing in the file asks me to modify anything. Line 56's "make it fire, then make it pass" is exercised by inserting rows into a scratch database, not by editing repo files.
+
+### 4. My definition tells me to re-run in isolation but not how — coverage gap
+
+"Flakes are findings" step 2 says re-run in isolation. Neither the `## The checks` block nor `## Environment traps` carries the two traps that make an isolation re-run silently wrong, both of which are in AGENTS.md Gotchas:
+
+- `npm run test:unit -- &lt;path&gt;` does not filter — it runs all 769 and says nothing. Needs `-- --testPathPattern`.
+- `npx jest --selectProjects database` aborts. Confirmed from `jest.database-setup.js:20-33`: `assertSerialised` throws when `maxWorkers &gt; 1`, requiring `npm run test:database` or an explicit `--runInBand`.
+
+A verifier that hits either while triaging a flake spends a triage round on the tooling. Two lines in the traps section closes it.
+
+### 5. My definition has no instruction to notice an *absent* mutant report — coverage gap
+
+AGENTS.md now says "**name each mutant and the suite that caught it when invoking the verifier.** An unreported mutant is an unaudited one, silently." The verifier side only says "Where the main agent reports having killed a mutant, audit the claim." Silence is unhandled: I have no instruction distinguishing "no mutation testing was warranted" from "mutation testing was done and not reported." The loop AGENTS.md opens is not closed on my side. It should say to flag a behavioural change that arrives with no mutant named at all.
+
+### 6. Agreement between the table and my definition — clean in both directions
+
+Every entry in the verifier column has an instruction in my definition: full unit *and* database projects → `npm test` (line 40); `npm run build` → line 42; full Playwright → line 41; migrations fresh *and* populated → lines 45–58; audit of every mutant reported killed → lines 97–108. Nothing dangles the way "cross-file regression sweeps" did.
+
+Reverse direction is also clean: nothing I am told to run belongs to the main agent alone. `lint` and `tsc` appear in both, which is now the explicit carve-out in AGENTS.md ("The cheap checks are the deliberate exception to the heading") and matches verifier.md lines 30–33. The `npm test` I run is the full both-projects run, not the main agent's focused subset.
+
+One asymmetry, not a contradiction: the table is a list of *runs*, so it omits three things my definition makes me responsible for — flake mechanism characterisation, the coverage/vacuity read, and regression-vs-pre-existing-vs-environment classification. If the main agent uses the table as the spec for what to hand me, it will not know that the third of those needs to be told what is already failing on `main`.
+
+### 7. Nit: #231 headcount differs between the files
+
+verifier.md:107 says "dropping two `set_config` calls passed all 781 tests"; AGENTS.md:191 says "Three that survived 781 tests." The PR body reconciles them — three mutants total (two `set_config` drops plus a flat zero) — so neither is false, but for a change whose purpose is coherence between these two files, "two" and "three" one paragraph apart in different files will read as a discrepancy to the next person.
+
+## Bottom line
+
+No regressions. Typecheck, lint, and both Jest projects are green on the final tree, and the three expensive checks I own are unreachable from this diff for the reasons given. Finding 1 is the one worth acting on before commit: the test that exists to prevent an unowned check cannot detect an unowned `npm run build` or `npx playwright test`, which are the two most expensive checks in the split.
+
+Relevant paths: `/home/scottdensmore/Developer/scottdensmore/travel-app/__tests__/docs/agentInstructions.test.ts`, `/home/scottdensmore/Developer/scottdensmore/travel-app/.claude/agents/verifier.md`, `/home/scottdensmore/Developer/scottdensmore/travel-app/AGENTS.md`, `/home/scottdensmore/Developer/scottdensmore/travel-app/jest.database-setup.js`</result>
+<usage><subagent_tokens>38499</subagent_tokens><tool_uses>16</tool_uses><duration_ms>360349</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a219c2561493ba0f5</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/a219c2561493ba0f5.output</output-file>
+<status>completed</status>
+<summary>Agent "Verify anchored consistency test" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>## What I ran
+
+| Check | Result |
+|---|---|
+| `npx tsc --noEmit` | **Clean**, exit 0 |
+| `npm run lint` | **0 errors**, 8 warnings — all in `components/ui/{pointsActivityTable,titlebar,travelGuideForm}.tsx`, none touched by this diff (pre-existing) |
+| `npm run test:unit -- --testPathPattern agentInstructions` | **7/7 pass** |
+| `npm run test:unit` (full) ×2 | **769/769, 69 suites**, both runs. #244 did not surface in either |
+| Mutation audit (offline harness) | All four claims confirmed dead, exactly one test red each |
+
+**Skipped, with reason:** `npm run build` and `npx playwright test` — the diff is two markdown files plus one file under `__tests__/`, none of which is in the Next build graph or reachable from any browser journey; `tsc` already covers the test file. Full database project and fresh/populated migrations — no schema, migration, SQL or service change. Per your instruction I did not re-run what previous passes justified skipping.
+
+The worktree is untouched. I replicated both extraction helpers verbatim into `/tmp/claude-1000/.../scratchpad/extract.mjs` and ran them against in-memory mutated copies of the two documents.
+
+---
+
+## 1. The adversarial pass on the two helpers
+
+**Your specific question — does `indexOf` returning -1 fail open? No, it fails closed, on both helpers.** `slice(-1)` yields the final single character, which can neither contain a 4+ character pattern nor start a `|` row, so `checksAssignedToTheVerifier` returns `''` and `instructionsTheVerifierFollows` returns `"\n"`. Verified: reword the anchor to "expensive checks", drop its bold markers, or move the sentence below the table, and all four tests go red.
+
+But it is fail-closed *incidentally*, not structurally, and the failure is unreadable: four tests red at once, each saying `expect("").toMatch(/npm run build/)`, which reads as "the verifier no longer owns the build" when the truth is "someone reworded a sentence three lines above the table."
+
+**Killed (fails closed, verified):** row deletion; column swap; adding a leading table column; replacing the table with prose; a blank line after the separator; a literal `|` inside a main-agent cell; heading rename to `## Checks to run`; deleting the bash block; deleting the `populated` sentence; deleting the mutant paragraphs.
+
+**Fail-opens — green, ownership claim gone.** Every one of these is a single plausible copy edit except F2 and F7:
+
+| # | Edit | Why it stays green |
+|---|---|---|
+| F1 | Delete the "audit the claim rather than taking it" imperative from verifier.md Coverage, keep the #231 anecdote | `/mutant/` matches "Mutants reported dead…". The instruction is gone; the anecdote satisfies the regex |
+| F3 | `npx playwright test &lt;spec&gt;  # only the spec the main agent says changed` | `/playwright test/` still matches. This is precisely the behaviour the change exists to prevent, and it survives |
+| F5 | Verifier cell → `Migrations against a fresh database; populated is the main agent's` | `/populated/` matches the word that hands the work *away* |
+| F6 | Verifier cell → `Note any mutant the main agent mentions` | `/mutant/` matches; "audit every" downgraded to "note any" |
+| F4 | Verifier cell → `Re-run \`npm run build\` only if asked` | Token present, assignment now conditional |
+| F2 | Drop `npm run build` from the bash block, add a trap "a stale `.next` makes `npm run build` bundle an old Prisma client" | The slice runs `## The checks` → EOF, so any mention below the heading satisfies it |
+| F7 | Delete the step-7 table, add any table later in AGENTS.md | The row-scanning loop is **unbounded** — it scans to EOF for the first `|` line, so a later table is silently read as the split |
+
+F8 (`## The checks` → `### The checks`) is green and harmless — `indexOf` matches the substring, slice shifts by one char.
+
+## 2. Are the assertions load-bearing on both sides?
+
+**Yes, against the deletion-and-move class, and the previous vacuity is genuinely fixed.** I confirmed the mechanism: `npm run build` and `npx playwright test` appear in verifier.md at line 31 — inside the sentence describing what the *main agent* skips — and `## The checks` is at line 41, so the slice starts below it. That was the whole of finding 1 and it is closed. Both sides now fail independently (M1–M3 red on the AGENTS side with the verifier side passing; M4 the reverse), which is the asymmetry that was missing.
+
+**No, against rewording.** The patterns pin a token's presence inside the assigning passage, not the strength of the claim, and F1/F3/F5/F6 each keep the token while deleting the assignment. That is an inherent limit of regex-over-prose and I would not treat it as a blocker — but the docblock's stated guarantee ("a check named in one file and absent from the other is owned by nobody") overstates what the assertions deliver, since a check can be *named in the right passage in both files* and owned by nobody.
+
+## 3. Reading the definition end to end as instructions
+
+**Finding A — regression, blocking. AGENTS.md contradicts its own table about lint and tsc, and it is the exact defect this test exists to prevent.**
+
+`AGENTS.md:174-177`:
+&gt; The cheap checks are the deliberate exception to the heading: lint, the typecheck and the unit project appear in both columns because they cost seconds…
+
+The extracted verifier column is, in full:
+```
+The full unit *and* database projects / `npm run build` / The full `npx playwright test` /
+Migrations against a fresh *and* a populated database / An audit of every mutant reported killed
+```
+The unit project appears in both columns. **`npm run lint` and `npx tsc --noEmit` appear only in the main-agent column.** Meanwhile `.claude/agents/verifier.md:36-39` does tell the verifier to re-run them. So lint and the typecheck are assigned in the verifier definition, absent from the AGENTS.md column, and the paragraph beneath the table asserts a table content that isn't there. `CHECKS_THE_VERIFIER_OWNS` does not cover them, so the new test cannot catch it. This is the "named in one file, absent from the other" defect, in the change that introduces the guard against it.
+
+**Finding B — blocking. `do not modify the worktree` is contradicted by the checks that follow.** `verifier.md:16` states the rule absolutely; `npm run build` writes `.next/`, line 69 *orders* "delete `.next`", and `npx prisma generate` writes into `node_modules`. I hit this live deciding whether my scratchpad harness and a build were permitted. Scope it to tracked source files — "do not change anything `git status` would report" — rather than "the worktree".
+
+**Finding C — blocking. "Ask which" is not executable.** `verifier.md:94` correctly says "You cannot delegate — you have no Task tool"; `verifier.md:128` then ends the Silence paragraph with "Ask which." There is no channel back to the main agent mid-run. The only available action is to report it, so it should say so.
+
+**Finding D — accuracy, low.** `verifier.md:80-82` says `jest.database-setup.js` "refuses any run it was not given `--runInBand`". `assertSerialised` actually tests `maxWorkers &gt; 1`, so a single-core machine or an explicit `--maxWorkers=1` passes without `--runInBand`. AGENTS.md's wording ("stops with a message naming the worker count") is the accurate one. The other new trap — `test:unit` swallowing a trailing path, `test:database` forwarding it — I verified against `package.json` and it is exactly right.
+
+**Finding E — rot, low.** Two hard-coded counts twenty lines apart: "all 769 tests" (line 78, accurate today — I measured 769) and "all 781 tests" (line 120, the #231 historical figure). Neither is pinned by anything. A reader meeting both has to deduce which is present-day.
+
+**Finding F — wording, low.** `AGENTS.md:194-196`: "The table lists *runs*, so it understates what the verifier is for. **It** also classifies every failure…" — the antecedent reads as the table.
+
+**Finding G — consistency, low.** `AGENTS.md:186-188` still rests the no-mutation-rerun rule on "it has no editing tools" — the capability framing that `verifier.md:14-18` now explicitly corrects to a rule. Finding 3 was applied to one file.
+
+**Finding H — environment, and important for this change specifically.** My injected copy of AGENTS.md was a **superseded draft matching nothing on disk and no commit**. It contains the table rows "Cross-file regression sweeps" and "An independent re-run of the mutation battery"; `grep` finds that string nowhere in the tree, and `git log --all -S` finds it only inside agent-transcript commits. HEAD still carries the bullet-list form; the worktree carries a third, different table. The injected verifier.md differs too ("Do not reproduce it by editing the file" vs the on-disk "from the source, without reproducing it"). Had I audited from context rather than disk, I would have reported that "cross-file regression sweeps" is assigned in AGENTS.md and defined nowhere in verifier.md — reproducing the exact defect the docblock cites as motivation. Worth a line in verifier.md: read these files from disk, the injected project context can lag the worktree you are certifying.
+
+*(Minor note: `npm run lint` covers `app components lib`, so the new test file is linted by nothing. `tsc` is its only static check.)*
+
+## 4. Mutation audit
+
+All four confirmed, and I can confirm the count too — **exactly one test red each**, not more:
+
+| Mutant | Observed |
+|---|---|
+| Delete the row carrying `npm run build` | RED, `the production build`, AGENTS side only |
+| Delete the row carrying `npx playwright test` | RED, `the full Playwright run`, AGENTS side only |
+| Swap that row's columns | RED, `the production build`, AGENTS side only |
+| `npm run build` → `npm ci` in `## The checks` | RED, `the production build`, **verifier side only** |
+
+The last one passing on the AGENTS side and failing on the verifier side is the pair-checking working as designed. No claim here was unauditable.
+
+## Verdict
+
+**Not ready to commit.** Finding A is a real cross-file ownership contradiction of exactly the kind this change exists to prevent, sitting inside the change; B and C are instructions I could not follow as literally written. All are prose edits to the two documents — no test change needed for any of them. Nothing I ran was red.
+
+**Is the test worth its maintenance cost?** Narrowly yes, with one cheap change. It kills the realistic failure mode — someone trims a table row or a bash line — and the pair-checking is genuine now in a way it was not last pass. Against that: ~60 lines of markdown parsing, no protection against rewording, and an anchor whose rot produces a four-test cascade blaming the wrong thing.
+
+I would make both helpers `throw new Error('AGENTS.md no longer contains the step 7 split anchor …')` when `indexOf` returns -1. Four lines, it removes the accidental dependence on `slice(-1)` being harmless, and it converts the misleading cascade into a message that names the real cause. Bounding the row scan (stop at the next `##` heading) closes F7 for another two. With those, I'd keep it. Without them I'd call it marginal — and either way I would soften the docblock's guarantee to say it catches *deletion and reassignment*, not that a check named in both places is genuinely owned.</result>
+<usage><subagent_tokens>50988</subagent_tokens><tool_uses>19</tool_uses><duration_ms>543868</duration_ms></usage>
+</task-notification>
