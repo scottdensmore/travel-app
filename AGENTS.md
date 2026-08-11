@@ -165,7 +165,7 @@ Chart and other browser-interactive components need `'use client'`.
    | The **red** step: does it fail for the intended reason | `npm run build` |
    | The whole unit project once a slice is done | The full `npx playwright test` |
    | `npm run lint`, `npx tsc --noEmit` | Migrations against a fresh *and* a populated database |
-   | The database tests covering what changed | An audit of every mutant reported killed |
+   | The database tests covering what changed | An audit of every mutant reported killed, and of the selection |
    | The single Playwright spec whose journey changed | `npm run lint` and `npx tsc --noEmit` again, on the final tree |
 
    The verifier's column costs minutes per entry. Running those in both places
@@ -191,6 +191,38 @@ Chart and other browser-interactive components need `'use client'`.
    verifier.** An unreported mutant is an
    unaudited one, silently. Three that survived 781 tests reached a pull request
    this way (#231).
+
+   **Choose mutants to defeat the assertion, not to confirm it.** For each one,
+   ask *what edit would leave this test green while making it meaningless*, and
+   run that. Corrupting a value the assertion reads only proves the matcher
+   works. Deleting the thing it claims to pin proves it is anchored to it — so
+   for a guard over a table or a document, delete the row or the section, do not
+   alter a word inside it.
+
+   Four guards written in one slice (#248) passed while asserting nothing, and
+   every one looked rigorous:
+
+   - a line limit of 16 on an 11-line file, which left room for four lines of
+     the instructions it existed to forbid
+   - the same limit tightened to 11, which caught appends and still admitted a
+     countermand of equal length, because counting lines cannot tell a pointer
+     from its opposite
+   - a check asking whether a document said `no Write`, against a document that
+     says `no Edit or Write tool`, so it never armed
+   - `expect(granted).toEqual(expect.not.arrayContaining([...]))`, a superset
+     check that fails only when *every* barred item is present, so granting one
+     walked past
+
+   The confirming mutants died in all four cases and reported nothing wrong. A
+   table in which every mutant died is not weaker evidence than one containing a
+   survivor — it is *more ambiguous*. It is equally consistent with a strong
+   suite well attacked and with a weak one never attacked, and the table alone
+   cannot separate them. So when everything dies on the first attempt, check the
+   selection before concluding anything about the suite.
+
+   A survivor is a diagnostic, never a target. Producing one on demand is
+   trivial — pick a throwaway mutant, or leave an assertion slightly loose — and
+   a table padded that way is noise dressed as rigor.
 
    The table lists *runs*, so it understates what the verifier is for. The
    verifier also classifies every failure as regression, pre-existing or
