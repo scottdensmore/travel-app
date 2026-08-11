@@ -26,6 +26,7 @@ import {
     latestBookableDateIso,
     millisecondsUntilNextLocalDay,
 } from '@/lib/dates'
+import { flightDeparture } from '@/lib/flightTime'
 
 interface FlightBookingFormProps {
     routes?: FlightRoute[];
@@ -1019,8 +1020,8 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                             </div>
                                             <div className="flight-result-route">
                                                 <div className="flight-result-stop">
-                                                    <span suppressHydrationWarning style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#fff' }}>
-                                                        {new Date(flight.departureDate).toLocaleDateString()}
+                                                    <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#fff' }}>
+                                                        {flightDeparture(flight).readableDate}
                                                     </span>
                                                     <span style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.from}</span>
                                                 </div>
@@ -1117,8 +1118,8 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                                         </div>
                                                         <div className="flight-result-route">
                                                             <div className="flight-result-stop">
-                                                                <span suppressHydrationWarning style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#fff' }}>
-                                                                    {new Date(flight.departureDate).toLocaleDateString()}
+                                                                <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#fff' }}>
+                                                                    {flightDeparture(flight).readableDate}
                                                                 </span>
                                                                 <span style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.from}</span>
                                                             </div>

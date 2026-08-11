@@ -25,6 +25,7 @@ import { bookingFlights, outboundFlight } from '@/lib/bookingItinerary';
 import { cancellableBooking, cancellationNote, cancellationOutcome } from '@/lib/cancellationPolicy';
 import { buildFlightRoutes, findNearbyOperatingDates } from '@/lib/flightSearch';
 import { airportCodeFor, airportCodesForRoute, airportTimeZoneFor } from '@/lib/airports';
+import { airportDayBounds, airportLocalInstant } from '@/lib/flightTime';
 import { flightRouteInclude, flightRouteWhere, withRouteLabels } from '@/lib/flightRoute';
 import type { RoutedFlight } from '@/lib/flightRoute';
 import { bookingWindowIsoDates } from '@/lib/dates';
@@ -43,6 +44,26 @@ import {
     seatChangesSchema,
     stringIdSchema
 } from '@/lib/validation';
+
+/**
+ * A schedule's departure on one date, as the instant it names.
+ *
+ * The schedule states a wall clock at the origin. Stapling a `Z` on it -- which
+ * both admin writers did after `FlightScheduleService` stopped -- stored a
+ * Tokyo 08:00 departure as 08:00Z, nine hours late, and on the wrong day for
+ * anything departing after 15:00 local. It also meant a staff-generated
+ * occurrence and a scheduler-generated one for the same flight and date got
+ * different values, so the unique pair could not stop them coexisting (#84).
+ */
+function departureInstantFor(
+    isoDate: string,
+    schedule: { from: string; departureTime: string },
+): Date {
+    const originZone = airportTimeZoneFor(schedule.from);
+    return originZone
+        ? airportLocalInstant(isoDate, schedule.departureTime, originZone)
+        : new Date(`${isoDate}T${schedule.departureTime}:00Z`);
+}
 
 const travelGuideService = new TravelGuideService();
 const flightBookingService = new FlightBookingService();
@@ -198,8 +219,11 @@ async function searchOneDirection(
     now: Date,
     cabin: CabinClass,
 ): Promise<{ flights: SearchResultFlight[]; nearbyDates: string[] }> {
-    const startOfDay = new Date(`${isoDate}T00:00:00.000Z`);
-    const endOfDay = new Date(`${isoDate}T23:59:59.999Z`);
+    // The day the customer asked for, at the airport they are leaving from.
+    // A UTC day is the wrong window once departures are instants: a 22:00 Miami
+    // departure is 02:00Z the next day, and the route became unfindable on
+    // every occurrence (#84).
+    const { start: startOfDay, end: endOfDay } = airportDayBounds(isoDate, airportTimeZoneFor(from));
     // A flight that has already left today is not bookable, but one later today
     // still is.
     const departureLowerBound = startOfDay <= now
@@ -215,7 +239,8 @@ async function searchOneDirection(
             status: { not: 'CANCELLED' },
             departureDate: {
                 ...departureLowerBound,
-                lte: endOfDay
+                // Half-open: `end` is midnight the next morning at the origin.
+                lt: endOfDay
             }
         },
         orderBy: { departureDate: 'asc' },
@@ -244,8 +269,8 @@ async function searchOneDirection(
                 ...route,
                 status: 'CANCELLED',
                 departureDate: {
-                    gte: new Date(`${earliestDate}T00:00:00.000Z`),
-                    lte: new Date(`${latestDate}T23:59:59.999Z`),
+                    gte: airportDayBounds(earliestDate, airportTimeZoneFor(from)).start,
+                    lt: airportDayBounds(latestDate, airportTimeZoneFor(from)).end,
                 },
             },
             select: {
@@ -826,7 +851,7 @@ export async function saveFlightScheduleAction(data: {
 
         if (savedSchedule.daysOfWeek.includes(dayOfWeek)) {
             const dateStr = date.toISOString().split('T')[0];
-            const departureDate = new Date(`${dateStr}T${savedSchedule.departureTime}:00Z`);
+            const departureDate = departureInstantFor(dateStr, savedSchedule);
             
             // Check if flight instance already exists
             const existingInstance = await prisma.flight.findFirst({
@@ -954,7 +979,7 @@ export async function generateFlightOccurrencesAction(
         const dayOfWeek = current.getUTCDay();
         if (schedule.daysOfWeek.includes(dayOfWeek)) {
             const dateStr = current.toISOString().split('T')[0];
-            const departureDate = new Date(`${dateStr}T${schedule.departureTime}:00Z`);
+            const departureDate = departureInstantFor(dateStr, schedule);
 
             const existingInstance = await prisma.flight.findFirst({
                 where: {

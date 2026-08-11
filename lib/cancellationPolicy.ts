@@ -14,15 +14,13 @@ import { CABIN_FARE_PERCENT, bookingTotalCents, type CabinClass } from '@/lib/bo
  * | Premium Economy, Economy | Refund less a fee  | Cancel, no refund  | Refused  |
  * | Any, airline disrupted   | Full refund, no fee, no cut-off        | Refused  |
  *
- * One caveat about the input, which is not this module's to fix. `departsAt`
- * is compared against a real instant, but `Flight.departureDate` is not one:
- * `FlightScheduleService` builds it as the schedule's local wall-clock time
- * labelled UTC, in a column with no timezone, which `lib/dates.ts` says
- * outright. So both boundaries here are wrong by the origin airport's offset --
- * east of UTC a departed flight stays cancellable for the length of that
- * offset, and west of it a cancellation is refused early. Every rule below is
- * exact to the millisecond against the value it is given; the value is what is
- * approximate. Fixing it means giving flights real instants, which is #84.
+ * `departsAt` is compared against a real instant, and since #84 it is one:
+ * `Flight.departureDate` is built from the schedule's local time and the origin
+ * airport's zone rather than being that local time labelled UTC. Before that,
+ * both boundaries here were wrong by the origin's offset -- east of UTC a
+ * departed flight stayed cancellable for the length of it. The rules were
+ * always exact against the value they were given; the value is what was
+ * approximate.
  */
 
 /** How long before departure a refund stops being available. */

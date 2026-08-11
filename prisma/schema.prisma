@@ -207,7 +207,10 @@ model Flight {
   toAirportCode   String
   fromAirport     Airport @relation("FlightOrigin", fields: [fromAirportCode], references: [iataCode])
   toAirport       Airport @relation("FlightDestination", fields: [toAirportCode], references: [iataCode])
-  departureDate DateTime
+  /// The instant the flight leaves, not a local wall clock. Built from the
+  /// schedule's local time and the origin airport's zone; compare against it
+  /// freely, and render it only through `lib/flightTime` (#84).
+  departureDate DateTime  @db.Timestamptz(3)
   /// The fare in minor units. The only form the fare is stored in (#135).
   priceCents    Int
   status        FlightStatus @default(ON_TIME)
@@ -222,6 +225,8 @@ model Flight {
   seatAssignments SeatAssignment[]
 
   @@unique([flightNumber, departureDate])
+  /// Every search and the status board range-scan this (#167).
+  @@index([departureDate])
 
   @@index([fromAirportCode])
   @@index([toAirportCode])

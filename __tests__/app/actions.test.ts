@@ -241,7 +241,7 @@ describe('searchFlightsAction', () => {
     it('queries by date without generating inventory', async () => {
         jest.useFakeTimers().setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
         const flights = [
-            { id: 1, flightNumber: 'CA101', from: 'Seattle, USA', to: 'Detroit, USA', departureDate: new Date('2026-06-25T08:00:00Z') },
+            { id: 1, flightNumber: 'CA101', from: 'Seattle, USA', to: 'Detroit, USA', departureDate: new Date('2026-06-25T12:00:00Z') },
         ];
         mockedFlightFindMany.mockResolvedValue(flights.map(routed));
 
@@ -256,8 +256,10 @@ describe('searchFlightsAction', () => {
                 toAirportCode: 'DTW',
                 status: { not: 'CANCELLED' },
                 departureDate: {
-                    gte: new Date('2026-06-25T00:00:00.000Z'),
-                    lte: new Date('2026-06-25T23:59:59.999Z')
+                    // Seattle's calendar day, not UTC's: a customer searching
+                    // the 25th means the 25th where they are standing (#84).
+                    gte: new Date('2026-06-25T07:00:00.000Z'),
+                    lt: new Date('2026-06-26T07:00:00.000Z')
                 }
             },
             orderBy: { departureDate: 'asc' },
@@ -293,8 +295,10 @@ describe('searchFlightsAction', () => {
                 fromAirportCode: 'DTW',
                 toAirportCode: 'SEA',
                 departureDate: {
-                    gte: new Date('2026-07-02T00:00:00.000Z'),
-                    lte: new Date('2026-07-02T23:59:59.999Z'),
+                    // Detroit's day for the inbound leg: the bound follows the
+                    // origin of the direction being searched.
+                    gte: new Date('2026-07-02T04:00:00.000Z'),
+                    lt: new Date('2026-07-03T04:00:00.000Z'),
                 },
             }),
         }));
@@ -418,8 +422,12 @@ describe('searchFlightsAction', () => {
             .mockResolvedValueOnce([])
             .mockResolvedValueOnce([
                 {
+                    // As stored: the instant a Seattle 08:00 departure names,
+                    // not that wall clock with a Z on it. With the old value
+                    // the cancelled-flight key could never match a real row, so
+                    // a cancelled date was offered as a suggestion (#84).
                     flightNumber: 'CA101',
-                    departureDate: new Date('2026-07-15T08:00:00.000Z'),
+                    departureDate: new Date('2026-07-15T15:00:00.000Z'),
                 },
             ]);
         mockedFlightScheduleFindMany.mockResolvedValue([
@@ -451,8 +459,8 @@ describe('searchFlightsAction', () => {
                 toAirportCode: 'DTW',
                 status: 'CANCELLED',
                 departureDate: {
-                    gte: new Date('2026-07-14T00:00:00.000Z'),
-                    lte: new Date('2027-07-14T23:59:59.999Z'),
+                    gte: new Date('2026-07-14T07:00:00.000Z'),
+                    lt: new Date('2027-07-15T07:00:00.000Z'),
                 },
             },
             select: {
@@ -482,7 +490,7 @@ describe('searchFlightsAction', () => {
                 status: { not: 'CANCELLED' },
                 departureDate: {
                     gt: now,
-                    lte: new Date('2026-07-14T23:59:59.999Z'),
+                    lt: new Date('2026-07-15T07:00:00.000Z'),
                 },
             },
             orderBy: { departureDate: 'asc' },
@@ -1461,7 +1469,7 @@ describe('admin flight schedule actions', () => {
                     airline: 'American Airlines',
                     fromAirportCode: 'JFK',
                     toAirportCode: 'LHR',
-                    departureDate: new Date('2026-06-29T08:00:00Z'),
+                    departureDate: new Date('2026-06-29T12:00:00Z'),
                     priceCents: 85000,
                     status: 'ON_TIME',
                     firstClassRows: 3,
@@ -1737,7 +1745,7 @@ describe('admin flight schedule actions', () => {
                         airline: 'American Airlines',
                         fromAirportCode: 'JFK',
                         toAirportCode: 'SFO',
-                        departureDate: new Date('2026-07-06T08:00:00Z'),
+                        departureDate: new Date('2026-07-06T12:00:00Z'),
                         priceCents: 50000,
                         status: 'ON_TIME',
                         firstClassRows: 3,
