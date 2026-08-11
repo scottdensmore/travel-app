@@ -2,9 +2,10 @@ import { PrismaClient } from '@prisma/client'
 import CityGuideData from '../lib/data/CityGuideData'
 import AirportData from '../lib/data/AirportData'
 import { FlightData, FlightScheduleData } from '../lib/data/FlightData'
-import { airportCodesForRoute } from '../lib/airports'
+import { airportCodesForRoute, airportTimeZoneFor } from '../lib/airports'
 import { MAX_BOOKING_LEAD_DAYS } from '../lib/dates'
 import FlightScheduleService from '../lib/FlightScheduleService'
+import { airportLocalInstant } from '../lib/flightTime'
 import { prisma as applicationPrisma } from '../lib/prisma'
 
 const prisma = new PrismaClient()
@@ -66,10 +67,19 @@ async function main() {
 
     // Seed static legacy Flights (if they don't already exist, to prevent breaking old tests/data)
     for (const flightData of FlightData) {
+        // The fixture states a wall clock at the origin, the way the schedules
+        // do. Written straight through it would be read as an instant and the
+        // flight would leave at the wrong time of day (#84).
+        const stated = flightData.departureDate.toISOString();
+        const originZone = airportTimeZoneFor(flightData.from);
+        const departureDate = originZone
+            ? airportLocalInstant(stated.slice(0, 10), stated.slice(11, 16), originZone)
+            : flightData.departureDate;
+
         const existing = await prisma.flight.findFirst({
             where: {
                 flightNumber: flightData.flightNumber,
-                departureDate: flightData.departureDate
+                departureDate
             }
         });
         if (!existing) {
@@ -77,6 +87,7 @@ async function main() {
             const flight = await prisma.flight.create({
                 data: {
                     ...flightFields,
+                    departureDate,
                     ...airportCodesForRoute(from, to),
                 }
             })

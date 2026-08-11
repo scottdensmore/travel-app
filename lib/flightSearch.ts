@@ -1,4 +1,5 @@
 import { addDaysToIsoDate, bookingWindowIsoDates } from '@/lib/dates';
+import { airportLocalInstant } from '@/lib/flightTime';
 
 export interface FlightScheduleSummary {
     from: string;
@@ -24,6 +25,16 @@ export interface FlightRoute {
     nextOperatingDate: string;
 }
 
+/**
+ * The next date this schedule operates, worked in the origin's wall clock.
+ *
+ * The `Date.UTC` below is not a claim about instants: it builds a calendar
+ * cursor whose UTC fields *are* the local fields, so `getUTCDay` is the local
+ * day of week and the slice in `buildFlightRoutes` is the local operating date.
+ * That is the date a customer would name, and the date search bounds against
+ * the origin's own day (#84) -- reading it as an instant is what would be
+ * wrong here.
+ */
 function getNextDeparture(
     schedule: FlightScheduleSummary,
     now: Date,
@@ -82,17 +93,30 @@ export function buildFlightRoutes(
     return Array.from(routes.values(), ({ route }) => route);
 }
 
+/**
+ * Whether this date still has a departure worth suggesting.
+ *
+ * Unlike `getNextDeparture`, this one deals in instants: it compares against
+ * `now` and it joins to cancelled flights loaded from the database. Building
+ * the departure by stapling a `Z` on the schedule's local time therefore
+ * produced a key that could never match a stored row for a non-UTC origin, so
+ * a cancelled occurrence was offered as a nearby operating date -- sending the
+ * customer to a day with nothing on it (#84).
+ */
 function hasFutureDepartureOnDate(
     schedules: OperatingScheduleSummary[],
     dateString: string,
     now: Date,
     cancelledDepartureKeys: ReadonlySet<string>,
+    originTimeZone?: string | null,
 ): boolean {
     const day = new Date(`${dateString}T00:00:00.000Z`).getUTCDay();
 
     return schedules.some((schedule) => {
         if (!schedule.daysOfWeek.includes(day)) return false;
-        const departure = new Date(`${dateString}T${schedule.departureTime}:00Z`);
+        const departure = originTimeZone
+            ? airportLocalInstant(dateString, schedule.departureTime, originTimeZone)
+            : new Date(`${dateString}T${schedule.departureTime}:00Z`);
         if (Number.isNaN(departure.getTime())) return false;
         const departureKey = `${schedule.flightNumber}\u0000${departure.toISOString()}`;
         return departure > now
@@ -126,6 +150,7 @@ export function findNearbyOperatingDates(
                 earlierCandidate,
                 now,
                 cancelledDepartureKeys,
+                originTimeZone,
             )
         ) {
             earlierDate = earlierCandidate;
@@ -140,6 +165,7 @@ export function findNearbyOperatingDates(
                 laterCandidate,
                 now,
                 cancelledDepartureKeys,
+                originTimeZone,
             )
         ) {
             laterDate = laterCandidate;

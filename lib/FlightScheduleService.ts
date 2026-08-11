@@ -1,6 +1,7 @@
 import type { Flight } from '@prisma/client';
-import { airportCodesForRoute } from './airports';
+import { airportCodesForRoute, airportTimeZoneFor } from './airports';
 import { addDaysToIsoDate, todayIsoDate } from './dates';
+import { airportLocalInstant } from './flightTime';
 import { prisma } from './prisma';
 
 /** A flight instance for one schedule on one date, and whether this call created it. */
@@ -84,7 +85,13 @@ export default class FlightScheduleService {
 
         for (const schedule of schedules) {
             const dateStr = date.toISOString().split('T')[0];
-            const departureDate = new Date(`${dateStr}T${schedule.departureTime}:00Z`);
+            // The schedule's time is a wall clock at the origin. Stapling a `Z`
+            // on it stored a Tokyo 08:00 departure as 08:00Z -- nine hours late,
+            // and on the wrong day for anything near midnight (#84).
+            const originZone = airportTimeZoneFor(schedule.from);
+            const departureDate = originZone
+                ? airportLocalInstant(dateStr, schedule.departureTime, originZone)
+                : new Date(`${dateStr}T${schedule.departureTime}:00Z`);
 
             // Check if flight instance already exists
             let flight = await prisma.flight.findFirst({

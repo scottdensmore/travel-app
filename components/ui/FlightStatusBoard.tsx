@@ -3,6 +3,7 @@ import { flightFareCents, formatPrice } from '@/lib/bookingPricing';
 
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
+import { flightDeparture } from '@/lib/flightTime';
 
 interface Flight {
     id: number;
@@ -238,9 +239,9 @@ export default function FlightStatusBoard({ flights, coverage }: FlightStatusBoa
                                             <td style={{ padding: '1.25rem 1.5rem', fontWeight: '500', color: '#fff' }}>{flight.from}</td>
                                             <td style={{ padding: '1.25rem 1.5rem', fontWeight: '500', color: '#fff' }}>{flight.to}</td>
                                             <td style={{ padding: '1.25rem 1.5rem', color: '#fff' }}>
-                                                <div>{new Date(flight.departureDate).toLocaleDateString()}</div>
+                                                <div style={{ whiteSpace: 'nowrap' }}>{flightDeparture(flight).readableDate}</div>
                                                 <div style={{ fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.5)' }}>
-                                                    {new Date(flight.departureDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    {flightDeparture(flight).time} {flightDeparture(flight).zoneLabel}
                                                 </div>
                                             </td>
                                             <td style={{ padding: '1.25rem 1.5rem' }}>

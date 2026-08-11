@@ -41,6 +41,44 @@ const mockFlights = [
 
 const coverage = 'the last 6 hours and the next 7 days';
 
+/**
+ * A departure belongs to the airport it leaves from.
+ *
+ * Every screen rendered it with `toLocaleDateString()`, which uses whichever
+ * timezone the viewer's browser is set to -- so the same flight read
+ * differently depending on where the person looking at it was sitting, and for
+ * a departure near midnight it read as the wrong day. #84's acceptance criteria
+ * rule that out: flight times use the relevant airport's timezone.
+ */
+describe('a departure is shown at the airport it leaves from', () => {
+    it('reads the origin\'s date and clock, not the viewer\'s', () => {
+        // 23:00Z is the 16th in Tokyo and the 15th in UTC, and the flight
+        // leaves on the 16th.
+        render(<FlightStatusBoard flights={[{
+            ...mockFlights[0],
+            id: 9001,
+            from: 'Tokyo, Japan',
+            to: 'Seattle, USA',
+            departureDate: '2026-08-15T23:00:00Z',
+        }] as never} coverage="the next 7 days" />);
+
+        expect(screen.getByText('Aug 16, 2026')).toBeInTheDocument();
+        expect(screen.getByText(/08:00/)).toBeInTheDocument();
+    });
+
+    it('names the timezone, so the time is not just a number', () => {
+        render(<FlightStatusBoard flights={[{
+            ...mockFlights[0],
+            id: 9002,
+            from: 'Tokyo, Japan',
+            to: 'Seattle, USA',
+            departureDate: '2026-08-15T23:00:00Z',
+        }] as never} coverage="the next 7 days" />);
+
+        expect(screen.getByText(/GMT\+9/)).toBeInTheDocument();
+    });
+});
+
 describe('FlightStatusBoard coverage window', () => {
     // The board holds a window rather than the timetable (#153). A search for
     // something outside it returns nothing, which reads as "your flight is

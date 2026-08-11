@@ -1,3 +1,8 @@
+/**
+ * Departure times below are instants, not wall clocks. A schedule departing
+ * 19:30 from New York in June is 23:30Z, because the schedule states local time
+ * and the flight row stores the moment it names (#84).
+ */
 import FlightScheduleService from '@/lib/FlightScheduleService';
 import { prisma } from '@/lib/prisma';
 
@@ -73,7 +78,7 @@ describe('FlightScheduleService dynamic generator', () => {
         expect(mockedFlightFindFirst).toHaveBeenCalledWith({
             where: {
                 flightNumber: 'CA202',
-                departureDate: new Date('2026-06-25T19:30:00Z')
+                departureDate: new Date('2026-06-25T23:30:00Z')
             }
         });
 
@@ -84,7 +89,7 @@ describe('FlightScheduleService dynamic generator', () => {
                 airline: 'Gemini Airways',
                 fromAirportCode: 'JFK',
                 toAirportCode: 'LHR',
-                departureDate: new Date('2026-06-25T19:30:00Z'),
+                departureDate: new Date('2026-06-25T23:30:00Z'),
                 priceCents: 85000,
                 firstClassRows: 1,
                 businessRows: 2,
@@ -121,7 +126,7 @@ describe('FlightScheduleService dynamic generator', () => {
             airline: 'Gemini Airways',
             fromAirportCode: 'JFK',
             toAirportCode: 'LHR',
-            departureDate: new Date('2026-06-25T19:30:00Z'),
+            departureDate: new Date('2026-06-25T23:30:00Z'),
             returnDate: null,
             priceCents: 85000,
             status: 'DELAYED' // Administrative override preserved
@@ -164,7 +169,7 @@ describe('FlightScheduleService dynamic generator', () => {
             airline: 'Gemini Airways',
             fromAirportCode: 'JFK',
             toAirportCode: 'LHR',
-            departureDate: new Date('2026-06-25T19:30:00Z'),
+            departureDate: new Date('2026-06-25T23:30:00Z'),
             returnDate: null,
                 priceCents: 85000,
                 status: 'ON_TIME',
@@ -260,9 +265,9 @@ describe('FlightScheduleService inventory horizon', () => {
         expect(mockedFlightScheduleFindMany).toHaveBeenCalledTimes(3);
         expect(mockedFlightCreate).toHaveBeenCalledTimes(3);
         expect(mockedFlightCreate.mock.calls.map(([{ data }]: any) => data.departureDate)).toEqual([
-            new Date('2026-06-25T08:00:00Z'),
-            new Date('2026-06-26T08:00:00Z'),
-            new Date('2026-06-27T08:00:00Z'),
+            new Date('2026-06-25T15:00:00Z'),
+            new Date('2026-06-26T15:00:00Z'),
+            new Date('2026-06-27T15:00:00Z'),
         ]);
         expect(summary).toEqual({
             fromDate: '2026-06-25',

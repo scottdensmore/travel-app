@@ -12,6 +12,7 @@ import { isActionValidationFailure } from '@/lib/actionResult';
 import { CABIN_FARE_PERCENT, calculatePassengerFareCents, flightFareCents, formatPrice } from '@/lib/bookingPricing';
 import { BRAND } from '@/lib/brand';
 import { cabinLabel, legDirectionLabel } from '@/lib/bookingItinerary';
+import { flightDeparture } from '@/lib/flightTime';
 
 interface Flight {
     id: number;
@@ -1213,7 +1214,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                                                 {leg.from} → {leg.to}
                                             </div>
                                             <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginTop: '4px' }}>
-                                                Departure: {new Date(leg.departureDate).toLocaleDateString()}
+                                                Departure: {flightDeparture(leg).readableDate}
                                             </div>
                                             {/* Named, so a screen reader reaching these rows out
                                                 of order still knows whose flight they belong to. */}
@@ -1423,7 +1424,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                                         </div>
                                         <div>
                                             <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Date</div>
-                                            <div style={{ fontSize: '0.95rem', fontWeight: 'bold', marginTop: '3px' }}>{new Date(legFlight.departureDate).toLocaleDateString()}</div>
+                                            <div style={{ fontSize: '0.95rem', fontWeight: 'bold', marginTop: '3px' }}>{flightDeparture(legFlight).readableDate}</div>
                                         </div>
                                     </div>
 

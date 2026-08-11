@@ -42,13 +42,15 @@ export function bookingWindowIsoDates(referenceDate = new Date(), originTimeZone
 /**
  * The current date as an ISO `YYYY-MM-DD` string.
  *
- * Anchored to UTC, matching how flight dates are modeled throughout the app
- * (see `FlightScheduleService`, which stores departure times as UTC wall-clock
- * values). This is the single source of truth for "today" used by the search
- * date constraints, including the booking-window helpers, so the client and
- * server stay consistent. Displaying flight times in an airport's local
- * timezone is tracked separately and would require per-airport timezone data
- * that the schema does not yet carry.
+ * Anchored to UTC, and used only where no origin is known: pass a timezone to
+ * `bookingWindowIsoDates` wherever one is, because "today" in Tokyo is already
+ * tomorrow for much of the UTC evening. This is the single source of truth for
+ * "today" behind the search date constraints, so the client and server agree.
+ *
+ * Flight departures are no longer modelled this way. `Flight.departureDate` is
+ * a true instant built from the schedule's local time and the origin airport's
+ * zone, and is rendered through `lib/flightTime` in that zone rather than in
+ * the viewer's (#84).
  */
 export function todayIsoDate(referenceDate = new Date()): string {
     return referenceDate.toISOString().slice(0, 10);

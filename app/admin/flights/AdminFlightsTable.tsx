@@ -4,6 +4,7 @@ import { flightFareCents, formatPrice } from '@/lib/bookingPricing';
 import { cabinLabel } from '@/lib/bookingItinerary';
 import React, { useEffect, useRef, useState } from 'react';
 import FlightStatusSelector from './FlightStatusSelector';
+import { flightDeparture } from '@/lib/flightTime';
 
 interface Passenger {
     id: string;
@@ -143,9 +144,9 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                                             {flight.from} → {flight.to}
                                         </td>
                                         <td style={{ padding: '12px', fontSize: '0.9rem', color: '#fff' }}>
-                                            <div suppressHydrationWarning>{new Date(flight.departureDate).toLocaleDateString()}</div>
-                                            <div suppressHydrationWarning style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)' }}>
-                                                {new Date(flight.departureDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            <div style={{ whiteSpace: 'nowrap' }}>{flightDeparture(flight).readableDate}</div>
+                                            <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)' }}>
+                                                {flightDeparture(flight).time} {flightDeparture(flight).zoneLabel}
                                             </div>
                                         </td>
                                         <td style={{ padding: '12px', fontSize: '0.9rem', color: '#34d399', fontWeight: 'bold' }}>
@@ -240,8 +241,8 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                                 <h2 id="passenger-manifest-title" style={{ fontSize: '1.5rem', color: '#c084fc', margin: 0, fontWeight: 'bold' }}>
                                     Passenger Manifest
                                 </h2>
-                                <p suppressHydrationWarning style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.5)', margin: '4px 0 0 0' }}>
-                                    {selectedFlight.airline} {selectedFlight.flightNumber} | {selectedFlight.from} → {selectedFlight.to} | {new Date(selectedFlight.departureDate).toLocaleString()}
+                                <p style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.5)', margin: '4px 0 0 0' }}>
+                                    {selectedFlight.airline} {selectedFlight.flightNumber} | {selectedFlight.from} → {selectedFlight.to} | {flightDeparture(selectedFlight).readableDate} {flightDeparture(selectedFlight).time} {flightDeparture(selectedFlight).zoneLabel}
                                 </p>
                             </div>
                             <button 

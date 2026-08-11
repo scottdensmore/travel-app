@@ -10,6 +10,7 @@ import { cabinLabel, legDirectionLabel, orderedLegs, outboundFlight, seatLabel }
 import { cancelBookingAction, deleteReviewAction, toggleFavoriteCityGuideAction, changeBookingSeatsAction, getOccupiedSeatsAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
 import { PointsActivityDisplayData } from '@/lib/types/PointsActivity';
+import { flightDeparture } from '@/lib/flightTime';
 
 interface Flight {
     id: number;
@@ -407,7 +408,7 @@ export default function ProfileClient({
                                                         )}
                                                     </td>
                                                     <td className="py-2">{leg?.flight ? `${leg.flight.from} \u2192 ${leg.flight.to}` : '\u2014'}</td>
-                                                    <td className="py-2 whitespace-nowrap">{leg?.flight ? new Date(leg.flight.departureDate).toLocaleDateString() : '\u2014'}</td>
+                                                    <td className="py-2 whitespace-nowrap">{leg?.flight ? flightDeparture(leg.flight).readableDate : '\u2014'}</td>
                                                     {index === 0 && (
                                                         <>
                                                             <td className="py-2 whitespace-nowrap align-top" rowSpan={legRows.length}>{
