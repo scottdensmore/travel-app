@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "e221c84c0b9b",
+  "strategy": "manual-commit",
+  "branch": "docs/adversarial-mutants",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "AGENTS.md",
+    "__tests__/docs/agentInstructions.test.ts",
+    "docs/VERIFIER.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/e2/21c84c0b9b/0/metadata.json",
+      "transcript": "/e2/21c84c0b9b/0/full.jsonl",
+      "compact_transcript": "/e2/21c84c0b9b/0/transcript.jsonl",
+      "content_hash": "/e2/21c84c0b9b/0/content_hash.txt",
+      "prompt": "/e2/21c84c0b9b/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 5254,
+    "cache_creation_tokens": 10220368,
+    "cache_read_tokens": 1253327474,
+    "output_tokens": 1761316,
+    "api_call_count": 2520
+  }
+}
