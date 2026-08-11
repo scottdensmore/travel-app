@@ -732,6 +732,8 @@ export async function saveFlightScheduleAction(data: {
     from: string;
     to: string;
     departureTime: string;
+    /** Elapsed minutes gate to gate; the arrival time is derived from it (#84). */
+    durationMinutes: number;
     daysOfWeek: number[];
     price: string;
     firstClassRows?: number | null;
@@ -813,6 +815,7 @@ export async function saveFlightScheduleAction(data: {
                 from: data.from,
                 to: data.to,
                 departureTime: data.departureTime,
+                durationMinutes: data.durationMinutes,
                 daysOfWeek: data.daysOfWeek,
                 priceCents: parsePriceToCents(data.price),
                 firstClassRows,
@@ -830,6 +833,7 @@ export async function saveFlightScheduleAction(data: {
                 from: data.from,
                 to: data.to,
                 departureTime: data.departureTime,
+                durationMinutes: data.durationMinutes,
                 daysOfWeek: data.daysOfWeek,
                 priceCents: parsePriceToCents(data.price),
                 firstClassRows,
@@ -870,6 +874,7 @@ export async function saveFlightScheduleAction(data: {
                             ...airportCodesForRoute(savedSchedule.from, savedSchedule.to),
                             departureDate,
                             priceCents: savedSchedule.priceCents,
+                            durationMinutes: savedSchedule.durationMinutes,
                             status: 'ON_TIME',
                             firstClassRows,
                             businessRows,
@@ -999,6 +1004,7 @@ export async function generateFlightOccurrencesAction(
                             ...airportCodesForRoute(schedule.from, schedule.to),
                             departureDate,
                             priceCents: schedule.priceCents,
+                            durationMinutes: schedule.durationMinutes,
                             status: 'ON_TIME',
                             firstClassRows,
                             businessRows,

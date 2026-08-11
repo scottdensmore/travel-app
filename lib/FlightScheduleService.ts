@@ -111,6 +111,7 @@ export default class FlightScheduleService {
                             ...airportCodesForRoute(schedule.from, schedule.to),
                             departureDate,
                             priceCents: schedule.priceCents,
+                            durationMinutes: schedule.durationMinutes,
                             status: 'ON_TIME',
                             firstClassRows: schedule.firstClassRows ?? 3,
                             businessRows: schedule.businessRows ?? 3,

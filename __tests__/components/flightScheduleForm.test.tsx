@@ -61,6 +61,7 @@ describe('FlightScheduleForm', () => {
             from: 'New York',
             to: 'London',
             departureTime: '14:30',
+            durationMinutes: 245,
             daysOfWeek: [1, 3, 5],
             priceCents: 85000,
         };
@@ -104,6 +105,10 @@ describe('FlightScheduleForm', () => {
         fireEvent.change(screen.getByLabelText(/To \(Destination\) \*/i), { target: { value: 'London' } });
         fireEvent.change(screen.getByLabelText(/Price \(\$\) \*/i), { target: { value: '850' } });
 
+        // A duration, so the form reaches the departure-format check rather
+        // than stopping on a missing required field.
+        fireEvent.change(screen.getByLabelText(/Duration \(minutes\) \*/i), { target: { value: '245' } });
+
         // Invalid departure format
         fireEvent.change(screen.getByLabelText(/Departure \(HH:MM\) \*/i), { target: { value: '8:0' } });
         fireEvent.click(screen.getByRole('button', { name: 'Create Schedule' }));
@@ -122,6 +127,7 @@ describe('FlightScheduleForm', () => {
         fireEvent.change(screen.getByLabelText(/From \(Origin\) \*/i), { target: { value: 'New York' } });
         fireEvent.change(screen.getByLabelText(/To \(Destination\) \*/i), { target: { value: 'London' } });
         fireEvent.change(screen.getByLabelText(/Departure \(HH:MM\) \*/i), { target: { value: '08:00' } });
+        fireEvent.change(screen.getByLabelText(/Duration \(minutes\) \*/i), { target: { value: '245' } });
         fireEvent.change(screen.getByLabelText(/Price \(\$\) \*/i), { target: { value: '850' } });
 
         fireEvent.click(screen.getByRole('button', { name: 'Create Schedule' }));
@@ -142,6 +148,7 @@ describe('FlightScheduleForm', () => {
         fireEvent.change(screen.getByLabelText(/From \(Origin\) \*/i), { target: { value: 'New York' } });
         fireEvent.change(screen.getByLabelText(/To \(Destination\) \*/i), { target: { value: 'London' } });
         fireEvent.change(screen.getByLabelText(/Departure \(HH:MM\) \*/i), { target: { value: '08:00' } });
+        fireEvent.change(screen.getByLabelText(/Duration \(minutes\) \*/i), { target: { value: '245' } });
         fireEvent.change(screen.getByLabelText(/Price \(\$\) \*/i), { target: { value: '850' } });
         
         // Select Mon (1) and Wed (3)
@@ -158,6 +165,7 @@ describe('FlightScheduleForm', () => {
                 from: 'New York',
                 to: 'London',
                 departureTime: '08:00',
+                durationMinutes: 245,
                 daysOfWeek: [1, 3],
                 price: '$850', // automatically formats with $ if missing
                 firstClassRows: 3,
@@ -176,6 +184,10 @@ describe('FlightScheduleForm', () => {
         expect(screen.getByLabelText(/From \(Origin\) \*/i)).toHaveValue('');
         expect(screen.getByLabelText(/To \(Destination\) \*/i)).toHaveValue('');
         expect(screen.getByLabelText(/Departure \(HH:MM\) \*/i)).toHaveValue('');
+        // Left behind, the next schedule on a different route silently inherits
+        // this one's block time -- and there is no Duration column in the list
+        // and no edit form to notice it with (#84).
+        expect(screen.getByLabelText(/Duration \(minutes\) \*/i)).toHaveValue(null);
         expect(screen.getByLabelText(/Price \(\$\) \*/i)).toHaveValue('');
         expect(screen.getByLabelText('Mon')).not.toBeChecked();
         expect(screen.getByLabelText('Wed')).not.toBeChecked();
@@ -191,6 +203,7 @@ describe('FlightScheduleForm', () => {
             from: 'New York',
             to: 'London',
             departureTime: '14:30',
+            durationMinutes: 245,
             daysOfWeek: [1],
             priceCents: 85000,
         };
@@ -211,6 +224,7 @@ describe('FlightScheduleForm', () => {
                 from: 'New York',
                 to: 'London',
                 departureTime: '14:30',
+                durationMinutes: 245,
                 daysOfWeek: [6],
                 price: '$850',
                 firstClassRows: 3,
@@ -237,6 +251,7 @@ describe('FlightScheduleForm', () => {
         fireEvent.change(screen.getByLabelText(/From \(Origin\) \*/i), { target: { value: 'New York' } });
         fireEvent.change(screen.getByLabelText(/To \(Destination\) \*/i), { target: { value: 'London' } });
         fireEvent.change(screen.getByLabelText(/Departure \(HH:MM\) \*/i), { target: { value: '08:00' } });
+        fireEvent.change(screen.getByLabelText(/Duration \(minutes\) \*/i), { target: { value: '245' } });
         fireEvent.change(screen.getByLabelText(/Price \(\$\) \*/i), { target: { value: '850' } });
         fireEvent.click(screen.getByLabelText('Mon'));
 
@@ -257,6 +272,7 @@ describe('FlightScheduleForm', () => {
         fireEvent.change(screen.getByLabelText(/From \(Origin\) \*/i), { target: { value: 'New York' } });
         fireEvent.change(screen.getByLabelText(/To \(Destination\) \*/i), { target: { value: 'London' } });
         fireEvent.change(screen.getByLabelText(/Departure \(HH:MM\) \*/i), { target: { value: '08:00' } });
+        fireEvent.change(screen.getByLabelText(/Duration \(minutes\) \*/i), { target: { value: '245' } });
         fireEvent.change(screen.getByLabelText(/Price \(\$\) \*/i), { target: { value: '850' } });
         fireEvent.click(screen.getByLabelText('Mon'));
 
@@ -283,6 +299,7 @@ describe('FlightScheduleForm', () => {
                 from: 'New York',
                 to: 'London',
                 departureTime: '08:00',
+                durationMinutes: 245,
                 daysOfWeek: [1],
                 price: '$850',
                 firstClassRows: 3,
@@ -302,6 +319,7 @@ describe('FlightScheduleForm', () => {
         fireEvent.change(screen.getByLabelText(/From \(Origin\) \*/i), { target: { value: 'New York' } });
         fireEvent.change(screen.getByLabelText(/To \(Destination\) \*/i), { target: { value: 'London' } });
         fireEvent.change(screen.getByLabelText(/Departure \(HH:MM\) \*/i), { target: { value: '08:00' } });
+        fireEvent.change(screen.getByLabelText(/Duration \(minutes\) \*/i), { target: { value: '245' } });
         fireEvent.change(screen.getByLabelText(/Price \(\$\) \*/i), { target: { value: '850' } });
         fireEvent.click(screen.getByLabelText('Mon'));
 

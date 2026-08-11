@@ -211,6 +211,11 @@ model Flight {
   /// schedule's local time and the origin airport's zone; compare against it
   /// freely, and render it only through `lib/flightTime` (#84).
   departureDate DateTime  @db.Timestamptz(3)
+  /// Elapsed minutes gate to gate. The arrival instant is this added to the
+  /// departure -- not stored, because a second answer can disagree with the
+  /// first. Null for a flight created outside a schedule, which then shows no
+  /// arrival rather than an invented one (#84).
+  durationMinutes Int?
   /// The fare in minor units. The only form the fare is stored in (#135).
   priceCents    Int
   status        FlightStatus @default(ON_TIME)
@@ -263,6 +268,10 @@ model FlightSchedule {
   from          String
   to            String
   departureTime String
+  /// Elapsed minutes gate to gate, stated rather than inferred: subtracting
+  /// local times across a timezone is not a duration, and is an hour wrong
+  /// twice a year even within one (#84).
+  durationMinutes Int
   daysOfWeek    Int[]
   /// The fare in minor units. The only form the fare is stored in (#135).
   priceCents    Int

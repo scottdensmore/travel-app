@@ -122,6 +122,9 @@ test.describe('Admin Control Journey', () => {
     await page.fill('#from', 'Seattle, USA');
     await page.fill('#to', 'Detroit, USA');
     await page.fill('#departureTime', '10:00');
+    // A schedule states how long its flight takes; the arrival is derived from
+    // it rather than from two local clocks (#84).
+    await page.fill('#durationMinutes', '245');
     await page.fill('#price', '499');
 
     // Select all days of the week to ensure occurrences generate in the next 7 days

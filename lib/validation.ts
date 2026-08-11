@@ -196,6 +196,15 @@ export const scheduleSchema = z.object({
     from: requiredText('Origin', 120),
     to: requiredText('Destination', 120),
     departureTime: timeSchema,
+    /// Elapsed minutes gate to gate. A schedule that cannot say how long its
+    /// flight takes cannot produce an arrival time, and the alternative --
+    /// subtracting local times across a timezone -- is not a duration (#84).
+    /// Capped at three days, which is longer than any commercial sector and
+    /// short enough to catch a number typed in the wrong unit.
+    durationMinutes: z.coerce.number({ message: 'Flight duration is required.' })
+        .int('Flight duration must be a whole number of minutes.')
+        .min(1, 'Flight duration must be at least one minute.')
+        .max(3 * 24 * 60, 'Flight duration must be shorter than three days.'),
     daysOfWeek: z.array(z.number().int().min(0).max(6))
         .min(1)
         .max(7)

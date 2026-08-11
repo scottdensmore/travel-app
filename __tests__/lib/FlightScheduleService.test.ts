@@ -38,6 +38,7 @@ describe('FlightScheduleService dynamic generator', () => {
                 from: 'Seattle, USA',
                 to: 'Detroit, USA',
                 departureTime: '08:00',
+                durationMinutes: 420,
                 daysOfWeek: [1, 3, 5],
                 priceCents: 35000
             },
@@ -48,6 +49,7 @@ describe('FlightScheduleService dynamic generator', () => {
                 from: 'New York, USA',
                 to: 'London, UK',
                 departureTime: '19:30',
+                durationMinutes: 420,
                 daysOfWeek: [2, 4, 6],
                 priceCents: 85000,
                 firstClassRows: 1,
@@ -90,6 +92,10 @@ describe('FlightScheduleService dynamic generator', () => {
                 fromAirportCode: 'JFK',
                 toAirportCode: 'LHR',
                 departureDate: new Date('2026-06-25T23:30:00Z'),
+                // Inherited from the schedule. This is the path the seed and
+                // the horizon generator take, so a flight that lost it here
+                // would lose its arrival everywhere at once (#84).
+                durationMinutes: 420,
                 priceCents: 85000,
                 firstClassRows: 1,
                 businessRows: 2,
@@ -113,6 +119,7 @@ describe('FlightScheduleService dynamic generator', () => {
             from: 'New York, USA',
             to: 'London, UK',
             departureTime: '19:30',
+            durationMinutes: 420,
             daysOfWeek: [4],
             priceCents: 85000
         };
@@ -150,6 +157,7 @@ describe('FlightScheduleService dynamic generator', () => {
             from: 'New York, USA',
             to: 'London, UK',
             departureTime: '19:30',
+            durationMinutes: 420,
             daysOfWeek: [4],
             priceCents: 85000
         };
@@ -198,6 +206,7 @@ describe('FlightScheduleService dynamic generator', () => {
             from: 'New York, USA',
             to: 'London, UK',
             departureTime: '19:30',
+            durationMinutes: 420,
             daysOfWeek: [4],
             priceCents: 85000
         };
@@ -220,6 +229,7 @@ describe('FlightScheduleService dynamic generator', () => {
             from: 'New York, USA',
             to: 'London, UK',
             departureTime: '19:30',
+            durationMinutes: 420,
             daysOfWeek: [4],
             priceCents: 85000
         };
@@ -246,6 +256,7 @@ describe('FlightScheduleService inventory horizon', () => {
         from: 'Seattle, USA',
         to: 'Detroit, USA',
         departureTime: '08:00',
+        durationMinutes: 420,
         daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
         priceCents: 35000
     };

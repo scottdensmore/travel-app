@@ -51,6 +51,7 @@ async function aBooking(status?: 'CONFIRMED' | 'CANCELLED' | 'DISRUPTED') {
 afterAll(async () => {
     await prisma.booking.deleteMany({ where: { id: { in: created.bookingIds } } });
     await prisma.flight.deleteMany({ where: { id: { in: created.flightIds } } });
+    await prisma.flightSchedule.deleteMany({ where: { flightNumber: { startsWith: 'DUR-' } } });
     await prisma.user.deleteMany({ where: { id: { in: created.userIds } } });
     await prisma.$disconnect();
 });
@@ -327,5 +328,55 @@ describe('the status history', () => {
         });
 
         expect(orphans).toEqual([]);
+    });
+});
+
+/**
+ * A duration is a positive number of minutes, enforced by the database.
+ *
+ * Zero would make a flight arrive at the moment it left and negative would make
+ * it arrive before; both would print a nonsense arrival on a customer's
+ * booking. The Zod bounds catch it at the form, but a repair script or a seed
+ * reaches the table without passing through them -- which is the whole reason
+ * the constraint is there, and it was observed by nothing (#84).
+ */
+describe('a flight duration is positive, in the database', () => {
+    it('refuses zero and negative minutes on a schedule', async () => {
+        for (const minutes of [0, -5]) {
+            await expect(prisma.flightSchedule.create({
+                data: {
+                    flightNumber: `DUR-${randomUUID().slice(0, 6)}`,
+                    airline: 'Mona Airways',
+                    from: 'Seattle, USA',
+                    to: 'Detroit, USA',
+                    departureTime: '08:00',
+                    durationMinutes: minutes,
+                    daysOfWeek: [1],
+                    priceCents: 35_000,
+                },
+            })).rejects.toThrow(/constraint|check/i);
+        }
+    });
+
+    it('refuses them on a flight too, while still allowing none at all', async () => {
+        const route = airportCodesForRoute('Seattle, USA', 'Detroit, USA');
+        const base = {
+            airline: 'Mona Airways',
+            ...route,
+            departureDate: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000),
+            priceCents: 35_000,
+        };
+
+        await expect(prisma.flight.create({
+            data: { ...base, flightNumber: `DUR-${randomUUID().slice(0, 6)}`, durationMinutes: 0 },
+        })).rejects.toThrow(/constraint|check/i);
+
+        // Null is allowed on a flight: one created outside a schedule knows no
+        // duration, and shows no arrival rather than an invented one.
+        const unknown = await prisma.flight.create({
+            data: { ...base, flightNumber: `DUR-${randomUUID().slice(0, 6)}`, durationMinutes: null },
+        });
+        created.flightIds.push(unknown.id);
+        expect(unknown.durationMinutes).toBeNull();
     });
 });
