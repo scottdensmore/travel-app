@@ -2075,3 +2075,104 @@ CHECKS COMPLETE</event>
 ---
 
 Ok lets do 247
+
+---
+
+<task-notification>
+<task-id>a7e8489388181be8c</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/a7e8489388181be8c.output</output-file>
+<status>completed</status>
+<summary>Agent "Verify adversarial mutant rule" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Tree unchanged by this run (still only the two modified files; my scratch script lives outside the repo).
+
+## What I ran
+
+| Check | Result |
+| --- | --- |
+| `npx tsc --noEmit` | clean |
+| `npm run lint` | 0 errors, 8 warnings — matches your stated baseline |
+| `npm run test:unit` (full project) | 782 passed / 69 suites |
+| `__tests__/docs/agentInstructions.test.ts` alone | 20 passed |
+
+**Skipped, and I agree with you:** `npm run build`, `npx playwright test`, the database project. Not on cost — on reach. I checked rather than assumed: the only runtime consumer of either changed file is `__tests__/docs/agentInstructions.test.ts`, which is in the unit project and ran. `e2e/disruption.spec.ts` matches a grep for `AGENTS.md` but it is a prose comment on line 27, not a file read. No `*.database.test.ts` reads either file. Markdown reaches no build output. Those three checks are unreachable by this diff, which is a stronger justification than "prose is cheap."
+
+## 1. Is "audit the selection" actionable?
+
+Yes — I executed it on your own diff, and it is mechanical enough to describe as a procedure. Two steps:
+
+**Classify each named mutant.** Confirming = corrupts a value the assertion already reads (proves the matcher works). Defeating = deletes or substitutes the thing the assertion claims to pin. That is a source-only judgment.
+
+**Derive the assertion's guarded region independently, then ask what falls outside it.** This is the part that has teeth, and here it is on this slice. I replicated `checksAssignedToTheVerifier` in a scratch script against the real `AGENTS.md`. The region it guards is exactly six strings:
+
+```
+ The full unit *and* database projects
+ `npm run build`
+ The full `npx playwright test`
+ Migrations against a fresh *and* a populated database
+ An audit of every mutant reported killed
+ `npm run lint` and `npx tsc --noEmit` again, on the final tree
+```
+
+Everything else in step 7 — including both new paragraphs — is outside it. `/selection/` and `/survivor/` are false against that column and true against `docs/VERIFIER.md`'s guarded region. That took one script and settled question 4 factually instead of by argument.
+
+**The honest caveat:** this degrades outside document guards. Deriving "what does this assertion actually constrain" is cheap when the assertion is a regex over a file and expensive when it is an expectation over React state or a Prisma query. On a real feature slice I would do the classification step always and the region-derivation step only for assertions I could reduce to something enumerable. It is not a universally cheap duty, and the paragraph does not claim it is.
+
+## 2. Is the rule correct? Partly overstated — and your two documents do not overstate it equally
+
+The `AGENTS.md` sentence is the strong form:
+
+&gt; A table of mutants that all died is weaker evidence than one that survived
+
+As written this is wrong in the best case. A mature module where three genuinely adversarial mutants all die is *stronger* evidence than a table with a survivor — the survivor means a real hole existed. What is actually true is that an all-died table is **more ambiguous**, not weaker: it is consistent with "strong suite, strong selection" and with "any suite, confirming selection," and the table alone cannot separate them. A survivor is evidence about the *selection method*, not about the suite.
+
+Your `docs/VERIFIER.md` wording already says exactly that, and is the better sentence:
+
+&gt; it may mean the assertions hold, or that only confirming mutants were tried
+
+So my recommendation is not to drop the rule but to make `AGENTS.md` adopt the ambiguity framing it already has in the other file. That also dissolves the cost you flagged — an ambiguity claim does not encourage doubting healthy suites, whereas "weaker evidence" does.
+
+**One risk neither document names, and I think it is the real one:** "produce a survivor" is gameable in a way "produce a kill" is not. If this hardens into an expectation that a good table contains a survivor, the cheapest way to satisfy it is to pick a throwaway mutant known to survive, or to leave a test slightly weak so something does. That is pure noise wearing the costume of rigor. Both files currently frame it as a prompt to inspect selection rather than a quota, which is right — worth one clause making explicit that a survivor is not a target.
+
+**On the inference base:** you are candid that this is one slice, and I would add that all four examples are docs guards — string and line-count assertions over markdown, a domain unusually prone to vacuous assertions because the "behaviour" is text. Generalizing to server actions and Prisma is plausible, not demonstrated. The rule is worth shipping on one slice's evidence; the phrasing should not imply more.
+
+I verified all four worked examples against the recorded history in `__tests__/docs/agentInstructions.test.ts` (lines 53-59 for the 16-then-11 line limit, lines 277-284 for the `no Write` and superset cases). All four are faithful.
+
+**Minor accuracy nit:** `expect(granted).not.arrayContaining([...])` is not a valid Jest call — `arrayContaining` is an asymmetric matcher, so that literal form throws a TypeError rather than silently passing. The bug shape you are teaching people to recognize is `expect(granted).not.toEqual(expect.arrayContaining([...]))`. It matches the existing shorthand at line 280 of the test file, so it is defensible as abbreviation, but in a passage whose whole purpose is recognition of a subtle anti-pattern I would write the form that actually appears in code.
+
+## 3. Do the two files agree?
+
+Same duty, two strengths. `AGENTS.md` asserts weakness; `docs/VERIFIER.md` asserts ambiguity. They are compatible, but the main agent is being told something firmer than the verifier is. Aligning them per finding 2 fixes the divergence and the overstatement in one edit. Shared `selection`/`mutant` tokens and the `#248` citation in both give a reader a path between them, so I do not think prose drift is acute.
+
+## 4. Your no-test reasoning: premise verified, conclusion wrong
+
+Your premise is exactly right and I confirmed it from source: `CHECKS_THE_VERIFIER_OWNS` reads the table's verifier column, the new rule lives in prose beneath the table, and a pair using `/selection/` fails on the `AGENTS.md` side today.
+
+But "would not fit without a second bespoke helper" does not follow. The rule fits the *existing* mechanism if the table row carries the word. Reword line 168 from `An audit of every mutant reported killed` to something like `An audit of every mutant reported killed, and of the selection`, then add one array entry:
+
+```ts
+['an audit of the mutant selection', /selection/],
+```
+
+Both sides then match with no new helper — `/selection/` is already true against `docs/VERIFIER.md`'s guarded region, as my script confirmed. One row reworded, one array entry.
+
+Your rejection of *pinning the paragraphs* is correct and I agree with it — that assertion would be deleted the first time it was inconvenient, exactly as you say. But that is not the only option available, and the one that fits is the same shape and strength as the seven pairs already there. What it catches is the rule being deleted from one document and left in the other, which is precisely the drift you ask about in question 3 and precisely what the mechanism exists for. What it cannot catch is rewording or downgrade — the test's own docstring at lines 92-96 says so.
+
+I would add it. It is genuinely optional, and if you look at it and still judge the maintenance of a hand-kept array not worth catching one-sided deletion, that is a defensible call — but it should be made knowing the guard fits, not that it does not.
+
+## 5. Commit verdict
+
+**Commit — with one prose fix I would make first.**
+
+Nothing here is a regression. Every reachable check is green and matches your baseline exactly, so I saw no instance of #244 or #242 in this run (the unit project passed on the first attempt; I did not re-run to characterize those rates, and per my own three-run cap that is the right call given they are known-pre-existing).
+
+Before committing:
+
+- **Recommended:** soften the `AGENTS.md` "weaker evidence" sentence to the ambiguity framing already present in `docs/VERIFIER.md`, and add a clause that a survivor is not a target. Prose-only, does not invalidate this verification.
+- **Optional:** the `/selection/` guard pair above.
+- **Nit:** the `arrayContaining` call form.
+
+Files: `/home/scottdensmore/Developer/scottdensmore/travel-app/AGENTS.md` (new paragraph at lines 195-218, table row at 168), `/home/scottdensmore/Developer/scottdensmore/travel-app/docs/VERIFIER.md` (new paragraph at lines 133-140), `/home/scottdensmore/Developer/scottdensmore/travel-app/__tests__/docs/agentInstructions.test.ts` (`CHECKS_THE_VERIFIER_OWNS` at 109-117, extraction at 134-175).</result>
+<usage><subagent_tokens>36855</subagent_tokens><tool_uses>16</tool_uses><duration_ms>271092</duration_ms></usage>
+</task-notification>
