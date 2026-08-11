@@ -1989,3 +1989,66 @@ Every check that can reach this diff is green, plus the full Playwright suite an
 Findings 1 and 2 are gaps in the guard this commit introduces, not defects in the refactor — but they are both a few lines to close, and closing them in the commit that establishes the guard is cheaper than filing them. Finding 2 in particular leaves the verifier's largest duty unprotected by the very test written to protect it. My recommendation is to close 1 and 2, then commit; 3 through 6 are fine as issues.</result>
 <usage><subagent_tokens>54274</subagent_tokens><tool_uses>25</tool_uses><duration_ms>754329</duration_ms></usage>
 </task-notification>
+
+---
+
+<task-notification>
+<task-id>a866ce50502556e07</task-id>
+<tool-use-id>toolu_01WLkyacNEEfmaxCMtykUNxG</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/a866ce50502556e07.output</output-file>
+<status>completed</status>
+<summary>Agent "Confirm pointer refactor closures" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Read `docs/VERIFIER.md` from disk first, as instructed — and it was already out of date in my injected context in a second way: the step 7 table in `AGENTS.md` on disk now ends with "An audit of every mutant reported killed" and "`npm run lint` and `npx tsc --noEmit` again, on the final tree", not the rows my snapshot carried. Changed nothing in the tree.
+
+## What I ran
+
+| Check | Result |
+|---|---|
+| `npx tsc --noEmit` | exit 0 |
+| `npm run lint` | 0 errors, 8 warnings — all pre-existing (`@next/next/no-img-element` ×7, `react-hooks/incompatible-library` ×1) |
+| `npm test` | unit 69 suites / **782 pass** (17.6s); database 21 suites / **96 pass** (16.3s) |
+| `npm run test:unit` (2nd run) | 782 pass |
+| `npm run test:unit -- --testPathPattern agentInstructions` | 20/20 |
+
+Postgres up and healthy, port 3000 free, so nothing environmental skewed these.
+
+**Skipped `npx playwright test` and `npm run build` — I agree, and verified it rather than took it.** Grep across `*.ts,tsx,js,mjs,json` (excluding `node_modules`, `.next`) finds no reference to `.claude/agents/`, `docs/VERIFIER.md` or `docs/UI_REVIEW.md` anywhere but `/home/scottdensmore/Developer/scottdensmore/travel-app/__tests__/docs/agentInstructions.test.ts`; the only e2e mention of `AGENTS.md` is a prose comment at `/home/scottdensmore/Developer/scottdensmore/travel-app/e2e/disruption.spec.ts:27`. Markdown under `docs/` and `.claude/` is not a build input, and the only route from the test file into `next build` is a type error, which `tsc --noEmit` covers identically and reports clean.
+
+**Flakes:** neither fired. Two default unit runs green says #244 did not appear, which at ~1-in-5 is unsurprising and is not evidence it is fixed. I did not run `--randomize`, so this run says nothing at all about #242.
+
+## Findings
+
+**1. The toolset check can still disarm itself — YAML sequence form (guard robustness).** `agentInstructions.test.ts:254-257`:
+
+```ts
+const granted = readRepositoryFile(definition).match(/^tools:(.*)$/m)![1].split(',')
+```
+
+Written as a YAML list — which is valid frontmatter and a natural thing for a future edit to produce —
+
+```yaml
+tools:
+  - Read
+  - Edit
+```
+
+the capture group is empty, `granted` is `['']`, and the per-tool loop passes with `Edit` granted. That is the same failure as your two survived attempts: the check never arms. Separately, deleting the `tools:` line entirely — the worst case, since the sub-agent then inherits every tool — dies on the `!` with `Cannot read properties of null (reading '1')`, fail-closed by accident with no message, which is exactly what the comment at lines 124-127 refuses to accept for the anchor helpers. One assertion closes both: require the match and require `granted` to be a real list (e.g. `expect(granted).toContain('Read')`).
+
+**2. Closure 4 is done for one of the two agents.** The bootstrap paragraph is in `docs/VERIFIER.md:29-32` only. `docs/UI_REVIEW.md` has no equivalent — nothing tells a `ui-review` agent that an injected copy holding inline instructions predates the split, or to read from disk at all. And the deleted inline `ui-review` definition never carried a read-from-disk instruction, so a stale one has no path to `docs/UI_REVIEW.md` whatsoever; the verifier at least had one. Nothing in the test requires the paragraph in either file. Three lines of prose mirroring the verifier's.
+
+**3. Residual, not asking for a change:** `bodyOf` slices past the frontmatter, so `description:` is unpinned, and both descriptions are already three lines of prose injected into context. That is the remaining surface where instructions can accrete into a file that goes stale. Both currently route rather than instruct, so it is a note, not a finding.
+
+**4. Coverage, below the bar but named because silence is a finding:** the new `AGENTS.md` paragraph ("Edit the files in `docs/`… say so in the invocation when a slice touches `.claude/agents/`") is unguarded — delete it and everything is green — while the table three paragraphs above it is guarded row by row. No mutant was named for it. Probably correct to leave, but it is the one changed instruction in this diff with nothing holding it.
+
+## Your four questions
+
+**1. The exact-body pin is right, and being shared by two files makes it more right, not less.** The two pointers are meant to be identical boilerplate; the instructions path is the only thing that legitimately differs, and the template makes divergence impossible rather than merely improbable. The rigidity cost is bounded and benign — a failure prints a diff and is repaired by editing one template. The real cost is one you should write down: a third sub-agent needing any different pointer wording forces you either to change the template for all of them or to leave it out of `AGENT_DEFINITION_POINTERS`, and the second is the silent option. A sentence in the comment at lines 46-55 would pre-empt it.
+
+**2.** Audited from source. Closure 1 verified — `toBe` on the whole body at lines 232-234; `it.each` over two pointers means one mutated file is exactly 1 red, matching your count. Closure 2 verified — `/database project/` matches `AGENTS.md:164` in the verifier column and `docs/VERIFIER.md:60`, both asserted in the same test, so one-file deletion is 1 red, matching. Closure 3 verified as far as the loop goes, subject to finding 1. Closure 5 genuinely subsumed. Closure 6 verified at lines 271-274, and it pins the message, not just the throw. Closure 4 is finding 2 above.
+
+**3. You are half-rationalising.** The conclusion is right for a reason you did not give. The invariant survives the mutant because the per-tool loop is unconditional and never consults the doc — not because "the doc still asserts cannot delegate, so the assertion still holds". That assertion is `toMatch(/you have no|cannot delegate/i)` against the whole file: an alternation covering four separate claims across two documents, where `docs/UI_REVIEW.md` satisfies it with "you have no editing tools" and never mentions `Task` at all despite the frontmatter barring it. It is close to vacuous by construction. Ship it, but do not cite it in the mutant table as the reason the mutant is harmless — the loop is.
+
+**4. Commit.** The tree I certified is green and the two findings are guard-hardening, not defects in what ships. If you fold in findings 1 and 2 first — which I would, since finding 1 is the third instance of the same self-disarming-check failure in one slice — re-run `npm run test:unit -- --testPathPattern agentInstructions` and `npx tsc --noEmit` and commit on that. Nothing else in the battery can be reached by an edit to that test file and a markdown paragraph, so no full re-verification is warranted.</result>
+<usage><subagent_tokens>42532</subagent_tokens><tool_uses>17</tool_uses><duration_ms>372621</duration_ms></usage>
+</task-notification>
