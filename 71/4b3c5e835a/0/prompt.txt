@@ -1749,3 +1749,112 @@ The last one passing on the AGENTS side and failing on the verifier side is the 
 I would make both helpers `throw new Error('AGENTS.md no longer contains the step 7 split anchor …')` when `indexOf` returns -1. Four lines, it removes the accidental dependence on `slice(-1)` being harmless, and it converts the misleading cascade into a message that names the real cause. Bounding the row scan (stop at the next `##` heading) closes F7 for another two. With those, I'd keep it. Without them I'd call it marginal — and either way I would soften the docblock's guarantee to say it catches *deletion and reassignment*, not that a check named in both places is genuinely owned.</result>
 <usage><subagent_tokens>50988</subagent_tokens><tool_uses>19</tool_uses><duration_ms>543868</duration_ms></usage>
 </task-notification>
+
+---
+
+<task-notification>
+<task-id>a0d557ee63a73f69a</task-id>
+<tool-use-id>toolu_01EL3a57NfoZ3zsJHFWXKuuE</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/a0d557ee63a73f69a.output</output-file>
+<status>completed</status>
+<summary>Agent "Final pass on workflow split" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Worktree unchanged (same three modified files, zero untracked, same line counts as at start). Nothing was reproduced by editing; the mutant audit is entirely in-memory simulation from source.
+
+**One thing worth stating first:** my injected copies of `AGENTS.md` and `verifier.md` were the *pre-round-3* versions — my system prompt still carries `| Cross-file regression sweeps |`, `| An independent re-run of the mutation battery |`, "Ask which", "769 tests", and the lint/tsc-missing table that was finding A. So the read-from-disk instruction you added is not hypothetical; it fired on its own first run. Everything below is read from disk.
+
+## What I ran
+
+| Check | Result |
+|---|---|
+| `npx tsc --noEmit` | clean, exit 0 |
+| `npm run lint` | 0 errors, 8 warnings — identical to your stated pre-existing baseline |
+| `npm run test:unit` (full project) | 69 suites, **773/773 passed**, 18.2s |
+| `agentInstructions.test.ts` isolated | 11/11 passed |
+| In-memory mutant simulation | 3 claims, all confirmed |
+
+**Skipped, with reason:** `npm run build`, full `npx playwright test`, the database project, and migrations fresh/populated. The diff is three files — two Markdown documents and one `@jest-environment node` test that reads them with `fs.readFileSync`. No route, component, schema, migration, or runtime module is touched, so none of those can reach the change. This matches what earlier passes justified.
+
+**Flakes:** one full unit run, clean. I did not chase #244 or #242 — a docs diff cannot reach `UserAuthForm` focus timing or `instrumentation` under `--randomize`, and characterising a tracked, pre-existing flake further is the "nine runs of nothing" case.
+
+## 1. The two helpers — F7 and the `indexOf` cascade
+
+**Both closed. Confirmed, not taken on trust.**
+
+The `indexOf` cascade is gone: both helpers throw named errors, and the guard test at `/home/scottdensmore/Developer/scottdensmore/travel-app/__tests__/docs/agentInstructions.test.ts:162` pins both messages against synthetic input, so it cannot rot with the real files.
+
+F7 is closed, and I verified the mechanism rather than the assertion. Stripping every table line from `AGENTS.md` leaves **zero** `|`-leading lines between the step 7 anchor and the next `##` heading, so the scan reaches `## Testing Expectations`, breaks with `rows.length === 0`, and throws `no longer a table`. The appended decoy table is never reached.
+
+New attack surface from the throw-and-bound — I probed six mutations:
+
+| Mutation | Result |
+|---|---|
+| Delete the `npm run build` row | caught (1 red) |
+| Move `npm run build` to the main column | caught (1 red) |
+| Delete verifier.md's checks code block | caught (4 red) |
+| Reword a verifier.md instruction, keep the token | missed — **documented** in the docblock |
+| **Swap the two column headers only** | **missed** |
+
+The header swap is the one genuinely new gap. `checksAssignedToTheVerifier` reads column *position* (`row.split('|')[2]`) and never asserts the header's second cell says `Verifier`. Change `| Main agent | Verifier |` to `| Verifier | Main agent |` and every row's ownership inverts while all 11 tests stay green. That slightly overclaims the docblock at line 35, which says it catches a check "*reassigned* to the other" — a header swap reassigns all six at once and passes. Coverage gap, low: nobody swaps headers by accident, and the fix is one `expect(rows[0]).toContain('Verifier')`.
+
+One lesser note: `row.split('|')[2] ?? ''` misreads if a cell ever contains an escaped `\|`. Every realistic shape of that fails *closed* (red, with a pattern mismatch rather than a structural message), so it is a legibility nit, not a hole.
+
+## 2. Finding A's class — enumerated both directions, not sampled
+
+**Gone. Six for six, complete in both directions.**
+
+Verifier column → verifier.md:
+
+| # | Table verifier cell | Instructed in verifier.md below `## The checks` |
+|---|---|---|
+| 1 | The full unit *and* database projects | `npm test` — Jest, both projects |
+| 2 | `npm run build` | `npm run build` in the block |
+| 3 | The full `npx playwright test` | `npx playwright test` in the block |
+| 4 | Migrations against a fresh *and* a populated database | the scratch/populated paragraph |
+| 5 | An audit of every mutant reported killed | `## Coverage`, audit-the-claim paragraph |
+| 6 | `npm run lint` and `npx tsc --noEmit` again, on the final tree | both in the block, plus the "re-running the cheap checks" paragraph |
+
+verifier.md → table, the direction that failed twice: every *check* the definition commands is `npx tsc --noEmit`, `npm run lint`, `npm test`, `npx playwright test`, `npm run build`, and the empty/populated migration runs. All six map onto rows above. Nothing is commanded and unlisted. `docker compose up -d db mailpit` is setup, not a check; the three-run flake cap is a bound, not a check.
+
+The two non-run duties — coverage-gap analysis and classifying failures as regression/pre-existing/environment — are outside the table by design, and the "the table lists *runs*, so it understates" paragraph plus step 7's opening sentence ("must report failures, flakes, missing coverage, and environment issues") both cover them. That is a deliberate gap, not A's class.
+
+Also resolved: `Cross-file regression sweeps` (the entry the docblock cites as having reached the table undefined anywhere) and `An independent re-run of the mutation battery` (which directly contradicted verifier.md's audit-without-reproducing rule) are both gone from the on-disk table.
+
+Non-vacuity check on the guard itself: `npm run build` and `playwright test` each occur **once above** `## The checks` in verifier.md, in the sentence describing what the *main agent* skips. That is precisely the false positive the docblock describes, and the anchored read excludes it. The exclusion is load-bearing and currently working.
+
+## 3. Round-3 contradictions
+
+**The `git status` rule holds — I checked it against the actual ignore file rather than reading it.** `.gitignore:13` is `/.next/` and `:44` is `/lib/generated/prisma`; the Prisma client otherwise lands in `node_modules`. So build output, the generated client and scratch databases are all things `git status` would never report. The carve-out paragraph is therefore *redundant with* the rule, not an exception to it — which is the safe direction. No contradiction.
+
+One narrow imprecision in the same rule: `.env` is gitignored (`.gitignore:29`), so editing it is not something `git status` would report, and the letter of the rule permits it. Nit, low.
+
+**The read-from-disk instruction does not conflict with anything**, and as noted it is empirically justified. Adjacent nit: AGENTS.md now says the verifier "reads from disk throughout rather than snapshotting". That is true of the two instruction files but not of `tsc`/`lint`/`jest`, each of which does snapshot the tree at the moment it runs. The conclusion it draws — incoherent rather than stale, no marked boundary — is right and is the more useful warning, so this is wording, not a defect.
+
+Two small mismatches, both low:
+
+- `AGENTS.md:187` says the verifier "is barred from changing **tracked** files"; verifier.md says "change nothing `git status` would report", which also bars new untracked files inside the repo. The verifier follows the stricter one, so behaviour is fine, but the pair is meant to agree.
+- `AGENTS.md:189-191` has a ragged wrap mid-bold — the line `   and the` is a two-word stub. Renders fine; looks like an editing artifact.
+
+D is accurate as reworded: `jest.database-setup.js` gates on `maxWorkers &gt; 1`, so "refuses to start when it sees more than one worker" is exactly right. (AGENTS.md's older Gotchas phrasing, "refuses any run it is not given", is looser — but it is pre-existing text outside this diff and it does name the worker count.)
+
+## 4. Mutant audit
+
+All three confirmed from source, **including the counts**, which is the part #231 got wrong:
+
+- **Blank the lint/tsc verifier cell → 2 red.** Correct. Neither `npm run lint` nor `tsc --noEmit` appears in any other verifier-column cell, so exactly the two `it.each` cases fail. This mutant reproduces finding A's defect precisely; it is a genuine kill.
+- **`npx tsc --noEmit` → `npx tsc` → 1 red.** Correct. `tsc --noEmit` occurs exactly once below `## The checks`, so the count cannot be inflated.
+- **Reword the step 7 anchor → 7 red, message names the anchor.** Correct, and the arithmetic is exact: 6 `it.each` cases throw `step 7 anchor`, plus `'reads the split from step 7 rather than the next table in the file'`, which expects `/no longer a table/` and gets the anchor message instead. The synthetic-input test correctly stays green.
+
+No silence finding: every behaviour change in this diff has a named mutant.
+
+## Verdict
+
+**Commit.** Nothing blocking, nothing at medium. Three findings, all low, none of which needs a fifth pass:
+
+1. *(coverage gap, low)* Header swap defeats the guard; docblock line 35 overclaims "reassigned to the other" by one case. One assertion on `rows[0]` closes it — worth a follow-up issue rather than a round 5.
+2. *(nit)* `AGENTS.md:187` "tracked files" vs verifier.md's broader `git status` rule.
+3. *(nit)* Ragged wrap at `AGENTS.md:189-191`.
+
+Findings A through H are all genuinely resolved, and A's class is closed in both directions rather than by sampling. If you want (1) filed, it belongs in an issue — it is outside this slice.</result>
+<usage><subagent_tokens>48971</subagent_tokens><tool_uses>15</tool_uses><duration_ms>438399</duration_ms></usage>
+</task-notification>
