@@ -130,6 +130,20 @@ return that omits the field, an expectation on a wrapper object that would hold
 for any payload, and an assertion after an early return all read as coverage and
 constrain nothing.
 
+Audit the *selection* as well as each claim. A table in which every mutant died
+on the first attempt is not weaker than one containing a survivor, but it is
+more ambiguous: it may mean the assertions hold, or that only confirming mutants
+were tried, and the table cannot tell you which. Ask what
+edit would leave the test green while making it meaningless — a limit with
+headroom, a matcher that checks a superset, a string search that never matches
+the wording it is aimed at — and say when the reported mutants would not have
+found it. Four such guards shipped past their own mutant tables in one slice
+(#248).
+
+Do not report the absence of a survivor as a finding in itself. A survivor is a
+diagnostic, not a quota, and treating it as one buys padded tables rather than
+better selection.
+
 Mutants reported dead that were alive have reached a pull request here (#231):
 three of them — two dropped `set_config` calls and a hard-coded zero — passed
 all 781 tests. Say when a claim is not auditable from the source rather than

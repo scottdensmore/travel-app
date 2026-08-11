@@ -114,6 +114,7 @@ const CHECKS_THE_VERIFIER_OWNS: ReadonlyArray<readonly [string, RegExp]> = [
     ['a re-run of lint on the final state', /npm run lint/],
     ['a re-run of the typecheck on the final state', /tsc --noEmit/],
     ['the full unit and database projects', /database project/],
+    ['an audit of the mutant selection', /selection/],
 ];
 
 const STEP_SEVEN_ANCHOR = '**The verifier owns the slow checks';
@@ -277,7 +278,8 @@ describe('agent instruction files', () => {
             // Unconditional and one at a time, both on purpose. Deciding per
             // tool whether the doc "mentions" it disarms itself -- `no Edit or
             // Write tool` contains "no Edit" and never "no Write". And
-            // `not.arrayContaining` is a superset check, so it only fails when
+            // `toEqual(expect.not.arrayContaining(...))` is a superset check
+            // rather than a membership one, so it only fails when
             // *every* barred tool is granted; adding just Write walked past it.
             for (const tool of TOOLS_THE_INSTRUCTIONS_RULE_OUT) {
                 expect(granted).not.toContain(tool);
