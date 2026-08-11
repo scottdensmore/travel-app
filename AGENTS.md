@@ -13,7 +13,7 @@ npm run dev                 # http://localhost:3000
 npm run lint                # eslint app components lib
 npx tsc --noEmit            # typecheck (no npm script)
 npm test                    # Jest, both projects — needs a running Postgres (see Gotchas)
-npm run test:unit           # the parallel project; takes flags, e.g. -- -t 'name'
+npm run test:unit -- --testPathPattern flightTime   # one file; see Gotchas before using a bare path
 npm run test:database       # the *.database.test.ts project, serialised
 npx playwright test         # E2E; starts its own dev server, so free port 3000 first
 npm run build               # next build + scripts/sanitize-standalone.mjs
@@ -78,6 +78,12 @@ that runs this application injects configuration at runtime.
   `globalSetup` refuses any run it is not given — `npx jest --selectProjects
   database` stops with a message naming the worker count rather than
   reproducing the interference the split removed (#215)
+- `npm run test:unit -- <path>` does **not** filter: it runs all of them and says nothing.
+  The script ends in `--selectProjects unit`, which takes a list, so the path is read as
+  another project name and ignored. Filter with `-- --testPathPattern <regex>` or
+  `-- -t '<test name>'`. `npm run test:database -- <path>` does filter, because
+  `--runInBand` sits between the project list and the path — which is exactly why the
+  difference is easy to miss
 - Node-environment tests need `/** @jest-environment node */` (jsdom is the Jest default)
 - Playwright runs `workers: 1, fullyParallel: false` on purpose — parallel runs collide on the DB
 - A Playwright run fails in `global-teardown` if it left accounts, tokens, reviews,
@@ -147,7 +153,24 @@ Chart and other browser-interactive components need `'use client'`.
    change. The verifier must report failures, flakes, missing coverage, and
    environment issues. Fix or explicitly resolve every actionable finding
    before starting code review. If a verifier finding requires a code change,
-   rerun the verifier after addressing it.
+   rerun the focused tests for that change and then rerun the verifier — not
+   the whole battery again.
+
+   **The verifier owns the slow checks; do not run them twice.** Split it by
+   what a check costs:
+
+   - Run freely while working: `npm run lint`, `npx tsc --noEmit`, and the whole
+     unit project — about 18 seconds, and it needs nothing running.
+   - Run focused: the database tests covering what changed, and the single
+     Playwright spec whose journey changed.
+   - Leave to the verifier: the full database project, `npm run build`, and the
+     full `npx playwright test`. Those cost minutes each, running them in both
+     places doubles every slice for no extra signal, and a second concurrent run
+     competes for port 3000 and the shared database — which has already produced
+     failures that looked real and were not.
+
+   Mutation testing stays with the main agent and stays focused: run the suite
+   that should catch the mutant, not everything.
 
 8. **Review the code before every commit.** Two mechanisms cover this, and
    neither is a bespoke sub-agent:
