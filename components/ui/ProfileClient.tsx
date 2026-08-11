@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useTransition } from 'react';
+import React, { useState, useEffect, useRef, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import PointsActivityTable from "@/components/ui/pointsActivityTable";
 import NextStatusChart from "@/components/ui/charts/nextStatusChart";
@@ -115,6 +115,59 @@ export default function ProfileClient({
 }: ProfileClientProps) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
+    const bookingsRegionRef = useRef<HTMLDivElement | null>(null);
+    /**
+     * Whether the region scrolls, and separately whether the Status column is
+     * out of reach.
+     *
+     * The Status column is the first thing to fall off the right edge, and when
+     * it does a disrupted booking looks identical to a confirmed one (#229). A
+     * breakpoint cannot answer this: the crossover moves with the widest row's
+     * content -- measured between 478px and 510px across three fixtures -- so
+     * any number picked here is wrong for somebody's data.
+     *
+     * Starts true so the status is in the server's markup and in the first
+     * client render, which keeps hydration quiet and errs towards showing it.
+     */
+    const [{ scrollable: bookingsScrollable, statusHidden: bookingsStatusHidden }, setBookings] =
+        useState({ scrollable: true, statusHidden: true });
+
+    useEffect(() => {
+        const region = bookingsRegionRef.current;
+        if (!region) return;
+
+        // Whether the Status column itself is out of reach -- not merely
+        // whether the table overflows. Status is not the last column, so the
+        // region can scroll while the status is still perfectly visible, which
+        // showed the duplicate for another 80-200px depending on the widest
+        // row.
+        //
+        // An unmeasurable region -- zero width, because it is hidden or the
+        // environment does not lay out -- counts as out of reach. Erring
+        // towards showing the status costs a duplicate; erring the other way
+        // hides the only copy a phone can see.
+        const measure = () => {
+            // Two different questions, and they part company across a ~190px
+            // band: the region can scroll while the Status column is still
+            // perfectly visible, because Status is not the last column.
+            if (region.clientWidth === 0) return setBookings({ scrollable: true, statusHidden: true });
+
+            const status = region.querySelector<HTMLElement>('[data-testid^="booking-status-"]');
+            setBookings({
+                scrollable: region.scrollWidth > region.clientWidth,
+                // `status` is always present: the region only renders when
+                // there are bookings, and every row emits a status cell. The
+                // optional chain is for the type, not for a case that happens.
+                statusHidden: (status?.offsetLeft ?? 0) + (status?.offsetWidth ?? 0)
+                    > region.scrollLeft + region.clientWidth,
+            });
+        };
+        measure();
+
+        const observer = new ResizeObserver(measure);
+        observer.observe(region);
+        return () => observer.disconnect();
+    }, [bookings]);
 
     // Modal state
     const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
@@ -342,7 +395,20 @@ export default function ProfileClient({
                 <div className="profile-card">
                     <h2 className="text-2xl font-bold mb-4">My Bookings</h2>
                     {bookings.length > 0 ? (
-                        <div className="overflow-x-auto">
+                        <div
+                            ref={bookingsRegionRef}
+                            className="overflow-x-auto"
+                            // Focusable whenever there is something to scroll,
+                            // which is a wider condition than the status being
+                            // hidden -- tying it to the latter left a ~190px
+                            // band where the region scrolled with no way in.
+                            // Chromium makes scrollers focusable natively, but
+                            // only those with no focusable children, and these
+                            // rows carry buttons.
+                            tabIndex={bookingsScrollable ? 0 : undefined}
+                            role="region"
+                            aria-label="Your bookings"
+                        >
                             <table className="min-w-full text-left">
                                 <thead>
                                     <tr className="border-b">
@@ -375,6 +441,17 @@ export default function ProfileClient({
                                         ? new Date(legs[0].flight.departureDate).getTime() <= renderedAt
                                         : false;
                                     const cancellable = !isCancelled && !departed;
+                                    // Said once. Two copies of this that must
+                                    // always agree is how one surface came to
+                                    // name a different flight from another.
+                                    const statusText = isCancelled
+                                        ? 'Cancelled'
+                                        : isDisrupted
+                                            ? `${cancelledLeg?.flight?.flightNumber ?? 'Flight'} cancelled by airline`
+                                            : 'Confirmed';
+                                    const statusColour = isCancelled
+                                        ? '#f87171'
+                                        : isDisrupted ? '#fbbf24' : '#34d399';
                                     // Every leg is a row of its own, so the browser
                                     // keeps each flight aligned with its route and
                                     // date at any width. Booking-level cells span
@@ -399,8 +476,31 @@ export default function ProfileClient({
                                                             </div>
                                                         )}
                                                         <div>{leg?.flight ? `${leg.flight.airline} ${leg.flight.flightNumber}` : '\u2014'}</div>
+                                                        {index === 0 && bookingsStatusHidden && (
+                                                            // Shown only while the Status column is
+                                                            // actually out of reach, which is when a
+                                                            // disrupted booking would otherwise look
+                                                            // identical to a confirmed one (#229).
+                                                            <div
+                                                                data-testid={`compact-booking-status-${booking.id}`}
+                                                                // A visual aid only. The Status column
+                                                                // carries this to assistive technology
+                                                                // whether or not it is scrolled into
+                                                                // view, so announcing it twice would
+                                                                // just be noise.
+                                                                aria-hidden="true"
+                                                                style={{
+                                                                fontSize: '0.75rem',
+                                                                fontWeight: 'bold',
+                                                                marginTop: '2px',
+                                                                color: statusColour,
+                                                                }}
+                                                            >
+                                                                {statusText}
+                                                            </div>
+                                                        )}
                                                         {booking.passengers && booking.passengers.length > 0 && (
-                                                            <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
+                                                            <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.72)', marginTop: '2px' }}>
                                                                 {booking.passengers
                                                                     .map(p => `${p.firstName} (${seatFor(leg, p.id)})`)
                                                                     .join(', ')}
@@ -416,17 +516,17 @@ export default function ProfileClient({
                                                                     ? formatPrice(booking.totalPriceCents)
                                                                     : legs[0]?.flight ? formatPrice(flightFareCents(legs[0].flight)) : '\u2014'
                                                             }</td>
-                                                            <td className="py-2 align-top" rowSpan={legRows.length}>
+                                                            <td
+                                                                className="py-2 align-top"
+                                                                rowSpan={legRows.length}
+                                                                data-testid={`booking-status-${booking.id}`}
+                                                            >
                                                                 <span style={{
-                                                                    color: isCancelled ? '#ef4444' : isDisrupted ? '#fbbf24' : '#10b981',
+                                                                    color: statusColour,
                                                                     fontWeight: 'bold',
                                                                     fontSize: '0.85rem'
                                                                 }}>
-                                                                    {isCancelled
-                                                                        ? 'Cancelled'
-                                                                        : isDisrupted
-                                                                            ? `${cancelledLeg?.flight?.flightNumber ?? 'Flight'} cancelled by airline`
-                                                                            : 'Confirmed'}
+                                                                    {statusText}
                                                                 </span>
                                                                 {isDisrupted && (
                                                                     <p style={{

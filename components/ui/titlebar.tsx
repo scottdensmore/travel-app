@@ -1,7 +1,8 @@
 "use client"
 
 import { BRAND } from '@/lib/brand';
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
@@ -21,12 +22,30 @@ interface Notification {
     createdAt: Date | string;
 }
 
+/** `useLayoutEffect` in the browser, `useEffect` on the server, which warns. */
+const useBeforePaint = typeof window === 'undefined' ? useEffect : useLayoutEffect;
+
 const TitleBar: React.FC = () => {
     const pathname = usePathname();
     const { data: session } = useSession();
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [isOpen, setIsOpen] = useState(false);
     const drawerRef = useRef<HTMLLIElement>(null);
+    const bellRef = useRef<HTMLButtonElement>(null);
+    const panelRef = useRef<HTMLDivElement | null>(null);
+    /**
+     * Where the drawer sits, measured from the bell each time it opens.
+     *
+     * It is rendered into `document.body` rather than beside the bell, because
+     * at phone width `header nav` carries `overflow-x: auto` -- which forces
+     * `overflow-y: auto` too, and clipped the drawer to sixteen visible pixels
+     * of a 389px panel. The clicks landed and the badge counted down, so the
+     * feature was not dead, just invisible (#208).
+     *
+     * Measured rather than assumed: the header is sticky and its height changes
+     * with the viewport, so a hard-coded offset would drift.
+     */
+    const [anchor, setAnchor] = useState<{ top: number; right: number; width: number } | null>(null);
 
     const pageTitles: { [key: string]: string } = {
         '/book': 'Book Flight',
@@ -96,10 +115,91 @@ const TitleBar: React.FC = () => {
         };
     }, [session, pathname]);
 
+    /**
+     * Escape closes the drawer from anywhere, and hands focus back.
+     *
+     * On the document rather than the panel, because focus leaves the panel the
+     * moment anyone tabs: with the handler on the panel alone, Escape stopped
+     * working and the drawer sat open over the page with the bell five stops
+     * away.
+     *
+     * Focus is only restored here. Restoring it after an outside click fought
+     * the browser and lost -- the default mousedown action blurs to the body
+     * after React has run, so the effect's work was undone a frame later, and
+     * the same guard stole focus to the bell on a cold page load where nothing
+     * was focused yet.
+     */
+    useEffect(() => {
+        if (!isOpen) return;
+        const closeOnEscape = (event: KeyboardEvent) => {
+            if (event.key !== 'Escape') return;
+            setIsOpen(false);
+            bellRef.current?.focus();
+        };
+        document.addEventListener('keydown', closeOnEscape);
+        return () => document.removeEventListener('keydown', closeOnEscape);
+    }, [isOpen]);
+
+    /**
+     * Focused as it mounts, rather than from an effect on `isOpen`.
+     *
+     * The panel does not exist at the moment `isOpen` flips -- it waits a render
+     * for the bell to be measured -- so an effect keyed on `isOpen` finds a null
+     * ref and silently does nothing.
+     */
+    const attachPanel = useCallback((node: HTMLDivElement | null) => {
+        panelRef.current = node;
+        node?.focus();
+    }, []);
+
+    // Keep the drawer under the bell as the page scrolls or the window resizes.
+    // Placed before paint, or reopening after the bell has moved shows a frame
+    // at the old position; guarded because `useLayoutEffect` warns on the
+    // server, where this component is still rendered.
+    useBeforePaint(() => {
+        if (!isOpen) {
+            // Cleared, or reopening paints one frame at the old position.
+            setAnchor(null);
+            return;
+        }
+
+        const place = () => {
+            const rect = bellRef.current?.getBoundingClientRect();
+            if (!rect) return;
+            const viewport = window.innerWidth;
+            const measuredRight = Math.max(8, viewport - rect.right);
+            // Wide enough to read, but never wider than the viewport itself.
+            const floor = Math.min(240, viewport - 16);
+            const width = Math.max(floor, Math.min(320, viewport - measuredRight - 8));
+            // Then pull it back rightwards if that width would push its left
+            // edge off screen. Clamping the width alone is not enough: the
+            // floor can beat the space the inset leaves, and at 320px -- where
+            // the bell sits in a horizontally scrolled nav, so the inset is
+            // large -- the panel started at -65 with no way to scroll to it.
+            const right = Math.min(measuredRight, Math.max(8, viewport - width - 8));
+
+            setAnchor({ top: rect.bottom + 8, right, width });
+        };
+
+        place();
+        window.addEventListener('resize', place);
+        // Capturing, so a scroll inside any container still repositions it.
+        window.addEventListener('scroll', place, true);
+        return () => {
+            window.removeEventListener('resize', place);
+            window.removeEventListener('scroll', place, true);
+        };
+    }, [isOpen]);
+
     // Click outside to close notifications drawer
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (drawerRef.current && !drawerRef.current.contains(event.target as Node)) {
+            const target = event.target as Node;
+            // The panel is no longer inside `drawerRef`, so "outside" has to
+            // mean outside both, or every click within the drawer closes it.
+            const insideTrigger = drawerRef.current?.contains(target);
+            const insidePanel = panelRef.current?.contains(target);
+            if (!insideTrigger && !insidePanel) {
                 setIsOpen(false);
             }
         };
@@ -173,8 +273,12 @@ const TitleBar: React.FC = () => {
                             {/* Notification Bell Container */}
                             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                                 <button 
+                                    ref={bellRef}
                                     onClick={() => setIsOpen(!isOpen)}
                                     aria-label="Toggle notifications"
+                                    aria-haspopup="dialog"
+                                    aria-expanded={isOpen}
+                                    aria-controls={isOpen ? 'notification-drawer' : undefined}
                                     style={{
                                         background: 'none',
                                         border: 'none',
@@ -184,7 +288,9 @@ const TitleBar: React.FC = () => {
                                         alignItems: 'center',
                                         padding: '4px',
                                         color: pathname?.startsWith('/admin') ? 'white' : 'inherit',
-                                        outline: 'none',
+                                        // No `outline: none`: this is the way in
+                                        // to the drawer, and a keyboard user
+                                        // could not see where they were.
                                         position: 'relative'
                                     }}
                                 >
@@ -210,13 +316,25 @@ const TitleBar: React.FC = () => {
                                 </button>
 
                                 {/* Notification Drawer Dropdown */}
-                                {isOpen && (
-                                    <div style={{
-                                        position: 'absolute',
-                                        top: '40px',
-                                        right: 0,
-                                        width: '320px',
-                                        maxHeight: '400px',
+                                {isOpen && anchor && createPortal(
+                                    <div
+                                        ref={attachPanel}
+                                        id="notification-drawer"
+                                        role="dialog"
+                                        aria-label="Notifications"
+                                        tabIndex={-1}
+                                        style={{
+                                        // Fixed and in `document.body`, so no
+                                        // scrolling ancestor can clip it (#208).
+                                        position: 'fixed',
+                                        top: `${anchor.top}px`,
+                                        right: `${anchor.right}px`,
+                                        // Never wider than what is left of the
+                                        // viewport after the inset, which is
+                                        // what makes it usable on a phone
+                                        // rather than merely present.
+                                        width: `${anchor.width}px`,
+                                        maxHeight: `calc(100vh - ${anchor.top + 16}px)`,
                                         background: 'rgba(15, 10, 25, 0.95)',
                                         backdropFilter: 'blur(20px)',
                                         WebkitBackdropFilter: 'blur(20px)',
@@ -260,8 +378,13 @@ const TitleBar: React.FC = () => {
                                         {/* List */}
                                         <div style={{
                                             overflowY: 'auto',
+                                            // No cap of its own: the panel's
+                                            // `maxHeight` already fits the
+                                            // viewport, and a second limit
+                                            // showed three of eight
+                                            // notifications with 600px of
+                                            // screen going spare.
                                             flex: 1,
-                                            maxHeight: '340px'
                                         }}>
                                             {notifications.length > 0 ? (
                                                 notifications.map(notif => {
@@ -291,7 +414,7 @@ const TitleBar: React.FC = () => {
                                                                 <span style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.7)', lineHeight: '1.3' }}>
                                                                     {notif.message}
                                                                 </span>
-                                                                <span suppressHydrationWarning style={{ fontSize: '0.65rem', color: 'rgba(255, 255, 255, 0.4)', marginTop: '4px' }}>
+                                                                <span suppressHydrationWarning style={{ fontSize: '0.65rem', color: 'rgba(255, 255, 255, 0.72)', marginTop: '4px' }}>
                                                                     {new Date(notif.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                                 </span>
                                                             </div>
@@ -312,14 +435,15 @@ const TitleBar: React.FC = () => {
                                                 <div style={{
                                                     padding: '24px',
                                                     textAlign: 'center',
-                                                    color: 'rgba(255, 255, 255, 0.4)',
+                                                    color: 'rgba(255, 255, 255, 0.72)',
                                                     fontSize: '0.85rem'
                                                 }}>
                                                     {"You're all caught up!"}
                                                 </div>
                                             )}
                                         </div>
-                                    </div>
+                                    </div>,
+                                    document.body,
                                 )}
                             </div>
 

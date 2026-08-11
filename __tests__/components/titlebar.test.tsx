@@ -312,3 +312,84 @@ describe('TitleBar', () => {
         });
     });
 });
+
+describe('the notification drawer is reachable, not just visible', () => {
+    // Its own setup, not the outer block's. `clearAllMocks` leaves
+    // implementations in place, so a block that relies on a *sibling* having
+    // signed a user in passes only in the order it happens to run -- which is
+    // what the comment on the outer `beforeEach` was written about.
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (usePathname as jest.Mock).mockReturnValue('/');
+        (require('next-auth/react').useSession as jest.Mock).mockReturnValue({
+            data: { user: { id: 'u1', name: 'Bob', role: 'USER' } },
+        });
+        mockGetUserNotifications.mockResolvedValue([
+            {
+                id: 'n1', userId: 'u1', title: 'Flight Delayed',
+                message: 'Flight AA100 is delayed', type: 'FLIGHT_STATUS',
+                isRead: false, createdAt: new Date(),
+            },
+        ]);
+    });
+
+    /**
+     * Portalling the panel out of the header fixed it being clipped to sixteen
+     * pixels (#208) and broke something else on the way: the panel became the
+     * last thing in the document, so "Mark all read" went from one Tab away to
+     * past every other control on the page, with no way to dismiss it from the
+     * keyboard. The DOM used to express the relationship; now it has to be
+     * stated.
+     */
+    it('lives outside the header, where no scrolling ancestor can clip it', async () => {
+        // The whole of #208: `header nav` carries `overflow-x: auto` at phone
+        // width, which forces `overflow-y: auto` and clipped a 389px panel to
+        // sixteen visible pixels. Reverting the portal passes every other test
+        // in the repository, because nothing else opens the drawer at all.
+        render(<TitleBar />);
+
+        fireEvent.click(screen.getByRole('button', { name: /toggle notifications/i }));
+
+        // Awaited, so the notifications promise settles inside `act` rather
+        // than warning after the test has ended.
+        const drawer = await screen.findByRole('dialog', { name: /notifications/i });
+        expect(drawer.parentElement).toBe(document.body);
+        expect(document.querySelector('header')?.contains(drawer)).toBe(false);
+    });
+
+    it('says the bell opens a dialog, and which one', async () => {
+        render(<TitleBar />);
+
+        const bell = screen.getByRole('button', { name: /toggle notifications/i });
+        expect(bell).toHaveAttribute('aria-haspopup', 'dialog');
+        expect(bell).toHaveAttribute('aria-expanded', 'false');
+
+        fireEvent.click(bell);
+
+        await waitFor(() => expect(bell).toHaveAttribute('aria-expanded', 'true'));
+        const drawer = screen.getByRole('dialog', { name: /notifications/i });
+        expect(bell).toHaveAttribute('aria-controls', drawer.id);
+    });
+
+    it('moves focus into the drawer, and back to the bell on Escape', async () => {
+        render(<TitleBar />);
+
+        const bell = screen.getByRole('button', { name: /toggle notifications/i });
+        fireEvent.click(bell);
+
+        const drawer = await screen.findByRole('dialog', { name: /notifications/i });
+        await waitFor(() => expect(drawer).toHaveFocus());
+
+        // On the body, not the drawer: a handler scoped to the panel catches a
+        // keydown dispatched on the panel too, so that assertion could not tell
+        // the two apart -- and panel-scoped is the arrangement that left the
+        // drawer open once focus had tabbed away.
+        fireEvent.keyDown(document.body, { key: 'Escape' });
+
+        await waitFor(() => {
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        });
+        await waitFor(() => expect(bell).toHaveFocus());
+    });
+});
+

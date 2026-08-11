@@ -38,11 +38,11 @@ const created = { flightIds: [] as number[] };
 
 test.afterAll(async () => {
     await prisma.booking.deleteMany({
-        where: { user: { email: { in: [customerEmail, staffEmail, departedEmail, flyerEmail] } } },
+        where: { user: { email: { contains: `-${suffix}@example.com` } } },
     });
     await prisma.flight.deleteMany({ where: { id: { in: created.flightIds } } });
     await prisma.user.deleteMany({
-        where: { email: { in: [customerEmail, staffEmail, departedEmail, flyerEmail] } },
+        where: { email: { contains: `-${suffix}@example.com` } },
     });
 });
 
@@ -110,12 +110,15 @@ test.describe('Cancelling a booking yourself', () => {
         await signInWithCredentials(page, { email: customerEmail, password });
 
         await page.goto('/profile');
-        await expect(page.getByText('Ada (2A)')).toBeVisible();
+        await expect(page.getByText('Ada (Seat 2A)')).toBeVisible();
 
         const row = page.getByTestId(`booking-row-${booking.id}`);
         page.once('dialog', dialog => dialog.accept());
         await row.getByRole('button', { name: 'Cancel', exact: true }).click();
-        await expect(row.getByText('Cancelled', { exact: true })).toBeVisible();
+        // Scoped to the Status column. The status also renders beside the
+        // flight number at phone width, so a visibility filter would resolve to
+        // both the moment anyone runs this at 390px (#229).
+        await expect(page.getByTestId(`booking-status-${booking.id}`)).toContainText('Cancelled');
 
         // The seat is free again, and the row still says which seat it was --
         // a held count of zero is equally true of the placeholder rename this
@@ -128,7 +131,7 @@ test.describe('Cancelling a booking yourself', () => {
         });
         expect(released.seatNumber).toBe('2A');
         expect(released.releasedAt).not.toBeNull();
-        await expect(page.getByText('Ada (Released)')).toBeVisible();
+        await expect(page.getByText('Ada (Seat released)')).toBeVisible();
 
         // Economy, well before the cut-off: a fifth of the fare is kept, and
         // the amount is written down rather than left to be re-derived later.
@@ -205,7 +208,8 @@ test.describe('When the airline cancels the flight', () => {
         await signInWithCredentials(page, { email: flyerEmail, password });
 
         await page.goto('/profile');
-        await expect(page.getByText(`${flight.flightNumber} cancelled by airline`)).toBeVisible();
+        await expect(page.getByTestId(`booking-status-${booking.id}`))
+            .toContainText(`${flight.flightNumber} cancelled by airline`);
         await expect(page.getByText(/Your seat is held/)).toBeVisible();
 
         await expect(page.getByText(/has been cancelled by the airline/)).toHaveCount(0);
@@ -230,7 +234,7 @@ test.describe('When the airline cancels the flight', () => {
         await disruptedRow.getByRole('button', { name: 'Cancel', exact: true }).click();
         // Scoped to the row, and to the status rather than any text containing
         // the word: "cancelled by airline" also contains "Cancelled".
-        await expect(disruptedRow.getByText('Cancelled', { exact: true })).toBeVisible();
+        await expect(page.getByTestId(`booking-status-${booking.id}`)).toContainText('Cancelled');
         expect(prompt).toMatch(/take a full refund/i);
 
         // Whole fare back, no fee: the airline caused this, so the fare rules
@@ -270,3 +274,35 @@ test.describe('A booking whose flight has gone', () => {
         await expect(row.getByText(/full refund/)).toHaveCount(0);
     });
 });
+
+test.describe('A disrupted booking on a phone', () => {
+    test('says so where the screen can actually show it', async ({ page }) => {
+        // The visible premise of #229, and the only place it is proven against
+        // real geometry: at 390px the Status column sits past the right edge of
+        // a scrolling region, so without the copy beside the flight number a
+        // disrupted booking is pixel-identical to a confirmed one. Jest can
+        // only assert this with hand-stubbed offsets.
+        const flight = await aFlight(`PHN-${suffix.slice(-6)}`);
+        const email = `disrupt-phone-${suffix}@example.com`;
+        await createVerifiedAccount(page, { name: 'Phone Flyer', email, password });
+        const booking = await bookFor(email, flight.id, '5A');
+        await prisma.flight.update({ where: { id: flight.id }, data: { status: 'CANCELLED' } });
+        await prisma.booking.update({ where: { id: booking.id }, data: { status: 'DISRUPTED' } });
+
+        await page.setViewportSize({ width: 390, height: 844 });
+        await signInWithCredentials(page, { email, password });
+        await page.goto('/profile');
+
+        const compact = page.getByTestId(`compact-booking-status-${booking.id}`);
+        await expect(compact).toBeVisible();
+        await expect(compact).toContainText(`${flight.flightNumber} cancelled by airline`);
+
+        // Visible without scrolling sideways, which the Status column is not.
+        const box = (await compact.boundingBox())!;
+        expect(box.x + box.width).toBeLessThanOrEqual(390);
+
+        // Cleanup is `afterAll`'s: deleting the account here detaches the
+        // booking (userId is SET NULL), and then nothing matches it by email.
+    });
+});
+

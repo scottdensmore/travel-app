@@ -70,7 +70,10 @@ export function passengersSeatedOnLeg<TPassenger extends { id: string }>(
             // Every traveller holds an assignment on every leg, asserted against
             // the whole table by seatAssignmentCoverage.database.test.ts. A leg
             // with no seat for someone is a defect, not a shape to render.
-            seatNumber: held?.seatNumber ?? 'Not assigned',
+            // Empty rather than the words "Not assigned": the only reader
+            // renders this through `seatLabel`, which says so properly. The
+            // string used to be interpolated into "Seat Not assigned" (#229).
+            seatNumber: held?.seatNumber ?? '',
             releasedAt: held?.releasedAt ?? null,
             cabinClass: held?.cabinClass ?? 'ECONOMY',
         };
@@ -90,8 +93,13 @@ export function passengersSeatedOnLeg<TPassenger extends { id: string }>(
 export function seatLabel(
     seat: { seatNumber: string; releasedAt?: Date | string | null } | null | undefined,
 ): string {
-    if (!seat?.seatNumber) return 'Not assigned';
-    return seat.releasedAt ? 'Released' : seat.seatNumber;
+    if (!seat?.seatNumber) return 'No seat assigned';
+    // Named, not just numbered. "11A" beside a traveller's name is a seat only
+    // if you already know that; a screen reader announced it as a bare
+    // parenthetical, and a sighted reader had to infer it too (#229). The admin
+    // manifest said "Seat 11A" for a held seat but a bare "Released" for a
+    // let-go one; both now read this, so the two surfaces cannot drift.
+    return seat.releasedAt ? 'Seat released' : `Seat ${seat.seatNumber}`;
 }
 
 const CABIN_NAMES: Record<string, string> = {

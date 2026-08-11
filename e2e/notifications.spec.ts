@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { prisma } from '../lib/prisma';
 import { flightRouteInclude } from '@/lib/flightRoute';
-import { registerAndSignIn } from './helpers/auth';
+import { createVerifiedAccount, signInWithCredentials } from './helpers/auth';
 
 test.describe('User Notifications & Alerts Journey', () => {
   const uniqueEmail = `notiftest-${Date.now()}@example.com`;
@@ -9,8 +9,14 @@ test.describe('User Notifications & Alerts Journey', () => {
   const password = 'Password123!';
 
   test.beforeEach(async ({ page }) => {
-    // Register and login a fresh user to isolate notifications state
-    await registerAndSignIn(page, { name, email: uniqueEmail, password });
+    // One account for the whole file, signed in per test. Registering in
+    // `beforeEach` worked only while this spec had a single test: the second
+    // one hit the unique constraint on the email.
+    const existing = await prisma.user.findUnique({ where: { email: uniqueEmail } });
+    if (!existing) {
+      await createVerifiedAccount(page, { name, email: uniqueEmail, password });
+    }
+    await signInWithCredentials(page, { email: uniqueEmail, password });
   });
 
   test.afterAll(async () => {
@@ -132,7 +138,10 @@ test.describe('User Notifications & Alerts Journey', () => {
       await dialog.accept();
     });
     await page.click('button:has-text("Cancel")');
-    await expect(page.locator('text=Cancelled').first()).toBeVisible();
+    // The Status column. The copy shown beside the flight number when the
+    // column is out of reach carries a `compact-` prefix precisely so this
+    // cannot resolve to it -- it is aria-hidden and decorative (#229).
+    await expect(page.getByTestId(/^booking-status-/).first()).toContainText('Cancelled');
 
     // Verify notification badge is "1" again
     await expect(badge).toBeVisible({ timeout: 8000 });
@@ -142,5 +151,56 @@ test.describe('User Notifications & Alerts Journey', () => {
     await bellBtn.click();
     await expect(page.locator('text=Booking Cancelled:')).toBeVisible();
     await expect(page.locator('text=Deducted -')).toBeVisible();
+  });
+
+  test('the notification drawer is readable on a phone', async ({ page }) => {
+      // #208: the drawer was `position: absolute` inside a nav carrying
+      // `overflow-x: auto`, which forces `overflow-y: auto` and clipped a 389px
+      // panel to sixteen visible pixels. The clicks landed and the badge counted
+      // down, so nothing failed -- it was simply invisible, and no test noticed
+      // because every journey opens it at desktop width.
+      // Sized before loading, then the bell reached by scrolling the nav, which
+      // is what a real phone user does. Resizing afterwards pushes the bell off
+      // the right edge, collapsing the measured inset to its floor -- the one
+      // input at which the left-edge clamp is a no-op, so the test would pass
+      // against the very bug it is here for.
+      await page.setViewportSize({ width: 320, height: 700 });
+      await page.goto('/');
+
+      await page.locator('button[aria-label="Toggle notifications"]').click();
+      const drawer = page.getByRole('dialog', { name: /notifications/i });
+      await expect(drawer).toBeVisible();
+
+      const box = (await drawer.boundingBox())!;
+      const viewport = page.viewportSize()!;
+      // Inside the viewport on every edge, which is the whole claim.
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+      // And tall enough to read, rather than a sliver.
+      expect(box.height).toBeGreaterThan(100);
+
+      // The box alone proves nothing. `boundingBox()` reports layout geometry,
+      // which an ancestor's `overflow` clipping does not affect, and
+      // `toBeVisible()` ignores that clipping too -- so every assertion above
+      // is satisfied by a panel that is 52% clipped and unclickable at its
+      // centre, which is exactly the state #208 described. Ask the page what is
+      // actually painted there.
+      const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      const paintedAtCentre = await page.evaluate(
+          ({ x, y }) => document.elementFromPoint(x, y)?.closest('[role="dialog"]') !== null,
+          centre,
+      );
+      expect(paintedAtCentre).toBe(true);
+
+      // The width clamp only binds below about 336px, so 390 never exercises
+      // it. A phone this narrow is rare but real.
+      // And it survives a resize while open, which re-measures.
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect.poll(async () => {
+          const wider = (await drawer.boundingBox())!;
+          return { left: wider.x >= 0, right: wider.x + wider.width <= 390 };
+      }).toEqual({ left: true, right: true });
   });
 });

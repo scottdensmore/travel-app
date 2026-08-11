@@ -195,7 +195,7 @@ test.describe('Admin Control Journey', () => {
     expect(profileResponse?.ok()).toBe(true);
     const profileResponseBody = await profileResponse!.text();
     const profileVisibleText = await page.locator('body').innerText();
-    await expect(page.getByText('Manifest (11A)')).toBeVisible();
+    await expect(page.getByText('Manifest (Seat 11A)')).toBeVisible();
     for (const value of restrictedValues) {
       expect(profileResponseBody).not.toContain(value);
       expect(profileVisibleText).not.toContain(value);
@@ -269,7 +269,7 @@ test.describe('Admin Control Journey', () => {
       .locator(`tr:has-text("${activeOccurrence.flightNumber}"):has-text("(1 Cancelled)")`)
       .locator('button:has-text("Manifest")').click();
     const releasedManifest = await page.getByRole('dialog', { name: 'Passenger Manifest' }).innerText();
-    expect(releasedManifest).toContain('Released');
+    expect(releasedManifest).toContain('Seat released');
     expect(releasedManifest).not.toContain('Seat 11A');
     await page.locator('button:has-text("Close")').click();
     await expect(page.locator('h2:has-text("Passenger Manifest")')).not.toBeVisible();
