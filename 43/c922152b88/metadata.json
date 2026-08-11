@@ -1,0 +1,42 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "43c922152b88",
+  "strategy": "manual-commit",
+  "branch": "feat/flight-instants",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "__tests__/app/actions.test.ts",
+    "__tests__/components/FlightStatusBoard.test.tsx",
+    "__tests__/lib/FlightScheduleService.test.ts",
+    "__tests__/lib/flightTime.test.ts",
+    "app/actions.ts",
+    "app/admin/flights/AdminFlightsTable.tsx",
+    "components/ui/BookingCheckoutWizard.tsx",
+    "components/ui/FlightStatusBoard.tsx",
+    "components/ui/ProfileClient.tsx",
+    "components/ui/flightBookingForm.tsx",
+    "lib/FlightScheduleService.ts",
+    "lib/cancellationPolicy.ts",
+    "lib/dates.ts",
+    "lib/flightTime.ts",
+    "prisma/migrations/20260810210000_flight_departure_instants/migration.sql",
+    "prisma/schema.prisma",
+    "prisma/seed.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/43/c922152b88/0/metadata.json",
+      "transcript": "/43/c922152b88/0/full.jsonl",
+      "compact_transcript": "/43/c922152b88/0/transcript.jsonl",
+      "content_hash": "/43/c922152b88/0/content_hash.txt",
+      "prompt": "/43/c922152b88/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 4445,
+    "cache_creation_tokens": 8518041,
+    "cache_read_tokens": 987589718,
+    "output_tokens": 1463060,
+    "api_call_count": 2088
+  }
+}
