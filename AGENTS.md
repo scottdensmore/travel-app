@@ -159,18 +159,65 @@ Chart and other browser-interactive components need `'use client'`.
    **The verifier owns the slow checks; do not run them twice.** Split it by
    what a check costs:
 
-   - Run freely while working: `npm run lint`, `npx tsc --noEmit`, and the whole
-     unit project — about 18 seconds, and it needs nothing running.
-   - Run focused: the database tests covering what changed, and the single
-     Playwright spec whose journey changed.
-   - Leave to the verifier: the full database project, `npm run build`, and the
-     full `npx playwright test`. Those cost minutes each, running them in both
-     places doubles every slice for no extra signal, and a second concurrent run
-     competes for port 3000 and the shared database — which has already produced
-     failures that looked real and were not.
+   | Main agent | Verifier |
+   | --- | --- |
+   | The TDD inner loop — one file, via `--testPathPattern` | The full unit *and* database projects |
+   | The **red** step: does it fail for the intended reason | `npm run build` |
+   | The whole unit project once a slice is done | The full `npx playwright test` |
+   | `npm run lint`, `npx tsc --noEmit` | Migrations against a fresh *and* a populated database |
+   | The database tests covering what changed | An audit of every mutant reported killed |
+   | The single Playwright spec whose journey changed | `npm run lint` and `npx tsc --noEmit` again, on the final tree |
 
-   Mutation testing stays with the main agent and stays focused: run the suite
-   that should catch the mutant, not everything.
+   The verifier's column costs minutes per entry. Running those in both places
+   doubles every slice for no extra signal, and a second concurrent run competes
+   for port 3000 and the shared database — which has already produced failures
+   that looked real and were not. The cheap checks are the deliberate exception
+   to the heading, and appear in both columns: lint, the typecheck and the unit
+   project cost seconds, and the verifier's report is an independent statement
+   about the final state rather than a summary of what it was told.
+
+   Two things cannot move to the verifier. **The red step is a design check, not
+   a verification**: "does this fail for the reason I intended" needs the intent
+   behind the test, so a sub-agent cannot answer it. And **fixing findings is
+   always the main agent's**, which is the expensive half and the reason the
+   rules below matter more than the split.
+
+   **Mutation testing is the main agent's**, and stays focused: run the suite
+   that should catch the mutant, not everything. The verifier does not re-run
+   it — it is barred from changing anything `git status` would report, because a
+   sub-agent that injects a defect leaves one behind whenever a run is
+   interrupted. It audits the claim instead, which means the claim has to reach
+   it: **name each mutant and the suite that caught it when invoking the
+   verifier.** An unreported mutant is an
+   unaudited one, silently. Three that survived 781 tests reached a pull request
+   this way (#231).
+
+   The table lists *runs*, so it understates what the verifier is for. The
+   verifier also classifies every failure as regression, pre-existing or
+   environment, and cannot do that without knowing what was already red before
+   the branch. **Say what is failing on `main`** when invoking it, or the
+   classification is a guess dressed as a result.
+
+   **Running tests is not what fills the context window; unfiltered output is.**
+   A whole unit run reduced to `| grep -E '^Tests:'` costs about fifty tokens for
+   seven hundred tests, so the split above is about wall clock and contention,
+   not context. Three habits protect context far more than it does:
+
+   - **Never launch the verifier until the tree is settled.** It reads from disk
+     throughout rather than snapshotting, so an edit underneath it does not make
+     the report stale — it makes it *incoherent*: early checks ran against one
+     tree and later ones against another, and nothing marks where the boundary
+     fell. The result certifies a state that never existed at any single moment.
+     Wasted on both sides, twice in one session.
+   - **Prefer one thorough pass to several narrow ones.** Batch the fixes for a
+     round of findings and re-verify once. Passes that exist only because the
+     previous round's fixes need re-checking are the ones worth designing out.
+   - **Cap failure triage at two rounds.** Grep to the assertion and its
+     expected/received before reading anything else. If two rounds do not
+     explain the failure, hand the investigation to a sub-agent rather than
+     reading progressively more output. The same goes for a failure that smells
+     environmental — a stale `.next`, a port collision, a Prisma client left
+     over from a branch switch: ask a sub-agent whether it is real.
 
 8. **Review the code before every commit.** Two mechanisms cover this, and
    neither is a bespoke sub-agent:
