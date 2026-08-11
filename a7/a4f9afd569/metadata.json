@@ -1,0 +1,29 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "a7a4f9afd569",
+  "strategy": "manual-commit",
+  "branch": "refactor/agent-definitions-as-pointers",
+  "checkpoints_count": 5,
+  "files_touched": [
+    "AGENTS.md",
+    "__tests__/docs/agentInstructions.test.ts",
+    "docs/UI_REVIEW.md",
+    "docs/VERIFIER.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/a7/a4f9afd569/0/metadata.json",
+      "transcript": "/a7/a4f9afd569/0/full.jsonl",
+      "compact_transcript": "/a7/a4f9afd569/0/transcript.jsonl",
+      "content_hash": "/a7/a4f9afd569/0/content_hash.txt",
+      "prompt": "/a7/a4f9afd569/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 5207,
+    "cache_creation_tokens": 10009306,
+    "cache_read_tokens": 1248108500,
+    "output_tokens": 1744793,
+    "api_call_count": 2495
+  }
+}
