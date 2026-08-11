@@ -5,6 +5,7 @@ import {
     legDirectionLabel,
     outboundFlight,
     passengersSeatedOnLeg,
+    seatLabel,
 } from '@/lib/bookingItinerary';
 
 const seattle = { id: 1, flightNumber: 'GA101', from: 'Seattle, USA', to: 'Detroit, USA' };
@@ -84,7 +85,10 @@ describe('booking itinerary', () => {
             // somewhere else (#137).
             const leg = { seatAssignments: [] };
             expect(passengersSeatedOnLeg(leg, [ada])).toEqual([
-                { ...ada, seatNumber: 'Not assigned', releasedAt: null, cabinClass: 'ECONOMY' },
+                // Empty, not prose: the reader renders it through `seatLabel`,
+                // which says "No seat assigned". The words used to be
+                // interpolated into "Seat Not assigned" (#229).
+                { ...ada, seatNumber: '', releasedAt: null, cabinClass: 'ECONOMY' },
             ]);
         });
 
@@ -98,7 +102,7 @@ describe('booking itinerary', () => {
             expect(first.cabinClass).toBe('BUSINESS');
             // Grace has no assignment on this leg, so she is reported as
             // unseated rather than inheriting Ada's.
-            expect(second.seatNumber).toBe('Not assigned');
+            expect(second.seatNumber).toBe('');
         });
     });
 
@@ -151,3 +155,28 @@ describe('booking itinerary', () => {
         });
     });
 });
+
+/**
+ * How a seat reads, in the one place both surfaces read it from.
+ *
+ * Covered only through two component tests before. The profile said
+ * "Released" while the admin manifest said the same word for a different
+ * concept, and neither said "Seat" at all — a number beside a name is a seat
+ * only if you already know that (#229).
+ */
+describe('seatLabel', () => {
+    it('names the seat, not just its number', () => {
+        expect(seatLabel({ seatNumber: '11A', releasedAt: null })).toBe('Seat 11A');
+    });
+
+    it('says a released seat is released, without the number somebody else may hold', () => {
+        expect(seatLabel({ seatNumber: '11A', releasedAt: new Date() })).toBe('Seat released');
+    });
+
+    it('has an answer for a traveller with no seat', () => {
+        expect(seatLabel({ seatNumber: '', releasedAt: null })).toBe('No seat assigned');
+        expect(seatLabel(null)).toBe('No seat assigned');
+        expect(seatLabel(undefined)).toBe('No seat assigned');
+    });
+});
+

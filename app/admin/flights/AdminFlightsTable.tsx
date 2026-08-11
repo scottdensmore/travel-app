@@ -1,7 +1,7 @@
 "use client"
 import { flightFareCents, formatPrice } from '@/lib/bookingPricing';
 
-import { cabinLabel } from '@/lib/bookingItinerary';
+import { cabinLabel, seatLabel } from '@/lib/bookingItinerary';
 import React, { useEffect, useRef, useState } from 'react';
 import FlightStatusSelector from './FlightStatusSelector';
 import { flightDeparture } from '@/lib/flightTime';
@@ -317,7 +317,7 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                                                     <td style={{ padding: '10px 12px', fontSize: '0.85rem' }}>
                                                         <div>{cabinLabel(passenger.cabinClass)}</div>
                                                         <div style={{ color: isCancelled ? '#ef4444' : '#34d399', fontWeight: 'bold', fontSize: '0.75rem' }}>
-                                                            {passenger.releasedAt ? 'Released' : `Seat ${passenger.seatNumber}`}
+                                                            {seatLabel(passenger)}
                                                         </div>
                                                     </td>
                                                     <td style={{ padding: '10px 12px' }}>

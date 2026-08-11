@@ -211,7 +211,9 @@ describe('AdminFlightsTable', () => {
         expect(screen.queryByText('DOB')).not.toBeInTheDocument();
         expect(screen.queryByText('Passport')).not.toBeInTheDocument();
         expect(screen.getByText('Business')).toBeInTheDocument();
-        expect(screen.getByText('Released')).toBeInTheDocument();
+        // The manifest reads the same `seatLabel` the profile does now, so the
+        // two surfaces cannot drift apart on this string (#229).
+        expect(screen.getByText('Seat released')).toBeInTheDocument();
         // A disrupted passenger is neither confirmed nor cancelled: staff were
         // told a passenger on a flight the airline had cancelled was
         // "Confirmed", holding a live seat on it (#76).

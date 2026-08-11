@@ -1,6 +1,16 @@
 import React from 'react';
-import { cleanup, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
+
+/** jsdom has no ResizeObserver; keep the callbacks so a test can fire them. */
+const resizeObserverCallbacks: Array<() => void> = [];
+beforeEach(() => { resizeObserverCallbacks.length = 0; });
+global.ResizeObserver = class {
+    constructor(callback: () => void) { resizeObserverCallbacks.push(callback); }
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+} as unknown as typeof ResizeObserver;
 import ProfileClient from '@/components/ui/ProfileClient';
 import { cancelBookingAction, deleteReviewAction, toggleFavoriteCityGuideAction, changeBookingSeatsAction, getOccupiedSeatsAction } from '@/app/actions';
 import { useRouter } from 'next/navigation';
@@ -376,8 +386,8 @@ describe('ProfileClient interactive dashboard', () => {
             renderBookings([roundTripBooking]);
 
             const legs = within(screen.getByTestId('booking-row-202')).getAllByTestId(/^booking-leg-/);
-            expect(legs[0]).toHaveTextContent('Jane (12A)');
-            expect(legs[1]).toHaveTextContent('Jane (4C)');
+            expect(legs[0]).toHaveTextContent('Jane (Seat 12A)');
+            expect(legs[1]).toHaveTextContent('Jane (Seat 4C)');
         });
 
         it('labels a two-leg trip as a round trip and a single leg as one way', () => {
@@ -482,7 +492,7 @@ describe('ProfileClient interactive dashboard', () => {
             ]);
 
             const legs = within(screen.getByTestId('booking-row-202')).getAllByTestId(/^booking-leg-/);
-            expect(legs[0]).toHaveTextContent('Jane (Not assigned)');
+            expect(legs[0]).toHaveTextContent('Jane (No seat assigned)');
             expect(legs[0]).not.toHaveTextContent('12A');
         });
 
@@ -495,6 +505,139 @@ describe('ProfileClient interactive dashboard', () => {
                 flight: { ...leg.flight, status: index === 1 ? 'CANCELLED' : 'ON_TIME' },
             })),
         };
+
+        it('repeats the status where a phone can see it, without saying it twice', () => {
+            // At 390px the Status column sits past the right edge, so a
+            // disrupted booking was pixel-identical to a confirmed one. The
+            // copy beside the flight number fixes that for the eye and is
+            // hidden from assistive technology, which already hears the
+            // column (#229).
+            renderBookings([disruptedRoundTrip]);
+
+            const row = screen.getByTestId('booking-row-202');
+            const copies = within(row).getAllByText(/cancelled by airline/);
+            expect(copies).toHaveLength(2);
+
+            const phoneCopy = screen.getByTestId('compact-booking-status-202');
+            expect(phoneCopy).toHaveTextContent('cancelled by airline');
+            expect(phoneCopy).toHaveAttribute('aria-hidden', 'true');
+        });
+
+        it('shows the phone copy for a plain confirmed booking too', () => {
+            // Only the disrupted case was asserted, so the branch deciding the
+            // other two could be reverted in silence.
+            renderBookings([roundTripBooking]);
+
+            const row = screen.getByTestId('booking-row-202');
+            const copies = within(row).getAllByText('Confirmed');
+            expect(copies).toHaveLength(2);
+            expect(screen.getByTestId('compact-booking-status-202')).toHaveTextContent('Confirmed');
+        });
+
+        it('shows the phone copy when the status column is scrolled out of reach', () => {
+            // The branch every other test reached through the zero-width escape
+            // hatch: a region that genuinely measures, with the status cell
+            // past its right edge.
+            renderBookings([roundTripBooking]);
+
+            const region = screen.getByRole('region', { name: /your bookings/i });
+            const status = screen.getByTestId('booking-status-202');
+            Object.defineProperty(region, 'clientWidth', { configurable: true, value: 320 });
+            Object.defineProperty(region, 'scrollWidth', { configurable: true, value: 700 });
+            Object.defineProperty(region, 'scrollLeft', { configurable: true, value: 0 });
+            Object.defineProperty(status, 'offsetLeft', { configurable: true, value: 400 });
+            Object.defineProperty(status, 'offsetWidth', { configurable: true, value: 90 });
+            act(() => { resizeObserverCallbacks.forEach(run => run()); });
+
+            expect(screen.getByTestId('compact-booking-status-202')).toBeInTheDocument();
+        });
+
+        it('drops the phone copy once the status column has room', () => {
+            // The point of measuring rather than picking a breakpoint: the
+            // crossover moves with the widest row's content, so any number
+            // hard-coded here is wrong for somebody's data (#229).
+            renderBookings([roundTripBooking]);
+
+            const region = screen.getByRole('region', { name: /your bookings/i });
+            const status = screen.getByTestId('booking-status-202');
+            // The region still scrolls; the status cell is simply within it.
+            // That distinction is the whole point -- an overflow proxy kept the
+            // duplicate on screen for another 80-200px, because Status is not
+            // the last column.
+            Object.defineProperty(region, 'clientWidth', { configurable: true, value: 900 });
+            Object.defineProperty(region, 'scrollWidth', { configurable: true, value: 1100 });
+            Object.defineProperty(region, 'scrollLeft', { configurable: true, value: 0 });
+            Object.defineProperty(status, 'offsetLeft', { configurable: true, value: 500 });
+            Object.defineProperty(status, 'offsetWidth', { configurable: true, value: 90 });
+            expect(resizeObserverCallbacks.length).toBeGreaterThan(0);
+            act(() => { resizeObserverCallbacks.forEach(run => run()); });
+
+            expect(screen.queryByTestId('compact-booking-status-202')).not.toBeInTheDocument();
+            // The region still scrolls here, so it keeps its tab stop: tying
+            // the stop to the status being hidden left a ~190px band where the
+            // region scrolled with no keyboard way into it.
+            expect(region).toHaveAttribute('tabindex', '0');
+        });
+
+        it('stops being a tab stop only when nothing scrolls', () => {
+            renderBookings([roundTripBooking]);
+
+            const region = screen.getByRole('region', { name: /your bookings/i });
+            const status = screen.getByTestId('booking-status-202');
+            Object.defineProperty(region, 'clientWidth', { configurable: true, value: 900 });
+            Object.defineProperty(region, 'scrollWidth', { configurable: true, value: 900 });
+            Object.defineProperty(region, 'scrollLeft', { configurable: true, value: 0 });
+            Object.defineProperty(status, 'offsetLeft', { configurable: true, value: 500 });
+            Object.defineProperty(status, 'offsetWidth', { configurable: true, value: 90 });
+            act(() => { resizeObserverCallbacks.forEach(run => run()); });
+
+            expect(region).not.toHaveAttribute('tabindex');
+        });
+
+        it('shows the phone copy for a cancelled booking', () => {
+            // The third branch of the shared `statusText`, which no unit test
+            // reached -- only the slow suite caught a break in it.
+            renderBookings([{ ...roundTripBooking, status: 'CANCELLED' }]);
+
+            const row = screen.getByTestId('booking-row-202');
+            expect(within(row).getAllByText('Cancelled')).toHaveLength(2);
+        });
+
+        it('keeps the raised contrast on the status and the seat line', () => {
+            // Three contrast improvements in this change were unguarded: the
+            // status greens and reds, and the passenger line at 0.4 alpha
+            // measuring 3.80:1 (#229). A revert is a one-character edit.
+            renderBookings([roundTripBooking]);
+
+            const row = screen.getByTestId('booking-row-202');
+            expect(screen.getByTestId('compact-booking-status-202')).toHaveStyle({ color: '#34d399' });
+
+            // One seat line per leg; they share the style. 0.4 alpha measured
+            // 3.80:1 against the card, which is an actual AA failure rather
+            // than a near miss.
+            const [seatLine] = within(row).getAllByText(/Jane \(Seat/);
+            expect(seatLine).toHaveStyle({ color: 'rgba(255,255,255,0.72)' });
+        });
+
+        it('keeps the raised contrast on a cancelled status', () => {
+            // 6.59:1 against the card, where the shade it replaced measured
+            // 4.84:1. Both clear AA, so this guards an improvement rather than
+            // a violation -- asserted for symmetry with the other two.
+            renderBookings([{ ...roundTripBooking, status: 'CANCELLED' }]);
+
+            expect(screen.getByTestId('compact-booking-status-202'))
+                .toHaveStyle({ color: '#f87171' });
+        });
+
+        it('lets a keyboard reach the sideways-scrolling bookings region', () => {
+            // The status lives past the right edge at phone width, and a
+            // scrollable region a keyboard cannot focus is content it cannot
+            // read at all -- WCAG 2.1.1 (#229).
+            renderBookings([disruptedRoundTrip]);
+
+            const region = screen.getByRole('region', { name: /your bookings/i });
+            expect(region).toHaveAttribute('tabindex', '0');
+        });
 
         it('names the leg the airline cancelled, not whichever came first', () => {
             // The status cell sits beside leg 1, so it used to mark the
@@ -564,7 +707,7 @@ describe('ProfileClient interactive dashboard', () => {
             ]);
 
             const legs = within(screen.getByTestId('booking-row-202')).getAllByTestId(/^booking-leg-/);
-            expect(legs[0]).toHaveTextContent('Jane (Released)');
+            expect(legs[0]).toHaveTextContent('Jane (Seat released)');
             // The number is kept on the row now, and is exactly what must not
             // be shown: the seat is free and may already belong to somebody
             // else (#76).

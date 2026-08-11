@@ -193,7 +193,7 @@ test.describe('Flight Booking Journey', () => {
     // Save
     await page.click('button:has-text("Save New Seats")');
     await expect(page.locator('h2:has-text("Change Seats")')).not.toBeVisible();
-    await expect(page.locator('text=Bob (11B)')).toBeVisible();
+    await expect(page.locator('text=Bob (Seat 11B)')).toBeVisible();
 
     // --- CANCEL BOOKING FLOW ---
     page.once('dialog', async dialog => {
@@ -203,7 +203,10 @@ test.describe('Flight Booking Journey', () => {
     await page.click('button:has-text("Cancel")');
 
     // Confirm cancel status badge and action buttons are gone
-    await expect(page.locator('text=Cancelled').first()).toBeVisible();
+    // The Status column. The copy shown beside the flight number when the
+    // column is out of reach carries a `compact-` prefix precisely so this
+    // cannot resolve to it -- it is aria-hidden and decorative (#229).
+    await expect(page.getByTestId(/^booking-status-/).first()).toContainText('Cancelled');
     await expect(page.locator('button:has-text("Change Seats")')).not.toBeVisible();
 
     // The seat reads as released, and the number it held is not shown.
@@ -212,8 +215,8 @@ test.describe('Flight Booking Journey', () => {
     // Releasing a seat now keeps the real number on the row, so the page must
     // load `releasedAt` *and* render from it -- drop either and this prints
     // 11B, a seat the customer no longer holds and somebody else may (#76).
-    await expect(page.locator('text=Bob (Released)')).toBeVisible();
-    await expect(page.locator('text=Bob (11B)')).not.toBeVisible();
+    await expect(page.locator('text=Bob (Seat released)')).toBeVisible();
+    await expect(page.locator('text=Bob (Seat 11B)')).not.toBeVisible();
     
     // Confirm points are deducted back to starting points (1300)
     const pointsTextAfterCancel = await page.locator('p:has-text("Status Points")').textContent();
