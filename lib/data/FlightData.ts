@@ -9,6 +9,7 @@ export const FlightData = [
         airline: BRAND.name,
         from: 'Seattle, USA',
         to: 'Detroit, USA',
+        durationMinutes: 245,
         departureDate: new Date('2026-05-15T08:00:00Z'),
         priceCents: 35000,
         status: 'ON_TIME'
@@ -18,6 +19,7 @@ export const FlightData = [
         airline: BRAND.name,
         from: 'New York, USA',
         to: 'London, UK',
+        durationMinutes: 420,
         departureDate: new Date('2026-06-10T19:30:00Z'),
         priceCents: 85000,
         status: 'DELAYED'
@@ -27,6 +29,7 @@ export const FlightData = [
         airline: BRAND.name,
         from: 'San Francisco, USA',
         to: 'Tokyo, Japan',
+        durationMinutes: 680,
         departureDate: new Date('2026-07-05T11:00:00Z'),
         priceCents: 120000,
         status: 'CANCELLED'
@@ -36,6 +39,7 @@ export const FlightData = [
         airline: BRAND.name,
         from: 'Chicago, USA',
         to: 'Paris, France',
+        durationMinutes: 510,
         departureDate: new Date('2026-08-12T17:45:00Z'),
         priceCents: 95000,
         status: 'ON_TIME'
@@ -45,6 +49,7 @@ export const FlightData = [
         airline: BRAND.name,
         from: 'Miami, USA',
         to: 'Rio de Janeiro, Brazil',
+        durationMinutes: 525,
         departureDate: new Date('2026-09-18T22:00:00Z'),
         priceCents: 50000,
         status: 'ON_TIME'
@@ -67,6 +72,7 @@ export const FlightScheduleData = [
         airline: BRAND.name,
         from: 'Seattle, USA',
         to: 'Detroit, USA',
+        durationMinutes: 245,
         departureTime: '08:00',
         daysOfWeek: [1, 3, 5], // Mon, Wed, Fri
         priceCents: 35000
@@ -76,6 +82,7 @@ export const FlightScheduleData = [
         airline: BRAND.name,
         from: 'New York, USA',
         to: 'London, UK',
+        durationMinutes: 420,
         departureTime: '19:30',
         daysOfWeek: [2, 4, 6], // Tue, Thu, Sat
         priceCents: 85000
@@ -85,6 +92,7 @@ export const FlightScheduleData = [
         airline: BRAND.name,
         from: 'San Francisco, USA',
         to: 'Tokyo, Japan',
+        durationMinutes: 680,
         departureTime: '11:00',
         daysOfWeek: [0, 2, 4], // Sun, Tue, Thu
         priceCents: 120000
@@ -94,6 +102,7 @@ export const FlightScheduleData = [
         airline: BRAND.name,
         from: 'Chicago, USA',
         to: 'Paris, France',
+        durationMinutes: 510,
         departureTime: '17:45',
         daysOfWeek: [1, 3, 5], // Mon, Wed, Fri
         priceCents: 95000
@@ -103,6 +112,7 @@ export const FlightScheduleData = [
         airline: BRAND.name,
         from: 'Miami, USA',
         to: 'Rio de Janeiro, Brazil',
+        durationMinutes: 525,
         departureTime: '22:00',
         daysOfWeek: [0, 3, 5], // Sun, Wed, Fri
         priceCents: 50000
@@ -115,6 +125,7 @@ export const FlightScheduleData = [
         airline: BRAND.name,
         from: 'Detroit, USA',
         to: 'Seattle, USA',
+        durationMinutes: 285,
         departureTime: '18:00',
         daysOfWeek: [1, 3, 5], // Mon, Wed, Fri
         priceCents: 35000
@@ -124,6 +135,7 @@ export const FlightScheduleData = [
         airline: BRAND.name,
         from: 'London, UK',
         to: 'New York, USA',
+        durationMinutes: 485,
         departureTime: '10:00',
         daysOfWeek: [2, 4, 6], // Tue, Thu, Sat
         priceCents: 85000
@@ -133,6 +145,7 @@ export const FlightScheduleData = [
         airline: BRAND.name,
         from: 'Tokyo, Japan',
         to: 'San Francisco, USA',
+        durationMinutes: 575,
         departureTime: '15:00',
         daysOfWeek: [0, 2, 4], // Sun, Tue, Thu
         priceCents: 120000
@@ -142,6 +155,7 @@ export const FlightScheduleData = [
         airline: BRAND.name,
         from: 'Paris, France',
         to: 'Chicago, USA',
+        durationMinutes: 560,
         departureTime: '09:30',
         daysOfWeek: [1, 3, 5], // Mon, Wed, Fri
         priceCents: 95000

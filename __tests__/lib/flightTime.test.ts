@@ -3,7 +3,10 @@ import fs from 'fs';
 import path from 'path';
 import {
     airportLocalInstant,
+    arrivalInstant,
     departureInOriginZone,
+    durationLabel,
+    flightArrival,
 } from '@/lib/flightTime';
 
 const repositoryRoot = path.resolve(__dirname, '../..');
@@ -187,5 +190,103 @@ describe('no screen renders a departure in the viewer\'s timezone', () => {
             });
 
         expect(offenders).toEqual([]);
+    });
+});
+
+describe('when a flight lands', () => {
+    /**
+     * The reason the duration is stored rather than the arrival derived from
+     * two local times: across a timezone, subtracting them is not a duration.
+     * Tokyo to San Francisco lands hours *earlier* by the clock than it left,
+     * and a shorter New York to London hop lands the next day.
+     */
+    it('is the departure plus the elapsed minutes, whatever the zones', () => {
+        expect(arrivalInstant('2026-08-16T15:00:00.000Z', 680).toISOString())
+            .toBe('2026-08-17T02:20:00.000Z');
+    });
+
+    it('reads at the destination, with no day marker for an ordinary hop', () => {
+        // Seattle 08:00 PDT, 4h05 to Detroit: lands 15:05 EDT the same day.
+        const arrival = flightArrival({
+            departureDate: airportLocalInstant('2026-08-17', '08:00', 'America/Los_Angeles'),
+            durationMinutes: 245,
+            from: 'Seattle, USA',
+            to: 'Detroit, USA',
+        });
+
+        expect(arrival).toMatchObject({ date: '2026-08-17', time: '15:05', dayOffset: 0 });
+    });
+
+    it('marks the next day for an overnight crossing', () => {
+        // New York 19:30 EDT, 7h to London: lands 07:30 BST the next morning.
+        const arrival = flightArrival({
+            departureDate: airportLocalInstant('2026-08-17', '19:30', 'America/New_York'),
+            durationMinutes: 420,
+            from: 'New York, USA',
+            to: 'London, UK',
+        });
+
+        expect(arrival).toMatchObject({ date: '2026-08-18', time: '07:30', dayOffset: 1 });
+    });
+
+    it('marks a day gained crossing the date line westward', () => {
+        // San Francisco 11:00 PDT, 11h20 to Tokyo: lands the *following* day
+        // despite taking less than a day.
+        const arrival = flightArrival({
+            departureDate: airportLocalInstant('2026-08-17', '11:00', 'America/Los_Angeles'),
+            durationMinutes: 680,
+            from: 'San Francisco, USA',
+            to: 'Tokyo, Japan',
+        });
+
+        expect(arrival.dayOffset).toBe(1);
+    });
+
+    it('lands on the same date it left coming the other way', () => {
+        // Tokyo 15:00 JST, 9h35 to San Francisco: arrives 08:35 the same
+        // calendar date, having "gone back" in local time. Subtracting the two
+        // clocks would report minus six hours.
+        const arrival = flightArrival({
+            departureDate: airportLocalInstant('2026-08-17', '15:00', 'Asia/Tokyo'),
+            durationMinutes: 575,
+            from: 'Tokyo, Japan',
+            to: 'San Francisco, USA',
+        });
+
+        expect(arrival).toMatchObject({ date: '2026-08-17', time: '08:35', dayOffset: 0 });
+    });
+
+    it('counts the day marker in calendar days, not in elapsed time', () => {
+        // A 4h05 hop that leaves at 23:00 lands the next day; a 9h35 crossing
+        // can land the same day. Elapsed time cannot tell you which.
+        const lateHop = flightArrival({
+            departureDate: airportLocalInstant('2026-08-17', '23:00', 'America/Los_Angeles'),
+            durationMinutes: 245,
+            from: 'Seattle, USA',
+            to: 'Detroit, USA',
+        });
+
+        expect(lateHop.dayOffset).toBe(1);
+    });
+
+    it('marks a landing on an earlier date crossing the line eastward', () => {
+        // Tokyo before about 06:25 lands the *previous* calendar date in San
+        // Francisco. It is the row a reader most needs the marker on -- the
+        // arrival otherwise looks like a mistake -- and admin-authored data
+        // reaches it even though the seed does not.
+        const arrival = flightArrival({
+            departureDate: airportLocalInstant('2026-08-17', '00:30', 'Asia/Tokyo'),
+            durationMinutes: 575,
+            from: 'Tokyo, Japan',
+            to: 'San Francisco, USA',
+        });
+
+        expect(arrival).toMatchObject({ date: '2026-08-16', dayOffset: -1 });
+    });
+
+    it('states elapsed time the way a timetable does', () => {
+        expect(durationLabel(245)).toBe('4h 05m');
+        expect(durationLabel(680)).toBe('11h 20m');
+        expect(durationLabel(60)).toBe('1h 00m');
     });
 });

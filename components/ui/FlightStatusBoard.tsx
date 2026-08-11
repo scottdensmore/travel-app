@@ -3,7 +3,7 @@ import { flightFareCents, formatPrice } from '@/lib/bookingPricing';
 
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { flightDeparture } from '@/lib/flightTime';
+import { durationLabel, flightArrival, flightDeparture } from '@/lib/flightTime';
 
 interface Flight {
     id: number;
@@ -12,6 +12,9 @@ interface Flight {
     from: string;
     to: string;
     departureDate: Date | string;
+    /// Elapsed minutes, from which the arrival is derived. Null for a flight
+    /// created outside a schedule, which then shows no arrival (#84).
+    durationMinutes?: number | null;
     priceCents: number;
     status: string;
 }
@@ -224,13 +227,20 @@ export default function FlightStatusBoard({ flights, coverage }: FlightStatusBoa
                                         <th style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa' }}>Flight</th>
                                         <th style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa' }}>From</th>
                                         <th style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa' }}>To</th>
-                                        <th style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa' }}>Departure</th>
+                                        <th style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa' }}>Departure / Arrival</th>
                                         <th style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa' }}>Status</th>
                                         <th style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa', textAlign: 'right' }}>Price</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filteredFlights.map((flight) => (
+                                    {filteredFlights.map((flight) => {
+                                    // Once per row: each of these builds Intl
+                                    // formatters, and the board renders many.
+                                    const departure = flightDeparture(flight);
+                                    const arrival = flight.durationMinutes
+                                        ? flightArrival({ ...flight, durationMinutes: flight.durationMinutes })
+                                        : null;
+                                    return (
                                         <tr key={flight.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.06)', transition: 'background-color 0.2s' }} className="hover:bg-white/5 transition-colors">
                                             <td style={{ padding: '1.25rem 1.5rem' }}>
                                                 <div style={{ fontWeight: 'bold', color: '#c084fc' }}>{flight.airline}</div>
@@ -239,9 +249,30 @@ export default function FlightStatusBoard({ flights, coverage }: FlightStatusBoa
                                             <td style={{ padding: '1.25rem 1.5rem', fontWeight: '500', color: '#fff' }}>{flight.from}</td>
                                             <td style={{ padding: '1.25rem 1.5rem', fontWeight: '500', color: '#fff' }}>{flight.to}</td>
                                             <td style={{ padding: '1.25rem 1.5rem', color: '#fff' }}>
-                                                <div style={{ whiteSpace: 'nowrap' }}>{flightDeparture(flight).readableDate}</div>
+                                                <div style={{ whiteSpace: 'nowrap' }}>{departure.readableDate}</div>
                                                 <div style={{ fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.5)' }}>
-                                                    {flightDeparture(flight).time} {flightDeparture(flight).zoneLabel}
+                                                    {departure.time} {departure.zoneLabel}
+                                                    {arrival ? (
+                                                        <>
+                                                            {/* Arrival on the destination's clock, and the day
+                                                                marker a timetable prints. Neither can be had by
+                                                                subtracting the two local times (#84).
+
+                                                                Worded rather than an arrow: a screen reader
+                                                                either drops U+2192 or says "right arrow", which
+                                                                left a bare second time under a Departure
+                                                                heading. And the day marker is spelled out --
+                                                                "+1" sat directly against a "GMT+1" zone label,
+                                                                where no reader could tell which was which. */}
+                                                            <div style={{ color: 'rgba(255, 255, 255, 0.75)' }}>
+                                                                Arrives {arrival.time} {arrival.zoneLabel}
+                                                                {arrival.dayOffset === 1 ? ' (next day)' : ''}
+                                                                {arrival.dayOffset > 1 ? ` (+${arrival.dayOffset} days)` : ''}
+                                                                {arrival.dayOffset < 0 ? ' (previous day)' : ''}
+                                                            </div>
+                                                            <div>{durationLabel(flight.durationMinutes!)}</div>
+                                                        </>
+                                                    ) : null}
                                                 </div>
                                             </td>
                                             <td style={{ padding: '1.25rem 1.5rem' }}>
@@ -260,7 +291,8 @@ export default function FlightStatusBoard({ flights, coverage }: FlightStatusBoa
                                                 {formatPrice(flightFareCents(flight))}
                                             </td>
                                         </tr>
-                                    ))}
+                                    );
+                                    })}
                                 </tbody>
                             </table>
                         </div>

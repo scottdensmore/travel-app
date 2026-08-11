@@ -68,6 +68,7 @@ async function leaveARowInEveryTrackedTable(): Promise<string> {
             from: 'Seattle, USA',
             to: 'Detroit, USA',
             departureTime: '09:00',
+            durationMinutes: 245,
             daysOfWeek: [1],
             priceCents: 35_000,
         },

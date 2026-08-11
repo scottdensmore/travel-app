@@ -16,6 +16,7 @@ interface FlightSchedule {
     from: string;
     to: string;
     departureTime: string;
+    durationMinutes: number;
     daysOfWeek: number[];
     priceCents: number | null;
     firstClassRows?: number | null;
@@ -34,6 +35,11 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
     const [from, setFrom] = useState(initialSchedule?.from ?? '');
     const [to, setTo] = useState(initialSchedule?.to ?? '');
     const [departureTime, setDepartureTime] = useState(initialSchedule?.departureTime ?? '');
+    // Minutes gate to gate. Stated rather than inferred: an arrival time cannot
+    // be had by subtracting local times across a timezone (#84).
+    const [durationMinutes, setDurationMinutes] = useState(
+        initialSchedule?.durationMinutes ? String(initialSchedule.durationMinutes) : '',
+    );
     const [price, setPrice] = useState(
         initialSchedule?.priceCents === undefined || initialSchedule?.priceCents === null
             ? ''
@@ -82,7 +88,7 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
         setSuccess(null);
 
         // Validation
-        if (!flightNumber || !airline || !from || !to || !departureTime || !price) {
+        if (!flightNumber || !airline || !from || !to || !departureTime || !durationMinutes || !price) {
             setError('Please fill in all required fields.');
             return;
         }
@@ -124,6 +130,7 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                     from,
                     to,
                     departureTime,
+                    durationMinutes: Number(durationMinutes),
                     daysOfWeek,
                     price: formattedPrice,
                     firstClassRows: fRows,
@@ -164,6 +171,7 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                     setFrom('');
                     setTo('');
                     setDepartureTime('');
+                    setDurationMinutes('');
                     setPrice('');
                     setDaysOfWeek([]);
                     setFirstClassRows('3');
@@ -279,6 +287,29 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                         disabled={isPending}
                         required
                     />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label htmlFor="durationMinutes" style={{ fontSize: '0.85rem', color: '#a78bfa', fontWeight: 'bold' }}>Duration (minutes) *</label>
+                    <input
+                        id="durationMinutes"
+                        type="number"
+                        min={1}
+                        max={3 * 24 * 60}
+                        step={1}
+                        inputMode="numeric"
+                        value={durationMinutes}
+                        onChange={e => setDurationMinutes(e.target.value)}
+                        placeholder="e.g. 245"
+                        disabled={isPending}
+                        required
+                        aria-invalid={Boolean(fieldErrors.durationMinutes) || undefined}
+                        aria-describedby={fieldErrors.durationMinutes ? 'durationMinutes-error' : undefined}
+                    />
+                    {fieldErrors.durationMinutes && (
+                        <p id="durationMinutes-error" style={{ color: '#f87171', fontSize: '0.8rem', margin: 0 }}>
+                            {fieldErrors.durationMinutes}
+                        </p>
+                    )}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <label htmlFor="price" style={{ fontSize: '0.85rem', color: '#a78bfa', fontWeight: 'bold' }}>Price ($) *</label>

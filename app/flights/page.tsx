@@ -88,6 +88,11 @@ export default async function FlightsPage() {
             flightNumber: true,
             airline: true,
             departureDate: true,
+            // The board derives the arrival from this. Omitted, every row
+            // silently loses its arrival line -- the same seam that hid a
+            // released seat in #230, and one a component test cannot see
+            // because it is handed props directly (#84).
+            durationMinutes: true,
             priceCents: true,
             status: true,
             ...flightRouteInclude,

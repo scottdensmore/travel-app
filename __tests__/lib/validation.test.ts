@@ -17,6 +17,61 @@ import {
     seatChangesSchema
 } from '@/lib/validation';
 
+/**
+ * A schedule must say how long its flight takes.
+ *
+ * It is required at three layers -- the form, this schema and a NOT NULL column
+ * -- and was asserted at none, so every one of them could be relaxed with the
+ * suite still green. Without it there is no arrival time, and the alternative
+ * is the subtraction of local times #84 exists to remove.
+ */
+describe('a schedule states its flight duration', () => {
+    const schedule = (durationMinutes: unknown) => ({
+        flightNumber: 'MA900',
+        airline: 'Mona Airways',
+        from: 'Seattle, USA',
+        to: 'Detroit, USA',
+        departureTime: '08:00',
+        durationMinutes,
+        daysOfWeek: [1],
+        price: '350',
+    });
+
+    it('accepts a plausible block time', () => {
+        expect(scheduleSchema.safeParse(schedule(245)).success).toBe(true);
+    });
+
+    it('refuses a schedule with none', () => {
+        const parsed = scheduleSchema.safeParse(schedule(undefined));
+
+        expect(parsed.success).toBe(false);
+        expect(JSON.stringify(parsed.error?.issues)).toMatch(/duration is required/i);
+    });
+
+    it('refuses nothing, and refuses time running backwards', () => {
+        for (const bad of [0, -5]) {
+            const parsed = scheduleSchema.safeParse(schedule(bad));
+            expect({ bad, ok: parsed.success }).toEqual({ bad, ok: false });
+            expect(JSON.stringify(parsed.error?.issues)).toMatch(/at least one minute/i);
+        }
+    });
+
+    it('refuses a number that is not whole minutes', () => {
+        const parsed = scheduleSchema.safeParse(schedule(1.5));
+
+        expect(parsed.success).toBe(false);
+        expect(JSON.stringify(parsed.error?.issues)).toMatch(/whole number of minutes/i);
+    });
+
+    it('refuses a duration longer than any sector, which catches a wrong unit', () => {
+        // 99999 is what someone types when they meant seconds, or hours.
+        const parsed = scheduleSchema.safeParse(schedule(99_999));
+
+        expect(parsed.success).toBe(false);
+        expect(JSON.stringify(parsed.error?.issues)).toMatch(/shorter than three days/i);
+    });
+});
+
 describe('shared server validation schemas', () => {
     afterEach(() => jest.useRealTimers());
 
@@ -79,6 +134,7 @@ describe('shared server validation schemas', () => {
             from: ' Seattle, USA ',
             to: ' Detroit, USA ',
             departureTime: '08:00',
+            durationMinutes: 245,
             daysOfWeek: [5, 1],
             price: '$350',
             firstClassRows: 3,
@@ -94,7 +150,7 @@ describe('shared server validation schemas', () => {
         });
         expect(scheduleSchema.safeParse({
             flightNumber: 'AA101', airline: 'Air', from: 'A', to: 'B',
-            departureTime: '08:00', daysOfWeek: [1, 1], price: '$1'
+            departureTime: '08:00', durationMinutes: 245, daysOfWeek: [1, 1], price: '$1'
         }).success).toBe(false);
     });
 
@@ -329,7 +385,7 @@ describe('shared server validation schemas', () => {
         // impossible to re-save without editing the price (#135).
         const base = {
             flightNumber: 'MA1', airline: 'A', from: 'X', to: 'Y',
-            departureTime: '08:00', daysOfWeek: [1],
+            departureTime: '08:00', durationMinutes: 245, daysOfWeek: [1],
         };
         expect(scheduleSchema.safeParse({ ...base, price: '$1,234.56' }).success).toBe(true);
         expect(scheduleSchema.safeParse({ ...base, price: '$1234' }).success).toBe(true);
@@ -354,7 +410,7 @@ describe('shared server validation schemas', () => {
 
         const boundarySchedule = {
             flightNumber: 'AB12345678', airline: 'A'.repeat(120), from: 'F'.repeat(120), to: 'T'.repeat(120),
-            departureTime: '23:59', daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+            departureTime: '23:59', durationMinutes: 245, daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
             price: '$999999', firstClassRows: 0, businessRows: 0,
             premiumEconomyRows: 0, economyRows: 1, seatPattern: 'ABCDEFGHIJKL'
         };

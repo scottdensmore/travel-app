@@ -191,3 +191,69 @@ export function departureInOriginZone(
             .find(part => part.type === 'timeZoneName')!.value,
     };
 }
+
+/** A flight's arrival, read at the airport it lands in. */
+export interface LocalArrival extends LocalDeparture {
+    /**
+     * How many calendar days later it lands, at the destination. Almost always
+     * 0 or 1; eastbound long-haul can be 1 even on a short flight, and a
+     * westbound crossing of the date line can be negative.
+     */
+    dayOffset: number;
+}
+
+/**
+ * When a flight lands, as an instant.
+ *
+ * Departure plus elapsed minutes. No timezone is involved and none can be: an
+ * elapsed duration is the same number of minutes wherever either end of the
+ * route is, which is exactly why the duration is what gets stored (#84).
+ */
+export function arrivalInstant(departure: Date | string, durationMinutes: number): Date {
+    const instant = departure instanceof Date ? departure : new Date(departure);
+    return new Date(instant.getTime() + durationMinutes * 60_000);
+}
+
+/**
+ * A flight's arrival, read at the destination -- with how many days later that
+ * is than the departure was at the origin.
+ *
+ * The offset is the `+1` a timetable prints, and it is a comparison between two
+ * *local* dates in two different zones. It cannot be had by subtracting
+ * instants: a Tokyo to San Francisco flight lands on the same calendar date it
+ * left, hours earlier by the clock, while a shorter New York to London hop
+ * lands the next day.
+ */
+export function flightArrival(flight: {
+    departureDate: Date | string;
+    durationMinutes: number;
+    from: string;
+    to: string;
+}): LocalArrival {
+    const arrival = arrivalInstant(flight.departureDate, flight.durationMinutes);
+    const atDestination = departureInOriginZone(arrival, airportTimeZoneFor(flight.to));
+    const atOrigin = departureInOriginZone(flight.departureDate, airportTimeZoneFor(flight.from));
+
+    return { ...atDestination, dayOffset: calendarDaysBetween(atOrigin.date, atDestination.date) };
+}
+
+/**
+ * Whole calendar days from one `YYYY-MM-DD` to another.
+ *
+ * Both are read as UTC midnights purely to count days between them; neither is
+ * an instant and no zone applies. Doing it any other way -- subtracting the two
+ * flights' instants, say -- answers a different question and gets the marker
+ * wrong for every route that crosses a date boundary without taking 24 hours.
+ */
+function calendarDaysBetween(from: string, to: string): number {
+    const start = Date.parse(`${from}T00:00:00.000Z`);
+    const end = Date.parse(`${to}T00:00:00.000Z`);
+    return Math.round((end - start) / 86_400_000);
+}
+
+/** `7h 05m`, the way a timetable states elapsed time. */
+export function durationLabel(durationMinutes: number): string {
+    const hours = Math.floor(durationMinutes / 60);
+    const minutes = durationMinutes % 60;
+    return `${hours}h ${String(minutes).padStart(2, '0')}m`;
+}

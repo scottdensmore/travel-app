@@ -594,12 +594,14 @@ describe('getFlightRoutesAction', () => {
                 from: 'Chicago, USA',
                 to: 'Paris, France',
                 departureTime: '17:45',
+                durationMinutes: 245,
                 daysOfWeek: [2],
             },
             {
                 from: 'Seattle, USA',
                 to: 'Detroit, USA',
                 departureTime: '08:00',
+                durationMinutes: 245,
                 daysOfWeek: [1, 3, 5],
             },
         ];
@@ -1366,6 +1368,7 @@ describe('admin flight schedule actions', () => {
             from: 'New York, USA',
             to: 'London, UK',
             departureTime: '08:00',
+            durationMinutes: 245,
             daysOfWeek: [1], // Mondays
             price: '$850',
         };
@@ -1440,6 +1443,7 @@ describe('admin flight schedule actions', () => {
                 // The persisted schedule carries the fare the generator copies
                 // onto each occurrence.
                 priceCents: 85000,
+                durationMinutes: 245,
             });
             mockedFlightFindFirst.mockResolvedValue(null); // No existing flight instance
             mockedFlightCreate.mockResolvedValue({});
@@ -1452,6 +1456,7 @@ describe('admin flight schedule actions', () => {
                     price: undefined,
                     // The fare is stored only in minor units now (#135).
                     priceCents: 85000,
+                    durationMinutes: 245,
                     firstClassRows: 3,
                     businessRows: 3,
                     premiumEconomyRows: 4,
@@ -1471,6 +1476,7 @@ describe('admin flight schedule actions', () => {
                     toAirportCode: 'LHR',
                     departureDate: new Date('2026-06-29T12:00:00Z'),
                     priceCents: 85000,
+                    durationMinutes: 245,
                     status: 'ON_TIME',
                     firstClassRows: 3,
                     businessRows: 3,
@@ -1511,6 +1517,7 @@ describe('admin flight schedule actions', () => {
                     price: undefined,
                     // The fare is stored only in minor units now (#135).
                     priceCents: 85000,
+                    durationMinutes: 245,
                     firstClassRows: 3,
                     businessRows: 3,
                     premiumEconomyRows: 4,
@@ -1722,6 +1729,7 @@ describe('admin flight schedule actions', () => {
                     from: 'New York, USA',
                     to: 'San Francisco, USA',
                     departureTime: '08:00',
+                    durationMinutes: 245,
                     daysOfWeek: [1], // Mondays
                     priceCents: 50000,
                 });
@@ -1746,6 +1754,9 @@ describe('admin flight schedule actions', () => {
                         fromAirportCode: 'JFK',
                         toAirportCode: 'SFO',
                         departureDate: new Date('2026-07-06T12:00:00Z'),
+                        // Inherited from the schedule: a flight knows how long
+                        // it takes because its schedule stated it (#84).
+                        durationMinutes: 245,
                         priceCents: 50000,
                         status: 'ON_TIME',
                         firstClassRows: 3,
@@ -1830,6 +1841,7 @@ describe('admin flight schedule actions', () => {
                     from: 'New York, USA',
                     to: 'San Francisco, USA',
                     departureTime: '08:00',
+                    durationMinutes: 245,
                     daysOfWeek: [1],
                     priceCents: 50000,
                 });
@@ -1853,6 +1865,7 @@ describe('admin flight schedule actions', () => {
                     from: 'New York, USA',
                     to: 'San Francisco, USA',
                     departureTime: '08:00',
+                    durationMinutes: 245,
                     daysOfWeek: [1],
                     priceCents: 50000,
                 });
@@ -1883,6 +1896,7 @@ describe('admin flight schedule actions', () => {
                     from: 'New York, USA',
                     to: 'San Francisco, USA',
                     departureTime: '08:00',
+                    durationMinutes: 245,
                     daysOfWeek: [1],
                     priceCents: 50000,
                 });
@@ -1936,6 +1950,7 @@ describe('admin flight schedule actions', () => {
                     from: 'New York, USA',
                     to: 'San Francisco, USA',
                     departureTime: '08:00',
+                    durationMinutes: 245,
                     daysOfWeek: [1],
                     priceCents: 50000,
                 });
@@ -1979,6 +1994,7 @@ describe('admin flight schedule actions', () => {
                     from: 'New York, USA',
                     to: 'San Francisco, USA',
                     departureTime: '08:00',
+                    durationMinutes: 245,
                     daysOfWeek: [1],
                     priceCents: 50000,
                 });

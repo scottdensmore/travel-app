@@ -66,6 +66,65 @@ describe('a departure is shown at the airport it leaves from', () => {
         expect(screen.getByText(/08:00/)).toBeInTheDocument();
     });
 
+    it('says when it arrives, on the destination\'s clock', () => {
+        render(<FlightStatusBoard flights={[{
+            ...mockFlights[0],
+            id: 9003,
+            from: 'Tokyo, Japan',
+            to: 'San Francisco, USA',
+            // 15:00 JST, 9h35: lands 08:35 the same calendar date, earlier by
+            // the clock than it left. Subtracting the two would give minus six
+            // hours.
+            departureDate: '2026-08-17T06:00:00Z',
+            durationMinutes: 575,
+        }] as never} coverage="the next 7 days" />);
+
+        expect(screen.getByText(/Arrives 08:35/)).toBeInTheDocument();
+        expect(screen.getByText('9h 35m')).toBeInTheDocument();
+        expect(screen.queryByText(/next day/)).not.toBeInTheDocument();
+    });
+
+    it('marks a landing on the following day in words', () => {
+        // "+1" sat directly against a "GMT+1" zone label, where no reader could
+        // tell which was which.
+        render(<FlightStatusBoard flights={[{
+            ...mockFlights[0],
+            id: 9004,
+            from: 'New York, USA',
+            to: 'London, UK',
+            departureDate: '2026-08-17T23:30:00Z',
+            durationMinutes: 420,
+        }] as never} coverage="the next 7 days" />);
+
+        expect(screen.getByText(/next day/)).toBeInTheDocument();
+        expect(screen.queryByText(/\+1 GMT/)).not.toBeInTheDocument();
+    });
+
+    it('says so when the landing is on an earlier date than the departure', () => {
+        render(<FlightStatusBoard flights={[{
+            ...mockFlights[0],
+            id: 9006,
+            from: 'Tokyo, Japan',
+            to: 'San Francisco, USA',
+            // 00:30 JST, 9h35: lands the previous calendar date in San
+            // Francisco. Without the marker the row reads as a mistake.
+            departureDate: '2026-08-16T15:30:00Z',
+            durationMinutes: 575,
+        }] as never} coverage="the next 7 days" />);
+
+        expect(screen.getByText(/previous day/)).toBeInTheDocument();
+    });
+
+    it('shows no arrival for a flight with no stated duration', () => {
+        // A flight created outside a schedule knows no duration, and an
+        // invented arrival is worse than none.
+        render(<FlightStatusBoard flights={[{
+            ...mockFlights[0], id: 9005, durationMinutes: null,
+        }] as never} coverage="the next 7 days" />);
+
+        expect(screen.queryByText(/Arrives/)).not.toBeInTheDocument();
+    });
+
     it('names the timezone, so the time is not just a number', () => {
         render(<FlightStatusBoard flights={[{
             ...mockFlights[0],

@@ -30,6 +30,7 @@ function fill() {
     // The form checks the rest of the required fields before it calls the
     // action, so they have to be present for the server's answer to be reached.
     fireEvent.change(screen.getByLabelText(/Departure \(HH:MM\)/i), { target: { value: '08:00' } });
+    fireEvent.change(screen.getByLabelText(/Duration \(minutes\)/i), { target: { value: '245' } });
     fireEvent.change(screen.getByLabelText(/Price/i), { target: { value: '350' } });
     fireEvent.click(screen.getByText('Mon'));
 }

@@ -66,8 +66,14 @@ describe('flight status board page', () => {
         const { select } = await queryArgs();
 
         expect(Object.keys(select).sort()).toEqual([
-            'airline', 'departureDate', 'flightNumber', 'fromAirport', 'id', 'priceCents', 'status', 'toAirport',
+            'airline', 'departureDate', 'durationMinutes', 'flightNumber', 'fromAirport', 'id',
+            'priceCents', 'status', 'toAirport',
         ]);
+        // Pinning the list catches a column arriving that nothing reads. It
+        // does not catch the opposite -- the board growing a field the select
+        // never adds -- which is how the arrival line shipped rendering
+        // nothing at all (#84). `renders every field it asks for` below is the
+        // half that watches that direction.
         // The route comes from the airports the flight references, not from the
         // prose columns beside them (#73).
         expect(select.fromAirport).toEqual({ select: { label: true } });
@@ -76,6 +82,17 @@ describe('flight status board page', () => {
         // once the window has done its work, and nothing here reads them.
         for (const unused of ['seatPattern', 'economyRows', 'businessRows', 'firstClassRows', 'premiumEconomyRows']) {
             expect(select).not.toHaveProperty(unused);
+        }
+    });
+
+    it('selects everything the board needs to render a departure and an arrival', async () => {
+        // The direction the list above cannot see. A component test hands the
+        // board props directly, so a page that stops selecting a field it reads
+        // produces a silently emptier row and nothing fails.
+        const { select } = await queryArgs();
+
+        for (const needed of ['departureDate', 'durationMinutes', 'fromAirport', 'toAirport']) {
+            expect(select).toHaveProperty(needed);
         }
     });
 

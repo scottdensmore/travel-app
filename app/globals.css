@@ -920,7 +920,9 @@ button:active, button[type="submit"]:active {
   font-weight: 600;
 }
 
-.admin-card input[type="text"], .admin-card textarea {
+.admin-card input[type="text"],
+.admin-card input[type="number"],
+.admin-card textarea {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: #fff;
