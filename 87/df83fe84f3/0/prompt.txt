@@ -2695,3 +2695,158 @@ Once a countdown does land it needs to answer the state this slice already creat
 - Real hold expiry after 10 minutes: not waited out.</result>
 <usage><subagent_tokens>97800</subagent_tokens><tool_uses>47</tool_uses><duration_ms>776071</duration_ms></usage>
 </task-notification>
+
+---
+
+<task-notification>
+<task-id>a70b05f5b3f9ad1a7</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/a70b05f5b3f9ad1a7.output</output-file>
+<status>completed</status>
+<summary>Agent "Verify seat holds slice 1" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Tree is byte-identical to how I found it; scratch databases dropped and the dev database restored to zero holds.
+
+## What I ran
+
+| Check | Result |
+|---|---|
+| `npx prisma generate` + `npx tsc --noEmit` | clean |
+| `npm run lint` | 0 errors, 8 warnings (all pre-existing, none in changed files) |
+| `npm run test:unit` | 790 passed / 69 suites |
+| `npm test` (full, incl. database) | 107 passed / 22 suites |
+| `npm run build` (after `rm -rf .next`) | passed; sanitize removed 1 env file from standalone |
+| `migrate deploy` → empty database | applied; `migrate diff` reports **No difference detected** |
+| `migrate deploy` → populated database (1416 flights, seeded) | applied in 2.4s |
+| CHECK / unique / FK, both databases | all exercised in both directions (below) |
+| `npx playwright test` (full) | **3 failed**, 35 passed |
+| `npx playwright test` (2 specs, holds cleared) | 2 passed, 1 failed — isolates the cause |
+
+## Finding 1 — REGRESSION, blocking. The change breaks the Playwright suite deterministically, and it is not #252
+
+Beyond the known `auth.spec.ts` failure, two specs newly fail:
+
+```
+2) multi-passenger.spec.ts:117  Locator: button[title="Select Seat 11A"]  element(s) not found
+3) notifications.spec.ts:106    Locator: button[title="Select Seat 11A"]  element(s) not found
+```
+
+Nothing releases a hold on the success path. `releaseHoldsExcept` is only called from `holdChosenSeatsAction`, and `releaseHold` is **never called by any production code** — it is dead export. So a completed booking leaves its hold live for the full 10 minutes.
+
+Straight after the full run the dev database held:
+
+```
+ flightId | seatNumber |         holderKey         | live | holder_still_exists
+        9 | 11A        | cmspkev1a000cet47d0ziayb3 | t    | f
+        9 | 11B        | cmspkfeh7000fet47pr54lfc5 | t    | f
+```
+
+Flight 9 is the earliest upcoming seeded flight — the one `booking.spec.ts`, `multi-passenger.spec.ts` and `notifications.spec.ts` all select. Each spec registers a fresh user, so the earlier spec's hold is "another customer's" and `getOccupiedSeatsAction` correctly greys the seat out. The specs' `afterAll` deletes users and bookings but not holds, and `holderKey` has no foreign key, so the rows outlive the account.
+
+I confirmed the causal chain rather than inferring it: with the three rows deleted, `multi-passenger` **passed** — then left its own holds on flight 9 (`11A`, `11B`) and `notifications` failed behind it in that same run. Two specs, one run, no other change.
+
+This also means the #213 leak detector has a hole: `/home/scottdensmore/Developer/scottdensmore/travel-app/e2e/global-teardown.ts` does not snapshot `SeatHold`, so the run leaked three rows and reported nothing.
+
+The product-side reading matters more than the test-side one: a purchased seat keeps a redundant hold for ten minutes, and an account deleted mid-checkout strands one with no owner who could ever release it.
+
+## Finding 2 — REGRESSION, blocking. `SeatHold` was inserted inside `SeatAssignment`'s doc comment
+
+`/home/scottdensmore/Developer/scottdensmore/travel-app/prisma/schema.prisma:348-367`. Prisma binds contiguous `///` lines to the model that follows, so `SeatAssignment` now has **no** doc comment and `SeatHold` claims:
+
+```
+/// flightId is denormalised from the leg so that the seat-uniqueness constraint
+/// can be expressed directly. A composite foreign key onto (id, flightId) of the
+/// leg keeps the two in agreement.
+/// A seat a customer is part-way through choosing.
+```
+
+`SeatHold` has no leg, no composite foreign key and no denormalised `flightId`. Both models are now misdescribed in the file that is the design record.
+
+## Finding 3 — design, should fix now. The timestamp columns are timezone-naive, which reintroduces the skew the design set out to remove
+
+`createdAt`/`expiresAt` are `timestamp(3) without time zone`. `now()` is `timestamptz`, so writing converts via the session `TimeZone`, and `"expiresAt" &gt; now()` converts back the same way. One hold written under a UTC session, read under three session timezones:
+
+```
+written under UTC; stored value = 2026-08-12 04:19:58.89
+live, read back under UTC:              true
+live, read under America/Los_Angeles:   true   (appears to have 430 minutes left)
+live, read under Asia/Tokyo:            false  (appears to have expired 530 minutes ago)
+```
+
+Your clock-source reasoning is right and I found no app-clock comparison in production code — `holdSeat` and `seatsHeldByOthers` are pure `now()`. But the column type puts the same failure back under a different key: not wall-clock skew between app and database, but `TimeZone` differing between sessions, or the server's `timezone` GUC changing. `Flight.departureDate` is `@db.Timestamptz(3)` for exactly this reason (#84, "an instant, not a local wall clock"); `SeatHold` breaks that precedent silently. This is far cheaper to change before the table has rows.
+
+Related, smaller: `@default(now())` is a Prisma client-side default, so any future `prisma.seatHold.create()` writes the app clock into `createdAt` and the CHECK then compares an app-clock value to a caller-supplied one. No production path does this today; the raw SQL avoids it.
+
+## Finding 4 — coverage gap. `releaseHoldsExcept` has no test of any kind
+
+It is your answer to ui-review's "`releaseHold` is never called", it is the function questions 3 and 4 turn on, and it carries the `NOT: { OR: [...] }` construct whose Prisma semantics are not obvious. Nothing in `__tests__/` references it.
+
+I exercised it directly against a scratch database and **it is correct** in all five cases — keeps the named seat, never touches another holder's row, scopes to the given flights, keeps the right seat on the right leg of a round trip, and treats an empty keep list as "release all mine on these flights". So this is a missing test, not a bug. But three mutants survive the entire suite today:
+
+- delete the call from `holdChosenSeatsAction` — nothing notices
+- drop `holderKey` from the `where` — one customer releases another's holds, which is precisely what `releaseHold`'s own test guards against
+- drop `flightId: { in: flightIds }` — releases the customer's holds on every flight
+
+## Finding 5 — coverage gap. The claims payload is never asserted, so the leg mapping you just fixed is unprotected
+
+`mockHoldChosenSeatsAction` is never checked with `toHaveBeenCalledWith`; it returns `{ ok: true }` for any argument. The `flatMap` in `holdChosenSeats` that pairs each passenger's per-leg seat with the right `flight.id` is therefore unconstrained. `passenger.seatNumbers[legIndex]` → `seatNumbers[0]`, or `flight.id` → `flights[0].id`, both stay green across all 790 unit tests. That is the send half of the same round-trip bug whose receive half you fixed and did test.
+
+## Finding 6 — coverage gap. Two of the four ui-review defects shipped with no regression test
+
+- **Thrown action.** No `mockRejectedValue` on the hold action anywhere; deleting the `try/catch` in `/home/scottdensmore/Developer/scottdensmore/travel-app/components/ui/BookingCheckoutWizard.tsx:290-299` survives.
+- **Error rendered off-viewport.** Nothing asserts `scrollIntoView` or that the banner takes focus. You modified `jest.setup.js` specifically to make that effect runnable, and then nothing exercises it; deleting the whole `useEffect` survives.
+
+Also unprotected: the `holdingSeats` busy state (`disabled`, `aria-busy`, the label), the `result.error?.message` branch, and `seatClaimsSchema` — `.max(18)` → `.max(1800)` is green, which is the "limit with headroom" case verbatim.
+
+## Finding 7 — mutant table audit
+
+Three of the five claims audit clean from the source: the `ON CONFLICT ... WHERE` removal genuinely reddens two `seatHolds.database` tests, "drop the leg from `takenSeats`" reddens two, "leave the refused seat selected" reddens one. Your reported survivor is real and the two new `occupiedSeats.database` tests do kill it — both assert on the hold's presence directly, not on a wrapper.
+
+**"Advancing no longer holds seats → 2 red" does not reproduce from the current source.** Four tests assert on the alert that only appears if the action is called: the two one-way refusal tests plus `blames the leg that actually lost the seat` and `lets go of a seat it could not hold`. It should be 4 red. Most likely the mutant was run before the two round-trip tests existed; either way the count as written is not auditable.
+
+One test is self-referential: `__tests__/lib/seatHolds.database.test.ts:126-139` derives its bounds from `HOLD_MINUTES`, so `HOLD_MINUTES = 60` is green. It does pin "the interval matches the constant", which is worth having, but not the docstring's claim about the countdown shown to the customer.
+
+## Your five questions
+
+**1. Migration, fresh and populated, CHECK both ways.** Both apply; no drift against `schema.prisma`. On both databases: a hold expiring after creation inserts; born-dead is rejected (23514); the exact boundary `expiresAt = createdAt` is rejected, so `&gt;` is doing real work; and an `UPDATE` cannot sneak past it either. The unique index rejects a second row for the same seat and the FK rejects an unknown flight.
+
+**2. The concurrency claim survives a direct attack, with one caveat.** I ran two transactions genuinely overlapping — B's statement issued while A was still open and uncommitted, verified blocked for 400ms before A committed:
+
+```
+ReadCommitted   empty-seat  | A=1 B=0        | B blocked while A open: true | winner=alice rows=1
+RepeatableRead  empty-seat  | A=1 B=ERR 40001| B blocked while A open: true | winner=alice rows=1
+Serializable    empty-seat  | A=1 B=ERR 40001| B blocked while A open: true | winner=alice rows=1
+ReadCommitted   expired-row | A=1 B=0        | B blocked while A open: true | winner=alice rows=1
+Serializable    expired-row | A=1 B=ERR 40001| B blocked while A open: true | winner=alice rows=1
+```
+
+At READ COMMITTED — what the code actually uses, since every call is autocommit — it is correct, including two customers racing to take over the *same* expired row: exactly one winner, exactly one row, loser gets `false`. Your unconditional index does not create a dead-row-blocks-live-claim case; the takeover is decided inside the row lock like any other conflict.
+
+Under REPEATABLE READ or SERIALIZABLE the loser gets **40001**, not `false`. `holdSeat` does not catch it, so the docstring's "another customer holding a seat is an ordinary answer, not an error" holds only at READ COMMITTED. Not reachable today; it becomes reachable the moment anyone wraps the claim loop in `prisma.$transaction` with an isolation level — which is the obvious response to question 3. Worth a line in the docstring.
+
+**Deadlock: not possible as written.** Each `holdSeat` is its own autocommit statement, so no transaction ever holds two seat locks at once and claim order cannot matter. That property is load-bearing and undocumented — making the loop transactional to gain atomicity would buy an ordering-dependent deadlock between two customers picking the same pair of seats in opposite order.
+
+**3. No, the gap cannot lose a seat you still want.** `keep` is the same array as the claim loop's input, so a seat about to be claimed is never in the delete set. Running the action's exact sequence against the real module with a rival pouncing in the gap:
+
+```
+rival grabs 30A in the gap? false            (re-advance with the same seat)
+rival grabs the abandoned 31A? true          (swap 31A -&gt; 31B, by design)
+```
+
+The only seat exposed in the gap is one the customer deliberately deselected. Partial failure behaves as documented — `{"ok":false,"takenSeats":[32B]}` and `32A` stays mine — and the round trip reports the correct leg.
+
+**4. One stranding path is real and it is not the Back button.** `holderKey` is the user id, not a checkout session, so two tabs on the same flight stomp each other: advancing in tab 2 releases tab 1's seat and another customer can take it.
+
+```
+tab1 wants 34A, then tab2 wants 34B  -&gt;  I hold ["L1:34B"]
+```
+
+The docstring already anticipates the key becoming per-checkout; the point is that `releaseHoldsExcept` turns a merely-shared key into a destructive one. Back itself is fine — expiry plus release-on-re-advance covers it. The `claims.length === 0` early return skips the release, but `validateStep2` requires a seat per passenger per leg, so it is defensive only; it becomes a stranding path if seats ever become optional. The real leak is Finding 1: the success path never releases.
+
+**5. Verdict: do not commit yet.** The concurrency design is sound and I could not break it at READ COMMITTED; the migration, the CHECK and the index all hold up under direct attack. But Finding 1 is a regression this branch introduces that fails the Playwright suite deterministically and is separate from #252, and Finding 2 corrupts the schema's documentation of two models. Both need fixing. Findings 3 through 6 I would resolve before commit as well — 3 because it is nearly free now and expensive later, and 4/5/6 because the untested surface includes two of the four defects ui-review just caught.
+
+When you re-run: the fixes for 1 and 2 need the full Playwright suite again (that is the only check that catches Finding 1), plus the database project. Findings 4 to 6 are new tests, so unit and database. `npm run build` and the migration checks do not need repeating unless the migration SQL changes — which it does if you take the `TIMESTAMPTZ(3)` change in Finding 3.
+
+Two smaller things, non-blocking. `occupiedSeatsByLeg` is seeded from the prop with `useState` and never resyncs, so a server re-render of `occupiedSeats` is ignored for the life of the component. And in `handleNextStep`, if `setErrorMessage` is called with a string identical to the current one React bails out, the effect does not re-run, and `errorClaimsFocus.current` is left `true` — the next validation error then steals focus to the banner instead of going to the field it names.</result>
+<usage><subagent_tokens>115578</subagent_tokens><tool_uses>62</tool_uses><duration_ms>1344410</duration_ms></usage>
+</task-notification>
