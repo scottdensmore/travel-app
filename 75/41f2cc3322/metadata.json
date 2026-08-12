@@ -3,7 +3,7 @@
   "checkpoint_id": "7541f2cc3322",
   "strategy": "manual-commit",
   "branch": "fix/ui-review-write-rule-and-guards",
-  "checkpoints_count": 2,
+  "checkpoints_count": 4,
   "files_touched": [
     "AGENTS.md",
     "CLAUDE.md",
@@ -18,13 +18,20 @@
       "compact_transcript": "/75/41f2cc3322/0/transcript.jsonl",
       "content_hash": "/75/41f2cc3322/0/content_hash.txt",
       "prompt": "/75/41f2cc3322/0/prompt.txt"
+    },
+    {
+      "metadata": "/75/41f2cc3322/1/metadata.json",
+      "transcript": "/75/41f2cc3322/1/full.jsonl",
+      "compact_transcript": "/75/41f2cc3322/1/transcript.jsonl",
+      "content_hash": "/75/41f2cc3322/1/content_hash.txt",
+      "prompt": "/75/41f2cc3322/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 105,
-    "cache_creation_tokens": 173547,
-    "cache_read_tokens": 7933360,
-    "output_tokens": 79702,
-    "api_call_count": 56
+    "input_tokens": 5868,
+    "cache_creation_tokens": 11019162,
+    "cache_read_tokens": 1364428076,
+    "output_tokens": 2031639,
+    "api_call_count": 2848
   }
 }
