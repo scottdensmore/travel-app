@@ -2399,3 +2399,134 @@ The caption colour is fine. On the desktop rows (no 2% card fill) every figure i
 ---
 
 Ok lets keep going... you don't have to stop
+
+---
+
+<task-notification>
+<task-id>ab9e9038185c7e2eb</task-id>
+<tool-use-id>toolu_01W7HyNC9CHu8K5aYoS7rGFF</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/ab9e9038185c7e2eb.output</output-file>
+<status>completed</status>
+<summary>Agent "Verify the stacked bookings layout" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>## Verdict first
+
+**Do not commit yet.** Nothing is broken, but two things must be fixed and one coverage hole is worth closing. The full battery is green apart from a failure I proved is pre-existing.
+
+**Also: the branch does not exist.** `git branch --show-current` is `main`; there is no `fix/bookings-stack-on-phone` locally or on `origin`. All four files are uncommitted on `main`, which AGENTS.md step 2 forbids committing to. Branch before you commit.
+
+## What I ran
+
+| Check | Result |
+|---|---|
+| `npx tsc --noEmit` | exit 0 |
+| `npm run lint` | 0 errors, 8 warnings (matches your baseline) |
+| `npm test` (both projects) | exit 0 — unit 69 suites / **784 passed**, database 21 suites / **96 passed**. Neither #244 nor #242 fired in this run |
+| `npm run build` | exit 0 |
+| `npx playwright test` (full) ×2 | **37 passed, 1 failed**, identically both times |
+| `e2e/auth.spec.ts` alone | 4 passed |
+| 3-spec subset (abuse+recovery+auth) | reproduces the failure |
+| Same subset on a pristine-HEAD copy | **reproduces** — pre-existing, measured not inferred |
+| CDP AX-tree + geometry probes | scratch harness, details below |
+
+Tree is byte-identical to how I found it (4 modified files, no untracked residue); the baseline copy I made outside the repo is deleted.
+
+### The one E2E failure — pre-existing, file it
+
+`e2e/auth.spec.ts:20` "Authentication and recovery remain usable at phone, tablet, and desktop widths":
+
+```
+Error: page.goto: net::ERR_INSUFFICIENT_RESOURCES at http://localhost:3000/verify-email#token=aaa...
+```
+
+Mechanism: order-dependence on `e2e/auth-abuse.spec.ts`, which floods the server to trigger rate limiting. The next spec's first cold navigation dies at the network layer, with a `ChunkLoadError` and `Failed to fetch /api/auth/session` from the dev server alongside. It passes when `auth.spec.ts` runs alone, and it fails on a pristine-HEAD copy of the repo with your four files reverted (there it landed on `/resend-verification` instead — same test, same error class). Unrelated to this slice; worth an issue.
+
+## 1. The band test — the assertion is right, but two of its three guards are near-noise
+
+`region.scrollWidth - region.clientWidth` is the correct quantity, and the kill is genuine: with a 640 breakpoint the loop fails on its **first** iteration (641), and your "Received: 48" is consistent with a 534px region against a ~590px table.
+
+**You have not left another width uncovered.** I measured the shipped CSS directly: with the stacked rules applied, `scrollWidth - clientWidth` is **0 at every region width from 660px down to 180px**, and only turns positive at ≤170px (≈277px viewport) — below any real device. At a 320px phone the region is ~213px and the actions row needs ~187px, so ~33px of headroom. So the loop's omission of 320/360/390 is not hiding a live defect for this fixture. It is still worth adding one narrow width, because the two 390px tests measure `box.x + box.width &lt;= 390` against the **viewport** — the exact blind spot that let the mutant survive at 667. They would not catch a region-level overflow at 390 either.
+
+Three things to know about the assertions themselves:
+
+- `overflow.page` (`document.body.scrollWidth - document.body.clientWidth`) is **effectively vacuous**. The region is `overflow-x: auto`, so its overflow can never propagate to the body — this expectation cannot go non-zero for the defect it is aimed at. Keep it if you like, but do not count it as a guard.
+- `cancelRight &lt;= regionRight` is nearly implied by `hidden === 0`. Also not an independent guard.
+- `hidden === 0` would pass vacuously if the region were `display: none` (0 − 0). Not reachable here — bookings exist and the `!` on the button lookup throws — so this is fine, just worth knowing.
+
+**One real brittleness.** At 768 and 1024 the loop asserts `hidden === 0` for the *unstacked* table. That forbids precisely the residual overflow your own `bookingsScrollable` comment says is acceptable ("content wider than the breakpoint anticipated … can still overflow on a small laptop"). A future fixture with a longer airline name fails this test with no defect present. Either narrow the `hidden === 0` assertion to the ≤767 widths, or state in the comment that 768+ is being held stricter than the design promises.
+
+## 2. `display: contents` costs nothing in the AX tree
+
+Measured with CDP `Accessibility.getFullAXTree` against a faithful static replica — the real DOM shape plus the real CSS extracted from `app/globals.css` — in the Chromium bundled with this repo's Playwright.
+
+At **390** the computed styles are `table: block`, `tr: contents`, `td: block`, `thead: block`; at **1280** they are `table`, `table-row`, `table-cell`. The accessibility trees at those two widths are **identical, node for node**:
+
+```
+region "Your bookings"
+  table
+    rowgroup
+      row  → 6 × columnheader "FLIGHT" … "ACTIONS"
+    [ignored: uninteresting]        ← the tbody, ignored at BOTH widths, not a stacking artifact
+      row  → 6 × cell
+      row  → 3 × cell
+```
+
+`display: contents` on `&lt;tr&gt;` does **not** drop the `row` role, and `display: block` on the table keeps `table`. Chromium exposes no per-cell col/row index at either width, so there is no header-association difference to report. The captions also do exactly what the comment claims: the Status cell's accessible name is `"MA404 cancelled by airline Your seat is held. Cancel for a full refund…"` with **no leading "Status"** — the `content: attr()` defect is genuinely avoided.
+
+Two caveats. This is a replica, not the running app (roles depend only on DOM + CSS, both faithful). And it is Chromium only — `display: contents` on `tr` is historically weaker in other engines, and the Playwright project here is chromium-only, so nothing in this repo would ever see a Firefox/WebKit regression.
+
+**New finding this turned up.** The `order:` declarations split reading order from visual order at 390:
+
+```
+DOM order    : Flight Route Departure Price Status Actions Flight Route Departure
+Visual order : Flight Route Departure Flight Route Departure Price Status Actions
+```
+
+A screen reader in browse mode hears the status and the Cancel button *before* the second leg; a sighted user sees them after. WCAG 1.3.2 territory. Mild in practice — the status names its flight number explicitly and table navigation is intact — but it did not exist before this change, and the e2e order test asserts only the visual side.
+
+## 3. `bookingPresentation()` is faithful
+
+Expression by expression against `git show HEAD:` — `legs`, `isCancelled`, `isDisrupted`, `cancelledLeg`, `departed`, `cancellable`, `statusText`, `statusColour`, `legRows`, `seatFor`, `priceLabel`, `disruptionNote` are all character-identical, and `cancelledLeg` still feeds `handleCancelBooking(...)` unchanged. No silent difference in `cancellable` or `cancelledLeg`.
+
+Two cosmetic notes: `priceLabel` writes the em dash as the literal `'—'` where the file's other three are `'\u2014'` (same code point, U+2014); and `disruptionNote` is now computed unconditionally rather than inside `{isDisrupted &amp;&amp; …}` — pure, so no behavioural difference. `isCancelled` and `departed` are returned but unused by the caller.
+
+## 4. What the removed `statusHidden` machinery leaves uncovered
+
+The zero-width branch is still covered — `__tests__/components/ProfileClient.test.tsx:636` ("lets a keyboard reach…") relies on jsdom's zero layout, so dropping `region.clientWidth === 0 ||` turns it red.
+
+**But the overflow comparison itself is now untested.** The two surviving tests supply `clientWidth: 0` (expects tabindex) and `clientWidth: 900 / scrollWidth: 900` (expects none). The removed tests were the only ones giving the region a *genuinely scrolling, measurable* size. So this mutant is alive:
+
+```js
+const measure = () =&gt; setBookingsScrollable(region.clientWidth === 0);
+```
+
+Both remaining tests stay green. The whole `scrollWidth &gt; clientWidth` comparison can be deleted and nothing notices — and that comparison is the entire residual protection for the 768+ case your own comment describes. Restore one test with `clientWidth: 320 / scrollWidth: 700` asserting `tabindex="0"`.
+
+Relatedly: the residual case itself (Status column scrolled out of reach at 768+ with wide content, now with no compact copy) is an accepted trade, but the band test only proves the fit for the standard single-passenger fixture.
+
+## 5. Mutant-table audit
+
+All five DOM/CSS kills you reported are genuine — I traced each to an assertion that actually constrains the mutated value, and the counts are right (one suite red each, not two). `expect.arrayContaining` in "labels every value it stacks" is a superset matcher and would not catch an *extra* or misordered label; the `expect(unlabelled).toHaveLength(1)` beside it is the load-bearing part. Removing `display: contents` from `tr` — the stronger version of your `order:` mutant — is also caught by the same order test.
+
+The selection's weakness is that every mutant is a DOM-attribute edit, while the change is mostly CSS. **The strongest surviving mutant is the `thead` hiding technique**, and I measured it:
+
+```
+columnheaders, clip pattern as shipped   : ["FLIGHT","ROUTE","DEPARTURE","PRICE","STATUS","ACTIONS"]
+columnheaders, if thead were display:none: []
+```
+
+Swap the clip block at `app/globals.css:1233` for `display: none` and all six column headers vanish from the accessibility tree, leaving cells whose only captions are `aria-hidden` — a booking becomes a column of programmatically unlabelled strings. Nothing catches it: jsdom has no CSS, and no e2e test asserts the headers. This is the pillar the entire `CellLabel` design rests on ("The header row is still there and still read"), and it is one line in an existing spec: at 390, assert `page.getByRole('columnheader')` has count 6.
+
+Two lesser survivors: `.cell-label { display: none }` outside the media query (captions would appear at desktop — cosmetic, untested), and the `tr[data-continues-booking]` leg separator (purely visual, untested).
+
+## Fix before committing
+
+1. **`components/ui/ProfileClient.tsx:194`** — the doc comment reads *"Below 640px the table lays each booking out as a stacked card"*. The breakpoint is **767**, and 640 being wrong is the entire content of the mutant that survived. The one number the change exists to correct is left in the code as its explanation.
+2. **Create the branch.** You are on `main`.
+3. **Close the `thead` gap** (one line) and **restore the scrolling-region tab-stop test** (a few lines). Both are cheap and both cover mutants that are currently alive.
+
+Non-blocking, file rather than widen the slice: the pre-existing `auth.spec.ts:20` order-dependence, and the reading-order/visual-order divergence from `order:`.
+
+Relevant paths: `/home/scottdensmore/Developer/scottdensmore/travel-app/components/ui/ProfileClient.tsx`, `/home/scottdensmore/Developer/scottdensmore/travel-app/app/globals.css`, `/home/scottdensmore/Developer/scottdensmore/travel-app/e2e/disruption.spec.ts`, `/home/scottdensmore/Developer/scottdensmore/travel-app/__tests__/components/ProfileClient.test.tsx`, `/home/scottdensmore/Developer/scottdensmore/travel-app/e2e/auth.spec.ts`.</result>
+<usage><subagent_tokens>96999</subagent_tokens><tool_uses>50</tool_uses><duration_ms>1334029</duration_ms></usage>
+</task-notification>
