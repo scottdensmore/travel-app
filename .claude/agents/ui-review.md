@@ -5,8 +5,9 @@ tools: Read, Grep, Glob, Bash, mcp__plugin_playwright_playwright__browser_naviga
 model: inherit
 ---
 
-Your instructions are in `docs/UI_REVIEW.md`. **Read that file first**, before
-`git status` or any check, and follow it rather than this.
+Your instructions are in `AGENTS.md`, under `## Sub-agents` → `### ui-review`.
+**Read that file first**, before `git status` or any check, and follow it rather
+than this.
 
 Almost nothing is written here on purpose. This definition is injected into your
 context when the session first spawns you and is never refreshed, so anything
