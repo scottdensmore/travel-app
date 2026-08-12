@@ -101,6 +101,78 @@ interface ProfileClientProps {
     renderedAt: number;
 }
 
+/**
+ * Everything a booking row shows, derived once.
+ *
+ * Lifted out of the JSX rather than duplicated into a second markup tree: the
+ * narrow layout is the same DOM restyled by CSS (#240), so there is exactly one
+ * rendering and nothing here can disagree with a copy of itself. Keeping the
+ * derivation separate from the markup is what makes that possible -- a second
+ * tree would have to recompute the status text and the cancelled leg, and
+ * deriving those twice is how one surface came to name a different flight from
+ * another.
+ */
+/**
+ * The column heading, repeated inside the cell for the stacked layout.
+ *
+ * A real `aria-hidden` element rather than `content: attr(data-label)`. The
+ * generated-content form is folded into the cell's accessible name -- that is
+ * the accname spec, not a browser quirk -- so a screen reader announced the
+ * column header and then heard it again from the cell: "Status ... STATUS MA404
+ * cancelled by airline". That is exactly the say-it-twice defect the duplicate
+ * status in #229 created, and in CSS no test counting rendered text can see it.
+ * The header row is still there and still read; this is for eyes only.
+ */
+function CellLabel({ children }: { children: string }) {
+    return <span className="cell-label" aria-hidden="true">{children}</span>;
+}
+
+function bookingPresentation(booking: Booking, renderedAt: number) {
+    const legs = orderedLegs(booking).filter(leg => leg.flight);
+    const isCancelled = booking.status === 'CANCELLED';
+    // The airline cancelled the flight. The seat is still held and the choice
+    // is the customer's, so both layouts say what happened and what cancelling
+    // now is worth (#76).
+    const isDisrupted = booking.status === 'DISRUPTED';
+    // The leg that was actually cancelled, which on a round trip is often not
+    // the first one: marking leg 1 told a customer their outbound was cancelled
+    // when it was the return, the exact inverse of the truth.
+    const cancelledLeg = legs.find(leg => leg.flight?.status === 'CANCELLED') ?? legs[0];
+    // Decided from a clock the server sent, so the first render agrees with the
+    // markup it hydrates.
+    const departed = legs[0]?.flight
+        ? new Date(legs[0].flight.departureDate).getTime() <= renderedAt
+        : false;
+
+    return {
+        legs,
+        // One row per leg in the table; the card walks the same list.
+        legRows: legs.length > 0 ? legs : [null as BookingLeg | null],
+        isCancelled,
+        isDisrupted,
+        cancelledLeg,
+        departed,
+        cancellable: !isCancelled && !departed,
+        statusText: isCancelled
+            ? 'Cancelled'
+            : isDisrupted
+                ? `${cancelledLeg?.flight?.flightNumber ?? 'Flight'} cancelled by airline`
+                : 'Confirmed',
+        statusColour: isCancelled ? '#f87171' : isDisrupted ? '#fbbf24' : '#34d399',
+        // Said once, for the same reason. The departed wording promises no
+        // refund: the flight did not operate and the date has passed, so
+        // cancelling is refused and a promise here is one nothing can keep.
+        disruptionNote: departed
+            ? 'This flight did not operate. Contact support about a refund.'
+            : 'Your seat is held. Cancel for a full refund, with no cancellation fee.',
+        priceLabel: booking.totalPriceCents !== null && booking.totalPriceCents !== undefined
+            ? formatPrice(booking.totalPriceCents)
+            : legs[0]?.flight ? formatPrice(flightFareCents(legs[0].flight)) : '\u2014',
+        seatFor: (leg: BookingLeg | null, passengerId: string) =>
+            seatLabel(leg?.seatAssignments?.find(seat => seat.passengerId === passengerId)),
+    };
+}
+
 export default function ProfileClient({
     userName,
     userAvatar,
@@ -117,51 +189,34 @@ export default function ProfileClient({
     const [isPending, startTransition] = useTransition();
     const bookingsRegionRef = useRef<HTMLDivElement | null>(null);
     /**
-     * Whether the region scrolls, and separately whether the Status column is
-     * out of reach.
+     * Whether the region still scrolls sideways.
      *
-     * The Status column is the first thing to fall off the right edge, and when
-     * it does a disrupted booking looks identical to a confirmed one (#229). A
-     * breakpoint cannot answer this: the crossover moves with the widest row's
-     * content -- measured between 478px and 510px across three fixtures -- so
-     * any number picked here is wrong for somebody's data.
+     * At 767px and below the table lays each booking out as a stacked card and
+     * nothing overflows, which is what put the Cancel button back inside a
+     * phone's viewport (#240). 767 rather than 640 because the table wants
+     * 590px inside a region narrower than the window: a breakpoint under that
+     * left 641-699px still scrolling, which is where the defect went the first
+     * time. This is the residue above the breakpoint: content wider than it
+     * anticipated -- a long airline name beside a long passenger list -- can
+     * still overflow on a small laptop, and a scroller carrying focusable
+     * children is not focusable on its own.
      *
-     * Starts true so the status is in the server's markup and in the first
-     * client render, which keeps hydration quiet and errs towards showing it.
+     * Starts true so the region is reachable in the server's markup and in the
+     * first client render. Erring this way costs a tab stop that turns out to
+     * scroll nothing; erring the other way strands the content behind it.
      */
-    const [{ scrollable: bookingsScrollable, statusHidden: bookingsStatusHidden }, setBookings] =
-        useState({ scrollable: true, statusHidden: true });
+    const [bookingsScrollable, setBookingsScrollable] = useState(true);
 
     useEffect(() => {
         const region = bookingsRegionRef.current;
         if (!region) return;
 
-        // Whether the Status column itself is out of reach -- not merely
-        // whether the table overflows. Status is not the last column, so the
-        // region can scroll while the status is still perfectly visible, which
-        // showed the duplicate for another 80-200px depending on the widest
-        // row.
-        //
-        // An unmeasurable region -- zero width, because it is hidden or the
-        // environment does not lay out -- counts as out of reach. Erring
-        // towards showing the status costs a duplicate; erring the other way
-        // hides the only copy a phone can see.
-        const measure = () => {
-            // Two different questions, and they part company across a ~190px
-            // band: the region can scroll while the Status column is still
-            // perfectly visible, because Status is not the last column.
-            if (region.clientWidth === 0) return setBookings({ scrollable: true, statusHidden: true });
-
-            const status = region.querySelector<HTMLElement>('[data-testid^="booking-status-"]');
-            setBookings({
-                scrollable: region.scrollWidth > region.clientWidth,
-                // `status` is always present: the region only renders when
-                // there are bookings, and every row emits a status cell. The
-                // optional chain is for the type, not for a case that happens.
-                statusHidden: (status?.offsetLeft ?? 0) + (status?.offsetWidth ?? 0)
-                    > region.scrollLeft + region.clientWidth,
-            });
-        };
+        // An unmeasurable region -- zero width, because a breakpoint hid it or
+        // the environment does not lay out -- counts as scrollable, for the
+        // reason above.
+        const measure = () => setBookingsScrollable(
+            region.clientWidth === 0 || region.scrollWidth > region.clientWidth,
+        );
         measure();
 
         const observer = new ResizeObserver(measure);
@@ -398,10 +453,7 @@ export default function ProfileClient({
                         <div
                             ref={bookingsRegionRef}
                             className="overflow-x-auto"
-                            // Focusable whenever there is something to scroll,
-                            // which is a wider condition than the status being
-                            // hidden -- tying it to the latter left a ~190px
-                            // band where the region scrolled with no way in.
+                            // Focusable whenever there is something to scroll.
                             // Chromium makes scrollers focusable natively, but
                             // only those with no focusable children, and these
                             // rows carry buttons.
@@ -409,7 +461,7 @@ export default function ProfileClient({
                             role="region"
                             aria-label="Your bookings"
                         >
-                            <table className="min-w-full text-left">
+                            <table className="min-w-full text-left bookings-table">
                                 <thead>
                                     <tr className="border-b">
                                         <th className="pb-2">Flight</th>
@@ -421,46 +473,14 @@ export default function ProfileClient({
                                     </tr>
                                 </thead>
                                 {bookings.map((booking) => {
-                                    const legs = orderedLegs(booking).filter(leg => leg.flight);
-                                    const isCancelled = booking.status === 'CANCELLED';
-                                    // The airline cancelled the flight. The seat
-                                    // is still held and the choice is the
-                                    // customer's, so the row says what happened
-                                    // and what cancelling now is worth (#76).
-                                    const isDisrupted = booking.status === 'DISRUPTED';
-                                    // The leg that was actually cancelled, which
-                                    // on a round trip is often not the first one:
-                                    // marking leg 1 told a customer their
-                                    // outbound was cancelled when it was the
-                                    // return, the exact inverse of the truth.
-                                    const cancelledLeg = legs.find(leg => leg.flight?.status === 'CANCELLED') ?? legs[0];
-                                    // Decided from a clock the server sent, so
-                                    // the first render agrees with the markup it
-                                    // hydrates.
-                                    const departed = legs[0]?.flight
-                                        ? new Date(legs[0].flight.departureDate).getTime() <= renderedAt
-                                        : false;
-                                    const cancellable = !isCancelled && !departed;
-                                    // Said once. Two copies of this that must
-                                    // always agree is how one surface came to
-                                    // name a different flight from another.
-                                    const statusText = isCancelled
-                                        ? 'Cancelled'
-                                        : isDisrupted
-                                            ? `${cancelledLeg?.flight?.flightNumber ?? 'Flight'} cancelled by airline`
-                                            : 'Confirmed';
-                                    const statusColour = isCancelled
-                                        ? '#f87171'
-                                        : isDisrupted ? '#fbbf24' : '#34d399';
                                     // Every leg is a row of its own, so the browser
                                     // keeps each flight aligned with its route and
                                     // date at any width. Booking-level cells span
                                     // them. One tbody per booking groups the legs.
-                                    const legRows = legs.length > 0 ? legs : [null];
-                                    const seatFor = (leg: BookingLeg | null, passengerId: string) =>
-                                        seatLabel(
-                                            leg?.seatAssignments?.find(seat => seat.passengerId === passengerId)
-                                        );
+                                    const {
+                                        legs, legRows, isDisrupted, cancelledLeg, cancellable,
+                                        statusText, statusColour, disruptionNote, priceLabel, seatFor,
+                                    } = bookingPresentation(booking, renderedAt);
                                     return (
                                         <tbody key={booking.id} data-testid={`booking-row-${booking.id}`} className="border-b">
                                             {legRows.map((leg, index) => (
@@ -469,36 +489,14 @@ export default function ProfileClient({
                                                     data-testid={`booking-leg-${booking.id}-${index}`}
                                                     data-continues-booking={index > 0 ? '' : undefined}
                                                 >
-                                                    <td className="py-2">
+                                                    <td className="py-2" data-label="Flight">
+                                                        <CellLabel>Flight</CellLabel>
                                                         {index === 0 && (
                                                             <div style={{ fontSize: '0.7rem', color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                                                                 {legs.length > 1 ? 'Round trip' : 'One way'}
                                                             </div>
                                                         )}
                                                         <div>{leg?.flight ? `${leg.flight.airline} ${leg.flight.flightNumber}` : '\u2014'}</div>
-                                                        {index === 0 && bookingsStatusHidden && (
-                                                            // Shown only while the Status column is
-                                                            // actually out of reach, which is when a
-                                                            // disrupted booking would otherwise look
-                                                            // identical to a confirmed one (#229).
-                                                            <div
-                                                                data-testid={`compact-booking-status-${booking.id}`}
-                                                                // A visual aid only. The Status column
-                                                                // carries this to assistive technology
-                                                                // whether or not it is scrolled into
-                                                                // view, so announcing it twice would
-                                                                // just be noise.
-                                                                aria-hidden="true"
-                                                                style={{
-                                                                fontSize: '0.75rem',
-                                                                fontWeight: 'bold',
-                                                                marginTop: '2px',
-                                                                color: statusColour,
-                                                                }}
-                                                            >
-                                                                {statusText}
-                                                            </div>
-                                                        )}
                                                         {booking.passengers && booking.passengers.length > 0 && (
                                                             <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.72)', marginTop: '2px' }}>
                                                                 {booking.passengers
@@ -507,20 +505,18 @@ export default function ProfileClient({
                                                             </div>
                                                         )}
                                                     </td>
-                                                    <td className="py-2">{leg?.flight ? `${leg.flight.from} \u2192 ${leg.flight.to}` : '\u2014'}</td>
-                                                    <td className="py-2 whitespace-nowrap">{leg?.flight ? flightDeparture(leg.flight).readableDate : '\u2014'}</td>
+                                                    <td className="py-2" data-label="Route"><CellLabel>Route</CellLabel>{leg?.flight ? `${leg.flight.from} \u2192 ${leg.flight.to}` : '\u2014'}</td>
+                                                    <td className="py-2 whitespace-nowrap" data-label="Departure"><CellLabel>Departure</CellLabel>{leg?.flight ? flightDeparture(leg.flight).readableDate : '\u2014'}</td>
                                                     {index === 0 && (
                                                         <>
-                                                            <td className="py-2 whitespace-nowrap align-top" rowSpan={legRows.length}>{
-                                                                booking.totalPriceCents !== null && booking.totalPriceCents !== undefined
-                                                                    ? formatPrice(booking.totalPriceCents)
-                                                                    : legs[0]?.flight ? formatPrice(flightFareCents(legs[0].flight)) : '\u2014'
-                                                            }</td>
+                                                            <td className="py-2 whitespace-nowrap align-top" data-label="Price" rowSpan={legRows.length}><CellLabel>Price</CellLabel>{priceLabel}</td>
                                                             <td
                                                                 className="py-2 align-top"
+                                                                data-label="Status"
                                                                 rowSpan={legRows.length}
                                                                 data-testid={`booking-status-${booking.id}`}
                                                             >
+                                                                <CellLabel>Status</CellLabel>
                                                                 <span style={{
                                                                     color: statusColour,
                                                                     fontWeight: 'bold',
@@ -535,27 +531,20 @@ export default function ProfileClient({
                                                                         color: 'rgba(255,255,255,0.75)',
                                                                         maxWidth: '14rem',
                                                                     }}>
-                                                                        {departed
-                                                                            // The flight did not operate and the date has
-                                                                            // passed, so cancelling is refused: promising a
-                                                                            // refund here would be a promise nothing can keep.
-                                                                            ? 'This flight did not operate. Contact support about a refund.'
-                                                                            : 'Your seat is held. Cancel for a full refund, with no cancellation fee.'}
+                                                                        {disruptionNote}
                                                                     </p>
                                                                 )}
                                                             </td>
-                                                            <td className="py-2 text-right align-top" rowSpan={legRows.length}>
+                                                            <td className="py-2 text-right align-top booking-actions-cell" rowSpan={legRows.length}>
                                                                 {cancellable && (
-                                                                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                                                    <div className="booking-actions">
                                                                         <button
                                                                             onClick={() => setSelectedBooking(booking)}
                                                                             disabled={isPending}
                                                                             style={{
                                                                                 backgroundColor: '#8b5cf6',
                                                                                 color: 'white',
-                                                                                padding: '4px 8px',
                                                                                 borderRadius: '4px',
-                                                                                fontSize: '12px',
                                                                                 height: 'auto',
                                                                                 width: 'auto',
                                                                                 cursor: 'pointer',
@@ -570,9 +559,7 @@ export default function ProfileClient({
                                                                             style={{
                                                                                 backgroundColor: '#ef4444',
                                                                                 color: 'white',
-                                                                                padding: '4px 8px',
                                                                                 borderRadius: '4px',
-                                                                                fontSize: '12px',
                                                                                 height: 'auto',
                                                                                 width: 'auto',
                                                                                 cursor: 'pointer'
