@@ -1,0 +1,29 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "5df9ccab859a",
+  "strategy": "manual-commit",
+  "branch": "fix/bookings-stack-on-phone",
+  "checkpoints_count": 6,
+  "files_touched": [
+    "__tests__/components/ProfileClient.test.tsx",
+    "app/globals.css",
+    "components/ui/ProfileClient.tsx",
+    "e2e/disruption.spec.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/5d/f9ccab859a/0/metadata.json",
+      "transcript": "/5d/f9ccab859a/0/full.jsonl",
+      "compact_transcript": "/5d/f9ccab859a/0/transcript.jsonl",
+      "content_hash": "/5d/f9ccab859a/0/content_hash.txt",
+      "prompt": "/5d/f9ccab859a/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 5510,
+    "cache_creation_tokens": 10710552,
+    "cache_read_tokens": 1295257090,
+    "output_tokens": 1859408,
+    "api_call_count": 2657
+  }
+}
