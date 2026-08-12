@@ -2,14 +2,16 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import BookingCheckoutWizard from '@/components/ui/BookingCheckoutWizard';
-import { bookFlightAction } from '@/app/actions';
+import { bookFlightAction, holdChosenSeatsAction } from '@/app/actions';
 
-// Mock the server action
+// Mock the server actions
 jest.mock('@/app/actions', () => ({
     bookFlightAction: jest.fn(),
+    holdChosenSeatsAction: jest.fn(),
 }));
 
 const mockBookFlightAction = bookFlightAction as jest.Mock;
+const mockHoldChosenSeatsAction = holdChosenSeatsAction as jest.Mock;
 
 const sampleFlight = {
     id: 42,
@@ -27,6 +29,10 @@ const sampleFlight = {
 describe('BookingCheckoutWizard', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        // Leaving the seat map holds the chosen seats (#74). Every test that
+        // reaches step 3 goes through it, so the default is the ordinary
+        // answer; the tests that care about a refusal say so themselves.
+        mockHoldChosenSeatsAction.mockResolvedValue({ ok: true });
     });
 
     it('renders Step 1 (Travelers) and calculates prices correctly based on cabin class and additions', async () => {
@@ -137,7 +143,131 @@ describe('BookingCheckoutWizard', () => {
 
         // Proceed to Step 3
         fireEvent.click(screen.getByText('Review Booking →'));
+        // Advancing now awaits the seat hold (#74), so step 3 arrives
+        // after the click rather than during it.
+        await screen.findByText('Review Booking');
         expect(screen.getByText('Review Booking')).toBeInTheDocument();
+    });
+
+    it('asks for each chosen seat against the leg it belongs to', async () => {
+        // The send half of the round-trip bug. Nothing asserted what was sent,
+        // so pairing every seat with `flights[0].id`, or reading
+        // `seatNumbers[0]` for every leg, stayed green -- and the receive half
+        // would then report the wrong leg no matter how carefully it was fixed.
+        const { container } = render(
+            <BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />,
+        );
+        fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Alice' } });
+        fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Smith' } });
+        fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1995-05-15' } });
+        fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US1234567' } });
+        fireEvent.click(screen.getByText('Select Seats →'));
+        fireEvent.click(screen.getByTitle('Select Seat 11A'));
+        fireEvent.click(screen.getByText('Review Booking →'));
+
+        await screen.findByText('Review Booking');
+        expect(mockHoldChosenSeatsAction).toHaveBeenCalledWith([
+            { flightId: sampleFlight.id, seatNumber: '11A' },
+        ]);
+    });
+
+    it('says so when the seats could not be held at all', async () => {
+        // An expired session or a dropped connection. Without a catch the
+        // promise rejected into nothing: no message, and a button that simply
+        // stopped working.
+        mockHoldChosenSeatsAction.mockRejectedValue(new Error('Unauthorized'));
+
+        const { container } = render(
+            <BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />,
+        );
+        fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Alice' } });
+        fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Smith' } });
+        fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1995-05-15' } });
+        fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US1234567' } });
+        fireEvent.click(screen.getByText('Select Seats →'));
+        fireEvent.click(screen.getByTitle('Select Seat 11A'));
+        fireEvent.click(screen.getByText('Review Booking →'));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(/could not hold those seats/i);
+        expect(screen.getByText('Select Your Seats')).toBeInTheDocument();
+    });
+
+    it('brings the refusal into view and puts focus on it', async () => {
+        // The banner renders above a thirty-row seat map and the button that
+        // raises it is below one, so it appeared 598px above the viewport at
+        // 390 and 207px at 1280: announced to a screen reader, invisible to
+        // everyone else, who saw a button that did nothing.
+        mockHoldChosenSeatsAction.mockResolvedValue({
+            ok: false,
+            takenSeats: [{ flightId: sampleFlight.id, seatNumber: '11A' }],
+        });
+        const scrollIntoView = jest.spyOn(Element.prototype, 'scrollIntoView');
+
+        const { container } = render(
+            <BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />,
+        );
+        fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Alice' } });
+        fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Smith' } });
+        fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1995-05-15' } });
+        fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US1234567' } });
+        fireEvent.click(screen.getByText('Select Seats →'));
+        fireEvent.click(screen.getByTitle('Select Seat 11A'));
+        fireEvent.click(screen.getByText('Review Booking →'));
+
+        const alert = await screen.findByRole('alert');
+        expect(scrollIntoView).toHaveBeenCalled();
+        expect(alert).toHaveFocus();
+        scrollIntoView.mockRestore();
+    });
+
+    it('keeps the customer on the seat map when a seat has just been taken', async () => {
+        // The race the hold exists to decide (#74). Another customer got 4A
+        // between this page rendering and this customer leaving the map, so
+        // advancing has to fail here rather than at payment -- the seat map is
+        // where the problem can be fixed.
+        mockHoldChosenSeatsAction.mockResolvedValue({
+            ok: false,
+            // The leg travels with the seat: a round trip can carry 11A twice.
+            takenSeats: [{ flightId: sampleFlight.id, seatNumber: '11A' }],
+        });
+
+        const { container } = render(<BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />);
+        fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Alice' } });
+        fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Smith' } });
+        fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1995-05-15' } });
+        fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US1234567' } });
+        fireEvent.click(screen.getByText('Select Seats →'));
+        fireEvent.click(screen.getByTitle('Select Seat 11A'));
+        fireEvent.click(screen.getByText('Review Booking →'));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            /Seat 11A is being held by another customer while they check out/i,
+        );
+        expect(screen.getByText('Select Your Seats')).toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'Review Booking' })).not.toBeInTheDocument();
+    });
+
+    it('marks a seat lost to another customer as taken on the map', async () => {
+        // The map was rendered before the seat went, so without this the error
+        // names a seat the map still draws as free -- the page arguing with
+        // itself, and the customer with no way to see what changed.
+        mockHoldChosenSeatsAction.mockResolvedValue({
+            ok: false,
+            // The leg travels with the seat: a round trip can carry 11A twice.
+            takenSeats: [{ flightId: sampleFlight.id, seatNumber: '11A' }],
+        });
+
+        const { container } = render(<BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />);
+        fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Alice' } });
+        fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Smith' } });
+        fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1995-05-15' } });
+        fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US1234567' } });
+        fireEvent.click(screen.getByText('Select Seats →'));
+        fireEvent.click(screen.getByTitle('Select Seat 11A'));
+        fireEvent.click(screen.getByText('Review Booking →'));
+
+        await screen.findByRole('alert');
+        expect(screen.queryByTitle('Select Seat 11A')).not.toBeInTheDocument();
     });
 
     it('confirms a server-priced booking without collecting payment card data', async () => {
@@ -171,6 +301,9 @@ describe('BookingCheckoutWizard', () => {
         
         // Proceed to Billing
         fireEvent.click(screen.getByText('Review Booking →'));
+        // Advancing now awaits the seat hold (#74), so step 3 arrives
+        // after the click rather than during it.
+        await screen.findByText('Review Booking');
 
         // Verify summary details are correct. The seat is read off the leg it
         // is held on, and the fare breakdown carries the cabin (#152).
@@ -228,6 +361,9 @@ describe('BookingCheckoutWizard', () => {
 
         // Review Step
         fireEvent.click(screen.getByText('Review Booking →'));
+        // Advancing now awaits the seat hold (#74), so step 3 arrives
+        // after the click rather than during it.
+        await screen.findByText('Review Booking');
 
         // Submit Booking
         fireEvent.click(screen.getByRole('button', { name: /Confirm \$100 booking/i }));
@@ -256,6 +392,9 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.click(screen.getByText('Select Seats →'));
         fireEvent.click(screen.getByTitle('Select Seat 11C'));
         fireEvent.click(screen.getByText('Review Booking →'));
+        // Advancing now awaits the seat hold (#74), so step 3 arrives
+        // after the click rather than during it.
+        await screen.findByText('Review Booking');
 
         fireEvent.click(screen.getByRole('button', { name: /Confirm \$100 booking/i }));
 
@@ -284,6 +423,9 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.click(screen.getByText('Select Seats →'));
         fireEvent.click(screen.getByTitle('Select Seat 11C'));
         fireEvent.click(screen.getByText('Review Booking →'));
+        // Advancing now awaits the seat hold (#74), so step 3 arrives
+        // after the click rather than during it.
+        await screen.findByText('Review Booking');
         fireEvent.click(screen.getByRole('button', { name: /Confirm \$100 booking/i }));
 
         await waitFor(() => {
@@ -310,6 +452,9 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.click(screen.getByText('Select Seats →'));
         fireEvent.click(screen.getByTitle('Select Seat 11C'));
         fireEvent.click(screen.getByText('Review Booking →'));
+        // Advancing now awaits the seat hold (#74), so step 3 arrives
+        // after the click rather than during it.
+        await screen.findByText('Review Booking');
         fireEvent.click(screen.getByRole('button', { name: /Confirm \$100 booking/i }));
 
         await waitFor(() => expect(screen.getByText('Traveler Information')).toBeInTheDocument());
@@ -339,6 +484,9 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.click(screen.getByText('Select Seats →'));
         fireEvent.click(screen.getByTitle('Select Seat 11C'));
         fireEvent.click(screen.getByText('Review Booking →'));
+        // Advancing now awaits the seat hold (#74), so step 3 arrives
+        // after the click rather than during it.
+        await screen.findByText('Review Booking');
         fireEvent.click(screen.getByRole('button', { name: /Confirm \$100 booking/i }));
 
         await waitFor(() => expect(screen.getByText('Select Your Seats')).toBeInTheDocument());
@@ -586,11 +734,17 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
             fireEvent.click(screen.getByTitle('Select Seat 12C'));
             fireEvent.click(screen.getByText('Review Booking →'));
+        // Advancing now awaits the seat hold (#74), so step 3 arrives
+        // after the click rather than during it.
+        await screen.findByText('Review Booking');
 
             // Go back to the departing leg so the error has a leg to correct.
             fireEvent.click(screen.getByText('← Back'));
             fireEvent.click(screen.getByRole('tab', { name: /Departing/ }));
             fireEvent.click(screen.getByText('Review Booking →'));
+        // Advancing now awaits the seat hold (#74), so step 3 arrives
+        // after the click rather than during it.
+        await screen.findByText('Review Booking');
             fireEvent.click(screen.getByRole('button', { name: /Confirm \$250 booking/i }));
 
             // The error names leg 1, so the returning map must be the one shown.
@@ -616,6 +770,90 @@ describe('BookingCheckoutWizard', () => {
             expect(screen.getByTitle('Select Seat 11A')).toBeInTheDocument();
         });
 
+        it('sends each leg its own flight id, not the first one twice', async () => {
+            // A one-leg assertion cannot see this: with a single flight,
+            // `flights[0].id` is the right answer by accident. Only a round
+            // trip distinguishes "the leg this seat belongs to" from "the first
+            // leg", which is the send half of the bug ui-review found.
+            const { container } = renderRoundTrip();
+            fillTraveler(container);
+            fireEvent.click(screen.getByText('Select Seats →'));
+            fireEvent.click(screen.getByTitle('Select Seat 11A'));
+            fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
+            fireEvent.click(await screen.findByTitle('Select Seat 12B'));
+            fireEvent.click(screen.getByText('Review Booking →'));
+
+            await screen.findByText('Review Booking');
+            expect(mockHoldChosenSeatsAction).toHaveBeenCalledWith([
+                { flightId: sampleFlight.id, seatNumber: '11A' },
+                { flightId: inboundFlight.id, seatNumber: '12B' },
+            ]);
+        });
+
+        it('blames the leg that actually lost the seat, not the one on screen', async () => {
+            // A round trip can carry 11A on both legs. Reporting the seat
+            // number alone made the client mark whichever leg it found first,
+            // so a customer who had just been *granted* their outbound seat was
+            // told it was gone -- and shown it disabled, while the leg that
+            // really failed sat on a tab they were not looking at (#74).
+            mockHoldChosenSeatsAction.mockResolvedValue({
+                ok: false,
+                takenSeats: [{ flightId: inboundFlight.id, seatNumber: '11A' }],
+            });
+
+            const { container } = renderRoundTrip();
+            fillTraveler(container);
+            fireEvent.click(screen.getByText('Select Seats →'));
+            fireEvent.click(screen.getByTitle('Select Seat 11A'));
+            fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
+            fireEvent.click(await screen.findByTitle('Select Seat 11A'));
+            fireEvent.click(screen.getByText('Review Booking →'));
+
+            expect(await screen.findByRole('alert')).toHaveTextContent(
+                /Seat 11A on the returning flight is being held by another customer/i,
+            );
+
+            // The failing leg is the one to look at.
+            expect(screen.getByRole('tab', { name: /Returning/ })).toHaveAttribute('aria-selected', 'true');
+            expect(screen.getByTitle('Seat 11A Occupied')).toBeDisabled();
+
+            // The outbound seat was granted and stays the customer's: not
+            // marked occupied, and still theirs in the passenger list. This is
+            // the half that was wrong -- it was drawn red and disabled while
+            // the error said it had gone.
+            fireEvent.click(screen.getByRole('tab', { name: /Departing/ }));
+            expect(await screen.findByRole('tab', { name: /Departing/ }))
+                .toHaveAttribute('aria-selected', 'true');
+            expect(screen.queryByTitle('Seat 11A Occupied')).not.toBeInTheDocument();
+        });
+
+        it('lets go of a seat it could not hold, so the button stops re-failing', async () => {
+            // Left in place the seat reads as chosen in the passenger list
+            // while the map draws it occupied and disabled, `validateStep2`
+            // keeps passing, and pressing the button again re-fails against a
+            // seat that can never be had.
+            mockHoldChosenSeatsAction.mockResolvedValue({
+                ok: false,
+                takenSeats: [{ flightId: inboundFlight.id, seatNumber: '11A' }],
+            });
+
+            const { container } = renderRoundTrip();
+            fillTraveler(container);
+            fireEvent.click(screen.getByText('Select Seats →'));
+            fireEvent.click(screen.getByTitle('Select Seat 11A'));
+            fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
+            // The map re-renders for the new leg before 11A is selectable again.
+            fireEvent.click(await screen.findByTitle('Select Seat 11A'));
+            fireEvent.click(screen.getByText('Review Booking →'));
+
+            await screen.findByRole('alert');
+
+            // Advancing again now stops on the missing seat rather than
+            // silently asking for the dead one a second time.
+            fireEvent.click(screen.getByText('Review Booking →'));
+            expect(await screen.findByRole('alert')).toHaveTextContent(/returning seat for Passenger 1/i);
+        });
+
         it('will not advance while a leg is unseated, and points at the leg that needs one', async () => {
             const { container } = renderRoundTrip();
             fillTraveler(container);
@@ -634,10 +872,13 @@ describe('BookingCheckoutWizard', () => {
             // Seating the return unblocks the step.
             fireEvent.click(screen.getByTitle('Select Seat 12C'));
             fireEvent.click(screen.getByText('Review Booking →'));
+        // Advancing now awaits the seat hold (#74), so step 3 arrives
+        // after the click rather than during it.
+        await screen.findByText('Review Booking');
             expect(screen.getByRole('heading', { name: 'Review Booking' })).toBeInTheDocument();
         });
 
-        it('reviews every leg of the itinerary, not just the last one opened', () => {
+        it('reviews every leg of the itinerary, not just the last one opened', async () => {
             // The review step read the leg the seat map happened to be showing,
             // so a round trip offered one flight card — the customer could not
             // check the return leg on the last screen before confirming (#152).
@@ -649,6 +890,9 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
             fireEvent.click(screen.getByTitle('Select Seat 12C'));
             fireEvent.click(screen.getByText('Review Booking →'));
+        // Advancing now awaits the seat hold (#74), so step 3 arrives
+        // after the click rather than during it.
+        await screen.findByText('Review Booking');
 
             const legs = screen.getAllByTestId('review-leg');
             expect(legs).toHaveLength(2);
@@ -662,7 +906,7 @@ describe('BookingCheckoutWizard', () => {
             expect(legs[1]).toHaveTextContent('Detroit, USA → Seattle, USA');
         });
 
-        it('shows each seat against the leg it is held on', () => {
+        it('shows each seat against the leg it is held on', async () => {
             // Seats were pooled into one comma list with nothing saying which
             // seat belonged to which flight (#152).
             const { container } = renderRoundTrip();
@@ -673,6 +917,9 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
             fireEvent.click(screen.getByTitle('Select Seat 12C'));
             fireEvent.click(screen.getByText('Review Booking →'));
+        // Advancing now awaits the seat hold (#74), so step 3 arrives
+        // after the click rather than during it.
+        await screen.findByText('Review Booking');
 
             const [departing, returning] = screen.getAllByTestId('review-leg');
             expect(departing).toHaveTextContent('Ada Lovelace');
@@ -684,7 +931,7 @@ describe('BookingCheckoutWizard', () => {
             expect(returning).not.toHaveTextContent('11A');
         });
 
-        it('still names one leg and one seat on a one-way review', () => {
+        it('still names one leg and one seat on a one-way review', async () => {
             const { container } = render(
                 <BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />
             );
@@ -692,6 +939,9 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByText('Select Seats →'));
             fireEvent.click(screen.getByTitle('Select Seat 11A'));
             fireEvent.click(screen.getByText('Review Booking →'));
+        // Advancing now awaits the seat hold (#74), so step 3 arrives
+        // after the click rather than during it.
+        await screen.findByText('Review Booking');
 
             const legs = screen.getAllByTestId('review-leg');
             expect(legs).toHaveLength(1);
@@ -702,7 +952,7 @@ describe('BookingCheckoutWizard', () => {
             expect(legs[0]).not.toHaveTextContent('Departing');
         });
 
-        it('does not bill a lone traveller in a breakdown of one row', () => {
+        it('does not bill a lone traveller in a breakdown of one row', async () => {
             // Seats moved into the leg cards, so a single traveller would
             // otherwise be named once per leg and again under a "Fare
             // breakdown" whose one row equals the total directly beneath it.
@@ -713,6 +963,9 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByText('Select Seats →'));
             fireEvent.click(screen.getByTitle('Select Seat 11A'));
             fireEvent.click(screen.getByText('Review Booking →'));
+        // Advancing now awaits the seat hold (#74), so step 3 arrives
+        // after the click rather than during it.
+        await screen.findByText('Review Booking');
 
             expect(screen.queryByText('Fare breakdown')).not.toBeInTheDocument();
             expect(screen.getAllByText('Ada Lovelace')).toHaveLength(1);
@@ -721,7 +974,7 @@ describe('BookingCheckoutWizard', () => {
             expect(screen.getByText('Estimated Total')).toBeInTheDocument();
         });
 
-        it('breaks the fare down once there is someone to compare against', () => {
+        it('breaks the fare down once there is someone to compare against', async () => {
             const { container } = renderRoundTrip();
             fillTraveler(container);
 
@@ -737,6 +990,9 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
             fireEvent.click(screen.getByText(/Auto-Assign Adjacent Seats/i));
             fireEvent.click(screen.getByText('Review Booking →'));
+        // Advancing now awaits the seat hold (#74), so step 3 arrives
+        // after the click rather than during it.
+        await screen.findByText('Review Booking');
 
             expect(screen.getByText('Fare breakdown')).toBeInTheDocument();
             // Named once per leg above, then once more against their fare.
@@ -799,6 +1055,9 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByTitle('Select Seat 12C'));
 
             fireEvent.click(screen.getByText('Review Booking →'));
+        // Advancing now awaits the seat hold (#74), so step 3 arrives
+        // after the click rather than during it.
+        await screen.findByText('Review Booking');
             // Each seat sits under its own leg rather than in one pooled list.
             const [departing, returning] = screen.getAllByTestId('review-leg');
             expect(departing).toHaveTextContent('Seat 11A');
@@ -848,6 +1107,9 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByTitle('Select Seat 12C'));
 
             fireEvent.click(screen.getByText('Review Booking →'));
+        // Advancing now awaits the seat hold (#74), so step 3 arrives
+        // after the click rather than during it.
+        await screen.findByText('Review Booking');
             fireEvent.click(screen.getByRole('button', { name: /Confirm \$250 booking/i }));
 
             await waitFor(() => {
@@ -893,6 +1155,9 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
             fireEvent.click(screen.getByTitle('Select Seat 12C'));
             fireEvent.click(screen.getByText('Review Booking →'));
+        // Advancing now awaits the seat hold (#74), so step 3 arrives
+        // after the click rather than during it.
+        await screen.findByText('Review Booking');
             fireEvent.click(screen.getByRole('button', { name: /Confirm \$250 booking/i }));
 
             await waitFor(() => {

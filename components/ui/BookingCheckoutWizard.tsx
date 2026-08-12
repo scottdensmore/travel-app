@@ -7,7 +7,7 @@ import Link from 'next/link';
 // browser. SWC elides this today because the binding is only used as a type —
 // this makes that a guarantee rather than an optimisation.
 import type { PassengerInput } from '@/lib/FlightBookingService';
-import { bookFlightAction } from '@/app/actions';
+import { bookFlightAction, holdChosenSeatsAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
 import { CABIN_FARE_PERCENT, calculatePassengerFareCents, flightFareCents, formatPrice } from '@/lib/bookingPricing';
 import { BRAND } from '@/lib/brand';
@@ -141,6 +141,19 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
         ? searchedCabin
         : availableCabins[0];
 
+    /**
+     * Which seats are unavailable, per leg.
+     *
+     * Seeded from the server's read and updated when a hold is refused: the
+     * map was rendered before that seat went, so leaving it as the prop would
+     * show a free seat beside an error saying it is taken (#74).
+     */
+    const [occupiedSeatsByLeg, setOccupiedSeatsByLeg] = useState<string[][]>(initialOccupiedSeats);
+
+    // The prop is the server's latest read. Seeding state from it once and then
+    // ignoring it means a re-render with fresher occupancy is discarded, which
+    // matters now that another customer's hold can change it between renders.
+    useEffect(() => setOccupiedSeatsByLeg(initialOccupiedSeats), [initialOccupiedSeats]);
     const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
     const [passengers, setPassengers] = useState<PassengerFormState[]>([
         {
@@ -262,9 +275,127 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
         return true;
     };
 
-    const handleNextStep = () => {
-        if (step === 1 && validateStep1()) setStep(2);
-        else if (step === 2 && validateStep2()) setStep(3);
+    /**
+     * Leaving the seat map claims the seats until the booking is paid for.
+     *
+     * Held here rather than on each click: a hold per click would have to
+     * follow every swap and deselection around this component, and the window
+     * that matters is between choosing and paying (#74). A refusal keeps the
+     * customer on the seat map, because that is where the problem is fixable.
+     */
+    const holdChosenSeats = async (): Promise<boolean> => {
+        const claims = flights.flatMap((flight, legIndex) =>
+            passengers
+                .map(passenger => passenger.seatNumbers[legIndex])
+                .filter((seat): seat is string => Boolean(seat))
+                .map(seatNumber => ({ flightId: flight.id, seatNumber })),
+        );
+        if (claims.length === 0) return true;
+
+        let result;
+        try {
+            result = await holdChosenSeatsAction(claims);
+        } catch {
+            // An expired session or a dropped connection. Without this the
+            // promise rejects into nothing: no message, and a button that
+            // simply stops working.
+            errorClaimsFocus.current = true;
+            setErrorMessage('We could not hold those seats just now. Please try again.');
+            return false;
+        }
+
+        if (result.ok) return true;
+
+        if ('takenSeats' in result) {
+            const taken = result.takenSeats;
+            // Which leg, not just which seat. A round trip can carry 16A on
+            // both, and matching by number alone marked whichever leg the
+            // customer happened to be looking at -- telling them a seat they
+            // had just been granted was gone.
+            const lostByLeg = flights.map(flight =>
+                taken.filter(seat => seat.flightId === flight.id).map(seat => seat.seatNumber));
+
+            setOccupiedSeatsByLeg(previous => previous.map((seats, legIndex) => [
+                ...new Set([...seats, ...(lostByLeg[legIndex] ?? [])]),
+            ]));
+
+            // Let the seat go. Left in place it reads as chosen in the
+            // passenger list while the map draws it occupied and disabled, and
+            // `validateStep2` keeps passing, so pressing the button again just
+            // re-fails against a seat that can never be had.
+            setPassengers(previous => previous.map(passenger => ({
+                ...passenger,
+                seatNumbers: passenger.seatNumbers.map((seat, legIndex) =>
+                    seat && lostByLeg[legIndex]?.includes(seat) ? '' : seat),
+            })));
+
+            const firstLostLeg = lostByLeg.findIndex(seats => seats.length > 0);
+            if (firstLostLeg >= 0) setActiveLegIndex(firstLostLeg);
+
+            const names = taken.map(seat => flights.length > 1
+                ? `${seat.seatNumber} on the ${legDirectionLabel(
+                    flights.findIndex(flight => flight.id === seat.flightId), flights.length,
+                ).toLowerCase()} flight`
+                : seat.seatNumber);
+            // "Being held" rather than "taken": the other customer may yet
+            // abandon their checkout, and claiming a sale that has not happened
+            // is a claim that is often untrue.
+            errorClaimsFocus.current = true;
+            setErrorMessage(
+                names.length === 1
+                    ? `Seat ${names[0]} is being held by another customer while they check out. Please choose a different one.`
+                    : `Seats ${names.join(' and ')} are being held by other customers while they check out. Please choose different ones.`,
+            );
+            return false;
+        }
+
+        errorClaimsFocus.current = true;
+        setErrorMessage(result.error?.message ?? 'Those seats could not be held. Please try again.');
+        return false;
+    };
+
+    const errorRef = useRef<HTMLDivElement | null>(null);
+    /**
+     * Whether this error is the banner's to own.
+     *
+     * Server validation errors route focus to the field they name, which is
+     * better than the banner; moving focus here unconditionally took it back
+     * off them. Only the seat-hold refusal has nowhere better to send it.
+     */
+    const errorClaimsFocus = useRef(false);
+
+    /**
+     * Put the error where the customer is looking.
+     *
+     * The banner renders above the card and the control that raises it is
+     * below a full seat map, so at every width it appeared off-screen: -598px
+     * at 390, -207px at 1280. Scroll anchoring even absorbed the inserted node,
+     * so nothing moved. Focus goes with it -- a keyboard user would otherwise
+     * have to walk back through ~180 seat buttons to reach it.
+     */
+    useEffect(() => {
+        if (!errorMessage) return;
+        const claimsFocus = errorClaimsFocus.current;
+        // Cleared here rather than after the effect: setting the same message
+        // twice is a no-op for React, the effect never re-runs, and the flag
+        // would survive to steal focus from the next field-level error.
+        errorClaimsFocus.current = false;
+        errorRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        if (claimsFocus) errorRef.current?.focus({ preventScroll: true });
+    }, [errorMessage]);
+
+    const [holdingSeats, setHoldingSeats] = useState(false);
+
+    const handleNextStep = async () => {
+        if (step === 1 && validateStep1()) { setStep(2); return; }
+        if (step !== 2 || holdingSeats || !validateStep2()) return;
+
+        setHoldingSeats(true);
+        try {
+            if (await holdChosenSeats()) setStep(3);
+        } finally {
+            setHoldingSeats(false);
+        }
     };
 
     const handlePrevStep = () => {
@@ -307,7 +438,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
     const activeRows = getRowsForClass(passengers[activePassengerIndex]?.cabinClass || 'ECONOMY');
 
     const isSeatOccupied = (seat: string) => {
-        return (initialOccupiedSeats[activeLegIndex] ?? []).includes(seat);
+        return (occupiedSeatsByLeg[activeLegIndex] ?? []).includes(seat);
     };
 
     const getGroupPassengerForSeat = (seat: string) => {
@@ -322,7 +453,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
         const cabinClass = passengers[activePassengerIndex]?.cabinClass || 'ECONOMY';
         const rows = getRowsForClass(cabinClass);
 
-        const currentOccupied = new Set(initialOccupiedSeats[activeLegIndex] ?? []);
+        const currentOccupied = new Set(occupiedSeatsByLeg[activeLegIndex] ?? []);
         const suggested: string[] = [startSeatId];
 
         const startIdx = seatLetters.indexOf(letter);
@@ -388,7 +519,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
 
     const autoAssignAdjacentSeats = () => {
         const updatedPassengers = [...passengers];
-        const currentOccupied = new Set(initialOccupiedSeats[activeLegIndex] ?? []);
+        const currentOccupied = new Set(occupiedSeatsByLeg[activeLegIndex] ?? []);
         const classes: PassengerFormState['cabinClass'][] = ['FIRST', 'BUSINESS', 'PREMIUM_ECONOMY', 'ECONOMY'];
 
         for (const cabinClass of classes) {
@@ -663,7 +794,12 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
             </div>
 
             {errorMessage && (
-                <div role="alert" style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '12px', borderRadius: '8px', marginBottom: '1.5rem' }}>
+                <div
+                    role="alert"
+                    ref={errorRef}
+                    tabIndex={-1}
+                    style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '12px', borderRadius: '8px', marginBottom: '1.5rem', scrollMarginTop: '1rem' }}
+                >
                     ⚠️ {errorMessage}
                 </div>
             )}
@@ -1168,8 +1304,14 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                             <button
                                 type="button"
                                 onClick={handleNextStep}
-                                style={{ backgroundColor: '#8b5cf6', color: '#fff', border: 'none', padding: '10px 28px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
-                                Review Booking →
+                                // Leaving the seat map now claims the seats, a
+                                // round trip of roughly half a second. Without
+                                // this a double click sent it twice and the
+                                // customer had no sign anything was happening.
+                                disabled={holdingSeats}
+                                aria-busy={holdingSeats}
+                                style={{ backgroundColor: holdingSeats ? '#6d28d9' : '#8b5cf6', color: '#fff', border: 'none', padding: '10px 28px', borderRadius: '8px', cursor: holdingSeats ? 'progress' : 'pointer', fontWeight: 'bold' }}>
+                                {holdingSeats ? 'Holding your seats…' : 'Review Booking →'}
                             </button>
                         </div>
                     </div>

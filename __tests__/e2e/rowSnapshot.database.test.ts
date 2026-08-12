@@ -61,6 +61,19 @@ async function leaveARowInEveryTrackedTable(): Promise<string> {
     });
     created.flightIds.push(flight.id);
 
+    // A hold outlives the account that took it -- `holderKey` is not a foreign
+    // key -- so deleting a run's users does not remove it, and the seat stays
+    // greyed out for whatever runs next (#74). Cascades with the flight above.
+    await prisma.seatHold.create({
+        data: {
+            id: randomUUID(),
+            flightId: flight.id,
+            seatNumber: '9F',
+            holderKey: user.id,
+            expiresAt: new Date(Date.now() + 10 * 60_000),
+        },
+    });
+
     const schedule = await prisma.flightSchedule.create({
         data: {
             flightNumber: `LEAK-${randomUUID().slice(0, 8)}`,
@@ -91,6 +104,7 @@ const TRACKED_TABLES = [
     'FlightSchedule',
     'Notification',
     'Review',
+    'SeatHold',
     'User',
     'UserFavorite',
     'VerificationToken',

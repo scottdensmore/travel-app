@@ -44,15 +44,15 @@ enum Role {
 }
 
 model User {
-  id                      String         @id @default(cuid())
+  id                      String                @id @default(cuid())
   name                    String?
-  email                   String?        @unique
+  email                   String?               @unique
   emailVerified           DateTime?
   image                   String?
   password                String?
-  role                    Role           @default(USER)
-  authVersion             Int            @default(0)
-  staffMfaSecretEncrypted String?        @db.Text
+  role                    Role                  @default(USER)
+  authVersion             Int                   @default(0)
+  staffMfaSecretEncrypted String?               @db.Text
   staffMfaEnrolledAt      DateTime?
   staffMfaLastUsedStep    Int?
   accounts                Account[]
@@ -114,7 +114,7 @@ model Booking {
   /// The booking total in minor units. Null for bookings taken before this
   /// column existed, which fall back to the flight's catalogue price.
   totalPriceCents Int?
-  currency        String   @default("USD")
+  currency        String        @default("USD")
   idempotencyKey  String?
 
   userId String?
@@ -179,6 +179,7 @@ model Passenger {
   /// Where this traveller sits: one per leg. A traveller is a person; a seat
   /// belongs to a flight, so the two are separate records (#137).
   seatAssignments SeatAssignment[]
+
   @@index([sensitiveDataExpiresAt])
 }
 
@@ -196,29 +197,29 @@ enum FlightStatus {
 }
 
 model Flight {
-  id            Int       @id @default(autoincrement())
-  flightNumber  String
-  airline       String
+  id              Int          @id @default(autoincrement())
+  flightNumber    String
+  airline         String
   /// Where this flight goes, and the only place it says so. The route was also
   /// stored as free text until #73: prose that was simultaneously the identity
   /// of a place and the words shown to a customer, so editing it repointed the
   /// route. The label lives on `Airport` and is read through these.
   fromAirportCode String
   toAirportCode   String
-  fromAirport     Airport @relation("FlightOrigin", fields: [fromAirportCode], references: [iataCode])
-  toAirport       Airport @relation("FlightDestination", fields: [toAirportCode], references: [iataCode])
+  fromAirport     Airport      @relation("FlightOrigin", fields: [fromAirportCode], references: [iataCode])
+  toAirport       Airport      @relation("FlightDestination", fields: [toAirportCode], references: [iataCode])
   /// The instant the flight leaves, not a local wall clock. Built from the
   /// schedule's local time and the origin airport's zone; compare against it
   /// freely, and render it only through `lib/flightTime` (#84).
-  departureDate DateTime  @db.Timestamptz(3)
+  departureDate   DateTime     @db.Timestamptz(3)
   /// Elapsed minutes gate to gate. The arrival instant is this added to the
   /// departure -- not stored, because a second answer can disagree with the
   /// first. Null for a flight created outside a schedule, which then shows no
   /// arrival rather than an invented one (#84).
   durationMinutes Int?
   /// The fare in minor units. The only form the fare is stored in (#135).
-  priceCents    Int
-  status        FlightStatus @default(ON_TIME)
+  priceCents      Int
+  status          FlightStatus @default(ON_TIME)
 
   firstClassRows     Int?
   businessRows       Int?
@@ -228,11 +229,11 @@ model Flight {
 
   itineraryLegs   ItineraryLeg[]
   seatAssignments SeatAssignment[]
+  seatHolds       SeatHold[]
 
   @@unique([flightNumber, departureDate])
   /// Every search and the status board range-scan this (#167).
   @@index([departureDate])
-
   @@index([fromAirportCode])
   @@index([toAirportCode])
 }
@@ -262,20 +263,20 @@ model Review {
 }
 
 model FlightSchedule {
-  id            Int     @id @default(autoincrement())
-  flightNumber  String
-  airline       String
-  from          String
-  to            String
-  departureTime String
+  id              Int     @id @default(autoincrement())
+  flightNumber    String
+  airline         String
+  from            String
+  to              String
+  departureTime   String
   /// Elapsed minutes gate to gate, stated rather than inferred: subtracting
   /// local times across a timezone is not a duration, and is an hour wrong
   /// twice a year even within one (#84).
   durationMinutes Int
-  daysOfWeek    Int[]
+  daysOfWeek      Int[]
   /// The fare in minor units. The only form the fare is stored in (#135).
-  priceCents    Int
-  isActive      Boolean @default(true)
+  priceCents      Int
+  isActive        Boolean @default(true)
 
   firstClassRows     Int?
   businessRows       Int?
@@ -342,6 +343,40 @@ enum CabinClass {
   PREMIUM_ECONOMY
   BUSINESS
   FIRST
+}
+
+/// A seat a customer is part-way through choosing.
+///
+/// Distinct from `SeatAssignment`, which records a seat somebody has actually
+/// bought. A hold is a claim with a deadline: it stops the seat being offered
+/// to anyone else while one customer is at the payment step, and stops meaning
+/// anything the moment it expires (#74).
+///
+/// Nothing sweeps these. An abandoned checkout costs the airline nothing
+/// because the row stops being live on its own, so there is no job whose
+/// failure would quietly reduce inventory -- which is the acceptance criterion
+/// this shape is chosen for.
+model SeatHold {
+  id         String   @id
+  flightId   Int
+  flight     Flight   @relation(fields: [flightId], references: [id], onDelete: Cascade)
+  seatNumber String
+  /// Who is holding it. The signed-in user today; a checkout session once
+  /// guests can book, which is why this is a string and not a relation.
+  holderKey  String
+  /// The migration writes `DEFAULT now()`, so the database supplies this. No
+  /// production path calls `prisma.seatHold.create` -- the claim is one raw
+  /// `INSERT ... ON CONFLICT` -- and the `expiresAt > createdAt` check would
+  /// reject a row whose two times came from clocks that disagreed.
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  expiresAt  DateTime @db.Timestamptz(3)
+
+  /// One live claim per seat. Expired rows stay in the table and are taken
+  /// over in place, so this is unconditional rather than partial: a second row
+  /// for the same seat should never exist even when the first is dead.
+  @@unique([flightId, seatNumber])
+  @@index([expiresAt])
+  @@index([holderKey])
 }
 
 /// Where one traveller sits on one leg. Separated from Passenger because a

@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache';
+import { holdSeat, releaseHoldsExcept, seatsHeldByOthers } from '@/lib/seatHolds';
 import { heldSeats } from '@/lib/seatOccupancy';
 import TravelGuideService from '@/lib/TravelGuideService';
 import FlightBookingService, { PassengerInput } from '@/lib/FlightBookingService';
@@ -42,6 +43,7 @@ import {
     scheduleSchema,
     searchFlightsSchema,
     seatChangesSchema,
+    seatClaimsSchema,
     stringIdSchema
 } from '@/lib/validation';
 
@@ -326,6 +328,19 @@ export async function bookFlightAction(bookingData: {
         idempotencyKey: bookingData.idempotencyKey
     });
 
+    // The seats are bought; the claim on them has done its job. Left behind it
+    // keeps a sold seat "held" for the rest of its ten minutes -- harmless to
+    // the buyer, who owns the assignment, and a seat withdrawn from everyone
+    // else for no reason. It also outlives the account: `holderKey` is not a
+    // foreign key, so a customer deleted mid-checkout strands a row nobody can
+    // release. Deliberately after the booking rather than inside it: a hold is
+    // an optimisation, and failing to tidy one up must never undo a purchase.
+    try {
+        await releaseHoldsExcept(bookingData.flightIds, userId, []);
+    } catch {
+        // Nothing to do about it. The row expires on its own.
+    }
+
     try {
         // The confirmation names the outbound flight; a round trip's inbound
         // is shown on the itinerary rather than in the notification.
@@ -382,7 +397,53 @@ export async function getOccupiedSeatsAction(flightId: number) {
             seatNumber: true
         }
     });
-    return assignments.map(seat => seat.seatNumber);
+
+    // A seat another customer is part-way through buying is unavailable too,
+    // and for the customer's purposes indistinguishable from one already sold
+    // (#74). Their own holds are excluded: greying out the seat they just
+    // picked would be the map arguing with them.
+    const beingChosen = await seatsHeldByOthers(flightId, session.user.id);
+
+    return [...new Set([...assignments.map(seat => seat.seatNumber), ...beingChosen])];
+}
+
+/**
+ * Claim every seat the customer has chosen, for as long as it takes to pay.
+ *
+ * Called when they leave the seat map, not on each click. A hold per click
+ * would have to follow every swap and deselection around the wizard, and the
+ * window that actually matters is the one between choosing and paying.
+ *
+ * Reports which seats went rather than which succeeded: a customer who cannot
+ * continue needs to know what to change, and "seat 12A has just been taken" is
+ * the whole message. Seats claimed before the refusal stay claimed -- they are
+ * the customer's, they expire on their own, and releasing them would hand away
+ * seats over a problem with a different one.
+ */
+export async function holdChosenSeatsAction(claims: { flightId: number; seatNumber: string }[]) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const parsed = parseActionInput(seatClaimsSchema, claims);
+    if (!parsed.ok) return parsed;
+
+    const wanted = parsed.data as { flightId: number; seatNumber: string }[];
+
+    // A customer who went back and changed their mind would otherwise strand
+    // the seat they abandoned for the rest of its ten minutes.
+    await releaseHoldsExcept([...new Set(wanted.map(claim => claim.flightId))], session.user.id, wanted);
+
+    const taken: { flightId: number; seatNumber: string }[] = [];
+    for (const claim of wanted) {
+        const held = await holdSeat({ ...claim, holderKey: session.user.id });
+        if (!held) taken.push(claim);
+    }
+
+    // The leg travels with the seat. A round trip can carry 16A twice, and
+    // reporting the number alone made the caller mark whichever leg it found
+    // first -- so a customer who *had* been granted their outbound seat was
+    // told it was gone while the leg that actually failed sat on another tab.
+    return taken.length > 0 ? { ok: false as const, takenSeats: taken } : { ok: true as const };
 }
 
 export async function toggleFavoriteCityGuideAction(cityGuideId: number) {
