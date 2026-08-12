@@ -89,6 +89,25 @@ async function bookFor(email: string, flightId: number, seatNumber: string) {
     });
 }
 
+/** A round trip: two legs, one traveller seated on each. */
+async function bookRoundTripFor(email: string, flightIds: number[], seatNumbers: string[]) {
+    const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+    return new FlightBookingService().bookFlight({
+        flightIds,
+        userId: user.id,
+        passengers: [{
+            firstName: 'Ada',
+            lastName: 'Lovelace',
+            dateOfBirth: '1990-01-01',
+            passportNumber: `R${suffix.slice(-7)}`,
+            gender: 'Female',
+            seatNumbers,
+            cabinClass: 'ECONOMY',
+        }],
+        idempotencyKey: randomUUID(),
+    });
+}
+
 /**
  * The recorded outcome of a booking's most recent status change.
  *
@@ -293,16 +312,180 @@ test.describe('A disrupted booking on a phone', () => {
         await signInWithCredentials(page, { email, password });
         await page.goto('/profile');
 
-        const compact = page.getByTestId(`compact-booking-status-${booking.id}`);
-        await expect(compact).toBeVisible();
-        await expect(compact).toContainText(`${flight.flightNumber} cancelled by airline`);
+        // The whole `CellLabel` design rests on the header row still being
+        // read: the captions in each cell are `aria-hidden`, so if the headers
+        // ever went away a booking would become a column of programmatically
+        // unlabelled strings. `thead` is moved off-screen by clip rather than
+        // hidden, and swapping that for `display: none` -- a one-line edit
+        // someone tidying CSS would make -- empties this and nothing else
+        // notices, because jsdom has no CSS.
+        await expect(
+            page.getByRole('region', { name: 'Your bookings' }).getByRole('columnheader'),
+        ).toHaveCount(6);
 
-        // Visible without scrolling sideways, which the Status column is not.
-        const box = (await compact.boundingBox())!;
+        // Said once now. #229 answered this with a second copy beside the
+        // flight number, because the Status column sat past the right edge of a
+        // scrolling region; the narrow layout stacks the cells instead (#240),
+        // so the column itself is on screen and the duplicate is gone.
+        const status = page.getByTestId(`booking-status-${booking.id}`);
+        await expect(status).toBeVisible();
+        await expect(status).toContainText(`${flight.flightNumber} cancelled by airline`);
+
+        // Visible without scrolling sideways, which it was not before.
+        const box = (await status.boundingBox())!;
+        expect(box.x).toBeGreaterThanOrEqual(0);
         expect(box.x + box.width).toBeLessThanOrEqual(390);
 
         // Cleanup is `afterAll`'s: deleting the account here detaches the
         // booking (userId is SET NULL), and then nothing matches it by email.
+    });
+
+    test('can take the refund it offers without scrolling sideways', async ({ page }) => {
+        // #229 made the disruption visible; the action stayed 173px past the
+        // right edge, so the customer could read that the airline cancelled
+        // their flight and not act on it (#240). Being told and being able to
+        // respond are separate outcomes and this is the second one.
+        const flight = await aFlight(`ACT-${suffix.slice(-6)}`);
+        const email = `disrupt-act-${suffix}@example.com`;
+        await createVerifiedAccount(page, { name: 'Acting Flyer', email, password });
+        const booking = await bookFor(email, flight.id, '5B');
+        await prisma.flight.update({ where: { id: flight.id }, data: { status: 'CANCELLED' } });
+        await prisma.booking.update({ where: { id: booking.id }, data: { status: 'DISRUPTED' } });
+
+        await page.setViewportSize({ width: 390, height: 844 });
+        await signInWithCredentials(page, { email, password });
+        await page.goto('/profile');
+
+        // Playwright's role selector skips anything `display: none`, so this is
+        // whichever layout the viewport actually chose.
+        const cancel = page.getByRole('button', { name: 'Cancel', exact: true });
+        await expect(cancel).toBeVisible();
+
+        const box = (await cancel.boundingBox())!;
+        expect(box.x).toBeGreaterThanOrEqual(0);
+        expect(box.x + box.width).toBeLessThanOrEqual(390);
+
+        // Reachable is not the same as usable: a button inside a sideways
+        // scroller can sit in the viewport and still be clipped by an ancestor,
+        // and Playwright's own actionability check would scroll it into view
+        // before clicking, hiding exactly the defect this test is about. Taking
+        // the refund through to the recorded outcome is the claim that matters.
+        page.once('dialog', dialog => dialog.accept());
+        await cancel.click();
+
+        await expect(page.getByTestId(`booking-status-${booking.id}`)).toContainText('Cancelled');
+        const refunded = await prisma.booking.findUniqueOrThrow({ where: { id: booking.id } });
+        expect(refunded.status).toBe('CANCELLED');
+    });
+
+    test('leaves no width between the stacked layout and a table that fits', async ({ page }) => {
+        // The first attempt stacked below 640px, and the table needs 590 inside
+        // a region narrower than the viewport -- so 641-699px kept the sideways
+        // scroll the change exists to remove. At 667, an iPhone SE in landscape
+        // or a window snapped to half a 1366 laptop, Cancel rendered clipped
+        // mid-word as "Ca". A breakpoint under the table's natural width
+        // relocates the overflow rather than removing it.
+        const flight = await aFlight(`BND-${suffix.slice(-6)}`);
+        const email = `disrupt-band-${suffix}@example.com`;
+        await createVerifiedAccount(page, { name: 'Band Flyer', email, password });
+        const booking = await bookFor(email, flight.id, '4A');
+        await prisma.flight.update({ where: { id: flight.id }, data: { status: 'CANCELLED' } });
+        await prisma.booking.update({ where: { id: booking.id }, data: { status: 'DISRUPTED' } });
+
+        await signInWithCredentials(page, { email, password });
+
+        // 320 and 390 are here because the two tests above measure the Cancel
+        // button against the *viewport*, which is the blind spot that let the
+        // 667px case survive: a region-level overflow at phone width would slip
+        // past both of them too.
+        const stacked = [320, 390, 641, 667, 700, 767];
+
+        for (const width of [...stacked, 768, 1024]) {
+            await page.setViewportSize({ width, height: 900 });
+            await page.goto('/profile');
+            await page.getByTestId(`booking-row-${booking.id}`).waitFor();
+
+            // Measured against the scrolling region, not the viewport. The
+            // first version of this test asked whether the button was inside
+            // the window and passed with the defect fully present: at 667 the
+            // button ends at x=643 -- inside a 667px window -- while the region
+            // clipping it ends at 614. The page never overflows either, because
+            // the region keeps its scroll to itself. Reverting the breakpoint
+            // to 640 left this green.
+            const measured = await page.evaluate(() => {
+                const region = document.querySelector<HTMLElement>(
+                    '[role="region"][aria-label="Your bookings"]',
+                )!;
+                return {
+                    hidden: region.scrollWidth - region.clientWidth,
+                    reachable: region.getAttribute('tabindex') === '0',
+                };
+            });
+
+            if (stacked.includes(width)) {
+                // Stacked: nothing may sit behind a sideways scroll at all.
+                expect(measured.hidden, `content is hidden sideways at ${width}px`).toBe(0);
+            } else {
+                // Above the breakpoint the table may still outgrow a small
+                // laptop -- the design says so -- but then it has to be
+                // reachable. Asserting no overflow here would fail on a longer
+                // airline name with nothing actually wrong.
+                expect(
+                    measured.hidden === 0 || measured.reachable,
+                    `at ${width}px the table hides ${measured.hidden}px with no way to scroll to it`,
+                ).toBe(true);
+            }
+        }
+    });
+
+    test('stacks a round trip in the order a card should read', async ({ page }) => {
+        // `rowSpan` stops meaning anything once rows are blocks, so the
+        // booking-level cells -- authored inside the first leg's row because
+        // that is what a table needs -- landed mid-card. A round trip printed
+        // "MA404 cancelled by airline" above a block naming its *outbound*,
+        // with the cancelled leg trailing below the buttons.
+        const outbound = await aFlight(`ORD-${suffix.slice(-6)}`);
+        const ret = await aFlight(`RTN-${suffix.slice(-6)}`);
+        const email = `disrupt-order-${suffix}@example.com`;
+        await createVerifiedAccount(page, { name: 'Order Flyer', email, password });
+        const booking = await bookRoundTripFor(email, [outbound.id, ret.id], ['3A', '3B']);
+        await prisma.flight.update({ where: { id: ret.id }, data: { status: 'CANCELLED' } });
+        await prisma.booking.update({ where: { id: booking.id }, data: { status: 'DISRUPTED' } });
+
+        await page.setViewportSize({ width: 390, height: 844 });
+        await signInWithCredentials(page, { email, password });
+        await page.goto('/profile');
+
+        const order = await page.evaluate((id: number) => {
+            const card = document.querySelector(`[data-testid="booking-row-${id}"]`)!;
+            return Array.from(card.querySelectorAll('td'))
+                .filter(cell => (cell.textContent || '').trim())
+                .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)
+                .map(cell => cell.getAttribute('data-label') ?? 'Actions');
+        }, booking.id);
+
+        // Both legs, then the price, then what happened, then what to do.
+        expect(order).toEqual([
+            'Flight', 'Route', 'Departure',
+            'Flight', 'Route', 'Departure',
+            'Price', 'Status', 'Actions',
+        ]);
+
+        // The cancelled leg is named above the action, not below it. Measured
+        // from the cells: a row is `display: contents` here and has no box of
+        // its own, so asking the `<tr>` for one silently answers about
+        // something else.
+        const [lastFlightTop, statusTop] = await page.evaluate((id: number) => {
+            const card = document.querySelector(`[data-testid="booking-row-${id}"]`)!;
+            const flights = Array.from(card.querySelectorAll('td[data-label="Flight"]'));
+            const status = card.querySelector(`[data-testid="booking-status-${id}"]`)!;
+            return [
+                flights[flights.length - 1].getBoundingClientRect().top,
+                status.getBoundingClientRect().top,
+            ];
+        }, booking.id);
+
+        expect(lastFlightTop).toBeLessThan(statusTop);
     });
 });
 

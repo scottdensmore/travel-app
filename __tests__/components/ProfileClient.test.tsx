@@ -506,76 +506,96 @@ describe('ProfileClient interactive dashboard', () => {
             })),
         };
 
-        it('repeats the status where a phone can see it, without saying it twice', () => {
-            // At 390px the Status column sits past the right edge, so a
-            // disrupted booking was pixel-identical to a confirmed one. The
-            // copy beside the flight number fixes that for the eye and is
-            // hidden from assistive technology, which already hears the
-            // column (#229).
+        it('says the status once, where stacking will show it', () => {
+            // #229 put a second copy beside the flight number because the
+            // Status column sat past the right edge at 390px. The narrow layout
+            // now stacks the cells instead (#240), so the column is on screen
+            // and the duplicate is gone -- said twice is what a locator picks
+            // the wrong one of.
             renderBookings([disruptedRoundTrip]);
 
             const row = screen.getByTestId('booking-row-202');
-            const copies = within(row).getAllByText(/cancelled by airline/);
-            expect(copies).toHaveLength(2);
-
-            const phoneCopy = screen.getByTestId('compact-booking-status-202');
-            expect(phoneCopy).toHaveTextContent('cancelled by airline');
-            expect(phoneCopy).toHaveAttribute('aria-hidden', 'true');
+            expect(within(row).getAllByText(/cancelled by airline/)).toHaveLength(1);
+            expect(screen.queryByTestId('compact-booking-status-202')).not.toBeInTheDocument();
+            expect(screen.getByTestId('booking-status-202')).toHaveTextContent('cancelled by airline');
         });
 
-        it('shows the phone copy for a plain confirmed booking too', () => {
+        it('says a plain confirmed status once too', () => {
             // Only the disrupted case was asserted, so the branch deciding the
             // other two could be reverted in silence.
             renderBookings([roundTripBooking]);
 
             const row = screen.getByTestId('booking-row-202');
-            const copies = within(row).getAllByText('Confirmed');
-            expect(copies).toHaveLength(2);
-            expect(screen.getByTestId('compact-booking-status-202')).toHaveTextContent('Confirmed');
+            expect(within(row).getAllByText('Confirmed')).toHaveLength(1);
         });
 
-        it('shows the phone copy when the status column is scrolled out of reach', () => {
-            // The branch every other test reached through the zero-width escape
-            // hatch: a region that genuinely measures, with the status cell
-            // past its right edge.
+        it('labels every value it stacks, since the header row goes off-screen', () => {
+            // Stacking drops the visual header, so each cell carries what the
+            // column used to say. Without this a booking on a phone is a column
+            // of unlabelled strings -- and `td:empty` hides the cells a rowSpan
+            // leaves behind rather than showing a label with nothing under it.
+            renderBookings([roundTripBooking]);
+
+            const row = screen.getByTestId('booking-row-202');
+            const withContent = within(row).getAllByRole('cell')
+                .filter(cell => cell.textContent?.trim());
+
+            expect(withContent.map(cell => cell.getAttribute('data-label'))).toEqual(
+                expect.arrayContaining(['Flight', 'Route', 'Departure', 'Price', 'Status']),
+            );
+
+            // The actions cell is the one deliberate exception: its content is
+            // two buttons that say what they do, and a heading reading
+            // "Actions" above them is noise rather than a label.
+            const unlabelled = withContent.filter(cell => !cell.getAttribute('data-label'));
+            expect(unlabelled.map(cell => cell.className)).toEqual(
+                expect.arrayContaining([expect.stringContaining('booking-actions-cell')]),
+            );
+            expect(unlabelled).toHaveLength(1);
+        });
+
+        it('hides the stacked captions from the accessible name of their cell', () => {
+            // The first version drew these with `content: attr(data-label)`,
+            // and generated content is folded into the cell's accessible name.
+            // A screen reader then read the real column header and heard it
+            // again from the cell -- "Status ... STATUS MA404 cancelled by
+            // airline" -- which is the say-it-twice defect of #229 rebuilt in
+            // CSS, where counting rendered text cannot find it.
+            renderBookings([disruptedRoundTrip]);
+
+            const status = screen.getByTestId('booking-status-202');
+            const caption = within(status).getByText('Status');
+
+            expect(caption).toHaveAttribute('aria-hidden', 'true');
+            expect(caption.tagName).toBe('SPAN');
+        });
+
+        it('keeps the action in the same row as the status it answers', () => {
+            // The whole of #240: the customer could read that the airline had
+            // cancelled their flight and not reach the button that takes the
+            // refund, 173px past the right edge. Geometry is Playwright's to
+            // prove; this holds the structure that makes it possible.
+            renderBookings([disruptedRoundTrip]);
+
+            const row = screen.getByTestId('booking-row-202');
+            expect(within(row).getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+            expect(within(row).getByText(/Your seat is held/)).toBeInTheDocument();
+        });
+
+        it('takes a tab stop when the region genuinely scrolls', () => {
+            // The only test that gives the region a measurable, scrolling size.
+            // Without it `scrollWidth > clientWidth` is unconstrained: the two
+            // other cases feed clientWidth 0 and a non-scrolling 900, so the
+            // whole comparison could be replaced by `clientWidth === 0` and
+            // both would stay green. That comparison is the entire remaining
+            // protection for a table too wide for a small laptop.
             renderBookings([roundTripBooking]);
 
             const region = screen.getByRole('region', { name: /your bookings/i });
-            const status = screen.getByTestId('booking-status-202');
             Object.defineProperty(region, 'clientWidth', { configurable: true, value: 320 });
             Object.defineProperty(region, 'scrollWidth', { configurable: true, value: 700 });
-            Object.defineProperty(region, 'scrollLeft', { configurable: true, value: 0 });
-            Object.defineProperty(status, 'offsetLeft', { configurable: true, value: 400 });
-            Object.defineProperty(status, 'offsetWidth', { configurable: true, value: 90 });
             act(() => { resizeObserverCallbacks.forEach(run => run()); });
 
-            expect(screen.getByTestId('compact-booking-status-202')).toBeInTheDocument();
-        });
-
-        it('drops the phone copy once the status column has room', () => {
-            // The point of measuring rather than picking a breakpoint: the
-            // crossover moves with the widest row's content, so any number
-            // hard-coded here is wrong for somebody's data (#229).
-            renderBookings([roundTripBooking]);
-
-            const region = screen.getByRole('region', { name: /your bookings/i });
-            const status = screen.getByTestId('booking-status-202');
-            // The region still scrolls; the status cell is simply within it.
-            // That distinction is the whole point -- an overflow proxy kept the
-            // duplicate on screen for another 80-200px, because Status is not
-            // the last column.
-            Object.defineProperty(region, 'clientWidth', { configurable: true, value: 900 });
-            Object.defineProperty(region, 'scrollWidth', { configurable: true, value: 1100 });
-            Object.defineProperty(region, 'scrollLeft', { configurable: true, value: 0 });
-            Object.defineProperty(status, 'offsetLeft', { configurable: true, value: 500 });
-            Object.defineProperty(status, 'offsetWidth', { configurable: true, value: 90 });
-            expect(resizeObserverCallbacks.length).toBeGreaterThan(0);
-            act(() => { resizeObserverCallbacks.forEach(run => run()); });
-
-            expect(screen.queryByTestId('compact-booking-status-202')).not.toBeInTheDocument();
-            // The region still scrolls here, so it keeps its tab stop: tying
-            // the stop to the status being hidden left a ~190px band where the
-            // region scrolled with no keyboard way into it.
             expect(region).toHaveAttribute('tabindex', '0');
         });
 
@@ -594,13 +614,13 @@ describe('ProfileClient interactive dashboard', () => {
             expect(region).not.toHaveAttribute('tabindex');
         });
 
-        it('shows the phone copy for a cancelled booking', () => {
+        it('names a cancelled booking cancelled', () => {
             // The third branch of the shared `statusText`, which no unit test
             // reached -- only the slow suite caught a break in it.
             renderBookings([{ ...roundTripBooking, status: 'CANCELLED' }]);
 
             const row = screen.getByTestId('booking-row-202');
-            expect(within(row).getAllByText('Cancelled')).toHaveLength(2);
+            expect(within(row).getAllByText('Cancelled')).toHaveLength(1);
         });
 
         it('keeps the raised contrast on the status and the seat line', () => {
@@ -610,7 +630,8 @@ describe('ProfileClient interactive dashboard', () => {
             renderBookings([roundTripBooking]);
 
             const row = screen.getByTestId('booking-row-202');
-            expect(screen.getByTestId('compact-booking-status-202')).toHaveStyle({ color: '#34d399' });
+            expect(within(screen.getByTestId('booking-status-202')).getByText('Confirmed'))
+                .toHaveStyle({ color: '#34d399' });
 
             // One seat line per leg; they share the style. 0.4 alpha measured
             // 3.80:1 against the card, which is an actual AA failure rather
@@ -625,7 +646,7 @@ describe('ProfileClient interactive dashboard', () => {
             // a violation -- asserted for symmetry with the other two.
             renderBookings([{ ...roundTripBooking, status: 'CANCELLED' }]);
 
-            expect(screen.getByTestId('compact-booking-status-202'))
+            expect(within(screen.getByTestId('booking-status-202')).getByText('Cancelled'))
                 .toHaveStyle({ color: '#f87171' });
         });
 
