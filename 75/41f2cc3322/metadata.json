@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "7541f2cc3322",
+  "strategy": "manual-commit",
+  "branch": "fix/ui-review-write-rule-and-guards",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "__tests__/docs/agentInstructions.test.ts",
+    "docs/UI_REVIEW.md",
+    "docs/VERIFIER.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/75/41f2cc3322/0/metadata.json",
+      "transcript": "/75/41f2cc3322/0/full.jsonl",
+      "compact_transcript": "/75/41f2cc3322/0/transcript.jsonl",
+      "content_hash": "/75/41f2cc3322/0/content_hash.txt",
+      "prompt": "/75/41f2cc3322/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 105,
+    "cache_creation_tokens": 173547,
+    "cache_read_tokens": 7933360,
+    "output_tokens": 79702,
+    "api_call_count": 56
+  }
+}
