@@ -442,3 +442,20 @@ export async function parseJsonRequest<T>(
     }
     return parseInput(schema, input, maxBytes);
 }
+
+/**
+ * The seats a customer is asking to hold while they pay (#74).
+ *
+ * Bounded because the list arrives from the browser and each entry costs a
+ * write: nine passengers is the most any itinerary here carries, across at most
+ * two legs, so eighteen is the ceiling with nothing legitimate above it.
+ */
+export const seatClaimsSchema = z
+    .array(
+        z.object({
+            flightId: numericIdSchema,
+            seatNumber: z.string().trim().min(2).max(4).regex(/^[0-9]{1,3}[A-Z]$/),
+        }),
+    )
+    .min(1)
+    .max(18);

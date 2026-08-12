@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto';
 import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 import FlightBookingService from '@/lib/FlightBookingService';
+import { holdSeat } from '@/lib/seatHolds';
 
 jest.mock('next-auth', () => ({ getServerSession: jest.fn() }));
 jest.mock('next/cache', () => ({ revalidatePath: jest.fn() }));
@@ -19,7 +20,12 @@ beforeEach(() => {
     mockedGetServerSession.mockResolvedValue({ user: { id: 'occupied-seats-suite' } });
 });
 
-const created = { flightIds: [] as number[], bookingIds: [] as number[], userIds: [] as string[] };
+const created = {
+    flightIds: [] as number[],
+    bookingIds: [] as number[],
+    userIds: [] as string[],
+    holderKeys: [] as string[],
+};
 
 async function createFlight(suffix: string, from: string, to: string, day: string) {
     const flight = await prisma.flight.create({
@@ -42,6 +48,7 @@ async function createFlight(suffix: string, from: string, to: string, day: strin
 }
 
 afterAll(async () => {
+    await prisma.seatHold.deleteMany({ where: { holderKey: { in: created.holderKeys } } });
     for (const bookingId of created.bookingIds) {
         await prisma.passenger.deleteMany({ where: { bookingId } });
         await prisma.booking.deleteMany({ where: { id: bookingId } });
@@ -123,5 +130,45 @@ describe('getOccupiedSeatsAction across an itinerary', () => {
 
         await prisma.booking.update({ where: { id: booking.id }, data: { status: 'CANCELLED' } });
         expect(await getOccupiedSeatsAction(flight.id)).toEqual([]);
+    });
+});
+
+describe('a seat another customer is choosing', () => {
+    it('counts as occupied, and the chooser\'s own seat does not', async () => {
+        // The read half of #74. Without it the hold decides races invisibly:
+        // both customers still see the seat as free, and the loser only finds
+        // out when advancing to payment fails.
+        const flight = await createFlight(randomUUID().slice(0, 6), 'Seattle, USA', 'Detroit, USA', '2026-09-01');
+        const rival = `rival-${randomUUID()}`;
+        created.holderKeys.push(rival, 'occupied-seats-suite');
+
+        await holdSeat({ flightId: flight.id, seatNumber: '14A', holderKey: rival });
+        await holdSeat({ flightId: flight.id, seatNumber: '14B', holderKey: 'occupied-seats-suite' });
+
+        const occupied = await getOccupiedSeatsAction(flight.id);
+
+        expect(occupied).toContain('14A');
+        // Greying out the seat the caller just picked would be the map
+        // arguing with them.
+        expect(occupied).not.toContain('14B');
+    });
+
+    it('stops counting once the hold has expired', async () => {
+        const flight = await createFlight(randomUUID().slice(0, 6), 'Seattle, USA', 'Detroit, USA', '2026-09-02');
+        const rival = `rival-${randomUUID()}`;
+        created.holderKeys.push(rival);
+
+        await holdSeat({ flightId: flight.id, seatNumber: '15C', holderKey: rival });
+        expect(await getOccupiedSeatsAction(flight.id)).toContain('15C');
+
+        await prisma.seatHold.updateMany({
+            where: { flightId: flight.id, seatNumber: '15C' },
+            data: {
+                createdAt: new Date(Date.now() - 60 * 60_000),
+                expiresAt: new Date(Date.now() - 60_000),
+            },
+        });
+
+        expect(await getOccupiedSeatsAction(flight.id)).not.toContain('15C');
     });
 });

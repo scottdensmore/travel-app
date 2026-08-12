@@ -100,6 +100,16 @@ const TRACKED: Array<{ table: string; ids: () => Promise<string[]> }> = [
       (await prisma.flightSchedule.findMany({ select: { id: true, flightNumber: true } }))
         .map(row => `${row.id} (${row.flightNumber})`),
   },
+  {
+    // A hold outlives the account that took it -- `holderKey` is not a foreign
+    // key -- so deleting a run's users leaves its holds behind, greying out
+    // seats for whatever runs next. That is how #74 broke two specs before
+    // this table was tracked here.
+    table: 'SeatHold',
+    ids: async () =>
+      (await prisma.seatHold.findMany({ select: { id: true, flightId: true, seatNumber: true } }))
+        .map(row => `${row.id} (flight ${row.flightId} seat ${row.seatNumber})`),
+  },
 ];
 
 /**

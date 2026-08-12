@@ -78,6 +78,7 @@ jest.mock('@/lib/prisma', () => ({
         review: { create: jest.fn(), findUnique: jest.fn(), delete: jest.fn() },
         booking: { findUnique: jest.fn(), delete: jest.fn(), update: jest.fn(), findMany: jest.fn() },
         seatAssignment: { findMany: jest.fn() },
+        $queryRaw: jest.fn().mockResolvedValue([]),
         notification: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), createMany: jest.fn() },
         $transaction: jest.fn((callback) => callback(mockTx)),
     },
