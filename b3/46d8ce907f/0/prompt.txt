@@ -408,3 +408,99 @@ If you would rather keep `scanImageLayers.test.ts`, widen the exception instead.
 **Not blocking, worth knowing:** `CLAUDE.md` lost its own size guard in `8c4688c` and now says "Nothing enforces that automatically any more." That predates this branch.</result>
 <usage><subagent_tokens>72629</subagent_tokens><tool_uses>23</tool_uses><duration_ms>605893</duration_ms></usage>
 </task-notification>
+
+---
+
+<task-notification>
+<task-id>ab5b39d4cce769fca</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/ab5b39d4cce769fca.output</output-file>
+<status>completed</status>
+<summary>Agent "Verify docs consolidation slice" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result># Final pass — `chore/tests-only-against-product-code`
+
+Re-read § Testing Expectations from disk. Tree unchanged by me; no leftover worktree. **No blocking findings.**
+
+## What I ran, and what I skipped
+
+| Check | Result |
+| --- | --- |
+| `npx tsc --noEmit` | exit 0 |
+| `npm run lint` | 0 errors, 8 warnings — unchanged from baseline |
+| `npm run test:unit` | **63 suites, 720 tests**, all passed |
+| `npm run test:database` | 22 suites, 111 tests, all passed |
+| `npx jest --selectProjects database` | still aborts: `maxWorkers=23`, exit 1 |
+| Restored suites in isolation | `productIdentity` 11 tests; `databaseSerialisation` 7 tests |
+
+**Skipped — unreachable.** `git status --short` over `e2e/ playwright.config.ts app/ lib/ components/ prisma/ public/ package.json package-lock.json Dockerfile .dockerignore scripts/ .github/` returns **zero** entries. The delta is two renames with zero content change, one deletion, and prose. So `npm run build`, `npx playwright test`, the migration runs, `npm audit` and the container scan cannot be reached. Build and Playwright ran green on an earlier state of this branch.
+
+## 1. Arithmetic — reconciles exactly
+
+Decomposed from measurements I took myself across passes, not from the claim:
+
+| | Suites | Tests |
+| --- | --- | --- |
+| `main` at `8c4688c` | 68 | 773 |
+| Original six files (measured in a scratch worktree, pass 2) | 6 | 66 |
+| less `databaseSerialisation` restored (measured) | −1 | −7 |
+| less `productIdentity` restored (measured) | −1 | −11 |
+| plus `scanImageLayers` (measured, pass 3) | +1 | +5 |
+| **Net removed** | **5** | **53** |
+| Expected final | 68 − 5 = **63** | 773 − 53 = **720** |
+| Observed | **63** | **720** |
+
+The two restorations contribute zero net, correctly — they were already inside `main`'s 773 and are byte-identical, so a rename moves nothing.
+
+**Both restorations verified by hash**, as asked:
+
+```
+9127ca4a7375804a2561a588363ab4124cf19f6ba09c7bcf833d9e870e94b883  productIdentity  (8c4688c and working tree)
+c342b4dcd4fc9a80d438c04ab5e2cbc570d95fb95683b061bb5339ac988a3543  databaseSerialisation (8c4688c and working tree)
+```
+
+`diff` empty for both; git records both as pure renames.
+
+## 2. Full re-audit against the new bullet text — every surviving suite clears
+
+I re-derived the list rather than reusing last round's, and checked all thirteen suites that read files or spawn processes. Grouped by why they qualify:
+
+- **Recursive scans of product source** — `productIdentity` (`app`, `components`, `lib`, `prisma`), `flightTime` (`app`, `components`, `lib`), `seatOccupancy` (`app`, `lib`, `components`), `deadControls` (`app`, `components`). All squarely inside the new "Subject, not technique" paragraph.
+- **Named product files/assets** — `responsiveDashboards` (`app/globals.css`), `passengerDataSchema` and `staffMfaSchema` (`prisma/schema.prisma` + migration SQL), `seatingMigration` and `authTokens.database` (migration SQL, which ships to the production database).
+- **`scripts/` that ships or produces what ships** — `containerEntrypoint` (runs in the image), `sanitizeStandalone` (modifies the artifact).
+- **Bullet 2 exception** — the four in `__tests__/harness/` and `__tests__/e2e/`.
+
+**Does "subject, not technique" make anything ambiguous?** No surviving test is ambiguous, but one thing is resolvable only by inference: the rule now names the `scripts/` files that are *excluded* (`verify-container-secrets.sh`, `scan-image-layers.sh`) and none that are *included*. A reader must work out for themselves that `container-entrypoint.sh` ships and `sanitize-standalone.mjs` produces what ships. The text supports both conclusions — "code or assets that ship, or that produce what ships" — so this is a one-clause improvement, not a defect, and not worth another round.
+
+**Does restoring `productIdentity` conflict with `responsiveDashboards` or `deadControls`?** No, and I checked the specific overlap rather than assuming. Both `productIdentity:147` and `responsiveDashboards:8` read `app/globals.css`, but they assert disjoint properties — the former that the hero references `/img/hero-routes.svg` and is viewport-bounded, the latter `min-width: 0` and the media queries. No duplication, no contradiction. That two suites now read the same file the same way and are both kept is the asymmetry the independent review identified, resolved consistently.
+
+**I also checked whether the restored file drags in anything the rule condemns**, since "almost end to end" was doing real work in your description. It does not: every path literal in it is under `app`, `components`, `lib`, `prisma` or `public`, and it reads no `package.json`, `.github/`, `README` or `Dockerfile`. Its own scan variable is named `shipped`. Clean.
+
+**No sixth file.** Nothing else in the tree is condemned or newly cleared by the rewrite.
+
+## 3. Bullet 2's narrowing excludes nothing it previously covered
+
+Checked by subject, not by directory:
+
+| Suite | Subject | Inside "Jest or Playwright run"? |
+| --- | --- | --- |
+| `harness/databaseSerialisation` | `jest.database-setup.js`, plus `jest.config.js` for the wiring assertion | Yes — named, and `jest.config.js` is "the configuration that wires them" |
+| `e2e/rowSnapshot` | `@/e2e/helpers/rowSnapshot` | Yes — "the leak snapshotter" |
+| `e2e/rowSnapshot.database` | + `@/e2e/helpers/runBaseline`, `@/e2e/global-teardown` | Yes |
+| `e2e/runIsolation.database` | `@/e2e/global-setup`, `@/playwright.config` | Yes — named, plus the configuration clause |
+
+None of the four touches `verify-container-secrets.sh` or `scan-image-layers.sh`, so the new exclusion cannot reach them. The narrowing is clean.
+
+For the record, since it was my exception: your correction is right and mine was under-specified. "Fails closed when a layer cannot be read" *is* my argument one level out, and "a green CI job is not a test result" is the limiter I failed to state. The new boundary is better than what I proposed.
+
+## Mutation testing
+
+Exemption correct and independently supported: both restored files are byte-identical to `8c4688c` by hash, so no assertion was added, removed or altered anywhere in the delta. The five deletions remove assertions and add none.
+
+## Classification
+
+All checks green and reconciling exactly against `main` at `8c4688c`. **No regressions, pre-existing failures, environment problems, or coverage gaps arising from this state.** The unguarded properties are recorded on #263 and #265 per the new disposal clause, and closing #264 is justified — `__tests__/app/productIdentity.test.ts:184` ("gives every public route a title and a description") is exactly what that issue asked for, and it passes.
+
+One scoping note on what this report certifies: I verified the tree, the arithmetic and the rule-to-tree correspondence. I did not and cannot verify the provenance of the decisions behind the deletion set — I have those from your messages and have taken them as given, per your instruction not to re-litigate them. If any of them has not in fact been put to the user directly, that is worth settling before the pull request rather than after, since the deletion set is the substance of the slice.</result>
+<usage><subagent_tokens>160201</subagent_tokens><tool_uses>9</tool_uses><duration_ms>184008</duration_ms></usage>
+</task-notification>
