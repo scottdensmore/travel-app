@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "b346d8ce907f",
+  "strategy": "manual-commit",
+  "branch": "chore/tests-only-against-product-code",
+  "checkpoints_count": 9,
+  "files_touched": [
+    "AGENTS.md",
+    "SECURITY.md",
+    "__tests__/app/productIdentity.test.ts",
+    "__tests__/docs/databaseSerialisation.test.ts",
+    "__tests__/docs/databaseTestHygiene.test.ts",
+    "__tests__/docs/productIdentity.test.ts",
+    "__tests__/harness/databaseSerialisation.test.ts",
+    "__tests__/security/committedSecrets.test.ts",
+    "__tests__/security/containerSecrets.test.ts",
+    "__tests__/security/dependencyPolicy.test.ts",
+    "__tests__/security/scanImageLayers.test.ts",
+    "jest.database-setup.js"
+  ],
+  "sessions": [
+    {
+      "metadata": "/b3/46d8ce907f/0/metadata.json",
+      "transcript": "/b3/46d8ce907f/0/full.jsonl",
+      "compact_transcript": "/b3/46d8ce907f/0/transcript.jsonl",
+      "content_hash": "/b3/46d8ce907f/0/content_hash.txt",
+      "prompt": "/b3/46d8ce907f/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 111,
+    "cache_creation_tokens": 312612,
+    "cache_read_tokens": 14130812,
+    "output_tokens": 61110,
+    "api_call_count": 60
+  }
+}
