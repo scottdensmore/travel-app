@@ -112,10 +112,19 @@ benefit is nil, and the rewrite would change every later commit identifier for
 anyone holding a clone. Treat the string as a known, assessed, inert artifact
 rather than a live credential.
 
-**Recurrence.** `__tests__/security/committedSecrets.test.ts` fails the build
-when any tracked file assigns one of the secret variables to a literal. It
-covers the escaped quoting that hid the original value inside a JSON string,
-which is why no existing check caught it at the time.
+**Recurrence: there is no automated control.**
+`__tests__/security/committedSecrets.test.ts` used to fail the build when a
+tracked file assigned one of the secret variables to a literal, including the
+escaped quoting that hid this value inside a JSON string. It was removed under
+the rule that tests are written only against product code, not against other
+things in the repository.
+
+Nothing now inspects tracked files for committed literals. CI scans built image
+layers (`scripts/verify-container-secrets.sh`), which would not have caught this
+one either — the value sat in an agent configuration file that `.dockerignore`
+excludes from the build context, as noted above. What remains is the
+32-character floor in `lib/env.ts`, which makes a short placeholder unusable
+rather than uncommitted, and review.
 
 ## Reporting a vulnerability
 

@@ -36,4 +36,8 @@ module.exports = async function databaseGlobalSetup(globalConfig) {
     assertSerialised(globalConfig);
 };
 
+// Jest only ever calls the default export. This one exists so
+// `__tests__/harness/databaseSerialisation.test.ts` can drive the guard
+// directly, which is the only way to assert it refuses a parallel run without
+// starting one. It reads as dead code and is not.
 module.exports.assertSerialised = assertSerialised;

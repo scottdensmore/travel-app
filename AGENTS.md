@@ -656,8 +656,37 @@ why — a journey you could not reach is a gap in the review, not a pass.
 
 ## Testing Expectations
 
-- Preserve all existing tests and add coverage for new behavior and
-  regressions.
+- **Tests are written against product code only** — code or assets that ship, or
+  that produce what ships. `prisma/schema.prisma` generates the client,
+  `app/globals.css` reaches the browser and `app/favicon.ico` is served, so all
+  three qualify. `package.json`, `.dockerignore`, `.github/workflows/`, the
+  agent instruction files, and CI tooling do not. A test whose subject is the
+  repository rather than the product does not get written, and an existing one
+  is removed as it is found, even when the property it pins is real and
+  otherwise unguarded — open an issue for the now-unguarded property before
+  removing it, and name that issue in the pull request. A guard removed with
+  only a note in the diff is a guard removed silently.
+
+  **Subject, not technique.** "It executes real code" is not the criterion — a
+  shell script in `scripts/` is real code and only some of it ships — and
+  neither is "it scans the source tree". A recursive scan of `app`, `components`
+  and `lib` has product code as its subject and qualifies; reading
+  `package.json` does not, however it is written.
+- **One exception: the harness that decides whether a run is trustworthy.**
+  `e2e/global-setup.ts`, the leak snapshotter, `jest.database-setup.js` and the
+  configuration that wires them are test tooling and ship nothing, but a silent
+  failure in any of them invalidates every other test rather than failing
+  honestly — which is how three specs leaked data for months (#213), how a
+  parallel database run counted another file's fixtures (#155, #215), and how a
+  stale server made a healthy branch look broken (#196). Those are testable and
+  tested, in `__tests__/harness/` and `__tests__/e2e/`. The exception is narrow:
+  it covers the machinery that decides whether a **Jest or Playwright run** can
+  be believed. A CI check whose silent failure would let something ship —
+  `scripts/verify-container-secrets.sh`, `scripts/scan-image-layers.sh` — sits
+  outside it, because a green CI job is not a test result. Guard those by making
+  the job a required check, not by testing them from here.
+- Preserve every existing test except the ones the two rules above exclude, and
+  add coverage for new behavior and regressions.
 - Add functional coverage for complete user journeys when a change crosses
   component, server, database, or authentication boundaries.
 - Use Jest and Testing Library for focused unit/component/integration tests and
