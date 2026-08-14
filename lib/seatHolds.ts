@@ -23,8 +23,19 @@ export const HOLD_MINUTES = 10;
 export interface SeatClaim {
     flightId: number;
     seatNumber: string;
-    /** The signed-in user today; a checkout session when guests can book. */
+    /** A server-derived key identifying one user's single checkout. */
     holderKey: string;
+}
+
+/**
+ * Bind a browser-generated checkout identifier to the authenticated user.
+ *
+ * The browser never supplies the complete holder key, so it cannot release a
+ * different account's claims. JSON array encoding is unambiguous even if a
+ * user identifier contains punctuation that would collide with a delimiter.
+ */
+export function checkoutHolderKey(userId: string, checkoutId: string): string {
+    return JSON.stringify([userId, checkoutId]);
 }
 
 /**
@@ -71,32 +82,36 @@ export async function releaseHold({ flightId, seatNumber, holderKey }: SeatClaim
     await prisma.seatHold.deleteMany({ where: { flightId, seatNumber, holderKey } });
 }
 
-/**
- * The seats on this flight that somebody *else* is currently holding.
- *
- * Excludes your own, or the seat a customer just picked would grey out under
- * them. Sorted so a caller can compare the list without minding the order the
- * rows came back in.
- */
-export async function seatsHeldByOthers(flightId: number, holderKey: string): Promise<string[]> {
-    const held = await prisma.$queryRaw<{ seatNumber: string }[]>`
-        SELECT "seatNumber" FROM "SeatHold"
+/** Load every live hold once so the two public views cannot disagree. */
+async function liveHolds(flightId: number): Promise<{ seatNumber: string; holderKey: string }[]> {
+    return prisma.$queryRaw<{ seatNumber: string; holderKey: string }[]>`
+        SELECT "seatNumber", "holderKey" FROM "SeatHold"
         WHERE "flightId" = ${flightId}
-          AND "holderKey" <> ${holderKey}
           AND "expiresAt" > now()
         ORDER BY "seatNumber"
     `;
+}
+
+/** The seats on this flight held by a different checkout. */
+export async function seatsHeldByOthers(flightId: number, holderKey: string): Promise<string[]> {
+    const held = await liveHolds(flightId);
+    return held.filter(row => row.holderKey !== holderKey).map(row => row.seatNumber);
+}
+
+/** Every live hold on a flight, for journeys that do not own a checkout. */
+export async function seatsOnHold(flightId: number): Promise<string[]> {
+    const held = await liveHolds(flightId);
     return held.map(row => row.seatNumber);
 }
 
 /**
- * Let go of every seat this customer holds on these flights except the ones
+ * Let go of every seat this checkout holds on these flights except the ones
  * named.
  *
- * Without it a customer who goes back and changes their mind strands the seat
+ * Without it a checkout that goes back and changes its mind strands the seat
  * they abandoned for the rest of its ten minutes, and every swap costs
- * inventory nobody is going to buy. Scoped to the holder, so it can only ever
- * release seats that were already theirs.
+ * inventory nobody is going to buy. Scoped to one checkout's holder key, so a
+ * second tab belonging to the same customer is left alone.
  */
 export async function releaseHoldsExcept(
     flightIds: number[],

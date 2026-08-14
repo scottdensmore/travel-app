@@ -166,9 +166,10 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.click(screen.getByText('Review Booking →'));
 
         await screen.findByText('Review Booking');
-        expect(mockHoldChosenSeatsAction).toHaveBeenCalledWith([
-            { flightId: sampleFlight.id, seatNumber: '11A' },
-        ]);
+        expect(mockHoldChosenSeatsAction).toHaveBeenCalledWith({
+            checkoutId: expect.stringMatching(/^[0-9a-f-]{36}$/i),
+            claims: [{ flightId: sampleFlight.id, seatNumber: '11A' }],
+        });
     });
 
     it('says so when the seats could not be held at all', async () => {
@@ -221,8 +222,8 @@ describe('BookingCheckoutWizard', () => {
     });
 
     it('keeps the customer on the seat map when a seat has just been taken', async () => {
-        // The race the hold exists to decide (#74). Another customer got 4A
-        // between this page rendering and this customer leaving the map, so
+        // The race the hold exists to decide (#74). Another checkout got 4A
+        // between this page rendering and this checkout leaving the map, so
         // advancing has to fail here rather than at payment -- the seat map is
         // where the problem can be fixed.
         mockHoldChosenSeatsAction.mockResolvedValue({
@@ -241,13 +242,13 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.click(screen.getByText('Review Booking →'));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
-            /Seat 11A is being held by another customer while they check out/i,
+            /Seat 11A is being held in another checkout/i,
         );
         expect(screen.getByText('Select Your Seats')).toBeInTheDocument();
         expect(screen.queryByRole('heading', { name: 'Review Booking' })).not.toBeInTheDocument();
     });
 
-    it('marks a seat lost to another customer as taken on the map', async () => {
+    it('marks a seat lost to another checkout as taken on the map', async () => {
         // The map was rendered before the seat went, so without this the error
         // names a seat the map still draws as free -- the page arguing with
         // itself, and the customer with no way to see what changed.
@@ -784,10 +785,13 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByText('Review Booking →'));
 
             await screen.findByText('Review Booking');
-            expect(mockHoldChosenSeatsAction).toHaveBeenCalledWith([
-                { flightId: sampleFlight.id, seatNumber: '11A' },
-                { flightId: inboundFlight.id, seatNumber: '12B' },
-            ]);
+            expect(mockHoldChosenSeatsAction).toHaveBeenCalledWith({
+                checkoutId: expect.stringMatching(/^[0-9a-f-]{36}$/i),
+                claims: [
+                    { flightId: sampleFlight.id, seatNumber: '11A' },
+                    { flightId: inboundFlight.id, seatNumber: '12B' },
+                ],
+            });
         });
 
         it('blames the leg that actually lost the seat, not the one on screen', async () => {
@@ -810,7 +814,7 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByText('Review Booking →'));
 
             expect(await screen.findByRole('alert')).toHaveTextContent(
-                /Seat 11A on the returning flight is being held by another customer/i,
+                /Seat 11A on the returning flight is being held in another checkout/i,
             );
 
             // The failing leg is the one to look at.
@@ -1066,6 +1070,7 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByRole('button', { name: /Confirm \$250 booking/i }));
 
             await waitFor(() => {
+                const checkoutId = mockHoldChosenSeatsAction.mock.calls[0][0].checkoutId;
                 expect(mockBookFlightAction).toHaveBeenCalledWith({
                     flightIds: [42, 43],
                     passengers: [{
@@ -1077,7 +1082,9 @@ describe('BookingCheckoutWizard', () => {
                         seatNumbers: ['11A', '12C'],
                         cabinClass: 'ECONOMY'
                     }],
-                    idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/i)
+                    // One checkout owns both the temporary claims and the
+                    // idempotent booking that will eventually consume them.
+                    idempotencyKey: checkoutId
                 });
             });
         });

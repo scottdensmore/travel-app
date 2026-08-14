@@ -16,7 +16,8 @@ import {
     markNotificationAsReadAction,
     markAllNotificationsAsReadAction,
     generateFlightOccurrencesAction,
-    getOccupiedSeatsAction
+    getOccupiedSeatsAction,
+    holdChosenSeatsAction,
 } from '@/app/actions';
 import { getServerSession } from 'next-auth';
 import TravelGuideService from '@/lib/TravelGuideService';
@@ -78,6 +79,7 @@ jest.mock('@/lib/prisma', () => ({
         review: { create: jest.fn(), findUnique: jest.fn(), delete: jest.fn() },
         booking: { findUnique: jest.fn(), delete: jest.fn(), update: jest.fn(), findMany: jest.fn() },
         seatAssignment: { findMany: jest.fn() },
+        $executeRaw: jest.fn(),
         $queryRaw: jest.fn().mockResolvedValue([]),
         notification: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), createMany: jest.fn() },
         $transaction: jest.fn((callback) => callback(mockTx)),
@@ -2076,5 +2078,25 @@ describe('getOccupiedSeatsAction authorization', () => {
 
         await expect(getOccupiedSeatsAction(-1 as number)).rejects.toThrow('Unauthorized');
         expect(mockedSeatFindMany).not.toHaveBeenCalled();
+    });
+});
+
+describe('holdChosenSeatsAction input boundary', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it('rejects a malformed checkout identifier before writing a hold', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-1' } });
+
+        await expect(holdChosenSeatsAction({
+            checkoutId: 'not-a-uuid',
+            claims: [{ flightId: 42, seatNumber: '11A' }],
+        })).resolves.toMatchObject({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                fields: { checkoutId: expect.any(Array) },
+            },
+        });
+        expect((prisma as any).$executeRaw).not.toHaveBeenCalled();
     });
 });

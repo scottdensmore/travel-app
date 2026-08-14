@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache';
-import { holdSeat, releaseHoldsExcept, seatsHeldByOthers } from '@/lib/seatHolds';
+import { checkoutHolderKey, holdSeat, releaseHoldsExcept, seatsOnHold } from '@/lib/seatHolds';
 import { heldSeats } from '@/lib/seatOccupancy';
 import TravelGuideService from '@/lib/TravelGuideService';
 import FlightBookingService, { PassengerInput } from '@/lib/FlightBookingService';
@@ -43,7 +43,7 @@ import {
     scheduleSchema,
     searchFlightsSchema,
     seatChangesSchema,
-    seatClaimsSchema,
+    checkoutSeatClaimsSchema,
     stringIdSchema
 } from '@/lib/validation';
 
@@ -336,7 +336,11 @@ export async function bookFlightAction(bookingData: {
     // release. Deliberately after the booking rather than inside it: a hold is
     // an optimisation, and failing to tidy one up must never undo a purchase.
     try {
-        await releaseHoldsExcept(bookingData.flightIds, userId, []);
+        await releaseHoldsExcept(
+            bookingData.flightIds,
+            checkoutHolderKey(userId, bookingData.idempotencyKey),
+            [],
+        );
     } catch {
         // Nothing to do about it. The row expires on its own.
     }
@@ -398,11 +402,11 @@ export async function getOccupiedSeatsAction(flightId: number) {
         }
     });
 
-    // A seat another customer is part-way through buying is unavailable too,
+    // A seat another checkout is part-way through buying is unavailable too,
     // and for the customer's purposes indistinguishable from one already sold
-    // (#74). Their own holds are excluded: greying out the seat they just
-    // picked would be the map arguing with them.
-    const beingChosen = await seatsHeldByOthers(flightId, session.user.id);
+    // (#74). This read has no checkout identity: the initial checkout page and
+    // profile seat-change modal both use it, so every active hold counts.
+    const beingChosen = await seatsOnHold(flightId);
 
     return [...new Set([...assignments.map(seat => seat.seatNumber), ...beingChosen])];
 }
@@ -420,22 +424,26 @@ export async function getOccupiedSeatsAction(flightId: number) {
  * the customer's, they expire on their own, and releasing them would hand away
  * seats over a problem with a different one.
  */
-export async function holdChosenSeatsAction(claims: { flightId: number; seatNumber: string }[]) {
+export async function holdChosenSeatsAction(request: {
+    checkoutId: string;
+    claims: { flightId: number; seatNumber: string }[];
+}) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new Error("Unauthorized");
 
-    const parsed = parseActionInput(seatClaimsSchema, claims);
+    const parsed = parseActionInput(checkoutSeatClaimsSchema, request);
     if (!parsed.ok) return parsed;
 
-    const wanted = parsed.data as { flightId: number; seatNumber: string }[];
+    const { checkoutId, claims: wanted } = parsed.data;
+    const holderKey = checkoutHolderKey(session.user.id, checkoutId);
 
     // A customer who went back and changed their mind would otherwise strand
     // the seat they abandoned for the rest of its ten minutes.
-    await releaseHoldsExcept([...new Set(wanted.map(claim => claim.flightId))], session.user.id, wanted);
+    await releaseHoldsExcept([...new Set(wanted.map(claim => claim.flightId))], holderKey, wanted);
 
     const taken: { flightId: number; seatNumber: string }[] = [];
     for (const claim of wanted) {
-        const held = await holdSeat({ ...claim, holderKey: session.user.id });
+        const held = await holdSeat({ ...claim, holderKey });
         if (!held) taken.push(claim);
     }
 
