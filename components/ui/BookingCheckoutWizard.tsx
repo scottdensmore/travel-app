@@ -152,7 +152,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
 
     // The prop is the server's latest read. Seeding state from it once and then
     // ignoring it means a re-render with fresher occupancy is discarded, which
-    // matters now that another customer's hold can change it between renders.
+    // matters now that another checkout's hold can change it between renders.
     useEffect(() => setOccupiedSeatsByLeg(initialOccupiedSeats), [initialOccupiedSeats]);
     const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
     const [passengers, setPassengers] = useState<PassengerFormState[]>([
@@ -294,7 +294,11 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
 
         let result;
         try {
-            result = await holdChosenSeatsAction(claims);
+            idempotencyKeyRef.current ??= createBookingRequestId();
+            result = await holdChosenSeatsAction({
+                checkoutId: idempotencyKeyRef.current,
+                claims,
+            });
         } catch {
             // An expired session or a dropped connection. Without this the
             // promise rejects into nothing: no message, and a button that
@@ -337,14 +341,14 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                     flights.findIndex(flight => flight.id === seat.flightId), flights.length,
                 ).toLowerCase()} flight`
                 : seat.seatNumber);
-            // "Being held" rather than "taken": the other customer may yet
-            // abandon their checkout, and claiming a sale that has not happened
-            // is a claim that is often untrue.
+            // "Being held" rather than "taken": the other checkout may yet be
+            // abandoned, and claiming a sale that has not happened is often
+            // untrue. A checkout may belong to this same signed-in customer.
             errorClaimsFocus.current = true;
             setErrorMessage(
                 names.length === 1
-                    ? `Seat ${names[0]} is being held by another customer while they check out. Please choose a different one.`
-                    : `Seats ${names.join(' and ')} are being held by other customers while they check out. Please choose different ones.`,
+                    ? `Seat ${names[0]} is being held in another checkout. Please choose a different one.`
+                    : `Seats ${names.join(' and ')} are being held in other checkouts. Please choose different ones.`,
             );
             return false;
         }

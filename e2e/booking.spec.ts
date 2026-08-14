@@ -28,6 +28,12 @@ test.describe('Flight Booking Journey', () => {
           where: { email }
         });
         if (!user) continue;
+        // A second checkout tab can deliberately remain on review when the
+        // first finishes. Holder keys are not foreign keys, so delete that
+        // tab's claim before deleting the account that owns the checkout.
+        await prisma.seatHold.deleteMany({
+          where: { holderKey: { contains: user.id } }
+        });
         const bookings = await prisma.booking.findMany({
           where: { userId: user.id }
         });
@@ -237,6 +243,68 @@ test.describe('Flight Booking Journey', () => {
 
     await expect(page).toHaveURL(`/checkout?outbound=${flight.id}`);
     await expect(page.locator('h2:has-text("Traveler Information")')).toBeVisible();
+  });
+
+  test('two checkout tabs keep independent seat holds for the same account', async ({ page, context }) => {
+    const flight = await prisma.flight.findFirstOrThrow({
+      where: { departureDate: { gt: new Date() } },
+      orderBy: { departureDate: 'asc' }
+    });
+    const secondTab = await context.newPage();
+    const checkoutUrl = `/checkout?outbound=${flight.id}`;
+
+    await Promise.all([page.goto(checkoutUrl), secondTab.goto(checkoutUrl)]);
+
+    const reachSeats = async (checkout: typeof page, passport: string) => {
+      await checkout.fill('input[placeholder="John"]', 'Tab');
+      await checkout.fill('input[placeholder="Doe"]', 'Traveler');
+      await checkout.fill('input[type="date"]', '1990-05-15');
+      await checkout.fill('input[placeholder="A00000000"]', passport);
+      await checkout.getByRole('button', { name: 'Select Seats →' }).click();
+    };
+    await Promise.all([
+      reachSeats(page, 'US-TAB-A'),
+      reachSeats(secondTab, 'US-TAB-B'),
+    ]);
+
+    const firstSeat = page.locator('button[title^="Select Seat"]').first();
+    const secondSeat = secondTab.locator('button[title^="Select Seat"]').nth(1);
+    const firstSeatName = (await firstSeat.getAttribute('title'))!.replace('Select Seat ', '');
+    const secondSeatName = (await secondSeat.getAttribute('title'))!.replace('Select Seat ', '');
+    expect(firstSeatName).not.toBe(secondSeatName);
+
+    await firstSeat.click();
+    await page.getByRole('button', { name: 'Review Booking →' }).click();
+    await expect(page.getByRole('heading', { name: 'Review Booking' })).toBeVisible();
+
+    await secondSeat.click();
+    await secondTab.getByRole('button', { name: 'Review Booking →' }).click();
+    await expect(secondTab.getByRole('heading', { name: 'Review Booking' })).toBeVisible();
+
+    const heldByBothTabs = await prisma.seatHold.findMany({
+      where: {
+        flightId: flight.id,
+        seatNumber: { in: [firstSeatName, secondSeatName] },
+      },
+      orderBy: { seatNumber: 'asc' },
+    });
+    expect(heldByBothTabs.map(hold => hold.seatNumber).sort()).toEqual(
+      [firstSeatName, secondSeatName].sort(),
+    );
+    expect(new Set(heldByBothTabs.map(hold => hold.holderKey))).toHaveProperty('size', 2);
+
+    // Completing one checkout cleans up only its claim. The other tab remains
+    // on review with the seat it is still deciding whether to buy.
+    await page.locator('button:has-text("Confirm $")').click();
+    await expect(page.getByRole('heading', { name: 'Booking Confirmed!' })).toBeVisible();
+    await expect(prisma.seatHold.findMany({
+      where: {
+        flightId: flight.id,
+        seatNumber: { in: [firstSeatName, secondSeatName] },
+      },
+    })).resolves.toMatchObject([{ seatNumber: secondSeatName }]);
+
+    await secondTab.close();
   });
 
   test('User chooses both legs in search and carries them into checkout', async ({ page }) => {

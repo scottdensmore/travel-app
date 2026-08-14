@@ -261,6 +261,8 @@ export const passengerSchema = z.object({
     cabinClass: z.enum(['ECONOMY', 'PREMIUM_ECONOMY', 'BUSINESS', 'FIRST'])
 }).strict();
 
+export const bookingRequestIdSchema = z.uuid('Booking request ID must be a UUID.');
+
 export const bookingRequestSchema = z.object({
     /// The itinerary, in leg order. One flight for a one-way trip, two for a
     /// round trip.
@@ -270,7 +272,7 @@ export const bookingRequestSchema = z.object({
     passengers: z.array(passengerSchema, { error: 'At least one passenger is required.' })
         .min(1, 'At least one passenger is required.')
         .max(MAX_PASSENGERS_PER_BOOKING),
-    idempotencyKey: z.uuid('Booking request ID must be a UUID.')
+    idempotencyKey: bookingRequestIdSchema
 }).strict().superRefine(({ flightIds, passengers }, context) => {
     if (new Set(flightIds).size !== flightIds.length) {
         context.addIssue({
@@ -459,3 +461,8 @@ export const seatClaimsSchema = z
     )
     .min(1)
     .max(18);
+
+export const checkoutSeatClaimsSchema = z.object({
+    checkoutId: bookingRequestIdSchema,
+    claims: seatClaimsSchema,
+}).strict();

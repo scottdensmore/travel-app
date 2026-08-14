@@ -1,6 +1,6 @@
 /** @jest-environment node */
 import { airportCodesForRoute } from '@/lib/airports';
-import { getOccupiedSeatsAction } from '@/app/actions';
+import { getOccupiedSeatsAction, holdChosenSeatsAction } from '@/app/actions';
 import { randomUUID } from 'crypto';
 import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
@@ -48,7 +48,14 @@ async function createFlight(suffix: string, from: string, to: string, day: strin
 }
 
 afterAll(async () => {
-    await prisma.seatHold.deleteMany({ where: { holderKey: { in: created.holderKeys } } });
+    await prisma.seatHold.deleteMany({
+        where: {
+            OR: [
+                { holderKey: { in: created.holderKeys } },
+                { flightId: { in: created.flightIds } },
+            ],
+        },
+    });
     for (const bookingId of created.bookingIds) {
         await prisma.passenger.deleteMany({ where: { bookingId } });
         await prisma.booking.deleteMany({ where: { id: bookingId } });
@@ -134,7 +141,46 @@ describe('getOccupiedSeatsAction across an itinerary', () => {
 });
 
 describe('a seat another customer is choosing', () => {
-    it('counts as occupied, and the chooser\'s own seat does not', async () => {
+    it('keeps two checkouts belonging to the same customer independent', async () => {
+        const flight = await createFlight(
+            randomUUID().slice(0, 6),
+            'Seattle, USA',
+            'Detroit, USA',
+            '2026-09-01',
+        );
+        const [firstCheckout, secondCheckout] = [randomUUID(), randomUUID()];
+
+        await expect(holdChosenSeatsAction({
+            checkoutId: firstCheckout,
+            claims: [{ flightId: flight.id, seatNumber: '12A' }],
+        })).resolves.toEqual({ ok: true });
+        await expect(holdChosenSeatsAction({
+            checkoutId: secondCheckout,
+            claims: [{ flightId: flight.id, seatNumber: '12B' }],
+        })).resolves.toEqual({ ok: true });
+
+        let rows = await prisma.seatHold.findMany({
+            where: { flightId: flight.id },
+            orderBy: { seatNumber: 'asc' },
+        });
+        expect(rows.map(row => row.seatNumber)).toEqual(['12A', '12B']);
+        expect(new Set(rows.map(row => row.holderKey))).toHaveProperty('size', 2);
+
+        // Updating the second checkout releases only its abandoned seat. The
+        // first tab's 12A remains held even though both tabs share one session.
+        await expect(holdChosenSeatsAction({
+            checkoutId: secondCheckout,
+            claims: [{ flightId: flight.id, seatNumber: '12C' }],
+        })).resolves.toEqual({ ok: true });
+
+        rows = await prisma.seatHold.findMany({
+            where: { flightId: flight.id },
+            orderBy: { seatNumber: 'asc' },
+        });
+        expect(rows.map(row => row.seatNumber)).toEqual(['12A', '12C']);
+    });
+
+    it('counts every live hold when the caller has no checkout identity', async () => {
         // The read half of #74. Without it the hold decides races invisibly:
         // both customers still see the seat as free, and the loser only finds
         // out when advancing to payment fails.
@@ -145,12 +191,11 @@ describe('a seat another customer is choosing', () => {
         await holdSeat({ flightId: flight.id, seatNumber: '14A', holderKey: rival });
         await holdSeat({ flightId: flight.id, seatNumber: '14B', holderKey: 'occupied-seats-suite' });
 
-        const occupied = await getOccupiedSeatsAction(flight.id);
-
-        expect(occupied).toContain('14A');
-        // Greying out the seat the caller just picked would be the map
-        // arguing with them.
-        expect(occupied).not.toContain('14B');
+        // This action also serves the profile seat-change modal and the first
+        // server render of checkout, neither of which owns a checkout key.
+        // Excluding every hold for the signed-in user would let one journey
+        // ignore a seat that user's other tab is already buying.
+        expect(await getOccupiedSeatsAction(flight.id)).toEqual(['14A', '14B']);
     });
 
     it('stops counting once the hold has expired', async () => {
