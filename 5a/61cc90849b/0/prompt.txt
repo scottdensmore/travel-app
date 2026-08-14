@@ -1,13 +1,1 @@
-I want to continue working on this app.Lets look through all the PRs which has a roadmap. Let me know the next pr to work on
-
----
-
-When you are working on a feature you can create a plan and also a prototype to figure things out. Use Agents.md for the workflow when you are ready for implmentation.  Lets start 257
-
----
-
-why is each jest project run seperately? I would think it would run the unit tess, then the end to end tests
-
----
-
 we should fix the two failing tests again
