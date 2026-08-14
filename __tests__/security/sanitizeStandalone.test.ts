@@ -1,9 +1,10 @@
-import { spawnSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-
-const sanitizer = path.resolve(__dirname, '../../scripts/sanitize-standalone.mjs');
+import {
+    runStandaloneSanitizer,
+    runStandaloneSanitizerCli,
+} from '../../scripts/sanitize-standalone-core.mjs';
 
 describe('standalone environment-file sanitizer', () => {
     let temporaryDirectory: string;
@@ -22,25 +23,26 @@ describe('standalone environment-file sanitizer', () => {
     });
 
     it('removes environment files without changing application files', () => {
-        const result = spawnSync('node', [sanitizer, temporaryDirectory], {
-            encoding: 'utf8',
-        });
+        const output = { log: jest.fn(), error: jest.fn() };
+        const status = runStandaloneSanitizer(temporaryDirectory, output);
 
-        expect(result.status).toBe(0);
+        expect(status).toBe(0);
         expect(fs.existsSync(path.join(temporaryDirectory, '.env'))).toBe(false);
         expect(fs.existsSync(path.join(temporaryDirectory, '.env.production'))).toBe(false);
         expect(fs.existsSync(path.join(temporaryDirectory, 'nested/.env.local'))).toBe(false);
         expect(fs.existsSync(path.join(temporaryDirectory, 'server.js'))).toBe(true);
-        expect(result.stdout).toContain('Removed 3 environment files from standalone output.');
+        expect(output.log).toHaveBeenCalledWith('Removed 3 environment files from standalone output.');
+        expect(output.error).not.toHaveBeenCalled();
     });
 
     it('fails clearly when the standalone directory does not exist', () => {
         const missingDirectory = path.join(temporaryDirectory, 'missing');
-        const result = spawnSync('node', [sanitizer, missingDirectory], {
-            encoding: 'utf8',
-        });
+        const output = { log: jest.fn(), error: jest.fn() };
+        const runtime: { exitCode?: number } = {};
+        runStandaloneSanitizerCli(missingDirectory, output, runtime);
 
-        expect(result.status).not.toBe(0);
-        expect(result.stderr).toContain(`Standalone output not found: ${missingDirectory}`);
+        expect(runtime.exitCode).toBe(1);
+        expect(output.error).toHaveBeenCalledWith(`Standalone output not found: ${missingDirectory}`);
+        expect(output.log).not.toHaveBeenCalled();
     });
 });
