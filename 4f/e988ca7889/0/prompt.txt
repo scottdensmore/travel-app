@@ -1,0 +1,38 @@
+we should fix the two failing tests again
+
+---
+
+Ok lets do #74
+
+---
+
+what hook timed out?
+
+---
+
+Stop hook (failed)
+  error: hook timed out after 30s is what I see
+
+---
+
+Ok I fixed it with entire doctor
+
+---
+
+Ok what is next?
+
+---
+
+Ok lets commit the changes that entire made to the settings.json file
+
+---
+
+Was the review workflow work made by claude?
+
+---
+
+Yep lets do that
+
+---
+
+actually lets drop them and just keep the entire portions. We can add them back later
