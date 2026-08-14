@@ -4,6 +4,7 @@ import { bookingFlights } from '@/lib/bookingItinerary';
 import { prisma } from '@/lib/prisma';
 import { assertSeatAvailableForCabin } from '@/lib/seatLayout';
 import { lockFlightForUpdate } from '@/lib/flightLock';
+import { checkoutHolderKey, consumeSeatHold, SeatHoldUnavailableError } from '@/lib/seatHolds';
 import { flightBookingServiceSchema, parseInput } from '@/lib/validation';
 import { calculateItineraryTotal, flightFareCents } from '@/lib/bookingPricing';
 import { safePassengerSelect } from '@/lib/passengerDataAccess';
@@ -215,6 +216,27 @@ export default class FlightBookingService {
                     if (occupied.has(seat)) {
                         throw new Error(`Seat ${seat} is already occupied on this flight.`);
                     }
+                }
+            }
+
+            const holderKey = checkoutHolderKey(userId, idempotencyKey);
+            const requestedClaims = flights.flatMap((flight, legIndex) => (
+                passengers.map(passenger => ({
+                    flightId: flight.id,
+                    seatNumber: passenger.seatNumbers[legIndex],
+                    holderKey,
+                }))
+            )).sort((left, right) => (
+                left.flightId - right.flightId || left.seatNumber.localeCompare(right.seatNumber)
+            ));
+
+            // Conversion, rather than cleanup: the live checkout claim is
+            // removed in the same transaction that creates the assignment.
+            // Every hold writer takes the Flight locks above, so a missing row
+            // cannot be inserted or taken over between this delete and commit.
+            for (const claim of requestedClaims) {
+                if (!await consumeSeatHold(tx, claim)) {
+                    throw new SeatHoldUnavailableError(claim);
                 }
             }
 

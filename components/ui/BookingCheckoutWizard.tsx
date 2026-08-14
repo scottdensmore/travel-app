@@ -359,6 +359,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
     };
 
     const errorRef = useRef<HTMLDivElement | null>(null);
+    const confirmationHeadingRef = useRef<HTMLHeadingElement | null>(null);
     /**
      * Whether this error is the banner's to own.
      *
@@ -367,6 +368,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
      * off them. Only the seat-hold refusal has nowhere better to send it.
      */
     const errorClaimsFocus = useRef(false);
+    const pendingValidationFocusPath = useRef<string | null>(null);
 
     /**
      * Put the error where the customer is looking.
@@ -387,6 +389,30 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
         errorRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
         if (claimsFocus) errorRef.current?.focus({ preventScroll: true });
     }, [errorMessage]);
+
+    /**
+     * Route server validation focus only after React has rendered the step,
+     * passenger and leg named by the error. A zero-delay timer can run before
+     * the responsive seat picker has mounted, leaving focus on the document.
+     */
+    useEffect(() => {
+        const targetPath = pendingValidationFocusPath.current;
+        if (!targetPath) return;
+
+        const field = document.querySelector<HTMLElement>(
+            `[data-validation-path="${targetPath}"]`
+        );
+        if (!field) return;
+
+        pendingValidationFocusPath.current = null;
+        field.focus();
+    }, [activeLegIndex, activePassengerIndex, passengers, serverFieldErrors, step]);
+
+    useEffect(() => {
+        if (step === 4 && bookingResult) {
+            confirmationHeadingRef.current?.focus();
+        }
+    }, [bookingResult, step]);
 
     const [holdingSeats, setHoldingSeats] = useState(false);
 
@@ -711,26 +737,34 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                 const passengerMatch = /^passengers\.(\d+)\.(\w+)(?:\.\d+)?$/.exec(firstFieldPath || '');
                 if (passengerMatch) {
                     const passengerIndex = Number(passengerMatch[1]);
+                    // A seat error names its leg, so the path carries a
+                    // trailing index the target element does not.
+                    pendingValidationFocusPath.current = firstFieldPath.replace(
+                        /^(passengers\.\d+\.seatNumbers)(?:\.\d+)?$/,
+                        'passengers.$#.seatNumber',
+                    ).replace('$#', String(passengerIndex));
                     setActivePassengerIndex(passengerIndex);
                     setStep(passengerMatch[2] === 'seatNumbers' ? 2 : 1);
                     // The trailing index names the leg, so show the map the
                     // error is about rather than whichever leg was open.
                     const legMatch = /^passengers\.\d+\.seatNumbers\.(\d+)$/.exec(firstFieldPath);
                     if (legMatch) {
-                        setActiveLegIndex(Number(legMatch[1]));
+                        const legIndex = Number(legMatch[1]);
+                        setActiveLegIndex(legIndex);
+                        // A failed conversion means this checkout no longer
+                        // owns the displayed selection. Clear it before
+                        // returning to the map so Confirm cannot repeat the
+                        // same impossible request.
+                        setPassengers(current => current.map((passenger, index) => (
+                            index === passengerIndex
+                                ? {
+                                    ...passenger,
+                                    seatNumbers: passenger.seatNumbers.map((seat, index) =>
+                                        index === legIndex ? '' : seat),
+                                }
+                                : passenger
+                        )));
                     }
-                    setTimeout(() => {
-                        // A seat error names its leg, so the path carries a
-                        // trailing index the target element does not.
-                        const targetPath = firstFieldPath.replace(
-                            /^(passengers\.\d+\.seatNumbers)(?:\.\d+)?$/,
-                            'passengers.$#.seatNumber',
-                        ).replace('$#', String(passengerIndex));
-                        const field = document.querySelector<HTMLElement>(
-                            `[data-validation-path="${targetPath}"]`
-                        );
-                        field?.focus();
-                    }, 0);
                 }
                 return;
             }
@@ -1478,7 +1512,13 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                         }}>
                             ✓
                         </div>
-                        <h2 style={{ fontSize: '2rem', color: '#34d399', fontWeight: 'bold', marginBottom: '0.5rem' }}>Booking Confirmed!</h2>
+                        <h2
+                            ref={confirmationHeadingRef}
+                            tabIndex={-1}
+                            style={{ fontSize: '2rem', color: '#34d399', fontWeight: 'bold', marginBottom: '0.5rem' }}
+                        >
+                            Booking Confirmed!
+                        </h2>
                         <p style={{ color: 'rgba(255,255,255,0.6)', marginBottom: '0.5rem' }}>Your booking is confirmed. Payment is not collected in this demo.</p>
                         <p style={{ color: '#34d399', marginBottom: '2rem', fontWeight: 'bold' }}>Confirmed total: {bookingResult.totalPriceCents !== null ? formatPrice(bookingResult.totalPriceCents) : totalPriceDisplay}</p>
 

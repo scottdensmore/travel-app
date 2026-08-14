@@ -410,7 +410,8 @@ describe('BookingCheckoutWizard', () => {
             totalPriceCents: 10000,
             passengers: [{ firstName: 'Bob', lastName: 'Jones', seatNumbers: ['11C'], cabinClass: 'ECONOMY' }]
         });
-        await waitFor(() => expect(screen.getByText('Booking Confirmed!')).toBeInTheDocument());
+        const confirmationHeading = await screen.findByRole('heading', { name: 'Booking Confirmed!' });
+        await waitFor(() => expect(confirmationHeading).toHaveFocus());
     });
 
     it('uses booking-specific copy for an unknown submission failure', async () => {
@@ -491,9 +492,40 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.click(screen.getByRole('button', { name: /Confirm \$100 booking/i }));
 
         await waitFor(() => expect(screen.getByText('Select Your Seats')).toBeInTheDocument());
-        const passengerTarget = screen.getByRole('button', { name: /Bob Jones.*Seat: 11C/i });
+        const passengerTarget = screen.getByRole('button', { name: /Bob Jones.*Seat: Not Chosen/i });
         expect(passengerTarget).toHaveAttribute('data-invalid', 'true');
         expect(passengerTarget).toHaveAccessibleDescription('Seat number is invalid.');
+        await waitFor(() => expect(passengerTarget).toHaveFocus());
+    });
+
+    it('clears a lost hold and returns focus to the seat map for recovery', async () => {
+        mockBookFlightAction.mockResolvedValue({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'Seat 11C is no longer held for this checkout. Please choose a seat again.',
+                fields: {
+                    'passengers.0.seatNumbers.0': [
+                        'Seat 11C is no longer held for this checkout. Please choose a seat again.',
+                    ],
+                },
+            },
+        });
+
+        const { container } = render(<BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />);
+        fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Bob' } });
+        fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Jones' } });
+        fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1988-12-01' } });
+        fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US9876543' } });
+        fireEvent.click(screen.getByText('Select Seats →'));
+        fireEvent.click(screen.getByTitle('Select Seat 11C'));
+        fireEvent.click(screen.getByText('Review Booking →'));
+        await screen.findByText('Review Booking');
+        fireEvent.click(screen.getByRole('button', { name: /Confirm \$100 booking/i }));
+
+        await screen.findByText('Select Your Seats');
+        const passengerTarget = screen.getByRole('button', { name: /Bob Jones.*Seat: Not Chosen/i });
+        expect(screen.getByRole('alert')).toHaveTextContent('Please choose a seat again.');
         await waitFor(() => expect(passengerTarget).toHaveFocus());
     });
 

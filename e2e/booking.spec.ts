@@ -293,8 +293,8 @@ test.describe('Flight Booking Journey', () => {
     );
     expect(new Set(heldByBothTabs.map(hold => hold.holderKey))).toHaveProperty('size', 2);
 
-    // Completing one checkout cleans up only its claim. The other tab remains
-    // on review with the seat it is still deciding whether to buy.
+    // Completing one checkout atomically replaces only its claim with a seat
+    // assignment. The other tab remains on review with its live claim.
     await page.locator('button:has-text("Confirm $")').click();
     await expect(page.getByRole('heading', { name: 'Booking Confirmed!' })).toBeVisible();
     await expect(prisma.seatHold.findMany({

@@ -1,6 +1,7 @@
 /** @jest-environment node */
 import { airportCodesForRoute } from '@/lib/airports';
 import FlightBookingService from '@/lib/FlightBookingService';
+import { bookHeldFlight } from '@/e2e/helpers/holdBookingSeats';
 import { prisma } from '@/lib/prisma';
 import { decryptPassengerData } from '@/lib/passengerDataProtection';
 import { purgeExpiredPassengerData } from '@/lib/passengerDataRetention';
@@ -41,7 +42,7 @@ describe('passenger identity data in PostgreSQL', () => {
     });
 
     it('stores only ciphertext, returns only safe fields, and purges on expiry', async () => {
-        const result = await new FlightBookingService().bookFlight({
+        const result = await bookHeldFlight(new FlightBookingService(), {
             flightIds: [flightId],
             userId,
             idempotencyKey: crypto.randomUUID(),

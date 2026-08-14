@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { airportCodesForRoute } from '@/lib/airports';
 import {
-    HOLD_MINUTES, holdSeat, releaseHold, releaseHoldsExcept, seatsHeldByOthers,
+    HOLD_MINUTES, holdSeat, holdSeats, releaseHold, releaseHoldsExcept, seatsHeldByOthers,
 } from '@/lib/seatHolds';
 
 /**
@@ -87,6 +87,31 @@ describe('holding a seat while the customer chooses', () => {
         expect([first, second]).toContain(rows[0].holderKey);
     });
 
+    it('serializes opposite-order multi-seat claims without a partial winner', async () => {
+        // Row locks alone deadlock here: each checkout takes its first seat and
+        // waits for the other checkout's row on its second. The shared Flight
+        // lock must make one checkout finish its complete set before the other
+        // starts, regardless of the order received from the browser.
+        const flight = await aFlight();
+        const [first, second] = [aHolder(), aHolder()];
+        const claims = [
+            { flightId: flight.id, seatNumber: '12B' },
+            { flightId: flight.id, seatNumber: '12C' },
+        ];
+
+        const results = await Promise.all([
+            holdSeats(claims.map(claim => ({ ...claim, holderKey: first }))),
+            holdSeats([...claims].reverse().map(claim => ({ ...claim, holderKey: second }))),
+        ]);
+
+        expect(results.map(taken => taken.length).sort()).toEqual([0, 2]);
+        const rows = await prisma.seatHold.findMany({
+            where: { flightId: flight.id, seatNumber: { in: ['12B', '12C'] } },
+        });
+        expect(rows).toHaveLength(2);
+        expect(new Set(rows.map(row => row.holderKey))).toHaveProperty('size', 1);
+    });
+
     it('lets the holder take the same seat again without losing it', async () => {
         // Re-picking a seat you already hold, or a page that re-renders, must
         // not read as a competing customer and fail.
@@ -123,6 +148,35 @@ describe('holding a seat while the customer chooses', () => {
         const rows = await prisma.seatHold.findMany({ where: { flightId: flight.id } });
         expect(rows).toHaveLength(1);
         expect(rows[0].holderKey).toBe(next);
+    });
+
+    it('hands over a hold that expires while the next customer waits for the flight lock', async () => {
+        const flight = await aFlight();
+        const [abandoned, next] = [aHolder(), aHolder()];
+        await holdSeat({ flightId: flight.id, seatNumber: '5B', holderKey: abandoned });
+        await prisma.$executeRaw`
+            UPDATE "SeatHold"
+            SET "createdAt" = statement_timestamp(),
+                "expiresAt" = statement_timestamp() + interval '500 milliseconds'
+            WHERE "flightId" = ${flight.id} AND "seatNumber" = '5B'
+        `;
+
+        let waitingClaim: Promise<boolean> | null = null;
+        await prisma.$transaction(async (tx) => {
+            await tx.$queryRaw`
+                SELECT "id" FROM "Flight" WHERE "id" = ${flight.id} FOR UPDATE
+            `;
+            // This transaction starts while the old claim is live, then waits
+            // here until the Flight lock is released after it has expired.
+            waitingClaim = holdSeat({ flightId: flight.id, seatNumber: '5B', holderKey: next });
+            await tx.$queryRaw`SELECT 1 AS slept FROM pg_sleep(0.75)`;
+        });
+
+        expect(waitingClaim).not.toBeNull();
+        await expect(waitingClaim!).resolves.toBe(true);
+        await expect(prisma.seatHold.findFirstOrThrow({
+            where: { flightId: flight.id, seatNumber: '5B' },
+        })).resolves.toMatchObject({ holderKey: next });
     });
 
     it('holds for the stated number of minutes, not some other number', async () => {

@@ -361,8 +361,8 @@ model SeatHold {
   flightId   Int
   flight     Flight   @relation(fields: [flightId], references: [id], onDelete: Cascade)
   seatNumber String
-  /// Who is holding it. The signed-in user today; a checkout session once
-  /// guests can book, which is why this is a string and not a relation.
+  /// One server-derived user + checkout identity. This is not a relation: the
+  /// checkout UUID scopes two tabs for one account independently.
   holderKey  String
   /// The migration writes `DEFAULT now()`, so the database supplies this. No
   /// production path calls `prisma.seatHold.create` -- the claim is one raw

@@ -11,6 +11,7 @@ import {
     generateStaffMfaSecret,
 } from '../lib/staffMfa';
 import { createVerifiedAccount, signInWithCredentials } from './helpers/auth';
+import { bookHeldFlight } from './helpers/holdBookingSeats';
 
 loadEnvConfig(process.cwd());
 
@@ -73,7 +74,7 @@ async function aFlight(flightNumber: string) {
 
 async function bookFor(email: string, flightId: number, seatNumber: string) {
     const user = await prisma.user.findUniqueOrThrow({ where: { email } });
-    return new FlightBookingService().bookFlight({
+    return bookHeldFlight(new FlightBookingService(), {
         flightIds: [flightId],
         userId: user.id,
         passengers: [{
@@ -92,7 +93,7 @@ async function bookFor(email: string, flightId: number, seatNumber: string) {
 /** A round trip: two legs, one traveller seated on each. */
 async function bookRoundTripFor(email: string, flightIds: number[], seatNumbers: string[]) {
     const user = await prisma.user.findUniqueOrThrow({ where: { email } });
-    return new FlightBookingService().bookFlight({
+    return bookHeldFlight(new FlightBookingService(), {
         flightIds,
         userId: user.id,
         passengers: [{
@@ -488,4 +489,3 @@ test.describe('A disrupted booking on a phone', () => {
         expect(lastFlightTop).toBeLessThan(statusTop);
     });
 });
-

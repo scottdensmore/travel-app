@@ -3,6 +3,7 @@ import { airportCodesForRoute } from '@/lib/airports';
 import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import FlightBookingService from '@/lib/FlightBookingService';
+import { bookHeldFlight } from '@/e2e/helpers/holdBookingSeats';
 import { updateFlightSeatingLayout } from '@/lib/FlightSeatLayoutService';
 
 const created = { flightIds: [] as number[], bookingIds: [] as number[], userIds: [] as string[] };
@@ -56,7 +57,7 @@ describe('updateFlightSeatingLayout with a round trip on the flight', () => {
         });
         created.userIds.push(user.id);
 
-        const booking = await new FlightBookingService().bookFlight({
+        const booking = await bookHeldFlight(new FlightBookingService(), {
             flightIds: [outbound.id, inbound.id],
             userId: user.id,
             passengers: [{
@@ -96,7 +97,7 @@ describe('updateFlightSeatingLayout with a round trip on the flight', () => {
         });
         created.userIds.push(user.id);
 
-        const booking = await new FlightBookingService().bookFlight({
+        const booking = await bookHeldFlight(new FlightBookingService(), {
             flightIds: [flight.id],
             userId: user.id,
             passengers: [{
@@ -136,7 +137,7 @@ describe('updateFlightSeatingLayout with a round trip on the flight', () => {
         });
         created.userIds.push(user.id);
 
-        const booking = await new FlightBookingService().bookFlight({
+        const booking = await bookHeldFlight(new FlightBookingService(), {
             flightIds: [flight.id],
             userId: user.id,
             passengers: [{

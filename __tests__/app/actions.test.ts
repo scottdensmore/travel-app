@@ -24,6 +24,7 @@ import TravelGuideService from '@/lib/TravelGuideService';
 import FlightBookingService from '@/lib/FlightBookingService';
 import FlightScheduleService from '@/lib/FlightScheduleService';
 import { prisma } from '@/lib/prisma';
+import { checkoutHolderKey, SeatHoldUnavailableError } from '@/lib/seatHolds';
 
 // Keep these heavy/server-only modules out of the unit test.
 jest.mock('next-auth', () => ({ getServerSession: jest.fn() }));
@@ -704,6 +705,80 @@ describe('bookFlightAction', () => {
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
         })).resolves.toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR' } });
         expect(mockBookFlight).not.toHaveBeenCalled();
+    });
+
+    it('returns a recoverable seat error when checkout no longer owns its hold', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        const idempotencyKey = '8ea59a65-9251-45b3-95d0-3920c49f5735';
+        mockBookFlight.mockRejectedValue(new SeatHoldUnavailableError({
+            flightId: 42,
+            seatNumber: '11A',
+            holderKey: checkoutHolderKey('user-123', idempotencyKey),
+        }));
+
+        await expect(bookFlightAction({
+            flightIds: [42],
+            passengers: [{
+                firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
+                passportNumber: 'AB123456', gender: 'Female', seatNumbers: ['11A'],
+                cabinClass: 'ECONOMY',
+            }],
+            idempotencyKey,
+        })).resolves.toEqual({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'Seat 11A is no longer held for this checkout. Please choose a seat again.',
+                fields: {
+                    'passengers.0.seatNumbers.0': [
+                        'Seat 11A is no longer held for this checkout. Please choose a seat again.',
+                    ],
+                },
+            },
+        });
+        expect(mockedNotificationCreate).not.toHaveBeenCalled();
+    });
+
+    it('maps a lost hold to the passenger and leg named by the claim', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        const idempotencyKey = '8ea59a65-9251-45b3-95d0-3920c49f5735';
+        mockBookFlight.mockRejectedValue(new SeatHoldUnavailableError({
+            flightId: 43,
+            seatNumber: '22B',
+            holderKey: checkoutHolderKey('user-123', idempotencyKey),
+        }));
+
+        await expect(bookFlightAction({
+            flightIds: [42, 43],
+            passengers: [{
+                firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
+                passportNumber: 'AB123456', gender: 'Female', seatNumbers: ['11A', '11B'],
+                cabinClass: 'ECONOMY',
+            }, {
+                firstName: 'Grace', lastName: 'Hopper', dateOfBirth: '1990-01-01',
+                passportNumber: 'CD123456', gender: 'Female', seatNumbers: ['22A', '22B'],
+                cabinClass: 'ECONOMY',
+            }],
+            idempotencyKey,
+        })).resolves.toMatchObject({
+            ok: false,
+            error: { fields: { 'passengers.1.seatNumbers.1': expect.any(Array) } },
+        });
+    });
+
+    it('does not turn an unexpected booking failure into validation feedback', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        mockBookFlight.mockRejectedValue(new Error('database unavailable'));
+
+        await expect(bookFlightAction({
+            flightIds: [42],
+            passengers: [{
+                firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
+                passportNumber: 'AB123456', gender: 'Female', seatNumbers: ['11A'],
+                cabinClass: 'ECONOMY',
+            }],
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+        })).rejects.toThrow('database unavailable');
     });
 
     it('rejects bookings without passengers before calling the booking service', async () => {

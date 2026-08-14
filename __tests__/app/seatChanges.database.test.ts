@@ -5,6 +5,7 @@ import { getServerSession } from 'next-auth';
 import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import FlightBookingService from '@/lib/FlightBookingService';
+import { bookHeldFlight } from '@/e2e/helpers/holdBookingSeats';
 
 // Only the session and cache boundaries are stubbed; the database is real,
 // because what is under test is which rows a seat change touches.
@@ -66,7 +67,7 @@ describe('changeBookingSeatsAction on a round trip', () => {
         const inbound = await createFlight(`I${suffix}`, 'Detroit, USA', 'Seattle, USA', '2027-06-08');
         const user = await createUser(suffix);
 
-        const booking = await new FlightBookingService().bookFlight({
+        const booking = await bookHeldFlight(new FlightBookingService(), {
             flightIds: [outbound.id, inbound.id],
             userId: user.id,
             passengers: [{
@@ -115,7 +116,7 @@ describe('changeBookingSeatsAction on a round trip', () => {
         const inbound = await createFlight(`I${suffix}`, 'Detroit, USA', 'Seattle, USA', '2027-07-08');
         const user = await createUser(suffix);
 
-        const booking = await new FlightBookingService().bookFlight({
+        const booking = await bookHeldFlight(new FlightBookingService(), {
             flightIds: [outbound.id, inbound.id],
             userId: user.id,
             passengers: [{
@@ -152,7 +153,7 @@ describe('changeBookingSeatsAction on a round trip', () => {
 
         // 11A on the inbound flight is free again, so the unique index accepts it.
         const other = await createUser(`${suffix}other`);
-        const secondBooking = await new FlightBookingService().bookFlight({
+        const secondBooking = await bookHeldFlight(new FlightBookingService(), {
             flightIds: [inbound.id],
             userId: other.id,
             passengers: [{
