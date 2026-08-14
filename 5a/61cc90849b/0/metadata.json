@@ -1,0 +1,46 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "5a61cc90849b",
+  "session_id": "019ffe5b-1054-7c22-8afc-e97cb84c7b73",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-14T05:44:24.395789415Z",
+  "branch": "fix/p2-2-checkout-scoped-holds",
+  "checkpoints_count": 1,
+  "save_step_count": 1,
+  "files_touched": [
+    "__tests__/app/actions.test.ts",
+    "__tests__/app/occupiedSeats.database.test.ts",
+    "__tests__/components/BookingCheckoutWizard.test.tsx",
+    "app/actions.ts",
+    "components/ui/BookingCheckoutWizard.tsx",
+    "e2e/booking.spec.ts",
+    "lib/seatHolds.ts",
+    "lib/validation.ts"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.6-sol",
+  "turn_id": "21929b4ac987",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 814163,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 38416640,
+    "output_tokens": 82070,
+    "api_call_count": 353
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-14T05:44:23.268693679Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 176,
+    "human_modified": 59,
+    "human_removed": 0,
+    "total_committed": 176,
+    "total_lines_changed": 235,
+    "agent_percentage": 0,
+    "metric_version": 2
+  }
+}
