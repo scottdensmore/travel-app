@@ -1,7 +1,12 @@
 'use server'
 
 import { revalidatePath } from 'next/cache';
-import { checkoutHolderKey, holdSeat, releaseHoldsExcept, seatsOnHold } from '@/lib/seatHolds';
+import {
+    checkoutHolderKey,
+    holdSeats,
+    SeatHoldUnavailableError,
+    seatsOnHold,
+} from '@/lib/seatHolds';
 import { heldSeats } from '@/lib/seatOccupancy';
 import TravelGuideService from '@/lib/TravelGuideService';
 import FlightBookingService, { PassengerInput } from '@/lib/FlightBookingService';
@@ -321,28 +326,25 @@ export async function bookFlightAction(bookingData: {
     if (!parsed.ok) return parsed;
     bookingData = parsed.data as typeof bookingData;
 
-    const result = await flightBookingService.bookFlight({
-        flightIds: bookingData.flightIds,
-        userId,
-        passengers: bookingData.passengers,
-        idempotencyKey: bookingData.idempotencyKey
-    });
-
-    // The seats are bought; the claim on them has done its job. Left behind it
-    // keeps a sold seat "held" for the rest of its ten minutes -- harmless to
-    // the buyer, who owns the assignment, and a seat withdrawn from everyone
-    // else for no reason. It also outlives the account: `holderKey` is not a
-    // foreign key, so a customer deleted mid-checkout strands a row nobody can
-    // release. Deliberately after the booking rather than inside it: a hold is
-    // an optimisation, and failing to tidy one up must never undo a purchase.
+    let result;
     try {
-        await releaseHoldsExcept(
-            bookingData.flightIds,
-            checkoutHolderKey(userId, bookingData.idempotencyKey),
-            [],
+        result = await flightBookingService.bookFlight({
+            flightIds: bookingData.flightIds,
+            userId,
+            passengers: bookingData.passengers,
+            idempotencyKey: bookingData.idempotencyKey
+        });
+    } catch (error) {
+        if (!(error instanceof SeatHoldUnavailableError)) throw error;
+
+        const legIndex = bookingData.flightIds.indexOf(error.claim.flightId);
+        const passengerIndex = bookingData.passengers.findIndex(
+            passenger => passenger.seatNumbers[legIndex] === error.claim.seatNumber,
         );
-    } catch {
-        // Nothing to do about it. The row expires on its own.
+        const field = legIndex >= 0 && passengerIndex >= 0
+            ? `passengers.${passengerIndex}.seatNumbers.${legIndex}`
+            : '_root';
+        return actionValidationFailure(error.message, field);
     }
 
     try {
@@ -437,15 +439,8 @@ export async function holdChosenSeatsAction(request: {
     const { checkoutId, claims: wanted } = parsed.data;
     const holderKey = checkoutHolderKey(session.user.id, checkoutId);
 
-    // A customer who went back and changed their mind would otherwise strand
-    // the seat they abandoned for the rest of its ten minutes.
-    await releaseHoldsExcept([...new Set(wanted.map(claim => claim.flightId))], holderKey, wanted);
-
-    const taken: { flightId: number; seatNumber: string }[] = [];
-    for (const claim of wanted) {
-        const held = await holdSeat({ ...claim, holderKey });
-        if (!held) taken.push(claim);
-    }
+    const taken = (await holdSeats(wanted.map(claim => ({ ...claim, holderKey }))))
+        .map(({ flightId, seatNumber }) => ({ flightId, seatNumber }));
 
     // The leg travels with the seat. A round trip can carry 16A twice, and
     // reporting the number alone made the caller mark whichever leg it found

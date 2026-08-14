@@ -6,6 +6,7 @@ import { encryptPassengerData } from '@/lib/passengerDataProtection';
 
 const mockTx = {
     $queryRaw: jest.fn(),
+    $executeRaw: jest.fn(),
     booking: {
         findFirst: jest.fn(),
         findMany: jest.fn(),
@@ -38,6 +39,8 @@ describe('FlightBookingService', () => {
         mockTx.seatAssignment.findMany.mockReset();
         mockTx.seatAssignment.findMany.mockResolvedValue([]);
         mockTx.$queryRaw.mockReset();
+        mockTx.$executeRaw.mockReset();
+        mockTx.$executeRaw.mockResolvedValue(1);
     });
 
     it('rejects a booking without passengers before starting a transaction', async () => {
@@ -248,7 +251,43 @@ describe('FlightBookingService', () => {
             }],
         });
 
+        // Booking consumes the checkout's live claim in the same transaction
+        // as the assignment. A later best-effort cleanup is not conversion:
+        // another checkout can take the row between the purchase and delete.
+        expect(mockTx.$executeRaw).toHaveBeenCalledTimes(1);
+
         expect(result).toMatchObject({ id: 2, totalPriceCents: 70000 });
+    });
+
+    it('refuses to book a seat this checkout no longer holds', async () => {
+        mockTx.flight.findMany.mockResolvedValue([{
+            id: 7,
+            priceCents: 35000,
+            status: 'ON_TIME',
+            departureDate: new Date('2099-01-01T10:00:00Z'),
+            firstClassRows: 0,
+            businessRows: 0,
+            premiumEconomyRows: 0,
+            economyRows: 20,
+            seatPattern: 'ABC-DEF',
+        }]);
+        mockTx.booking.findFirst.mockResolvedValue(null);
+        mockTx.seatAssignment.findMany.mockResolvedValue([]);
+        mockTx.$executeRaw.mockResolvedValue(0);
+
+        await expect(new FlightBookingService().bookFlight({
+            flightIds: [7],
+            userId: 'u1',
+            passengers: [{
+                firstName: 'Alice', lastName: 'Smith', dateOfBirth: '1995-05-15',
+                passportNumber: 'US123456', gender: 'Female', seatNumbers: ['11A'],
+                cabinClass: 'ECONOMY',
+            }],
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+        })).rejects.toThrow('Seat 11A is no longer held for this checkout.');
+
+        expect(mockTx.booking.create).not.toHaveBeenCalled();
+        expect(mockTx.seatAssignment.createMany).not.toHaveBeenCalled();
     });
 
     it('returns the existing booking when an idempotency key is retried', async () => {
@@ -307,6 +346,7 @@ describe('FlightBookingService', () => {
         });
         expect(mockTx.booking.create).not.toHaveBeenCalled();
         expect(mockTx.booking.findMany).not.toHaveBeenCalled();
+        expect(mockTx.$executeRaw).not.toHaveBeenCalled();
     });
 
     it('rejects reuse of an idempotency key for a different flight or passenger request', async () => {

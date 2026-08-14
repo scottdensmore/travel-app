@@ -6,6 +6,7 @@ import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 import FlightBookingService from '@/lib/FlightBookingService';
 import { holdSeat } from '@/lib/seatHolds';
+import { bookHeldFlight } from '@/e2e/helpers/holdBookingSeats';
 
 jest.mock('next-auth', () => ({ getServerSession: jest.fn() }));
 jest.mock('next/cache', () => ({ revalidatePath: jest.fn() }));
@@ -80,7 +81,7 @@ describe('getOccupiedSeatsAction across an itinerary', () => {
         });
         created.userIds.push(user.id);
 
-        const booking = await new FlightBookingService().bookFlight({
+        const booking = await bookHeldFlight(new FlightBookingService(), {
             flightIds: [outbound.id, inbound.id],
             userId: user.id,
             passengers: [{
@@ -117,7 +118,7 @@ describe('getOccupiedSeatsAction across an itinerary', () => {
         });
         created.userIds.push(user.id);
 
-        const booking = await new FlightBookingService().bookFlight({
+        const booking = await bookHeldFlight(new FlightBookingService(), {
             flightIds: [flight.id],
             userId: user.id,
             passengers: [{

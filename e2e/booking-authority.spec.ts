@@ -2,6 +2,8 @@ import { airportCodesForRoute } from '@/lib/airports';
 import { expect, test } from '@playwright/test';
 import FlightBookingService from '../lib/FlightBookingService';
 import { prisma } from '../lib/prisma';
+import { checkoutHolderKey, holdSeat } from '../lib/seatHolds';
+import { holdBookingSeats } from './helpers/holdBookingSeats';
 
 test.describe('Authoritative booking persistence', () => {
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -57,19 +59,30 @@ test.describe('Authoritative booking persistence', () => {
       cabinClass: 'ECONOMY'
     };
 
-    const results = await Promise.allSettled([
-      service.bookFlight({
+    const requests = [
+      {
         flightIds: [flight.id],
         userId: firstUser.id,
         passengers: [passenger],
         idempotencyKey: '770b1f71-d1b3-43ed-886e-4c0ec45c4e8a'
-      }),
-      service.bookFlight({
+      },
+      {
         flightIds: [flight.id],
         userId: secondUser.id,
         passengers: [{ ...passenger, passportNumber: 'RACE456' }],
         idempotencyKey: '62a0767b-2913-4077-88e8-0f9391f13552'
-      })
+      },
+    ];
+    const holds = await Promise.all(requests.map(request => holdSeat({
+      flightId: flight.id,
+      seatNumber: '1A',
+      holderKey: checkoutHolderKey(request.userId, request.idempotencyKey),
+    })));
+    expect(holds.filter(Boolean)).toHaveLength(1);
+
+    const results = await Promise.allSettled([
+      service.bookFlight(requests[0]),
+      service.bookFlight(requests[1]),
     ]);
 
     expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
@@ -131,6 +144,7 @@ test.describe('Authoritative booking persistence', () => {
     };
     const service = new FlightBookingService();
 
+    await holdBookingSeats(request);
     const first = await service.bookFlight(request);
     const retry = await service.bookFlight(request);
 

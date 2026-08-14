@@ -3,6 +3,7 @@ import { airportCodesForRoute } from '@/lib/airports';
 import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import FlightBookingService from '@/lib/FlightBookingService';
+import { bookHeldFlight } from '@/e2e/helpers/holdBookingSeats';
 
 /**
  * Every traveller holds a seat assignment on every leg of their booking.
@@ -54,7 +55,7 @@ beforeAll(async () => {
     });
     created.userIds.push(user.id);
 
-    booking = await new FlightBookingService().bookFlight({
+    booking = await bookHeldFlight(new FlightBookingService(), {
         flightIds: legs.map(leg => leg.id),
         userId: user.id,
         passengers: [

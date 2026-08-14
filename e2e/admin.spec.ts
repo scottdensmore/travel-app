@@ -5,6 +5,7 @@ import FlightBookingService from '../lib/FlightBookingService';
 import { updateFlightSeatingLayout } from '../lib/FlightSeatLayoutService';
 import { createVerifiedAccount, registerAndSignIn, signInWithCredentials } from './helpers/auth';
 import { createStaffTotpCode } from '../lib/staffMfa';
+import { bookHeldFlight } from './helpers/holdBookingSeats';
 
 /**
  * A TOTP code is only valid inside its own 30-second window. Generating one in
@@ -165,7 +166,7 @@ test.describe('Admin Control Journey', () => {
       orderBy: { departureDate: 'asc' }
     });
     const admin = await prisma.user.findUniqueOrThrow({ where: { email: adminEmail } });
-    await new FlightBookingService().bookFlight({
+    await bookHeldFlight(new FlightBookingService(), {
       flightIds: [activeOccurrence.id],
       userId: admin.id,
       passengers: [{
@@ -368,7 +369,7 @@ test.describe('Admin Control Journey', () => {
         economyRows: 19,
         seatPattern: 'ABC-DEF'
       }),
-      new FlightBookingService().bookFlight({
+      bookHeldFlight(new FlightBookingService(), {
         flightIds: [raceFlight.id],
         userId: admin.id,
         passengers: [{
