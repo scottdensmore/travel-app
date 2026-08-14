@@ -1,0 +1,52 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "9b6c58db686c",
+  "session_id": "019ffe5b-1054-7c22-8afc-e97cb84c7b73",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-14T05:15:44.165875583Z",
+  "branch": "fix/sanitizer-in-process-tests",
+  "checkpoints_count": 1,
+  "files_touched": [],
+  "agent": "Codex",
+  "model": "gpt-5.6-sol",
+  "turn_id": "21929b4ac987",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 588987,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 27392512,
+    "output_tokens": 68140,
+    "api_call_count": 268
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 235,
+      "user_lines_removed": 59,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "__tests__/app/actions.test.ts": 23,
+        "__tests__/app/occupiedSeats.database.test.ts": 54,
+        "__tests__/components/BookingCheckoutWizard.test.tsx": 20,
+        "app/actions.ts": 20,
+        "components/ui/BookingCheckoutWizard.tsx": 11,
+        "e2e/booking.spec.ts": 68,
+        "lib/seatHolds.ts": 31,
+        "lib/validation.ts": 8
+      },
+      "user_removed_per_file": {
+        "__tests__/app/actions.test.ts": 1,
+        "__tests__/app/occupiedSeats.database.test.ts": 9,
+        "__tests__/components/BookingCheckoutWizard.test.tsx": 13,
+        "app/actions.ts": 12,
+        "components/ui/BookingCheckoutWizard.tsx": 7,
+        "lib/seatHolds.ts": 16,
+        "lib/validation.ts": 1
+      }
+    }
+  ]
+}
