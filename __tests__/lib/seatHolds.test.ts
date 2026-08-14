@@ -1,12 +1,29 @@
 /** @jest-environment node */
-import { holdSeats, releaseHold, releaseHoldsExcept } from '@/lib/seatHolds';
+import {
+    checkoutHolderKey,
+    holdCheckoutSeats,
+    holdSeats,
+    releaseHold,
+    releaseHoldsExcept,
+    SeatHoldCheckoutLimitError,
+} from '@/lib/seatHolds';
 import { prisma } from '@/lib/prisma';
 
 const events: string[] = [];
 const databaseNow = new Date('2026-08-14T12:00:00.000Z');
 const earliestExpiry = new Date('2026-08-14T12:09:59.500Z');
+let activeCheckoutRows: { holderKey: string }[] = [];
 const mockTx = {
-    $queryRaw: jest.fn((_query: unknown, ...values: unknown[]) => {
+    $queryRaw: jest.fn((query: unknown, ...values: unknown[]) => {
+        const sql = Array.isArray(query) ? query.join('?') : String(query);
+        if (sql.includes('pg_advisory_xact_lock')) {
+            events.push(`account-lock:${values[0]}`);
+            return Promise.resolve([{ locked: null }]);
+        }
+        if (sql.includes('SELECT DISTINCT "holderKey"')) {
+            events.push(`active-checkouts:${values[1]}`);
+            return Promise.resolve(activeCheckoutRows);
+        }
         if (values.length > 0) {
             events.push(`lock:${values[0]}`);
             return Promise.resolve([]);
@@ -48,6 +65,7 @@ jest.mock('@/lib/prisma', () => ({
 describe('multi-seat hold transaction', () => {
     beforeEach(() => {
         events.length = 0;
+        activeCheckoutRows = [];
         jest.clearAllMocks();
     });
 
@@ -85,6 +103,44 @@ describe('multi-seat hold transaction', () => {
         ])).rejects.toThrow('Seat claims must belong to one checkout.');
 
         expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('takes the account admission lock before inspecting or claiming inventory', async () => {
+        activeCheckoutRows = [{ holderKey: checkoutHolderKey('user-1', 'first-checkout') }];
+
+        await holdCheckoutSeats('user-1', 'second-checkout', [
+            { flightId: 5, seatNumber: '12A' },
+        ]);
+
+        expect(events).toEqual([
+            'account-lock:user-1',
+            'active-checkouts:["user-1",',
+            'lock:5',
+            'release',
+            'occupancy:5',
+            'claim:5:12A',
+            'expiry',
+            'clock',
+        ]);
+    });
+
+    it('allows an existing checkout at the limit but refuses a new one before flight locks', async () => {
+        const current = checkoutHolderKey('user-1', 'current-checkout');
+        activeCheckoutRows = [current, checkoutHolderKey('user-1', 'other-checkout')]
+            .map(holderKey => ({ holderKey }));
+
+        await expect(holdCheckoutSeats('user-1', 'current-checkout', [
+            { flightId: 5, seatNumber: '12A' },
+        ])).resolves.toMatchObject({ taken: [] });
+
+        events.length = 0;
+        await expect(holdCheckoutSeats('user-1', 'third-checkout', [
+            { flightId: 9, seatNumber: '12B' },
+        ])).rejects.toBeInstanceOf(SeatHoldCheckoutLimitError);
+        expect(events).toEqual([
+            'account-lock:user-1',
+            'active-checkouts:["user-1",',
+        ]);
     });
 
     it('locks the flight before releasing one hold', async () => {

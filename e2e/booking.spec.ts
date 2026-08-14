@@ -301,15 +301,16 @@ test.describe('Flight Booking Journey', () => {
     await expect(page.getByRole('timer')).toContainText(/Seat hold expires in (?:09:\d{2}|10:00)/);
   });
 
-  test('two checkout tabs keep independent seat holds for the same account', async ({ page, context }) => {
+  test('two checkout tabs keep independent holds and a third is asked to finish one', async ({ page, context }) => {
     const flight = await prisma.flight.findFirstOrThrow({
       where: { departureDate: { gt: new Date() } },
       orderBy: { departureDate: 'asc' }
     });
     const secondTab = await context.newPage();
+    const thirdTab = await context.newPage();
     const checkoutUrl = `/checkout?outbound=${flight.id}`;
 
-    await Promise.all([page.goto(checkoutUrl), secondTab.goto(checkoutUrl)]);
+    await Promise.all([page.goto(checkoutUrl), secondTab.goto(checkoutUrl), thirdTab.goto(checkoutUrl)]);
 
     const reachSeats = async (checkout: typeof page, passport: string) => {
       await checkout.fill('input[placeholder="John"]', 'Tab');
@@ -321,13 +322,17 @@ test.describe('Flight Booking Journey', () => {
     await Promise.all([
       reachSeats(page, 'US-TAB-A'),
       reachSeats(secondTab, 'US-TAB-B'),
+      reachSeats(thirdTab, 'US-TAB-C'),
     ]);
 
     const firstSeat = page.locator('button[title^="Select Seat"]').first();
     const secondSeat = secondTab.locator('button[title^="Select Seat"]').nth(1);
+    const thirdSeat = thirdTab.locator('button[title^="Select Seat"]').nth(2);
     const firstSeatName = (await firstSeat.getAttribute('title'))!.replace('Select Seat ', '');
     const secondSeatName = (await secondSeat.getAttribute('title'))!.replace('Select Seat ', '');
+    const thirdSeatName = (await thirdSeat.getAttribute('title'))!.replace('Select Seat ', '');
     expect(firstSeatName).not.toBe(secondSeatName);
+    expect(new Set([firstSeatName, secondSeatName, thirdSeatName])).toHaveProperty('size', 3);
 
     await firstSeat.click();
     await page.getByRole('button', { name: 'Review Booking →' }).click();
@@ -336,6 +341,17 @@ test.describe('Flight Booking Journey', () => {
     await secondSeat.click();
     await secondTab.getByRole('button', { name: 'Review Booking →' }).click();
     await expect(secondTab.getByRole('heading', { name: 'Review Booking' })).toBeVisible();
+
+    await thirdSeat.click();
+    await thirdTab.getByRole('button', { name: 'Review Booking →' }).click();
+    await expect(thirdTab.getByRole('heading', { name: 'Select Your Seats' })).toBeVisible();
+    const limitMessage = thirdTab.locator('[role="alert"]').filter({ hasText:
+      'You already have seats held in two other checkouts. Finish one or wait for its hold to expire, then try again.',
+    });
+    await expect(limitMessage).toBeVisible();
+    await expect(limitMessage).toBeFocused();
+    await expect(limitMessage).toHaveCSS('outline', 'rgb(251, 191, 36) solid 3px');
+    await expect(limitMessage).toHaveCSS('outline-offset', '3px');
 
     const heldByBothTabs = await prisma.seatHold.findMany({
       where: {
@@ -361,6 +377,7 @@ test.describe('Flight Booking Journey', () => {
     })).resolves.toMatchObject([{ seatNumber: secondSeatName }]);
 
     await secondTab.close();
+    await thirdTab.close();
   });
 
   test('User chooses both legs in search and carries them into checkout', async ({ page }) => {

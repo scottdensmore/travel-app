@@ -27,6 +27,7 @@ const created = {
     userIds: [] as string[],
     holderKeys: [] as string[],
 };
+const currentTestFlightIds: number[] = [];
 
 async function createFlight(suffix: string, from: string, to: string, day: string) {
     const flight = await prisma.flight.create({
@@ -45,8 +46,16 @@ async function createFlight(suffix: string, from: string, to: string, day: strin
         },
     });
     created.flightIds.push(flight.id);
+    currentTestFlightIds.push(flight.id);
     return flight;
 }
+
+afterEach(async () => {
+    await prisma.seatHold.deleteMany({
+        where: { flightId: { in: currentTestFlightIds } },
+    });
+    currentTestFlightIds.length = 0;
+});
 
 afterAll(async () => {
     await prisma.seatHold.deleteMany({

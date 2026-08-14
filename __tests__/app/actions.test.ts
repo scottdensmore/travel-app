@@ -2174,4 +2174,15 @@ describe('holdChosenSeatsAction input boundary', () => {
         });
         expect((prisma as any).$executeRaw).not.toHaveBeenCalled();
     });
+
+    it('propagates an unexpected hold storage failure', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-1' } });
+        const storageError = new Error('hold storage unavailable');
+        mockTx.$queryRaw.mockRejectedValueOnce(storageError);
+
+        await expect(holdChosenSeatsAction({
+            checkoutId: '11111111-1111-4111-8111-111111111111',
+            claims: [{ flightId: 42, seatNumber: '11A' }],
+        })).rejects.toBe(storageError);
+    });
 });
