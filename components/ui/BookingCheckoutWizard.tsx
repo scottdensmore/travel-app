@@ -328,7 +328,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
             return true;
         }
 
-        if ('takenSeats' in result) {
+        if ('takenSeats' in result && result.takenSeats) {
             const taken = result.takenSeats;
             // Which leg, not just which seat. A round trip can carry 16A on
             // both, and matching by number alone marked whichever leg the
@@ -899,6 +899,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                     role="alert"
                     ref={errorRef}
                     tabIndex={-1}
+                    className="booking-checkout-error"
                     style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '12px', borderRadius: '8px', marginBottom: '1.5rem', scrollMarginTop: '1rem' }}
                 >
                     ⚠️ {errorMessage}

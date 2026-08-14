@@ -2,8 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import {
-    checkoutHolderKey,
-    holdSeats,
+    holdCheckoutSeats,
+    SeatHoldCheckoutLimitError,
     SeatHoldUnavailableError,
     seatsOnHold,
 } from '@/lib/seatHolds';
@@ -437,9 +437,21 @@ export async function holdChosenSeatsAction(request: {
     if (!parsed.ok) return parsed;
 
     const { checkoutId, claims: wanted } = parsed.data;
-    const holderKey = checkoutHolderKey(session.user.id, checkoutId);
-
-    const held = await holdSeats(wanted.map(claim => ({ ...claim, holderKey })));
+    let held;
+    try {
+        held = await holdCheckoutSeats(session.user.id, checkoutId, wanted);
+    } catch (error) {
+        if (error instanceof SeatHoldCheckoutLimitError) {
+            return {
+                ok: false as const,
+                error: {
+                    code: 'CHECKOUT_LIMIT' as const,
+                    message: error.message,
+                },
+            };
+        }
+        throw error;
+    }
     const taken = held.taken
         .map(({ flightId, seatNumber }) => ({ flightId, seatNumber }));
 

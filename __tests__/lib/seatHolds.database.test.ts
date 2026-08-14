@@ -3,7 +3,15 @@ import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { airportCodesForRoute } from '@/lib/airports';
 import {
-    HOLD_MINUTES, holdSeat, holdSeats, releaseHold, releaseHoldsExcept, seatsHeldByOthers,
+    checkoutHolderKey,
+    HOLD_MINUTES,
+    holdCheckoutSeats,
+    holdSeat,
+    holdSeats,
+    releaseHold,
+    releaseHoldsExcept,
+    SeatHoldCheckoutLimitError,
+    seatsHeldByOthers,
 } from '@/lib/seatHolds';
 
 /**
@@ -18,11 +26,12 @@ import {
  * the airline nothing: nothing has to notice the customer left, and there is no
  * job whose failure would permanently reduce inventory.
  */
-const created = { flightIds: [] as number[], holderKeys: [] as string[] };
+const created = { flightIds: [] as number[], holderKeys: [] as string[], userIds: [] as string[] };
 
 afterAll(async () => {
     await prisma.seatHold.deleteMany({ where: { holderKey: { in: created.holderKeys } } });
     await prisma.flight.deleteMany({ where: { id: { in: created.flightIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: created.userIds } } });
     await prisma.$disconnect();
 });
 
@@ -44,6 +53,20 @@ function aHolder() {
     const key = `holder-${randomUUID()}`;
     created.holderKeys.push(key);
     return key;
+}
+
+async function aUser() {
+    const suffix = randomUUID();
+    const user = await prisma.user.create({
+        data: {
+            name: 'Hold Limit',
+            email: `hold-limit-${suffix}@example.com`,
+            password: 'not-used',
+            emailVerified: new Date(),
+        },
+    });
+    created.userIds.push(user.id);
+    return user;
 }
 
 /**
@@ -217,6 +240,108 @@ describe('holding a seat while the customer chooses', () => {
         expect(result.expiresAt).toEqual(rows[0].expiresAt);
         expect(result.expiresInMilliseconds).toBeGreaterThan((HOLD_MINUTES - 1) * 60_000);
         expect(result.expiresInMilliseconds).toBeLessThanOrEqual(HOLD_MINUTES * 60_000);
+    });
+
+    it('allows two live checkout ids, refreshes either one, and rejects a third', async () => {
+        const user = await aUser();
+        const flights = await Promise.all([aFlight(), aFlight(), aFlight()]);
+        const checkoutIds = [randomUUID(), randomUUID(), randomUUID()];
+
+        await holdCheckoutSeats(user.id, checkoutIds[0], [
+            { flightId: flights[0].id, seatNumber: '8A' },
+        ]);
+        await holdCheckoutSeats(user.id, checkoutIds[1], [
+            { flightId: flights[1].id, seatNumber: '8B' },
+        ]);
+        await expect(holdCheckoutSeats(user.id, checkoutIds[0], [
+            { flightId: flights[0].id, seatNumber: '8C' },
+        ])).resolves.toMatchObject({ taken: [] });
+
+        await expect(holdCheckoutSeats(user.id, checkoutIds[2], [
+            { flightId: flights[2].id, seatNumber: '8D' },
+        ])).rejects.toBeInstanceOf(SeatHoldCheckoutLimitError);
+
+        const live = await prisma.seatHold.findMany({
+            where: {
+                holderKey: { in: checkoutIds.map(id => checkoutHolderKey(user.id, id)) },
+                expiresAt: { gt: new Date() },
+            },
+        });
+        expect(new Set(live.map(row => row.holderKey))).toHaveProperty('size', 2);
+        expect(live).not.toEqual(expect.arrayContaining([
+            expect.objectContaining({ flightId: flights[2].id }),
+        ]));
+    });
+
+    it('admits only one of two simultaneous checkouts at the final account slot', async () => {
+        const user = await aUser();
+        const flights = await Promise.all([aFlight(), aFlight(), aFlight()]);
+        const checkoutIds = [randomUUID(), randomUUID(), randomUUID()];
+
+        await holdCheckoutSeats(user.id, checkoutIds[0], [
+            { flightId: flights[0].id, seatNumber: '8E' },
+        ]);
+        const attempts = await Promise.allSettled([
+            holdCheckoutSeats(user.id, checkoutIds[1], [
+                { flightId: flights[1].id, seatNumber: '8F' },
+            ]),
+            holdCheckoutSeats(user.id, checkoutIds[2], [
+                { flightId: flights[2].id, seatNumber: '8G' },
+            ]),
+        ]);
+
+        expect(attempts.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+        const [refused] = attempts.filter(result => result.status === 'rejected');
+        expect(refused).toMatchObject({ reason: expect.any(SeatHoldCheckoutLimitError) });
+
+        const live = await prisma.seatHold.findMany({
+            where: {
+                holderKey: { in: checkoutIds.map(id => checkoutHolderKey(user.id, id)) },
+                expiresAt: { gt: new Date() },
+            },
+        });
+        expect(new Set(live.map(row => row.holderKey))).toHaveProperty('size', 2);
+    });
+
+    it('lets a current checkout refresh a pre-existing over-cap account', async () => {
+        const user = await aUser();
+        const flights = await Promise.all([aFlight(), aFlight(), aFlight()]);
+        const checkoutIds = [
+            '00000000-0000-4000-8000-000000000001',
+            '00000000-0000-4000-8000-000000000002',
+            '00000000-0000-4000-8000-000000000003',
+        ];
+
+        await Promise.all(checkoutIds.map((checkoutId, index) => holdSeats([{
+            flightId: flights[index].id,
+            seatNumber: '9A',
+            holderKey: checkoutHolderKey(user.id, checkoutId),
+        }])));
+
+        await expect(holdCheckoutSeats(user.id, checkoutIds[2], [
+            { flightId: flights[2].id, seatNumber: '9B' },
+        ])).resolves.toMatchObject({ taken: [] });
+    });
+
+    it('does not count another account or an expired checkout against the limit', async () => {
+        const [firstUser, secondUser] = await Promise.all([aUser(), aUser()]);
+        const flights = await Promise.all([aFlight(), aFlight(), aFlight(), aFlight()]);
+        const firstCheckouts = [randomUUID(), randomUUID(), randomUUID()];
+
+        await holdCheckoutSeats(firstUser.id, firstCheckouts[0], [
+            { flightId: flights[0].id, seatNumber: '9A' },
+        ]);
+        await holdCheckoutSeats(firstUser.id, firstCheckouts[1], [
+            { flightId: flights[1].id, seatNumber: '9B' },
+        ]);
+        await expect(holdCheckoutSeats(secondUser.id, randomUUID(), [
+            { flightId: flights[2].id, seatNumber: '9C' },
+        ])).resolves.toMatchObject({ taken: [] });
+
+        await abandon(flights[0].id, '9A');
+        await expect(holdCheckoutSeats(firstUser.id, firstCheckouts[2], [
+            { flightId: flights[3].id, seatNumber: '9D' },
+        ])).resolves.toMatchObject({ taken: [] });
     });
 });
 

@@ -22,6 +22,10 @@ import { heldSeats } from './seatOccupancy';
 
 /** How long a customer gets to finish choosing before the seat is offered on. */
 export const HOLD_MINUTES = 10;
+/** Two tabs are legitimate; a third live checkout is inventory abuse (#269). */
+export const MAX_ACTIVE_HOLD_CHECKOUTS = 2;
+export const HOLD_CHECKOUT_LIMIT_MESSAGE =
+    'You already have seats held in two other checkouts. Finish one or wait for its hold to expire, then try again.';
 
 export interface SeatClaim {
     flightId: number;
@@ -48,6 +52,13 @@ export class SeatHoldUnavailableError extends Error {
     }
 }
 
+export class SeatHoldCheckoutLimitError extends Error {
+    constructor() {
+        super(HOLD_CHECKOUT_LIMIT_MESSAGE);
+        this.name = 'SeatHoldCheckoutLimitError';
+    }
+}
+
 /**
  * Bind a browser-generated checkout identifier to the authenticated user.
  *
@@ -57,6 +68,10 @@ export class SeatHoldUnavailableError extends Error {
  */
 export function checkoutHolderKey(userId: string, checkoutId: string): string {
     return JSON.stringify([userId, checkoutId]);
+}
+
+function checkoutHolderPrefix(userId: string): string {
+    return `${JSON.stringify([userId]).slice(0, -1)},`;
 }
 
 /**
@@ -123,6 +138,78 @@ async function releaseHoldsExceptInTransaction(
  * race. Sorting the claims also keeps two multi-seat checkouts from acquiring
  * the same rows in opposite orders and deadlocking.
  */
+async function holdSeatsInTransaction(
+    tx: Prisma.TransactionClient,
+    claims: SeatClaim[],
+): Promise<SeatHoldBatchResult> {
+    const holderKey = claims[0].holderKey;
+    const flightIds = [...new Set(claims.map(claim => claim.flightId))]
+        .sort((left, right) => left - right);
+    const orderedClaims = [...claims].sort((left, right) => (
+        left.flightId - right.flightId || left.seatNumber.localeCompare(right.seatNumber)
+    ));
+
+    for (const flightId of flightIds) {
+        await lockFlightForUpdate(tx, flightId);
+    }
+
+    await releaseHoldsExceptInTransaction(tx, flightIds, holderKey, claims);
+
+    const occupied = new Set<string>();
+    for (const flightId of flightIds) {
+        const seats = await tx.seatAssignment.findMany({
+            where: heldSeats({ flightId }),
+            select: { seatNumber: true },
+        });
+        for (const { seatNumber } of seats) {
+            occupied.add(claimIdentity({ flightId, seatNumber }));
+        }
+    }
+
+    const taken = new Set<string>();
+    for (const claim of orderedClaims) {
+        const identity = claimIdentity(claim);
+        if (occupied.has(identity) || !await claimSeat(tx, claim)) {
+            taken.add(identity);
+        }
+    }
+
+    const takenClaims = claims.filter(claim => taken.has(claimIdentity(claim)));
+    const heldClaims = claims.filter(claim => !taken.has(claimIdentity(claim)));
+    if (heldClaims.length === 0) {
+        return { taken: takenClaims, expiresAt: null, expiresInMilliseconds: 0 };
+    }
+
+    // Read the exact set while the Flight locks are still ours. Looking up
+    // all rows for the holder would let an abandoned leg from a different
+    // request shorten this checkout's promise. The minimum is the only
+    // truthful deadline for a multi-passenger, multi-leg set.
+    const heldRows = await tx.seatHold.findMany({
+        where: {
+            holderKey,
+            OR: heldClaims.map(({ flightId, seatNumber }) => ({ flightId, seatNumber })),
+        },
+        select: { expiresAt: true },
+    });
+    const expiresAt = heldRows.reduce<Date | null>((earliest, row) => (
+        earliest === null || row.expiresAt < earliest ? row.expiresAt : earliest
+    ), null);
+    if (expiresAt === null) {
+        throw new Error('Claimed seats have no hold expiry.');
+    }
+
+    const [clock] = await tx.$queryRaw<{ now: Date }[]>`
+        SELECT statement_timestamp() AS "now"
+    `;
+    if (!clock) throw new Error('Database clock was unavailable.');
+
+    return {
+        taken: takenClaims,
+        expiresAt,
+        expiresInMilliseconds: Math.max(0, expiresAt.getTime() - clock.now.getTime()),
+    };
+}
+
 export async function holdSeats(claims: SeatClaim[]): Promise<SeatHoldBatchResult> {
     if (claims.length === 0) {
         return { taken: [], expiresAt: null, expiresInMilliseconds: 0 };
@@ -132,73 +219,49 @@ export async function holdSeats(claims: SeatClaim[]): Promise<SeatHoldBatchResul
     if (holderKeys.size !== 1) {
         throw new Error('Seat claims must belong to one checkout.');
     }
-    const holderKey = claims[0].holderKey;
-    const flightIds = [...new Set(claims.map(claim => claim.flightId))]
-        .sort((left, right) => left - right);
-    const orderedClaims = [...claims].sort((left, right) => (
-        left.flightId - right.flightId || left.seatNumber.localeCompare(right.seatNumber)
-    ));
 
-    return prisma.$transaction(async (tx) => {
-        for (const flightId of flightIds) {
-            await lockFlightForUpdate(tx, flightId);
-        }
+    return prisma.$transaction(tx => holdSeatsInTransaction(tx, claims));
+}
 
-        await releaseHoldsExceptInTransaction(tx, flightIds, holderKey, claims);
+/**
+ * Admit one authenticated checkout before it claims inventory.
+ *
+ * Flight locks cannot enforce an account-wide limit because two new checkouts
+ * can choose different flights. The transaction-scoped advisory lock gives
+ * every hold request for one account a shared boundary without locking the
+ * User row, whose foreign-key lock order would deadlock with booking conversion.
+ */
+export async function holdCheckoutSeats(
+    userId: string,
+    checkoutId: string,
+    claims: Omit<SeatClaim, 'holderKey'>[],
+): Promise<SeatHoldBatchResult> {
+    if (claims.length === 0) {
+        return { taken: [], expiresAt: null, expiresInMilliseconds: 0 };
+    }
 
-        const occupied = new Set<string>();
-        for (const flightId of flightIds) {
-            const seats = await tx.seatAssignment.findMany({
-                where: heldSeats({ flightId }),
-                select: { seatNumber: true },
-            });
-            for (const { seatNumber } of seats) {
-                occupied.add(claimIdentity({ flightId, seatNumber }));
-            }
-        }
+    const holderKey = checkoutHolderKey(userId, checkoutId);
+    const heldClaims = claims.map(claim => ({ ...claim, holderKey }));
 
-        const taken = new Set<string>();
-        for (const claim of orderedClaims) {
-            const identity = claimIdentity(claim);
-            if (occupied.has(identity) || !await claimSeat(tx, claim)) {
-                taken.add(identity);
-            }
-        }
-
-        const takenClaims = claims.filter(claim => taken.has(claimIdentity(claim)));
-        const heldClaims = claims.filter(claim => !taken.has(claimIdentity(claim)));
-        if (heldClaims.length === 0) {
-            return { taken: takenClaims, expiresAt: null, expiresInMilliseconds: 0 };
-        }
-
-        // Read the exact set while the Flight locks are still ours. Looking up
-        // all rows for the holder would let an abandoned leg from a different
-        // request shorten this checkout's promise. The minimum is the only
-        // truthful deadline for a multi-passenger, multi-leg set.
-        const heldRows = await tx.seatHold.findMany({
-            where: {
-                holderKey,
-                OR: heldClaims.map(({ flightId, seatNumber }) => ({ flightId, seatNumber })),
-            },
-            select: { expiresAt: true },
-        });
-        const expiresAt = heldRows.reduce<Date | null>((earliest, row) => (
-            earliest === null || row.expiresAt < earliest ? row.expiresAt : earliest
-        ), null);
-        if (expiresAt === null) {
-            throw new Error('Claimed seats have no hold expiry.');
-        }
-
-        const [clock] = await tx.$queryRaw<{ now: Date }[]>`
-            SELECT statement_timestamp() AS "now"
+    return prisma.$transaction(async tx => {
+        await tx.$queryRaw`
+            SELECT pg_advisory_xact_lock(hashtextextended(${userId}, 269))::text AS "locked"
         `;
-        if (!clock) throw new Error('Database clock was unavailable.');
 
-        return {
-            taken: takenClaims,
-            expiresAt,
-            expiresInMilliseconds: Math.max(0, expiresAt.getTime() - clock.now.getTime()),
-        };
+        const activeCheckouts = await tx.$queryRaw<{ holderKey: string }[]>`
+            SELECT DISTINCT "holderKey", ("holderKey" = ${holderKey}) AS "current"
+            FROM "SeatHold"
+            WHERE "expiresAt" > statement_timestamp()
+              AND starts_with("holderKey", ${checkoutHolderPrefix(userId)})
+            ORDER BY "current" DESC, "holderKey"
+            LIMIT ${MAX_ACTIVE_HOLD_CHECKOUTS}
+        `;
+        const currentIsActive = activeCheckouts.some(row => row.holderKey === holderKey);
+        if (!currentIsActive && activeCheckouts.length >= MAX_ACTIVE_HOLD_CHECKOUTS) {
+            throw new SeatHoldCheckoutLimitError();
+        }
+
+        return holdSeatsInTransaction(tx, heldClaims);
     });
 }
 
