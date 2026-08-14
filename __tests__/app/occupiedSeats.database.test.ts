@@ -5,7 +5,7 @@ import { randomUUID } from 'crypto';
 import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 import FlightBookingService from '@/lib/FlightBookingService';
-import { holdSeat } from '@/lib/seatHolds';
+import { checkoutHolderKey, holdSeat } from '@/lib/seatHolds';
 import { bookHeldFlight } from '@/e2e/helpers/holdBookingSeats';
 
 jest.mock('next-auth', () => ({ getServerSession: jest.fn() }));
@@ -142,6 +142,36 @@ describe('getOccupiedSeatsAction across an itinerary', () => {
 });
 
 describe('a seat another customer is choosing', () => {
+    it('returns the earliest database expiry for the seats the checkout now holds', async () => {
+        const flight = await createFlight(
+            randomUUID().slice(0, 6),
+            'Seattle, USA',
+            'Detroit, USA',
+            '2026-09-01',
+        );
+        const checkoutId = randomUUID();
+
+        const result = await holdChosenSeatsAction({
+            checkoutId,
+            claims: [
+                { flightId: flight.id, seatNumber: '11A' },
+                { flightId: flight.id, seatNumber: '11B' },
+            ],
+        });
+        if (!result.ok) throw new Error('Expected the checkout to hold both seats.');
+
+        const rows = await prisma.seatHold.findMany({
+            where: {
+                flightId: flight.id,
+                holderKey: checkoutHolderKey('occupied-seats-suite', checkoutId),
+            },
+            orderBy: { expiresAt: 'asc' },
+        });
+        expect(result.holdExpiresAt).toBe(rows[0].expiresAt.toISOString());
+        expect(result.holdExpiresInMilliseconds).toBeGreaterThan(9 * 60_000);
+        expect(result.holdExpiresInMilliseconds).toBeLessThanOrEqual(10 * 60_000);
+    });
+
     it('keeps two checkouts belonging to the same customer independent', async () => {
         const flight = await createFlight(
             randomUUID().slice(0, 6),
@@ -154,11 +184,19 @@ describe('a seat another customer is choosing', () => {
         await expect(holdChosenSeatsAction({
             checkoutId: firstCheckout,
             claims: [{ flightId: flight.id, seatNumber: '12A' }],
-        })).resolves.toEqual({ ok: true });
+        })).resolves.toMatchObject({
+            ok: true,
+            holdExpiresAt: expect.any(String),
+            holdExpiresInMilliseconds: expect.any(Number),
+        });
         await expect(holdChosenSeatsAction({
             checkoutId: secondCheckout,
             claims: [{ flightId: flight.id, seatNumber: '12B' }],
-        })).resolves.toEqual({ ok: true });
+        })).resolves.toMatchObject({
+            ok: true,
+            holdExpiresAt: expect.any(String),
+            holdExpiresInMilliseconds: expect.any(Number),
+        });
 
         let rows = await prisma.seatHold.findMany({
             where: { flightId: flight.id },
@@ -172,7 +210,11 @@ describe('a seat another customer is choosing', () => {
         await expect(holdChosenSeatsAction({
             checkoutId: secondCheckout,
             claims: [{ flightId: flight.id, seatNumber: '12C' }],
-        })).resolves.toEqual({ ok: true });
+        })).resolves.toMatchObject({
+            ok: true,
+            holdExpiresAt: expect.any(String),
+            holdExpiresInMilliseconds: expect.any(Number),
+        });
 
         rows = await prisma.seatHold.findMany({
             where: { flightId: flight.id },

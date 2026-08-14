@@ -30,6 +30,14 @@ export interface SeatClaim {
     holderKey: string;
 }
 
+export interface SeatHoldBatchResult {
+    taken: SeatClaim[];
+    /** The first claimed seat the database will consider expired. */
+    expiresAt: Date | null;
+    /** Its lifetime remaining against the database clock at response time. */
+    expiresInMilliseconds: number;
+}
+
 export class SeatHoldUnavailableError extends Error {
     readonly claim: SeatClaim;
 
@@ -115,8 +123,10 @@ async function releaseHoldsExceptInTransaction(
  * race. Sorting the claims also keeps two multi-seat checkouts from acquiring
  * the same rows in opposite orders and deadlocking.
  */
-export async function holdSeats(claims: SeatClaim[]): Promise<SeatClaim[]> {
-    if (claims.length === 0) return [];
+export async function holdSeats(claims: SeatClaim[]): Promise<SeatHoldBatchResult> {
+    if (claims.length === 0) {
+        return { taken: [], expiresAt: null, expiresInMilliseconds: 0 };
+    }
 
     const holderKeys = new Set(claims.map(claim => claim.holderKey));
     if (holderKeys.size !== 1) {
@@ -155,12 +165,45 @@ export async function holdSeats(claims: SeatClaim[]): Promise<SeatClaim[]> {
             }
         }
 
-        return claims.filter(claim => taken.has(claimIdentity(claim)));
+        const takenClaims = claims.filter(claim => taken.has(claimIdentity(claim)));
+        const heldClaims = claims.filter(claim => !taken.has(claimIdentity(claim)));
+        if (heldClaims.length === 0) {
+            return { taken: takenClaims, expiresAt: null, expiresInMilliseconds: 0 };
+        }
+
+        // Read the exact set while the Flight locks are still ours. Looking up
+        // all rows for the holder would let an abandoned leg from a different
+        // request shorten this checkout's promise. The minimum is the only
+        // truthful deadline for a multi-passenger, multi-leg set.
+        const heldRows = await tx.seatHold.findMany({
+            where: {
+                holderKey,
+                OR: heldClaims.map(({ flightId, seatNumber }) => ({ flightId, seatNumber })),
+            },
+            select: { expiresAt: true },
+        });
+        const expiresAt = heldRows.reduce<Date | null>((earliest, row) => (
+            earliest === null || row.expiresAt < earliest ? row.expiresAt : earliest
+        ), null);
+        if (expiresAt === null) {
+            throw new Error('Claimed seats have no hold expiry.');
+        }
+
+        const [clock] = await tx.$queryRaw<{ now: Date }[]>`
+            SELECT statement_timestamp() AS "now"
+        `;
+        if (!clock) throw new Error('Database clock was unavailable.');
+
+        return {
+            taken: takenClaims,
+            expiresAt,
+            expiresInMilliseconds: Math.max(0, expiresAt.getTime() - clock.now.getTime()),
+        };
     });
 }
 
 export async function holdSeat(claim: SeatClaim): Promise<boolean> {
-    return (await holdSeats([claim])).length === 0;
+    return (await holdSeats([claim])).taken.length === 0;
 }
 
 /** Consume one live claim while its Flight row is already locked for booking. */

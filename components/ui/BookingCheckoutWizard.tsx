@@ -93,6 +93,12 @@ function createBookingRequestId(): string {
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+function formatHoldTime(seconds: number): string {
+    const minutes = Math.floor(seconds / 60);
+    const remainder = seconds % 60;
+    return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
+}
+
 export default function BookingCheckoutWizard({ flights, occupiedSeats: initialOccupiedSeats, cabinClass: searchedCabin }: BookingCheckoutWizardProps) {
     // Seats are chosen one leg at a time: each flight has its own cabin layout,
     // its own seat pattern, and its own occupancy.
@@ -170,6 +176,8 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [serverFieldErrors, setServerFieldErrors] = useState<Record<string, string[]>>({});
+    const [holdDeadline, setHoldDeadline] = useState<number | null>(null);
+    const [holdSecondsRemaining, setHoldSecondsRemaining] = useState(0);
     const [bookingResult, setBookingResult] = useState<{
         id: number;
         totalPriceCents: number | null;
@@ -293,6 +301,11 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
         if (claims.length === 0) return true;
 
         let result;
+        // Anchor the database-derived lifetime at the start of the request.
+        // That deliberately subtracts the whole round trip: a slow response
+        // may shorten the display, but can never promise time the database has
+        // already spent.
+        const requestStartedAt = Date.now();
         try {
             idempotencyKeyRef.current ??= createBookingRequestId();
             result = await holdChosenSeatsAction({
@@ -308,7 +321,12 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
             return false;
         }
 
-        if (result.ok) return true;
+        if (result.ok) {
+            const deadline = requestStartedAt + result.holdExpiresInMilliseconds;
+            setHoldDeadline(deadline);
+            setHoldSecondsRemaining(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
+            return true;
+        }
 
         if ('takenSeats' in result) {
             const taken = result.takenSeats;
@@ -413,6 +431,46 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
             confirmationHeadingRef.current?.focus();
         }
     }, [bookingResult, step]);
+
+    useEffect(() => {
+        if (step !== 3 || holdDeadline === null) return;
+
+        const reconcileWithDeadline = () => {
+            const seconds = Math.max(0, Math.ceil((holdDeadline - Date.now()) / 1000));
+            setHoldSecondsRemaining(seconds);
+        };
+
+        reconcileWithDeadline();
+        const interval = window.setInterval(reconcileWithDeadline, 1000);
+        // Background tabs throttle timers. Reconcile against the absolute
+        // deadline immediately when the customer returns instead of resuming
+        // a counter that stopped while the page was hidden.
+        document.addEventListener('visibilitychange', reconcileWithDeadline);
+        window.addEventListener('focus', reconcileWithDeadline);
+        return () => {
+            window.clearInterval(interval);
+            document.removeEventListener('visibilitychange', reconcileWithDeadline);
+            window.removeEventListener('focus', reconcileWithDeadline);
+        };
+    }, [holdDeadline, step]);
+
+    useEffect(() => {
+        if (step !== 3 || holdDeadline === null || holdSecondsRemaining !== 0) return;
+
+        setHoldDeadline(null);
+        setActiveLegIndex(0);
+        setActivePassengerIndex(0);
+        setPassengers(current => current.map(passenger => ({
+            ...passenger,
+            seatNumbers: passenger.seatNumbers.map(() => ''),
+        })));
+        setServerFieldErrors({
+            'passengers.0.seatNumbers.0': ['Choose a new seat before returning to review.'],
+        });
+        pendingValidationFocusPath.current = 'passengers.0.seatNumber';
+        setErrorMessage('Your seat hold expired. Please choose your seats again.');
+        setStep(2);
+    }, [holdDeadline, holdSecondsRemaining, step]);
 
     const [holdingSeats, setHoldingSeats] = useState(false);
 
@@ -707,6 +765,11 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
     };
 
     const handleSubmitBooking = async () => {
+        if (holdDeadline === null || holdDeadline <= Date.now()) {
+            setHoldSecondsRemaining(0);
+            return;
+        }
+
         setIsSubmitting(true);
         setErrorMessage(null);
         setServerFieldErrors({});
@@ -1104,6 +1167,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                                         <React.Fragment key={idx}>
                                         <button
                                             type="button"
+                                            className="booking-passenger-target"
                                             onClick={() => setActivePassengerIndex(idx)}
                                             data-validation-path={`passengers.${idx}.seatNumber`}
                                             aria-label={`${p.firstName || 'Passenger'} ${p.lastName || `#${idx + 1}`}, Class: ${cabinLabel(p.cabinClass)}, Seat: ${p.seatNumbers[activeLegIndex] || 'Not Chosen'}`}
@@ -1142,12 +1206,14 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                             </div>
 
                             {/* Right panel: Cabin Grid */}
-                            <div style={{ flex: '2 1 400px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                            <div style={{ flex: '2 1 400px', minWidth: 0, maxWidth: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                 <div style={{
                                     border: '2px solid rgba(255,255,255,0.1)',
                                     borderRadius: '100px 100px 24px 24px',
                                     padding: '3rem 2rem 2rem',
                                     width: 'min(100%, 320px)',
+                                    maxWidth: '100%',
+                                    boxSizing: 'border-box',
                                     background: 'rgba(0,0,0,0.3)',
                                     maxHeight: '400px',
                                     overflow: 'auto',
@@ -1361,6 +1427,23 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                         <h2 style={{ fontSize: '1.8rem', color: '#c084fc', marginBottom: '0.5rem', fontWeight: 'bold' }}>Review Booking</h2>
                         <p style={{ color: 'rgba(255,255,255,0.5)', marginBottom: '2rem' }}>Verify the itinerary and traveler details before confirming.</p>
 
+                        <p
+                            id="seat-hold-timer"
+                            role="timer"
+                            aria-live="off"
+                            style={{
+                                margin: '0 0 1.25rem',
+                                padding: '0.85rem 1rem',
+                                border: '1px solid rgba(52, 211, 153, 0.35)',
+                                borderRadius: '10px',
+                                background: 'rgba(16, 185, 129, 0.1)',
+                                color: '#a7f3d0',
+                                fontWeight: 600,
+                            }}
+                        >
+                            Seat hold expires in {formatHoldTime(holdSecondsRemaining)}. Confirm before the timer reaches 00:00.
+                        </p>
+
                         <div style={{ marginBottom: '2rem' }}>
                             {/* Summary list */}
                             <div style={{ border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '1.5rem', background: 'rgba(0,0,0,0.15)' }}>
@@ -1485,9 +1568,10 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                             <button
                                 type="button"
                                 onClick={handleSubmitBooking}
-                                disabled={isSubmitting}
+                                disabled={isSubmitting || holdSecondsRemaining === 0}
                                 aria-busy={isSubmitting}
-                                style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '12px 32px', borderRadius: '8px', cursor: isSubmitting ? 'not-allowed' : 'pointer', opacity: isSubmitting ? 0.65 : 1, fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                aria-describedby="seat-hold-timer"
+                                style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '12px 32px', borderRadius: '8px', cursor: isSubmitting || holdSecondsRemaining === 0 ? 'not-allowed' : 'pointer', opacity: isSubmitting || holdSecondsRemaining === 0 ? 0.65 : 1, fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                                 {isSubmitting ? 'Confirming Booking...' : `Confirm ${totalPriceDisplay} booking`}
                             </button>
                         </div>
