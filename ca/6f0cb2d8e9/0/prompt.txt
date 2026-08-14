@@ -1,0 +1,517 @@
+Yep go ahead and pr then squash after checks then we can do the rest
+
+---
+
+Are those issues you filed?
+
+---
+
+Tests should only be against product code not other things in the repo
+
+---
+
+<task-notification>
+<task-id>b8vm33lvb</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/b8vm33lvb.output</output-file>
+<status>completed</status>
+<summary>Background command "cd /home/scottdensmore/Developer/scottdensmore/travel-app
+gh pr checks 259 --watch --interval 30 2&gt;&amp;1 | tail -20" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>ab5b39d4cce769fca</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/ab5b39d4cce769fca.output</output-file>
+<status>completed</status>
+<summary>Agent "Verify docs consolidation slice" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>## Verification report — `chore/tests-only-against-product-code`
+
+Re-read my instructions from `/home/scottdensmore/Developer/scottdensmore/travel-app/AGENTS.md` § Sub-agents → ### verifier at `8c4688c`, not from context. Noting that section now assigns `npm audit` and `verify-container-secrets.sh` to me when the diff reaches them; I acted on that below.
+
+### What I ran
+
+| Check | Result |
+| --- | --- |
+| `npx tsc --noEmit` | exit 0 |
+| `npm run lint` | 0 errors, 8 warnings — unchanged from baseline |
+| `npm run test:unit` | 62 suites, 707 tests, all passed |
+| `npm run test:database` | 22 suites, 111 tests, all passed (separate command, not via `npm test`) |
+| `npm run build` | exit 0; "Removed 1 environment files from standalone output" |
+| `npx playwright test` | 38 passed, 4.4m, `global-teardown` clean |
+| `npm audit --omit=dev --audit-level=high` | **0 vulnerabilities**, exit 0 |
+| `npx jest --selectProjects database` | aborts as designed — `maxWorkers=23`, exit 1, correct message |
+| Migrations fresh + populated | **Skipped**: `git status --short prisma/` is empty. Unreachable. |
+| `./scripts/verify-container-secrets.sh &lt;image&gt;` | **Skipped**: `Dockerfile`, `.dockerignore`, standalone output and `scripts/sanitize-standalone.mjs` are all untouched, so the image cannot differ from `main`. Unreachable. |
+
+I ran `npm audit` despite `package.json` being untouched, because a dependency-policy test was among the deletions and it costs seconds.
+
+`git status --short` is byte-identical to the start. I used a detached `git worktree` in the scratch directory to measure `main`, and removed it — `git worktree list` now shows only the repo.
+
+### Your four questions
+
+**1. Did anything depend on the deleted files? Verified — no.** The guard mechanism survives: `jest.database-setup.js` still exists and is still wired as `globalSetup` for the database project in `jest.config.js`. I ran the dangerous command and it aborted correctly. See finding 5 for a leftover.
+
+**2. Arithmetic — confirmed exactly, not taken.** I checked out `main` into a scratch worktree and ran the six deleted files there:
+
+```
+Test Suites: 6 passed, 6 total
+Tests:       66 passed, 66 total
+```
+
+68 − 6 = 62 ✓ and 773 − 66 = 707 ✓. Nothing else stopped running or was silently skipped.
+
+**3. Stale claims — your grep is confirmed.** Independently, across the whole repo excluding `node_modules`/`.git`, the only reference to any deleted file is the intentional past-tense `SECURITY.md:116`. `README.md:133`, `AGENTS.md:93` and `.github/copilot-instructions.md:24` mention `__tests__/` generically and remain accurate. But see finding 1 — a claim can go stale without naming a file.
+
+**4. SECURITY.md — all three claims accurate.**
+- "Nothing now inspects tracked files for committed literals" — verified. No gitleaks/trufflehog/secret-scan step in `.github/workflows/ci.yml`; `scripts/` contains nothing that reads tracked files for secrets.
+- ".dockerignore excludes the agent directories" — verified. `.dockerignore` lists `.agents`, and the incident value was in `.agents/agents/verify/agent.json`. "As noted above" also resolves — the point is made earlier in the same section.
+- "the 32-character floor in `lib/env.ts`" — verified at `lib/env.ts:69-70`.
+
+---
+
+## Findings
+
+### 1. Coverage gap — the control SECURITY.md now falls back on is itself no longer guarded
+
+The corrected paragraph leans on "CI scans built image layers (`scripts/verify-container-secrets.sh`)" as what remains. Two of the deleted tests were the assertions that CI still ran its gates:
+
+- `containerSecrets.test.ts:89` — "checks the final container image in CI"
+- `dependencyPolicy.test.ts:124` — "requires a high-severity production audit in CI"
+
+No surviving test reads `.github/workflows/` at all (`grep -rln "ci.yml\|workflows" __tests__/ scripts/` returns nothing). Both gates can now be removed from `ci.yml` in a one-line diff with nothing going red. Both are currently present — `ci.yml:36` and `ci.yml:78` — and the audit is clean.
+
+This matters more than the other deletions because `AGENTS.md` § Commands and my own instructions both describe these two as the gates that "nothing local covers", so the assertion that CI still contains them was the only thing standing behind that. This is a consequence of the deletions, which is what you asked me to report — not an argument to reverse them.
+
+### 2. Consistency — the stated keep criterion does not separate the kept tests from a deleted one
+
+You justify keeping `containerEntrypoint`, `sanitizeStandalone` and `scanImageLayers` because they "execute real shipped code with real inputs rather than asserting on repo files". `databaseSerialisation.test.ts` did exactly that:
+
+```js
+const { assertSerialised } = require('../../jest.database-setup.js');
+expect(() =&gt; assertSerialised({ maxWorkers: 8 })).toThrow(/one file at a time/);
+```
+
+It executed real code with real inputs and asserted on the thrown message. So "executes real code" is not the line. The line that actually holds is **does this code ship**: `container-entrypoint.sh` runs in the production image, `sanitize-standalone.mjs` produces the shipped artifact, `jest.database-setup.js` does neither.
+
+Under that reading, **`scanImageLayers.test.ts` fails too** — `scripts/scan-image-layers.sh` is CI tooling that never ships, the same category as the test infrastructure you removed. That is the kept test I would challenge. Either restate the criterion as "code that ships or produces what ships", or drop that file for consistency.
+
+### 3. Consistency — three surviving tests assert on file text, and the slice weighed only two
+
+You flagged `passengerDataSchema.test.ts` and `staffMfaSchema.test.ts` (regex over `prisma/schema.prisma` and migration SQL). There is a third you did not mention: `__tests__/styles/responsiveDashboards.test.ts` reads `app/globals.css` and matches exact substrings including embedded newlines, e.g.
+
+```js
+expect(css).toContain('.profile, .admin {\n  min-width: 0;');
+```
+
+That is the same method as `containerSecrets.test.ts` applied to a different file, and it is brittle to reformatting besides.
+
+My position on your borderline call: I would **keep all three**. `prisma/schema.prisma` generates the Prisma client and defines the database shape, and `app/globals.css` ships to the browser — both are product code, so under the rule as written (which is about *subject*) they pass. `.dockerignore` and `package.json` are repository metadata, so they fail. That is a coherent line. But it means the rule is about subject, not method — which is finding 2 again, from the other side. If you instead mean "do not assert on file text", all three go, and `containerSecrets`/`dependencyPolicy` were right to remove for a different reason than the one stated.
+
+### 4. Coverage gap — route metadata lost its only coverage
+
+`productIdentity.test.ts` was a mixed file. Most of it was repo hygiene the rule plainly covers (grepping the tree for stray carrier names, asset filenames, SVG contents). But three assertions were about product surface:
+
+- `:184` — every public `app/**/page.tsx`, excluding admin and dynamic-only segments, exports `metadata` with a `description:`
+- `:200` — the root layout sets a title `template:` and `app/page.tsx` spells the name out
+- `:209` — seeded flight numbers are prefixed with `BRAND.airlineCode`, and that code is two uppercase alphanumerics
+
+No surviving test mentions `metadata` or `generateMetadata` anywhere in `__tests__/`. A new page shipping with no title or description is a user-visible defect and now nothing catches it. Implemented as source greps, so it lands in the same tension as finding 3 — but the *subject* was product behaviour, and this is the one piece of removed coverage I would want re-added as a real test rather than left as an accepted loss.
+
+Two smaller ones in the same family, for the record: `dependencyPolicy.test.ts:68,96,103` pinned the `overrides` block for vulnerable legacy chains, `form-data` and Babel. The `overrides` can now be removed without a local failure, though CI's `npm audit` gate would likely catch the consequence — which loops back to finding 1.
+
+### 5. Minor — dead export left behind
+
+`jest.database-setup.js:39`:
+
+```js
+module.exports.assertSerialised = assertSerialised;
+```
+
+That named export existed only so `databaseSerialisation.test.ts` could call the function directly; Jest uses the default export. Its sole consumer is gone, so it is now unreferenced. The guard itself works — I verified it — this is just residue worth sweeping.
+
+---
+
+## Mutation testing
+
+Exemption accepted. The diff adds no assertion and changes no behaviour; `## Testing Expectations` covers test-removal and documentation slices, and you stated it explicitly rather than leaving silence, which is what my instructions ask for.
+
+One reframe, as last time: for a deletion slice the analogous question is not "what mutant would survive" but "what would now pass that used to fail". I worked that question deliberately, and findings 1 and 4 are its answers — `ci.yml` losing a gate, and a page shipping without a title. Neither is a reason to hold the slice.
+
+## Classification summary
+
+Nothing here is a regression: every check I ran is green, and the two baselines I was given (lint 8 warnings, unit 773 → 707) reconcile exactly. No baseline existed for the build, the database project or Playwright; all three passed, so nothing needed classifying — I am recording that a red result in any of them would have been unclassifiable rather than that they were known green.
+
+Findings 1 and 4 are **coverage gaps** and, per `## Issue Tracking`, are the two I would file before moving on — both verified against the current tree rather than read off the source. Findings 2, 3 and 5 are **consistency/hygiene** items internal to this slice, best resolved here rather than filed.</result>
+<usage><subagent_tokens>108210</subagent_tokens><tool_uses>24</tool_uses><duration_ms>867625</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>ab5b39d4cce769fca</task-id>
+<tool-use-id>toolu_014tS5BoDxcU4j5ei5kZf4Uj</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/ab5b39d4cce769fca.output</output-file>
+<status>completed</status>
+<summary>Agent "Verify docs consolidation slice" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result># Re-verification pass — `chore/tests-only-against-product-code`
+
+Re-read `AGENTS.md` from disk, including the new § Testing Expectations bullet. Tree unchanged by me; no leftover worktree.
+
+## What I ran, and what I skipped
+
+Scoped to the delta as you asked, not a reflexive re-run.
+
+| Check | Result |
+| --- | --- |
+| `npx tsc --noEmit` | exit 0 |
+| `npm run lint` | 0 errors, 8 warnings — unchanged |
+| `npm run test:unit` | **61 suites, 702 tests**, all passed |
+| `npm run test:database` | 22 suites, 111 tests, all passed — unchanged |
+| `npx jest --selectProjects database` (guard probe) | **still aborts**: `maxWorkers=23`, exit 1, full message intact, thrown from `assertSerialised` at `jest.database-setup.js:23` |
+
+Arithmetic confirmed rather than taken: 62 → 61 suites, 707 → 702 tests. `scanImageLayers.test.ts` carried exactly 5 `it(` blocks at HEAD, and it is the only test file in the delta, so the drop is fully accounted for.
+
+**Skipped, with reasons:**
+
+- **`npm run build`** — unreachable. The delta is one deleted Jest test file, one removed line from `jest.database-setup.js`, and one markdown bullet. None is in the build graph; `next build` compiles `app/`, `components/`, `lib/`, and the sanitize step reads standalone output. `git status --short` over `app/ lib/ components/ prisma/ scripts/ package.json package-lock.json Dockerfile .dockerignore` returns **zero** entries. Ran green on the previous state.
+- **`npx playwright test`** — unreachable. `e2e/` and `playwright.config.ts` are untouched (same zero-entry check), and nothing the delta touches is loaded by a Playwright run. Ran green on the previous state (38 passed).
+- **Migrations, `npm audit`, `./scripts/verify-container-secrets.sh`** — unreachable for the same reason; `prisma/`, the manifests, and the container inputs are all untouched. Audit was clean last round.
+
+## Verified as claimed
+
+- **`jest.database-setup.js`** — the diff removes only `module.exports.assertSerialised = assertSerialised;`. Default export and `assertSerialised` itself untouched, and the probe above proves the guard still fires. Nothing broke.
+- **`scripts/verify-container-secrets.sh:82`** still calls `"$script_directory/scan-image-layers.sh"`. The script survives; only its test went, as you said.
+- The three source-scanning survivors are consistent with the new bullet: `flightTime.test.ts` scans `['app', 'components', 'lib']`, `seatOccupancy.test.ts` and `deadControls.test.ts` likewise. Subjects ship, so they qualify — method is a source grep, but the bullet is explicitly about subject.
+
+---
+
+## Findings
+
+### 1. Coverage gap / consistency — the new bullet condemns three surviving test files (most severe)
+
+This is the answer to your item 3, and the rule and the tree genuinely disagree.
+
+`__tests__/e2e/` contains three suites whose subject is the **Playwright harness**, which is test tooling and never ships:
+
+| File | Subject | Project | Tests |
+| --- | --- | --- | --- |
+| `rowSnapshot.test.ts` | `@/e2e/helpers/rowSnapshot` | unit | 11 |
+| `rowSnapshot.database.test.ts` | `@/e2e/helpers/rowSnapshot`, `@/e2e/helpers/runBaseline`, `@/e2e/global-teardown` | database | 10 (with the next) |
+| `runIsolation.database.test.ts` | `@/e2e/global-setup`, **`playwright.config.ts`** | database | — |
+
+21 tests across 3 suites. The bullet names "test or CI tooling" as not qualifying, and `runIsolation.database.test.ts:90` ("starts its own server rather than borrowing one") asserts on `playwright.config.ts` — configuration, the same category as `.dockerignore`.
+
+These are the *same category* as the deleted `databaseSerialisation.test.ts`. Both pin "the harness refuses to run in a dangerous configuration"; `e2e/global-setup.ts` and `jest.database-setup.js` do the same job for the two suites. The bullet even uses `jest.database-setup.js` as its worked example of what does not qualify.
+
+**I am not recommending you delete them.** They are more load-bearing than anything removed so far — their headers cite #213 (three specs leaked for months), #173 (seat 11A held forever, three specs failing from the first run) and #196 (a stale server made a healthy branch look broken). Deleting them re-opens incidents that have already happened twice. My finding is that the written rule and the tree cannot both stand: either the bullet gains an explicit carve-out for the test harness's own correctness, or these three go. Right now the slice ships a rule that its own tree violates by 21 tests, which is the drift the rule was written to end.
+
+If it helps, the carve-out that would fit the evidence is narrow: *the harness that decides whether a run is trustworthy is in scope, because a silent failure there invalidates every other test.* That distinguishes `e2e/global-setup.ts` from `scripts/scan-image-layers.sh` on a principle rather than by listing exceptions — though I note it would also have kept `databaseSerialisation.test.ts`, so it is a real decision, not a patch.
+
+### 2. Consistency — the bullet as written does not authorise this slice, and the next bullet forbids it
+
+Bullet 1 is prospective only: "A test whose subject is the repository rather than the product **does not get written**." It says nothing about removing existing ones. Bullet 2, immediately after and unchanged, reads:
+
+&gt; Preserve all existing tests and add coverage for new behavior and regressions.
+
+Read literally, § Testing Expectations now says: do not write new repo-subject tests, and preserve all existing tests. That is not what this slice did — it removed seven files and 71 tests. Two small edits close it: extend bullet 1 to say existing ones are removed as they are found, and qualify bullet 2 with "except those bullet 1 excludes".
+
+### 3. Coverage gap — `scripts/scan-image-layers.sh` is now untested, and the rule forbids fixing it
+
+Recording this because the bullet explicitly asks me to: "even when the property it would pin is real and unguarded — say so plainly and leave it to review."
+
+`grep -rln "scan-image-layers" __tests__/ scripts/` now matches only the two shell scripts. The scanner has no test, and it is the code that actually performs the layer scan that `SECURITY.md` names as the remaining control after `committedSecrets.test.ts` was removed. This is distinct from #263, which is about nothing asserting CI still *invokes* the gate; this is that the gate's implementation is now unverified. Under the new rule no test may be written for it, so the honest disposition is a comment on #263 rather than a new issue or a code change.
+
+---
+
+## Mutation testing
+
+Exemption accepted, same reasoning as last round and it holds: no assertion added, no behaviour changed, the only non-deletion is prose. For a slice like this the productive question is "what would now pass that used to fail", and I worked it — findings 1 and 3 are its answers.
+
+## Classification
+
+Every check is green and reconciles exactly against the `main` baseline you gave (`8c4688c`, 8 lint warnings, 68 suites / 773 tests). **No regressions.** The guard you specifically asked about is intact and verified by running the dangerous command, not by reading the diff.
+
+Findings 1 and 2 are **consistency** issues internal to this slice and should be resolved here — finding 1 is the one I would not ship without a decision on, since the rule being introduced is contradicted by 21 tests in the same tree. Finding 3 is a **coverage gap** to record on #263.</result>
+<usage><subagent_tokens>130075</subagent_tokens><tool_uses>11</tool_uses><duration_ms>166791</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>ab5b39d4cce769fca</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/ab5b39d4cce769fca.output</output-file>
+<status>completed</status>
+<summary>Agent "Verify docs consolidation slice" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result># Final verification pass — `chore/tests-only-against-product-code`
+
+Re-read `AGENTS.md` § Testing Expectations and step 8 from disk. Tree unchanged by me.
+
+## What I ran, and what I skipped
+
+| Check | Result |
+| --- | --- |
+| `npx tsc --noEmit` | exit 0 |
+| `npm run lint` | 0 errors, 8 warnings — unchanged from baseline |
+| `npm run test:unit` | **62 suites, 709 tests**, all passed |
+| `npm run test:database` | 22 suites, 111 tests, all passed |
+| `npx jest --selectProjects database` (guard probe) | **still aborts**: `maxWorkers=23`, exit 1, full message intact |
+| Restored suite in isolation | 1 suite, **7 tests**, all passed |
+
+**Skipped — unreachable, same judgement as last round.** `git status --short` over `e2e/ playwright.config.ts app/ lib/ components/ prisma/ package.json package-lock.json Dockerfile .dockerignore scripts/ .github/` returns **zero** entries. So `npm run build`, `npx playwright test`, the fresh/populated migration runs, `npm audit` and `./scripts/verify-container-secrets.sh` cannot be reached by a delta consisting of one relocated test file, four added lines of comment in `jest.database-setup.js`, and reworded prose. Build and Playwright both ran green on an earlier state of this branch.
+
+## Verified rather than taken
+
+**Arithmetic — confirmed.** 773 → 709 is 64. Decomposed: the original six files measured 66 tests against `main` in a scratch worktree last round; `scanImageLayers.test.ts` measured 5 (and its removal moved 707 → 702); 66 + 5 = **71 removed**. The restored suite measures **7** (run in isolation just now). 71 − 7 = 64 ✓. Suites: 68 − 7 deleted + 1 restored = 62 ✓.
+
+**Restoration is byte-identical to `8c4688c`** — verified by hash, not by inspection:
+
+```
+c342b4dcd4fc9a80d438c04ab5e2cbc570d95fb95683b061bb5339ac988a3543  (8c4688c:__tests__/docs/databaseSerialisation.test.ts)
+c342b4dcd4fc9a80d438c04ab5e2cbc570d95fb95683b061bb5339ac988a3543  __tests__/harness/databaseSerialisation.test.ts
+```
+
+`diff` is empty, and git records it as a pure rename (`R`). Its `../..` paths resolve at the new depth — the suite passes, which is the proof.
+
+**`jest.database-setup.js`** is now `main` plus a four-line comment above the restored export. The guard fires, verified by running the dangerous command.
+
+**The rewritten bullets match the tree.** I re-audited every surviving suite against the new wording:
+
+- Bullet 2's exception covers all four harness suites, including the two edges I checked specifically: `rowSnapshot.database.test.ts` also exercises `e2e/global-teardown.ts` (reachable as the thing that acts on "the leak snapshotter"), and `runIsolation.database.test.ts:90` asserts on `playwright.config.ts` (reachable as "the configuration that wires them"). Bullet 2's claim that these live in `__tests__/harness/` and `__tests__/e2e/` is accurate — those directories contain exactly those four files and nothing else.
+- Dropping "test tooling" from bullet 1 was necessary, and the replacement example is right: `sanitize-standalone.mjs` *modifies* the artifact, so it "produces what ships"; `scan-image-layers.sh` only inspects and produces nothing. That is a principled line, not a list of exceptions.
+- No surviving suite now contradicts the section. Last round's contradiction is closed.
+
+---
+
+## Findings
+
+### 1. Coverage gap — `databaseTestHygiene.test.ts` is the closest call to the carve-out, and I think it stays deleted
+
+Recording this because the rule tells me to say so plainly rather than let it pass silently.
+
+That file pinned one property: every `*.database.test.[jt]sx?` file contains `prisma.$disconnect()`. Its rationale is the same family as the carve-out's — under `--runInBand` all 22 files share one process, so a file that never disconnects holds connections for the rest of the run (#165), and the header records that **two files were missing it and nothing noticed**.
+
+I checked whether it belongs inside the new exception and concluded it does not. The carve-out covers "the machinery that decides whether a result can be believed" — `jest.database-setup.js` and friends. This was a repository-wide lint over *test source text*, not a test of harness code. The line holds.
+
+The consequence is real and now unguarded: nothing catches a new database test file that never disconnects. I checked the current state — **all 22 files do disconnect**, so the property holds today; it is unguarded, not violated. Worth adding to #263 alongside the `scan-image-layers.sh` note, since it is the same shape: a real property the rule forbids testing.
+
+Nothing else. No regressions, no flakes, no environment issues.
+
+---
+
+## Mutation testing
+
+Exemption accepted and independently supported this round: the restored file is byte-identical to `8c4688c`, so no assertion was added, removed or altered anywhere in the delta. Confirmed by hash rather than by trusting the claim, as you asked.
+
+---
+
+## Your step 8 question
+
+You asked plainly, so I will answer plainly: **no, this slice should not have been split, and I do not think you should take it to the user as a step 8 violation.** But I do think step 8's wording is wrong, and that is worth taking to them instead.
+
+The rule reads: *"If a second round still requires code changes, the slice is too large: stop and split it per step 3 rather than looping."* Read literally, this is round three and rounds two and three both changed files, so it fires. I think the literal reading is wrong here, for a reason that does not depend on your authorship of the sentence:
+
+**Splitting would not have prevented any of these rounds.** That is the test step 3 actually implies — a slice is too large when it contains independently shippable parts, and the symptom is that review keeps finding unrelated things. Here the churn was neither unrelated nor divisible. The set of deleted files has been stable since round one; round two moved one file out and round three moved one file back in, both driven by a single question — *where is the boundary of the rule* — which cannot be answered in a smaller slice because the boundary is only visible against the whole set. A slice containing just `scanImageLayers.test.ts` could not have surfaced that `__tests__/e2e/` contradicted the rule, because the rule would not have existed yet.
+
+There is a sharper way to see it. Round three's changes were *caused by* the fix to round two's finding: writing the rule down is what made the contradiction with `__tests__/e2e/` legible, and resolving that is what forced the restoration. Iteration that converges on a boundary is not looping — each round eliminated a specific defect and none reappeared. Looping, which the rule is aimed at, is when round three re-opens round one.
+
+Where I would push back on you: the restoration in round three was not a wording change, it was a code change reversing a deletion from round one, and you should not describe it as merely prose settling. It was the right call and my finding forced it — but it means the slice's *content* did change late, and the honest framing is "a deletion was wrong and got reverted", not "only the wording moved".
+
+So my suggested wording, if you take this to the user: the trigger should be *a round that changes something an earlier round already settled*, or *findings in an area the previous round did not touch* — both symptoms of a slice too large to hold in one review. Round count is a proxy that misfires exactly when review is doing its job on a single hard question. I would not ship over the current sentence silently; I would say to the user what I have said here and let them decide, since it is their rule and this is the second slice in a row where documentation prose is the deliverable.
+
+One process note, for completeness rather than as an objection: three of my five pieces of input this session have shaped rules that govern me, and I cannot review my own carve-out neutrally — I proposed the harness exception in round two and have now checked the tree against it. An independent reading of bullet 2 before merge would be worth more than another pass from me.
+
+## Classification
+
+All checks green and reconciling exactly against `main` at `8c4688c` (8 lint warnings, 68 suites / 773 tests). **No regressions, pre-existing failures, or environment problems.** The single finding is a **coverage gap** to record on #263, not a blocker.</result>
+<usage><subagent_tokens>144012</subagent_tokens><tool_uses>8</tool_uses><duration_ms>156121</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>aa3c9d8f8d3fe3613</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/aa3c9d8f8d3fe3613.output</output-file>
+<status>completed</status>
+<summary>Agent "Cold read of testing rules" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>I read the policy, the full staged diff, all seven deleted files, and every one of the 84 Jest suites plus 11 Playwright specs. Here is the cold reading.
+
+## Q1 — Is the rule applicable without the author? **Yes.** All three decide cleanly.
+
+- `scripts/container-entrypoint.sh` → **product.** `Dockerfile:62` copies it into the image and `:72` makes it the `ENTRYPOINT`. It ships. `__tests__/security/containerEntrypoint.test.ts` survives — correct.
+- `scripts/sanitize-standalone.mjs` → **product.** `package.json:10` runs it as the second half of `npm run build`. "Produces what ships." `__tests__/security/sanitizeStandalone.test.ts` survives — correct.
+- `lib/env.ts` → **product**, trivially. `__tests__/lib/env.test.ts` survives — correct.
+
+The drafting is genuinely good here: the closing sentence ("a shell script in `scripts/` is real code, and only some of it ships") pre-empts the one ambiguity these three could have raised. Two gaps, both narrow:
+
+- **"Code" excludes assets.** `public/img/logo.svg`, `public/img/og-image.jpg`, `app/favicon.ico` ship but are not code. Under a literal reading a test asserting the favicon is decodable is unwritable — and that exact test existed and guarded a real build failure before it was deleted.
+- The exception's boundary is not decidable — see Q2.
+
+## Q2 — Is the exception principled? **The intent is; the stated principle is not what does the work.**
+
+The principle as written is "a silent failure in any of them invalidates every other test rather than failing honestly." Applied to the four kept suites, it holds. Applied to the deleted `__tests__/security/scanImageLayers.test.ts`, **it holds just as well.** That file spawns `scripts/scan-image-layers.sh` against real tar fixtures and asserts it fails closed. One of its cases is named *"fails closed when a layer cannot be read for sentinel scanning"*, with the comment: *"A layer whose contents cannot be read has not been shown to be clean. Reporting success here would let an unscanned layer ship."*
+
+That is the exception's own argument, verbatim, one level out. It is behavioral, not a text scan, and its silent failure produces a false green exactly the way a broken leak snapshotter does.
+
+The bullet excludes it by fiat — "not everything under `scripts/`" — rather than by principle. The real limiter is an unstated word: *test* run, as opposed to a CI job. That may well be the right line, but the sentence does not say it, so the next agent cannot derive the outcome from the text. This is the one place the exception reads as fitted rather than stated.
+
+`__tests__/docs/databaseTestHygiene.test.ts` is the honest near-miss on the other side, and I think its deletion is defensible: a leaked Prisma connection exhausts the pool and fails loudly, so the "silent" clause genuinely excludes it.
+
+## Q3 — Contradictions? **The old one is fixed. A new one was introduced.**
+
+Fixed: bullet 3 now reads "Preserve every existing test except the ones the two rules above exclude." Grep confirms no surviving "preserve all existing tests" anywhere in `AGENTS.md`. Clean.
+
+New: **bullet 1's disposal instruction contradicts `## Issue Tracking`.** Bullet 1 says a violating test "is removed as it is found ... even when the property it pins is real and otherwise unguarded — **say so plainly and leave it to review.**" Issue Tracking says: *"File anything found but not fixed... A finding recorded only in a commit message, a **pull request comment**, or a chat reply is a finding that gets lost."* Bullet 1 routes an unguarded-property finding into precisely the channel the other section names as lossy. It also sits against step 3 ("do not widen the slice to absorb it — file it").
+
+This is not theoretical — **this branch demonstrates the failure.** Seven guards removed, two issues filed (#263, #264, both partial). Unguarded and unfiled: the dependency override pins (`@auth/core` 0.41.3, `uuid`, `sharp`, `d3-*`, `postcss`, `form-data` ≥4.0.6, `@babel/core` ≥7.29.6), the Node-22/`engine-strict` baseline, the `$disconnect()` hygiene guard, the fail-closed layer scanner's behavior, and every product-identity guard except page metadata. The committed-secret guard's only record is prose in `SECURITY.md` — which now cites a file that no longer exists.
+
+Step 4's "when behavior **or structure** is testable" is mild residual tension, not a contradiction; the rule constrains subject, not technique.
+
+## Q4 — Does the tree comply? **In one direction yes, in the other no.**
+
+**No surviving test has a non-product subject.** I verified all 84 Jest suites and 11 specs, including every `fs`/`child_process`/`process.cwd()` call site and buried `it(...)` blocks. The complete set of filesystem-touching survivors: `deadControls` (app/components), `responsiveDashboards` (app/globals.css), `seatingMigration`, `passengerDataSchema`, `staffMfaSchema`, `authTokens.database` (prisma/migrations, schema.prisma), `flightTime`, `seatOccupancy` (app/lib/components), `containerEntrypoint`, `sanitizeStandalone` (shipping scripts) — all product. `__tests__/harness/` and `__tests__/e2e/` read `jest.config.js`, `jest.database-setup.js`, `e2e/global-setup.ts`, `e2e/global-teardown.ts`, `playwright.config` — all four explicitly inside the exception. No `.test.ts` exists outside `__tests__/` and `e2e/`. Nothing imports `package.json`, a workflow, a Dockerfile, or a doc.
+
+**But the deletion set violates the rule.** `__tests__/docs/productIdentity.test.ts` should not have been deleted. Its subject is product code almost end to end: `app/globals.css`, `app/layout.tsx`, `app/page.tsx`, `lib/data/FlightData.ts`, `prisma/schema.prisma`, `app/favicon.ico`, `public/img/*`, and a recursive scan of `app`/`components`/`lib`/`prisma`.
+
+The sharpest form of it: **the bullet names `app/globals.css` as its example of qualifying product code, and then deleted a test asserting against `app/globals.css` while keeping another one.** `responsiveDashboards.test.ts:8` and the deleted `productIdentity.test.ts` read the same file with the same technique and got opposite verdicts. No reading of the text separates them — bullet 1 explicitly disclaims "it executes real code" as the criterion and makes the *subject* decisive, and the subject is identical.
+
+That is the finding that answers your framing question. The rule as written is a real principle. The deletion set was not derived from it.
+
+## Defects, with wording
+
+**1. Restore `__tests__/docs/productIdentity.test.ts`** (as `__tests__/app/productIdentity.test.ts`). It is compliant. If the real driver was "no repository-wide source scans," then the rule must say that instead — but then `deadControls.test.ts` and `responsiveDashboards.test.ts` have to go too, and they were kept.
+
+**2. Bullet 1, first line** — close the asset gap:
+
+&gt; **Tests are written against product code only** — code or assets that ship, or that produce what ships.
+
+**3. Bullet 1, disposal clause** — replace `— say so plainly and leave it to review.` with:
+
+&gt; — open an issue for the now-unguarded property before removing it, and name that issue in the pull request. A guard removed with only a note in the diff is a guard removed silently.
+
+**4. Exception, last sentence** — replace `it covers the machinery that decides whether a result can be believed, not everything under `scripts/`.` with:
+
+&gt; it covers the machinery that decides whether a **Jest or Playwright run** can be believed. A CI check whose silent failure would let something ship — `scripts/verify-container-secrets.sh`, `scripts/scan-image-layers.sh` — sits outside it, because a green CI job is not a test result.
+
+If you would rather keep `scanImageLayers.test.ts`, widen the exception instead. Either is defensible. What is not defensible is shipping a principle that covers the file alongside a sentence that excludes it.
+
+**5. `SECURITY.md:116`** cites `__tests__/security/committedSecrets.test.ts`, which no longer exists, and is the only surviving record of that gap. File the issue and reference it there.
+
+**Not blocking, worth knowing:** `CLAUDE.md` lost its own size guard in `8c4688c` and now says "Nothing enforces that automatically any more." That predates this branch.</result>
+<usage><subagent_tokens>72629</subagent_tokens><tool_uses>23</tool_uses><duration_ms>605893</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>ab5b39d4cce769fca</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/ab5b39d4cce769fca.output</output-file>
+<status>completed</status>
+<summary>Agent "Verify docs consolidation slice" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result># Final pass — `chore/tests-only-against-product-code`
+
+Re-read § Testing Expectations from disk. Tree unchanged by me; no leftover worktree. **No blocking findings.**
+
+## What I ran, and what I skipped
+
+| Check | Result |
+| --- | --- |
+| `npx tsc --noEmit` | exit 0 |
+| `npm run lint` | 0 errors, 8 warnings — unchanged from baseline |
+| `npm run test:unit` | **63 suites, 720 tests**, all passed |
+| `npm run test:database` | 22 suites, 111 tests, all passed |
+| `npx jest --selectProjects database` | still aborts: `maxWorkers=23`, exit 1 |
+| Restored suites in isolation | `productIdentity` 11 tests; `databaseSerialisation` 7 tests |
+
+**Skipped — unreachable.** `git status --short` over `e2e/ playwright.config.ts app/ lib/ components/ prisma/ public/ package.json package-lock.json Dockerfile .dockerignore scripts/ .github/` returns **zero** entries. The delta is two renames with zero content change, one deletion, and prose. So `npm run build`, `npx playwright test`, the migration runs, `npm audit` and the container scan cannot be reached. Build and Playwright ran green on an earlier state of this branch.
+
+## 1. Arithmetic — reconciles exactly
+
+Decomposed from measurements I took myself across passes, not from the claim:
+
+| | Suites | Tests |
+| --- | --- | --- |
+| `main` at `8c4688c` | 68 | 773 |
+| Original six files (measured in a scratch worktree, pass 2) | 6 | 66 |
+| less `databaseSerialisation` restored (measured) | −1 | −7 |
+| less `productIdentity` restored (measured) | −1 | −11 |
+| plus `scanImageLayers` (measured, pass 3) | +1 | +5 |
+| **Net removed** | **5** | **53** |
+| Expected final | 68 − 5 = **63** | 773 − 53 = **720** |
+| Observed | **63** | **720** |
+
+The two restorations contribute zero net, correctly — they were already inside `main`'s 773 and are byte-identical, so a rename moves nothing.
+
+**Both restorations verified by hash**, as asked:
+
+```
+9127ca4a7375804a2561a588363ab4124cf19f6ba09c7bcf833d9e870e94b883  productIdentity  (8c4688c and working tree)
+c342b4dcd4fc9a80d438c04ab5e2cbc570d95fb95683b061bb5339ac988a3543  databaseSerialisation (8c4688c and working tree)
+```
+
+`diff` empty for both; git records both as pure renames.
+
+## 2. Full re-audit against the new bullet text — every surviving suite clears
+
+I re-derived the list rather than reusing last round's, and checked all thirteen suites that read files or spawn processes. Grouped by why they qualify:
+
+- **Recursive scans of product source** — `productIdentity` (`app`, `components`, `lib`, `prisma`), `flightTime` (`app`, `components`, `lib`), `seatOccupancy` (`app`, `lib`, `components`), `deadControls` (`app`, `components`). All squarely inside the new "Subject, not technique" paragraph.
+- **Named product files/assets** — `responsiveDashboards` (`app/globals.css`), `passengerDataSchema` and `staffMfaSchema` (`prisma/schema.prisma` + migration SQL), `seatingMigration` and `authTokens.database` (migration SQL, which ships to the production database).
+- **`scripts/` that ships or produces what ships** — `containerEntrypoint` (runs in the image), `sanitizeStandalone` (modifies the artifact).
+- **Bullet 2 exception** — the four in `__tests__/harness/` and `__tests__/e2e/`.
+
+**Does "subject, not technique" make anything ambiguous?** No surviving test is ambiguous, but one thing is resolvable only by inference: the rule now names the `scripts/` files that are *excluded* (`verify-container-secrets.sh`, `scan-image-layers.sh`) and none that are *included*. A reader must work out for themselves that `container-entrypoint.sh` ships and `sanitize-standalone.mjs` produces what ships. The text supports both conclusions — "code or assets that ship, or that produce what ships" — so this is a one-clause improvement, not a defect, and not worth another round.
+
+**Does restoring `productIdentity` conflict with `responsiveDashboards` or `deadControls`?** No, and I checked the specific overlap rather than assuming. Both `productIdentity:147` and `responsiveDashboards:8` read `app/globals.css`, but they assert disjoint properties — the former that the hero references `/img/hero-routes.svg` and is viewport-bounded, the latter `min-width: 0` and the media queries. No duplication, no contradiction. That two suites now read the same file the same way and are both kept is the asymmetry the independent review identified, resolved consistently.
+
+**I also checked whether the restored file drags in anything the rule condemns**, since "almost end to end" was doing real work in your description. It does not: every path literal in it is under `app`, `components`, `lib`, `prisma` or `public`, and it reads no `package.json`, `.github/`, `README` or `Dockerfile`. Its own scan variable is named `shipped`. Clean.
+
+**No sixth file.** Nothing else in the tree is condemned or newly cleared by the rewrite.
+
+## 3. Bullet 2's narrowing excludes nothing it previously covered
+
+Checked by subject, not by directory:
+
+| Suite | Subject | Inside "Jest or Playwright run"? |
+| --- | --- | --- |
+| `harness/databaseSerialisation` | `jest.database-setup.js`, plus `jest.config.js` for the wiring assertion | Yes — named, and `jest.config.js` is "the configuration that wires them" |
+| `e2e/rowSnapshot` | `@/e2e/helpers/rowSnapshot` | Yes — "the leak snapshotter" |
+| `e2e/rowSnapshot.database` | + `@/e2e/helpers/runBaseline`, `@/e2e/global-teardown` | Yes |
+| `e2e/runIsolation.database` | `@/e2e/global-setup`, `@/playwright.config` | Yes — named, plus the configuration clause |
+
+None of the four touches `verify-container-secrets.sh` or `scan-image-layers.sh`, so the new exclusion cannot reach them. The narrowing is clean.
+
+For the record, since it was my exception: your correction is right and mine was under-specified. "Fails closed when a layer cannot be read" *is* my argument one level out, and "a green CI job is not a test result" is the limiter I failed to state. The new boundary is better than what I proposed.
+
+## Mutation testing
+
+Exemption correct and independently supported: both restored files are byte-identical to `8c4688c` by hash, so no assertion was added, removed or altered anywhere in the delta. The five deletions remove assertions and add none.
+
+## Classification
+
+All checks green and reconciling exactly against `main` at `8c4688c`. **No regressions, pre-existing failures, environment problems, or coverage gaps arising from this state.** The unguarded properties are recorded on #263 and #265 per the new disposal clause, and closing #264 is justified — `__tests__/app/productIdentity.test.ts:184` ("gives every public route a title and a description") is exactly what that issue asked for, and it passes.
+
+One scoping note on what this report certifies: I verified the tree, the arithmetic and the rule-to-tree correspondence. I did not and cannot verify the provenance of the decisions behind the deletion set — I have those from your messages and have taken them as given, per your instruction not to re-litigate them. If any of them has not in fact been put to the user directly, that is worth settling before the pull request rather than after, since the deletion set is the substance of the slice.</result>
+<usage><subagent_tokens>160201</subagent_tokens><tool_uses>9</tool_uses><duration_ms>184008</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>be6caiozp</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/be5618d4-2d56-4d15-8f3c-aaaba6a29b03/tasks/be6caiozp.output</output-file>
+<status>completed</status>
+<summary>Background command "cd /home/scottdensmore/Developer/scottdensmore/travel-app
+gh pr checks 266 --watch --interval 30 2&gt;&amp;1 | tail -8" completed (exit code 0)</summary>
+</task-notification>
