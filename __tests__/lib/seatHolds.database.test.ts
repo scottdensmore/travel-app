@@ -104,7 +104,7 @@ describe('holding a seat while the customer chooses', () => {
             holdSeats([...claims].reverse().map(claim => ({ ...claim, holderKey: second }))),
         ]);
 
-        expect(results.map(taken => taken.length).sort()).toEqual([0, 2]);
+        expect(results.map(result => result.taken.length).sort()).toEqual([0, 2]);
         const rows = await prisma.seatHold.findMany({
             where: { flightId: flight.id, seatNumber: { in: ['12B', '12C'] } },
         });
@@ -192,6 +192,31 @@ describe('holding a seat while the customer chooses', () => {
         const held = row.expiresAt.getTime() - before;
         expect(held).toBeGreaterThan((HOLD_MINUTES - 1) * 60_000);
         expect(held).toBeLessThanOrEqual(HOLD_MINUTES * 60_000 + 5_000);
+    });
+
+    it('reports the earliest database expiry for the complete held set', async () => {
+        const flights = await Promise.all([aFlight(), aFlight()]);
+        const unrelatedFlight = await aFlight();
+        const holderKey = aHolder();
+        await holdSeat({ flightId: unrelatedFlight.id, seatNumber: '5A', holderKey });
+        await abandon(unrelatedFlight.id, '5A');
+        const claims = flights.flatMap((flight, legIndex) => ['C', 'D'].map(letter => ({
+            flightId: flight.id,
+            seatNumber: `${6 + legIndex}${letter}`,
+            holderKey,
+        })));
+
+        const result = await holdSeats(claims);
+        const rows = await prisma.seatHold.findMany({
+            where: { flightId: { in: flights.map(flight => flight.id) }, holderKey },
+            orderBy: { expiresAt: 'asc' },
+        });
+
+        expect(result.taken).toEqual([]);
+        expect(rows).toHaveLength(4);
+        expect(result.expiresAt).toEqual(rows[0].expiresAt);
+        expect(result.expiresInMilliseconds).toBeGreaterThan((HOLD_MINUTES - 1) * 60_000);
+        expect(result.expiresInMilliseconds).toBeLessThanOrEqual(HOLD_MINUTES * 60_000);
     });
 });
 

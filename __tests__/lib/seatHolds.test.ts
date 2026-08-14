@@ -3,10 +3,16 @@ import { holdSeats, releaseHold, releaseHoldsExcept } from '@/lib/seatHolds';
 import { prisma } from '@/lib/prisma';
 
 const events: string[] = [];
+const databaseNow = new Date('2026-08-14T12:00:00.000Z');
+const earliestExpiry = new Date('2026-08-14T12:09:59.500Z');
 const mockTx = {
     $queryRaw: jest.fn((_query: unknown, ...values: unknown[]) => {
-        events.push(`lock:${values[0]}`);
-        return Promise.resolve([]);
+        if (values.length > 0) {
+            events.push(`lock:${values[0]}`);
+            return Promise.resolve([]);
+        }
+        events.push('clock');
+        return Promise.resolve([{ now: databaseNow }]);
     }),
     $executeRaw: jest.fn((_query: unknown, ...values: unknown[]) => {
         events.push(`claim:${values[1]}:${values[2]}`);
@@ -16,6 +22,13 @@ const mockTx = {
         deleteMany: jest.fn(() => {
             events.push('release');
             return Promise.resolve({ count: 0 });
+        }),
+        findMany: jest.fn(() => {
+            events.push('expiry');
+            return Promise.resolve([
+                { expiresAt: new Date('2026-08-14T12:10:00.000Z') },
+                { expiresAt: earliestExpiry },
+            ]);
         }),
     },
     seatAssignment: {
@@ -45,7 +58,11 @@ describe('multi-seat hold transaction', () => {
             { flightId: 9, seatNumber: '12B', holderKey },
             { flightId: 5, seatNumber: '12C', holderKey },
             { flightId: 5, seatNumber: '12A', holderKey },
-        ])).resolves.toEqual([]);
+        ])).resolves.toEqual({
+            taken: [],
+            expiresAt: earliestExpiry,
+            expiresInMilliseconds: 599_500,
+        });
 
         expect(events).toEqual([
             'lock:5',
@@ -56,6 +73,8 @@ describe('multi-seat hold transaction', () => {
             'claim:5:12A',
             'claim:5:12C',
             'claim:9:12B',
+            'expiry',
+            'clock',
         ]);
     });
 

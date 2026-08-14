@@ -1017,6 +1017,16 @@ footer a:hover {
   gap: 1rem;
 }
 
+/* Expiry recovery moves focus here without a keyboard event, so `:focus`
+   must be visible as well as `:focus-visible`. Amber stays distinct from the
+   purple selected-passenger border and the green confirmation action. */
+.booking-passenger-target:focus,
+.booking-review-actions button:focus-visible {
+  outline: 3px solid #fbbf24;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 5px rgba(251, 191, 36, 0.28);
+}
+
 .flight-result-card {
   align-items: center;
   backdrop-filter: blur(10px);

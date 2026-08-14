@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import BookingCheckoutWizard from '@/components/ui/BookingCheckoutWizard';
 import { bookFlightAction, holdChosenSeatsAction } from '@/app/actions';
@@ -32,7 +32,11 @@ describe('BookingCheckoutWizard', () => {
         // Leaving the seat map holds the chosen seats (#74). Every test that
         // reaches step 3 goes through it, so the default is the ordinary
         // answer; the tests that care about a refusal say so themselves.
-        mockHoldChosenSeatsAction.mockResolvedValue({ ok: true });
+        mockHoldChosenSeatsAction.mockResolvedValue({
+            ok: true,
+            holdExpiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+            holdExpiresInMilliseconds: 10 * 60_000,
+        });
     });
 
     it('renders Step 1 (Travelers) and calculates prices correctly based on cabin class and additions', async () => {
@@ -170,6 +174,118 @@ describe('BookingCheckoutWizard', () => {
             checkoutId: expect.stringMatching(/^[0-9a-f-]{36}$/i),
             claims: [{ flightId: sampleFlight.id, seatNumber: '11A' }],
         });
+    });
+
+    it('shows the authoritative hold countdown and recovers as soon as a backgrounded checkout resumes expired', async () => {
+        jest.useFakeTimers();
+        jest.setSystemTime(new Date('2026-08-14T12:00:00.000Z'));
+        mockHoldChosenSeatsAction.mockImplementation(async () => {
+            // A slow round trip must consume visible hold time rather than
+            // giving it back when the response arrives.
+            jest.setSystemTime(new Date('2026-08-14T12:00:05.000Z'));
+            return {
+                ok: true,
+                holdExpiresAt: '2026-08-14T12:01:05.000Z',
+                holdExpiresInMilliseconds: 60_000,
+            };
+        });
+
+        try {
+            const returningFlight = {
+                ...sampleFlight,
+                id: 43,
+                flightNumber: 'GA405',
+                from: 'Detroit, USA',
+                to: 'Seattle, USA',
+            };
+            const { container } = render(
+                <BookingCheckoutWizard
+                    flights={[sampleFlight, returningFlight]}
+                    occupiedSeats={[[], []]}
+                />,
+            );
+            fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Alice' } });
+            fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Smith' } });
+            fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1995-05-15' } });
+            fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US1234567' } });
+            fireEvent.click(screen.getByText('+ Add Traveler'));
+            fireEvent.change(screen.getAllByPlaceholderText('John')[1], { target: { value: 'Grace' } });
+            fireEvent.change(screen.getAllByPlaceholderText('Doe')[1], { target: { value: 'Hopper' } });
+            fireEvent.change(container.querySelectorAll('input[type="date"]')[1], { target: { value: '1906-12-09' } });
+            fireEvent.change(screen.getAllByPlaceholderText('A00000000')[1], { target: { value: 'US4440000' } });
+            fireEvent.click(screen.getByText('Select Seats →'));
+            fireEvent.click(screen.getByText(/Auto-Assign Adjacent Seats/i));
+            fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
+            fireEvent.click(screen.getByText(/Auto-Assign Adjacent Seats/i));
+            fireEvent.click(screen.getByText('Review Booking →'));
+
+            await act(async () => {});
+            expect(screen.getByRole('timer')).toHaveTextContent('Seat hold expires in 00:55');
+
+            // Returning to a still-live checkout must reconcile immediately,
+            // even when the document visibility state did not change.
+            act(() => {
+                jest.setSystemTime(new Date('2026-08-14T12:00:15.000Z'));
+                window.dispatchEvent(new Event('focus'));
+            });
+            expect(screen.getByRole('timer')).toHaveTextContent('Seat hold expires in 00:45');
+
+            // Advancing the wall clock does not run an interval. The
+            // visibility event is what must reconcile a suspended tab with
+            // the absolute deadline rather than resuming a drifted counter.
+            act(() => {
+                jest.setSystemTime(new Date('2026-08-14T12:01:01.000Z'));
+                document.dispatchEvent(new Event('visibilitychange'));
+            });
+
+            expect(screen.getByRole('heading', { name: 'Select Your Seats' })).toBeInTheDocument();
+            expect(screen.getByRole('alert')).toHaveTextContent(/seat hold expired/i);
+            const firstTraveler = screen.getByRole('button', { name: /Alice Smith.*Seat: Not Chosen/i });
+            expect(firstTraveler).toHaveFocus();
+            expect(firstTraveler).toHaveClass('booking-passenger-target');
+            expect(screen.getByRole('button', { name: /Grace Hopper.*Seat: Not Chosen/i }))
+                .toBeInTheDocument();
+            fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
+            expect(screen.getByRole('button', { name: /Alice Smith.*Seat: Not Chosen/i }))
+                .toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /Grace Hopper.*Seat: Not Chosen/i }))
+                .toBeInTheDocument();
+            expect(mockBookFlightAction).not.toHaveBeenCalled();
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it('blocks confirmation when the deadline passes before the next timer tick', async () => {
+        jest.useFakeTimers();
+        jest.setSystemTime(new Date('2026-08-14T12:00:00.000Z'));
+        mockHoldChosenSeatsAction.mockResolvedValue({
+            ok: true,
+            holdExpiresAt: '2026-08-14T12:01:00.000Z',
+            holdExpiresInMilliseconds: 60_000,
+        });
+
+        try {
+            const { container } = render(
+                <BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />,
+            );
+            fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Alice' } });
+            fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Smith' } });
+            fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1995-05-15' } });
+            fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US1234567' } });
+            fireEvent.click(screen.getByText('Select Seats →'));
+            fireEvent.click(screen.getByTitle('Select Seat 11A'));
+            fireEvent.click(screen.getByText('Review Booking →'));
+            await act(async () => {});
+
+            jest.setSystemTime(new Date('2026-08-14T12:01:01.000Z'));
+            fireEvent.click(screen.getByRole('button', { name: /Confirm \$100 booking/i }));
+
+            expect(screen.getByRole('heading', { name: 'Select Your Seats' })).toBeInTheDocument();
+            expect(mockBookFlightAction).not.toHaveBeenCalled();
+        } finally {
+            jest.useRealTimers();
+        }
     });
 
     it('says so when the seats could not be held at all', async () => {

@@ -245,6 +245,62 @@ test.describe('Flight Booking Journey', () => {
     await expect(page.locator('h2:has-text("Traveler Information")')).toBeVisible();
   });
 
+  test('expired seat holds recover before confirmation and can be selected again', async ({ page }) => {
+    const flight = await prisma.flight.findFirstOrThrow({
+      where: { departureDate: { gt: new Date() } },
+      orderBy: { departureDate: 'asc' }
+    });
+    await page.clock.install({ time: new Date() });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/checkout?outbound=${flight.id}`);
+
+    await page.fill('input[placeholder="John"]', 'Timer');
+    await page.fill('input[placeholder="Doe"]', 'Traveler');
+    await page.fill('input[type="date"]', '1990-05-15');
+    await page.fill('input[placeholder="A00000000"]', 'US-TIMER-1');
+    await page.getByRole('button', { name: 'Select Seats →' }).click();
+
+    const seat = page.locator('button[title^="Select Seat"]').first();
+    const seatName = (await seat.getAttribute('title'))!.replace('Select Seat ', '');
+    await seat.click();
+    await page.getByRole('button', { name: 'Review Booking →' }).click();
+
+    await expect(page.getByRole('timer')).toContainText(/Seat hold expires in (?:09:\d{2}|10:00)/);
+    const confirmButton = page.getByRole('button', { name: /Confirm .* booking/ });
+    await page.getByRole('button', { name: '← Back' }).focus();
+    await page.keyboard.press('Tab');
+    await expect(confirmButton).toBeFocused();
+    await expect(confirmButton).toHaveCSS('outline-style', 'solid');
+    await expect(confirmButton).toHaveCSS('outline-width', '3px');
+    await expect(confirmButton).toHaveCSS('outline-color', 'rgb(251, 191, 36)');
+
+    // Browser timers may be throttled while a checkout is hidden. Advancing
+    // the wall clock drives the same absolute-deadline reconciliation without
+    // waiting ten real minutes.
+    await page.clock.fastForward('10:01');
+
+    await expect(page.getByRole('heading', { name: 'Select Your Seats' })).toBeVisible();
+    await expect(page.getByText(/Your seat hold expired/)).toBeVisible();
+    const recoveryTarget = page.getByRole('button', { name: /Timer Traveler.*Seat: Not Chosen/i });
+    await expect(recoveryTarget).toBeFocused();
+    await expect(recoveryTarget).toHaveCSS('outline-style', 'solid');
+    await expect(recoveryTarget).toHaveCSS('outline-width', '3px');
+    await expect(recoveryTarget).toHaveCSS('outline-color', 'rgb(251, 191, 36)');
+    expect(await page.evaluate(() => ({
+      viewport: document.documentElement.clientWidth,
+      content: document.documentElement.scrollWidth,
+    }))).toEqual({ viewport: 390, content: 390 });
+    await expect(confirmButton).toHaveCount(0);
+
+    // The old row belongs to this checkout and is refreshable whether its
+    // database deadline has just passed or the conservative browser deadline
+    // reached zero first. Recovery must not lead to a dead end.
+    await page.getByTitle(`Select Seat ${seatName}`).click();
+    await page.getByRole('button', { name: 'Review Booking →' }).click();
+    await expect(page.getByRole('heading', { name: 'Review Booking' })).toBeVisible();
+    await expect(page.getByRole('timer')).toContainText(/Seat hold expires in (?:09:\d{2}|10:00)/);
+  });
+
   test('two checkout tabs keep independent seat holds for the same account', async ({ page, context }) => {
     const flight = await prisma.flight.findFirstOrThrow({
       where: { departureDate: { gt: new Date() } },

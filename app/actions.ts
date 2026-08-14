@@ -439,14 +439,22 @@ export async function holdChosenSeatsAction(request: {
     const { checkoutId, claims: wanted } = parsed.data;
     const holderKey = checkoutHolderKey(session.user.id, checkoutId);
 
-    const taken = (await holdSeats(wanted.map(claim => ({ ...claim, holderKey }))))
+    const held = await holdSeats(wanted.map(claim => ({ ...claim, holderKey })));
+    const taken = held.taken
         .map(({ flightId, seatNumber }) => ({ flightId, seatNumber }));
 
     // The leg travels with the seat. A round trip can carry 16A twice, and
     // reporting the number alone made the caller mark whichever leg it found
     // first -- so a customer who *had* been granted their outbound seat was
     // told it was gone while the leg that actually failed sat on another tab.
-    return taken.length > 0 ? { ok: false as const, takenSeats: taken } : { ok: true as const };
+    if (taken.length > 0) return { ok: false as const, takenSeats: taken };
+    if (!held.expiresAt) throw new Error('Held seats have no expiry.');
+
+    return {
+        ok: true as const,
+        holdExpiresAt: held.expiresAt.toISOString(),
+        holdExpiresInMilliseconds: held.expiresInMilliseconds,
+    };
 }
 
 export async function toggleFavoriteCityGuideAction(cityGuideId: number) {

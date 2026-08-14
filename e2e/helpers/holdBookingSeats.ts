@@ -18,7 +18,7 @@ export async function holdBookingSeats<T extends BookingSeatRequest>(request: T)
             holderKey,
         }))
     ));
-    const taken = await holdSeats(claims);
+    const { taken } = await holdSeats(claims);
     if (taken.length > 0) {
         throw new Error('Booking fixture could not hold every requested seat.');
     }
