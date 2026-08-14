@@ -306,18 +306,15 @@ Chart and other browser-interactive components need `'use client'`.
      sub-agent whether it is real, not the `verifier`, which runs its whole
      column by design and would spend minutes on a one-line question.
 
-8. **Review the code before every commit.** Two mechanisms cover this, and
-   neither is a bespoke sub-agent:
-   - The `PreToolUse` hooks in `.claude/settings.json` review the diff
-     automatically and block on `git push` and `gh pr create`. They run
-     without being asked; do not work around a block by pushing differently.
-   - `/code-review` gives a fuller pass, and against a pull request it runs
-     unattended and posts its findings as a comment. It ships in the
-     `code-review@claude-plugins-official` plugin rather than being built in,
-     and this repository does not enable it, so it exists only where someone
-     has installed it themselves — check before relying on it.
-     `/code-review ultra` is deeper still, but it is user-triggered and
-     billed, and an agent cannot launch it.
+8. **Review the code before every commit.** `/code-review` gives a full pass,
+   and against a pull request it runs unattended and posts its findings as a
+   comment. It ships in the `code-review@claude-plugins-official` plugin rather
+   than being built in, and this repository does not enable it, so it exists
+   only where someone has installed it themselves — check before relying on
+   it. `/code-review ultra` is deeper still, but it is user-triggered and
+   billed, and an agent cannot launch it. Where the plugin is unavailable, the
+   main agent performs and records an expert review of the complete diff; do
+   not replace it with a bespoke review sub-agent.
 
    Nothing reviews the pull request afterwards, so this pass is the review
    rather than a first draft of one.
