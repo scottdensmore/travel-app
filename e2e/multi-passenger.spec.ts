@@ -159,6 +159,9 @@ test.describe('Multi-Passenger Booking Journey', () => {
       { cabinClass: 'ECONOMY' },
       { cabinClass: 'ECONOMY' }
     ]).cents);
-    expect(persistedBooking.paymentIntentId).toBeNull();
+    expect(persistedBooking.paymentIntentId).toMatch(/^pi_playwright_/);
+    await expect(prisma.paymentAttempt.findUniqueOrThrow({
+      where: { providerIntentId: persistedBooking.paymentIntentId! }
+    })).resolves.toMatchObject({ status: 'CAPTURED' });
   });
 });

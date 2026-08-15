@@ -166,7 +166,7 @@ model Booking {
   id              Int           @id @default(autoincrement())
   createdAt       DateTime      @default(now())
   status          BookingStatus @default(CONFIRMED)
-  paymentIntentId String?
+  paymentIntentId String?       @unique
   /// The booking total in minor units. Null for bookings taken before this
   /// column existed, which fall back to the flight's catalogue price.
   totalPriceCents Int?

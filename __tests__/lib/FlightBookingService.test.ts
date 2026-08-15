@@ -166,7 +166,8 @@ describe('FlightBookingService', () => {
             flightIds: [7],
             userId: 'u1',
             passengers: passengersList,
-            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+            paymentIntentId: 'pi_authorized',
         });
 
         expect(mockTx.booking.findFirst).toHaveBeenCalledWith({
@@ -216,7 +217,7 @@ describe('FlightBookingService', () => {
                 legs: {
                     create: [{ sequence: 1, flightId: 7 }],
                 },
-                paymentIntentId: null,
+                paymentIntentId: 'pi_authorized',
                 idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
                 passengers: {
                     create: [
@@ -298,6 +299,7 @@ describe('FlightBookingService', () => {
             legs: [{ sequence: 1, flight: { id: 7 } }],
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
             totalPriceCents: 35000,
+            paymentIntentId: 'pi_authorized',
             passengers: [{
                 id: passengerId,
                 firstName: 'Alice', lastName: 'Smith',
@@ -325,7 +327,8 @@ describe('FlightBookingService', () => {
                 passportNumber: 'US123456', gender: 'Female', seatNumbers: ['11A'],
                 cabinClass: 'ECONOMY'
             }],
-            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+            paymentIntentId: 'pi_authorized',
         });
 
         expect(result).toEqual({
@@ -349,6 +352,43 @@ describe('FlightBookingService', () => {
         expect(mockTx.$executeRaw).not.toHaveBeenCalled();
     });
 
+    it('rejects an idempotent retry linked to a different payment', async () => {
+        const passengerId = 'passenger-payment-mismatch';
+        mockTx.flight.findMany.mockResolvedValue([{
+            id: 7,
+            priceCents: 35000,
+            status: 'ON_TIME',
+            departureDate: new Date('2099-01-01T10:00:00Z'),
+        }]);
+        mockTx.booking.findFirst.mockResolvedValue({
+            id: 12,
+            userId: 'u1',
+            legs: [{ sequence: 1, flight: { id: 7 } }],
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+            paymentIntentId: 'pi_first',
+            passengers: [{
+                id: passengerId,
+                firstName: 'Alice', lastName: 'Smith',
+                dateOfBirthEncrypted: encryptPassengerData('1995-05-15', { passengerId, field: 'dateOfBirth' }),
+                passportNumberEncrypted: encryptPassengerData('US123456', { passengerId, field: 'passportNumber' }),
+                gender: 'Female',
+                seatAssignments: [{ seatNumber: '11A', cabinClass: 'ECONOMY', leg: { sequence: 1 } }],
+            }],
+        });
+
+        await expect(new FlightBookingService().bookFlight({
+            flightIds: [7],
+            userId: 'u1',
+            passengers: [{
+                firstName: 'Alice', lastName: 'Smith', dateOfBirth: '1995-05-15',
+                passportNumber: 'US123456', gender: 'Female', seatNumbers: ['11A'],
+                cabinClass: 'ECONOMY',
+            }],
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+            paymentIntentId: 'pi_second',
+        })).rejects.toThrow('Booking request ID was already used with a different payment.');
+    });
+
     it('rejects reuse of an idempotency key for a different flight or passenger request', async () => {
         const passengerId = 'passenger-2';
         const existing = {
@@ -357,6 +397,7 @@ describe('FlightBookingService', () => {
             legs: [{ sequence: 1, flight: { id: 8 } }],
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
             totalPriceCents: 35000,
+            paymentIntentId: null,
             passengers: [{
                 id: passengerId,
                 firstName: 'Alice', lastName: 'Smith',
@@ -520,7 +561,7 @@ describe('FlightBookingService', () => {
         expect(mockTx.booking.create).not.toHaveBeenCalled();
     });
 
-    it('rejects client-supplied prices and payment identifiers', async () => {
+    it('rejects client-supplied prices', async () => {
         await expect(new FlightBookingService().bookFlight({
             flightIds: [7],
             userId: 'u1',
@@ -530,7 +571,7 @@ describe('FlightBookingService', () => {
                 cabinClass: 'ECONOMY'
             }],
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
-            paymentIntentId: 'forged'
+            totalPriceCents: 1,
         } as any)).rejects.toThrow('Unrecognized');
 
         expect(prisma.$transaction).not.toHaveBeenCalled();

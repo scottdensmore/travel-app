@@ -186,6 +186,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
         publishableKey: string;
     } | null>(null);
     const [isPreparingPayment, setIsPreparingPayment] = useState(false);
+    const [bookingSecured, setBookingSecured] = useState(false);
     const [bookingResult, setBookingResult] = useState<{
         id: number;
         totalPriceCents: number | null;
@@ -471,7 +472,12 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
     }, [holdDeadline, step]);
 
     useEffect(() => {
-        if (step !== 3 || holdDeadline === null || holdSecondsRemaining !== 0) return;
+        if (
+            step !== 3
+            || holdDeadline === null
+            || holdSecondsRemaining !== 0
+            || bookingSecured
+        ) return;
 
         setHoldDeadline(null);
         setPaymentSession(null);
@@ -487,7 +493,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
         pendingValidationFocusPath.current = 'passengers.0.seatNumber';
         setErrorMessage('Your seat hold expired. Please choose your seats again.');
         setStep(2);
-    }, [holdDeadline, holdSecondsRemaining, step]);
+    }, [bookingSecured, holdDeadline, holdSecondsRemaining, step]);
 
     const [holdingSeats, setHoldingSeats] = useState(false);
 
@@ -785,6 +791,11 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
         setErrorMessage(failure.error.message);
         setServerFieldErrors(failure.error.fields);
         const firstFieldPath = Object.keys(failure.error.fields)[0];
+        if (firstFieldPath === 'payment.capture') {
+            setBookingSecured(true);
+            showFocusedError(failure.error.message);
+            return;
+        }
         const passengerMatch = /^passengers\.(\d+)\.(\w+)(?:\.\d+)?$/.exec(firstFieldPath || '');
         if (!passengerMatch) return;
 
@@ -853,7 +864,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
     };
 
     const handleSubmitBooking = async () => {
-        if (holdDeadline === null || holdDeadline <= Date.now()) {
+        if (!bookingSecured && (holdDeadline === null || holdDeadline <= Date.now())) {
             setHoldSecondsRemaining(0);
             return;
         }
@@ -880,7 +891,9 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                 payment = await startCheckoutPaymentAction(checkoutPaymentInput());
             } catch {
                 showFocusedError(
-                    'We could not verify the payment authorization just now. No booking has been created yet.',
+                    bookingSecured
+                        ? 'Your booking and seats remain secured, but we could not verify payment capture just now. Try again.'
+                        : 'We could not verify the payment authorization just now. No booking has been created yet.',
                 );
                 return;
             }
@@ -1503,8 +1516,8 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
 
                         <p
                             id="seat-hold-timer"
-                            role="timer"
-                            aria-live="off"
+                            role={bookingSecured ? 'status' : 'timer'}
+                            aria-live={bookingSecured ? 'polite' : 'off'}
                             style={{
                                 margin: '0 0 1.25rem',
                                 padding: '0.85rem 1rem',
@@ -1515,7 +1528,9 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                                 fontWeight: 600,
                             }}
                         >
-                            Seat hold expires in {formatHoldTime(holdSecondsRemaining)}. Confirm before the timer reaches 00:00.
+                            {bookingSecured
+                                ? 'Your booking and seats are secured while payment capture finishes.'
+                                : `Seat hold expires in ${formatHoldTime(holdSecondsRemaining)}. Confirm before the timer reaches 00:00.`}
                         </p>
 
                         <div style={{ marginBottom: '2rem' }}>
@@ -1637,13 +1652,15 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                                     Secure payment
                                 </h3>
                                 <p style={{ color: 'rgba(255,255,255,0.65)', margin: '0 0 1rem' }}>
-                                    Stripe will authorize {formatPrice(paymentSession.amountCents)}. This step does not capture funds.
+                                    {bookingSecured
+                                        ? `Stripe authorized ${formatPrice(paymentSession.amountCents)}. Finish payment capture to complete this booking.`
+                                        : `Stripe will authorize ${formatPrice(paymentSession.amountCents)}. This step does not capture funds.`}
                                 </p>
                                 <CheckoutPaymentForm
                                     publishableKey={paymentSession.publishableKey}
                                     clientSecret={paymentSession.clientSecret}
                                     amountDisplay={formatPrice(paymentSession.amountCents)}
-                                    disabled={holdSecondsRemaining === 0}
+                                    disabled={!bookingSecured && holdSecondsRemaining === 0}
                                     submitting={isSubmitting}
                                     onConfirmed={handleSubmitBooking}
                                 />

@@ -26,7 +26,9 @@ import FlightBookingService from '@/lib/FlightBookingService';
 import FlightScheduleService from '@/lib/FlightScheduleService';
 import { prisma } from '@/lib/prisma';
 import { checkoutHolderKey, SeatHoldUnavailableError } from '@/lib/seatHolds';
-import { CheckoutPaymentService } from '@/lib/checkoutPaymentService';
+import {
+    CheckoutPaymentService,
+} from '@/lib/checkoutPaymentService';
 import { createStripePaymentProvider, getStripePublishableKey } from '@/lib/stripePaymentProvider';
 
 // Keep these heavy/server-only modules out of the unit test.
@@ -51,7 +53,17 @@ jest.mock('@/lib/TravelGuideService', () => {
 
 jest.mock('@/lib/checkoutPaymentService', () => {
     const startPayment = jest.fn();
-    return { CheckoutPaymentService: jest.fn().mockImplementation(() => ({ startPayment })) };
+    const capturePayment = jest.fn();
+    const cancelPayment = jest.fn();
+    class PaymentCaptureIncompleteError extends Error {}
+    return {
+        CheckoutPaymentService: jest.fn().mockImplementation(() => ({
+            startPayment,
+            capturePayment,
+            cancelPayment,
+        })),
+        PaymentCaptureIncompleteError,
+    };
 });
 
 jest.mock('@/lib/stripePaymentProvider', () => ({
@@ -115,6 +127,8 @@ const mockSaveCityGuide = new (TravelGuideService as any)().saveCityGuide as jes
 const mockBookFlight = new (FlightBookingService as any)().bookFlight as jest.Mock;
 const mockGenerateFlightsForDate = new (FlightScheduleService as any)().generateFlightsForDate as jest.Mock;
 const mockStartPayment = new (CheckoutPaymentService as any)().startPayment as jest.Mock;
+const mockCapturePayment = new (CheckoutPaymentService as any)().capturePayment as jest.Mock;
+const mockCancelPayment = new (CheckoutPaymentService as any)().cancelPayment as jest.Mock;
 const mockedCreateStripePaymentProvider = createStripePaymentProvider as jest.Mock;
 const mockedGetStripePublishableKey = getStripePublishableKey as jest.Mock;
 const mockedFlightFindMany = (prisma as any).flight.findMany as jest.Mock;
@@ -653,8 +667,11 @@ describe('bookFlightAction', () => {
             amountCents: 20_000,
             currency: 'USD',
             clientSecret: 'pi_secret_for_elements',
+            providerIntentId: 'pi_authorized',
             status: 'AUTHORIZED',
         });
+        mockCapturePayment.mockResolvedValue({ status: 'CAPTURED', wasCaptured: true });
+        mockCancelPayment.mockResolvedValue({ status: 'CANCELLED', wasCancelled: true });
     });
 
     it('refuses to create a booking until Stripe reports an authorized payment', async () => {
@@ -666,7 +683,7 @@ describe('bookFlightAction', () => {
             status: 'PROCESSING',
         });
 
-        await expect(bookFlightAction({
+        const outcome = await bookFlightAction({
             flightIds: [42],
             passengers: [{
                 firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
@@ -674,7 +691,8 @@ describe('bookFlightAction', () => {
                 cabinClass: 'ECONOMY',
             }],
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
-        })).resolves.toEqual({
+        });
+        expect(outcome).toEqual({
             ok: false,
             error: {
                 code: 'VALIDATION_ERROR',
@@ -691,6 +709,7 @@ describe('bookFlightAction', () => {
             amountCents: 20_000,
             currency: 'USD',
             clientSecret: 'pi_secret_for_elements',
+            providerIntentId: 'pi_authorized',
             status: 'CAPTURED',
         });
         mockBookFlight.mockResolvedValue({
@@ -729,8 +748,14 @@ describe('bookFlightAction', () => {
             flightIds: [42],
             userId: 'user-123',
             passengers,
-            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+            paymentIntentId: 'pi_authorized',
         }));
+        expect(mockCapturePayment).toHaveBeenCalledWith({
+            userId: 'user-123',
+            checkoutId: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+            bookingId: 1,
+        });
         expect(result).toEqual({
             id: 1,
             flightIds: [42],
@@ -768,13 +793,14 @@ describe('bookFlightAction', () => {
     it('returns a recoverable seat error when checkout no longer owns its hold', async () => {
         mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
         const idempotencyKey = '8ea59a65-9251-45b3-95d0-3920c49f5735';
+        mockCancelPayment.mockRejectedValueOnce(new Error('provider response included sensitive data'));
         mockBookFlight.mockRejectedValue(new SeatHoldUnavailableError({
             flightId: 42,
             seatNumber: '11A',
             holderKey: checkoutHolderKey('user-123', idempotencyKey),
         }));
 
-        await expect(bookFlightAction({
+        const outcome = await bookFlightAction({
             flightIds: [42],
             passengers: [{
                 firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
@@ -782,7 +808,8 @@ describe('bookFlightAction', () => {
                 cabinClass: 'ECONOMY',
             }],
             idempotencyKey,
-        })).resolves.toEqual({
+        });
+        expect(outcome).toEqual({
             ok: false,
             error: {
                 code: 'VALIDATION_ERROR',
@@ -795,6 +822,11 @@ describe('bookFlightAction', () => {
             },
         });
         expect(mockedNotificationCreate).not.toHaveBeenCalled();
+        expect(JSON.stringify(outcome)).not.toContain('sensitive data');
+        expect(mockCancelPayment).toHaveBeenCalledWith({
+            userId: 'user-123',
+            checkoutId: idempotencyKey,
+        });
     });
 
     it('maps a lost hold to the passenger and leg named by the claim', async () => {
@@ -839,6 +871,37 @@ describe('bookFlightAction', () => {
         })).rejects.toThrow('database unavailable');
     });
 
+    it('returns truthful retry feedback when booking succeeds before capture is confirmed', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        mockBookFlight.mockResolvedValue({ id: 9, wasCreated: true });
+        mockCapturePayment.mockRejectedValue(
+            new Error('provider response included a sensitive capture value'),
+        );
+
+        const outcome = await bookFlightAction({
+            flightIds: [42],
+            passengers: [{
+                firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
+                passportNumber: 'AB123456', gender: 'Female', seatNumbers: ['11A'],
+                cabinClass: 'ECONOMY',
+            }],
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+        });
+        expect(outcome).toEqual({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'Your booking and seats are secured, but payment capture is still being confirmed. Try again to finish payment.',
+                fields: {
+                    'payment.capture': [
+                        'Your booking and seats are secured, but payment capture is still being confirmed. Try again to finish payment.',
+                    ],
+                },
+            },
+        });
+        expect(JSON.stringify(outcome)).not.toContain('sensitive capture value');
+    });
+
     it('rejects bookings without passengers before calling the booking service', async () => {
         mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
 
@@ -872,6 +935,7 @@ describe('bookFlightAction', () => {
 
     it('does not duplicate booking notifications for an idempotent retry', async () => {
         mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        mockCapturePayment.mockResolvedValue({ status: 'CAPTURED', wasCaptured: false });
         mockBookFlight.mockResolvedValue({
             id: 1,
             flightIds: [42],
@@ -879,7 +943,14 @@ describe('bookFlightAction', () => {
             totalPriceCents: 20000,
             wasCreated: false
         });
-        mockedFlightFindUnique.mockResolvedValue({ id: 42, flightNumber: 'GA101' });
+        mockedFlightFindUnique.mockResolvedValue({
+            id: 42,
+            airline: 'Gemini Airways',
+            flightNumber: 'GA101',
+            priceCents: 20_000,
+            fromAirport: { label: 'A' },
+            toAirport: { label: 'B' },
+        });
 
         await bookFlightAction({
             flightIds: [42],
@@ -892,6 +963,36 @@ describe('bookFlightAction', () => {
         });
 
         expect(mockedNotificationCreate).not.toHaveBeenCalled();
+    });
+
+    it('creates the confirmation notification when a retry recovers payment capture', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        mockBookFlight.mockResolvedValue({
+            id: 1,
+            totalPriceCents: 20_000,
+            wasCreated: false,
+        });
+        mockCapturePayment.mockResolvedValue({ status: 'CAPTURED', wasCaptured: true });
+        mockedFlightFindUnique.mockResolvedValue({
+            id: 42,
+            airline: 'Gemini Airways',
+            flightNumber: 'GA101',
+            priceCents: 20_000,
+            fromAirport: { label: 'A' },
+            toAirport: { label: 'B' },
+        });
+
+        await bookFlightAction({
+            flightIds: [42],
+            passengers: [{
+                firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
+                passportNumber: 'AB123456', gender: 'Female', seatNumbers: ['11A'],
+                cabinClass: 'ECONOMY',
+            }],
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+        });
+
+        expect(mockedNotificationCreate).toHaveBeenCalledTimes(1);
     });
 });
 
@@ -910,6 +1011,7 @@ describe('startCheckoutPaymentAction', () => {
             amountCents: 60_000,
             currency: 'USD',
             clientSecret: 'pi_secret_for_elements',
+            providerIntentId: 'pi_server_only',
             status: 'REQUIRES_PAYMENT_METHOD',
         });
 

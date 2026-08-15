@@ -66,7 +66,12 @@ locally generated secrets:
 Starting a checkout payment requires a matching Stripe test-mode
 `STRIPE_SECRET_KEY` and `STRIPE_PUBLISHABLE_KEY`. The application sends only
 the server-calculated amount and its internal payment-attempt ID to Stripe,
-then embeds Stripe's hosted Payment Element. Signed payment status delivery at
+then embeds Stripe's hosted Payment Element. After Stripe authorizes the
+PaymentIntent, the server creates the booking, links that booking to the
+PaymentIntent, and captures the exact server-calculated amount with a stable
+idempotency key. An interrupted capture response is recovered by re-reading
+Stripe and can be retried without authorizing the hosted payment twice. Signed
+payment status delivery at
 `POST /api/stripe/webhook` additionally requires `STRIPE_WEBHOOK_SECRET`. To
 forward test events locally, run:
 
