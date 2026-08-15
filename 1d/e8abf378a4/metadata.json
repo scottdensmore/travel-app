@@ -1,0 +1,43 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "1de8abf378a4",
+  "strategy": "manual-commit",
+  "branch": "feat/75-start-payment-authorization",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".env.example",
+    "AGENTS.md",
+    "README.md",
+    "__tests__/app/actions.test.ts",
+    "__tests__/e2e/rowSnapshot.database.test.ts",
+    "__tests__/lib/checkoutPaymentService.database.test.ts",
+    "__tests__/lib/paymentAttemptIntegrity.database.test.ts",
+    "__tests__/lib/stripePaymentProvider.test.ts",
+    "__tests__/lib/validation.test.ts",
+    "app/actions.ts",
+    "docker-compose.yml",
+    "e2e/helpers/rowSnapshot.ts",
+    "lib/checkoutPaymentService.ts",
+    "lib/seatHolds.ts",
+    "lib/stripePaymentProvider.ts",
+    "lib/validation.ts",
+    "prisma/migrations/20260814120000_checkout_payment_attempts/migration.sql",
+    "prisma/schema.prisma"
+  ],
+  "sessions": [
+    {
+      "metadata": "/1d/e8abf378a4/0/metadata.json",
+      "transcript": "/1d/e8abf378a4/0/full.jsonl",
+      "compact_transcript": "/1d/e8abf378a4/0/transcript.jsonl",
+      "content_hash": "/1d/e8abf378a4/0/content_hash.txt",
+      "prompt": "/1d/e8abf378a4/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 353847,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 30936576,
+    "output_tokens": 47321,
+    "api_call_count": 407
+  }
+}

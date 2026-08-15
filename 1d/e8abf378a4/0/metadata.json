@@ -1,0 +1,66 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "1de8abf378a4",
+  "session_id": "019ffe5b-1054-7c22-8afc-e97cb84c7b73",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-15T02:34:04.755975165Z",
+  "branch": "feat/75-start-payment-authorization",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".env.example",
+    "AGENTS.md",
+    "README.md",
+    "__tests__/app/actions.test.ts",
+    "__tests__/e2e/rowSnapshot.database.test.ts",
+    "__tests__/lib/checkoutPaymentService.database.test.ts",
+    "__tests__/lib/paymentAttemptIntegrity.database.test.ts",
+    "__tests__/lib/stripePaymentProvider.test.ts",
+    "__tests__/lib/validation.test.ts",
+    "app/actions.ts",
+    "docker-compose.yml",
+    "e2e/helpers/rowSnapshot.ts",
+    "lib/checkoutPaymentService.ts",
+    "lib/seatHolds.ts",
+    "lib/stripePaymentProvider.ts",
+    "lib/validation.ts",
+    "prisma/migrations/20260814120000_checkout_payment_attempts/migration.sql",
+    "prisma/schema.prisma"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.6-sol",
+  "turn_id": "d5391c03818e",
+  "checkpoint_transcript_start": 7744,
+  "transcript_lines_at_start": 7744,
+  "compact_transcript_start": 1196,
+  "token_usage": {
+    "input_tokens": 353847,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 30936576,
+    "output_tokens": 47321,
+    "api_call_count": 407
+  },
+  "session_metrics": {
+    "turn_count": 13
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-15T02:34:00.301474646Z",
+    "agent_lines": 1247,
+    "agent_removed": 2,
+    "human_added": 21,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1268,
+    "total_lines_changed": 1272,
+    "agent_percentage": 98.19182389937107,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
