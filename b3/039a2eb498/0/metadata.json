@@ -1,0 +1,69 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "b3039a2eb498",
+  "session_id": "019ffe5b-1054-7c22-8afc-e97cb84c7b73",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-15T04:44:26.26243055Z",
+  "branch": "feat/75-reconcile-stripe-webhooks",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".env.example",
+    "AGENTS.md",
+    "README.md",
+    "__tests__/app/api/stripeWebhook.test.ts",
+    "__tests__/app/api/stripeWebhookWiring.test.ts",
+    "__tests__/e2e/rowSnapshot.database.test.ts",
+    "__tests__/lib/checkoutPaymentService.database.test.ts",
+    "__tests__/lib/paymentWebhookEventIntegrity.database.test.ts",
+    "__tests__/lib/paymentWebhookService.database.test.ts",
+    "__tests__/lib/stripePaymentProvider.test.ts",
+    "__tests__/lib/stripeWebhook.test.ts",
+    "app/api/stripe/webhook/route.ts",
+    "docker-compose.yml",
+    "e2e/helpers/rowSnapshot.ts",
+    "lib/checkoutPaymentService.ts",
+    "lib/paymentIntentLock.ts",
+    "lib/paymentWebhookService.ts",
+    "lib/stripePaymentProvider.ts",
+    "lib/stripeWebhook.ts",
+    "prisma/migrations/20260814193000_stripe_webhook_events/migration.sql",
+    "prisma/schema.prisma"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.6-sol",
+  "turn_id": "5f2582e22b51",
+  "checkpoint_transcript_start": 10259,
+  "transcript_lines_at_start": 10259,
+  "compact_transcript_start": 1598,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": -15339264,
+    "output_tokens": -27462,
+    "api_call_count": 310
+  },
+  "session_metrics": {
+    "turn_count": 13
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-15T04:44:20.320182277Z",
+    "agent_lines": 1104,
+    "agent_removed": 21,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1104,
+    "total_lines_changed": 1125,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}

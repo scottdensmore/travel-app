@@ -1,0 +1,46 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "b3039a2eb498",
+  "strategy": "manual-commit",
+  "branch": "feat/75-reconcile-stripe-webhooks",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".env.example",
+    "AGENTS.md",
+    "README.md",
+    "__tests__/app/api/stripeWebhook.test.ts",
+    "__tests__/app/api/stripeWebhookWiring.test.ts",
+    "__tests__/e2e/rowSnapshot.database.test.ts",
+    "__tests__/lib/checkoutPaymentService.database.test.ts",
+    "__tests__/lib/paymentWebhookEventIntegrity.database.test.ts",
+    "__tests__/lib/paymentWebhookService.database.test.ts",
+    "__tests__/lib/stripePaymentProvider.test.ts",
+    "__tests__/lib/stripeWebhook.test.ts",
+    "app/api/stripe/webhook/route.ts",
+    "docker-compose.yml",
+    "e2e/helpers/rowSnapshot.ts",
+    "lib/checkoutPaymentService.ts",
+    "lib/paymentIntentLock.ts",
+    "lib/paymentWebhookService.ts",
+    "lib/stripePaymentProvider.ts",
+    "lib/stripeWebhook.ts",
+    "prisma/migrations/20260814193000_stripe_webhook_events/migration.sql",
+    "prisma/schema.prisma"
+  ],
+  "sessions": [
+    {
+      "metadata": "/b3/039a2eb498/0/metadata.json",
+      "transcript": "/b3/039a2eb498/0/full.jsonl",
+      "compact_transcript": "/b3/039a2eb498/0/transcript.jsonl",
+      "content_hash": "/b3/039a2eb498/0/content_hash.txt",
+      "prompt": "/b3/039a2eb498/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": -15339264,
+    "output_tokens": -27462,
+    "api_call_count": 310
+  }
+}
