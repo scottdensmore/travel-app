@@ -73,6 +73,23 @@ const TRACKED: Array<{ table: string; ids: () => Promise<string[]> }> = [
       })).map(row => owned(row.id, row.user?.email ?? `checkout ${row.checkoutId}`)),
   },
   {
+    // Webhook deliveries cascade from their attempt, but an event can be added
+    // to an attempt that existed before the run. Track it independently so
+    // that delivery history cannot accumulate invisibly across E2E runs.
+    table: 'PaymentWebhookEvent',
+    ids: async () =>
+      (await prisma.paymentWebhookEvent.findMany({
+        select: {
+          id: true,
+          providerIntentId: true,
+          paymentAttempt: { select: { user: { select: { email: true } } } },
+        },
+      })).map(row => owned(
+        row.id,
+        row.paymentAttempt.user?.email ?? `intent ${row.providerIntentId}`,
+      )),
+  },
+  {
     table: 'VerificationToken',
     ids: async () =>
       (await prisma.verificationToken.findMany({ select: { identifier: true } }))

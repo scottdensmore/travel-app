@@ -65,9 +65,19 @@ locally generated secrets:
 
 Starting a checkout payment also requires `STRIPE_SECRET_KEY`. Use a Stripe
 test-mode secret key for local development; the application sends only the
-server-calculated amount and its internal payment-attempt ID to Stripe. Card
-details belong in Stripe Elements and must never be added to `.env`, an action,
-or this application's database.
+server-calculated amount and its internal payment-attempt ID to Stripe. Signed
+payment status delivery at `POST /api/stripe/webhook` additionally requires
+`STRIPE_WEBHOOK_SECRET`. To forward test events locally, run:
+
+```bash
+stripe listen --forward-to localhost:3000/api/stripe/webhook
+```
+
+Copy the command's `whsec_...` signing secret into `.env`; do not commit it.
+Card details belong in Stripe Elements and must never be added to `.env`, an
+action, a webhook log, or this application's database. The application stores
+only the event ID, event type, PaymentIntent ID and local payment-attempt link
+after a successful reconciliation; it does not retain webhook request bodies.
 
 Never commit `.env` or reuse its local values in a deployment.
 

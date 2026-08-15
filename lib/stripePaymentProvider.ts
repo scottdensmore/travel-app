@@ -15,6 +15,12 @@ export interface PaymentAuthorization {
     status: PaymentAuthorizationStatus;
 }
 
+export interface PaymentState {
+    providerIntentId: string;
+    paymentAttemptId: string | null;
+    status: PaymentAuthorizationStatus;
+}
+
 export interface PaymentProvider {
     createAuthorization(input: {
         attemptId: string;
@@ -22,6 +28,10 @@ export interface PaymentProvider {
         currency: string;
     }): Promise<PaymentAuthorization>;
     retrieveAuthorization(providerIntentId: string): Promise<PaymentAuthorization>;
+}
+
+export interface PaymentStateProvider {
+    retrievePaymentState(providerIntentId: string): Promise<PaymentState>;
 }
 
 const PAYMENT_STATUS: Record<Stripe.PaymentIntent.Status, PaymentAuthorizationStatus> = {
@@ -68,6 +78,15 @@ export class StripePaymentProvider implements PaymentProvider {
     async retrieveAuthorization(providerIntentId: string): Promise<PaymentAuthorization> {
         return paymentAuthorization(await this.stripe.paymentIntents.retrieve(providerIntentId));
     }
+
+    async retrievePaymentState(providerIntentId: string): Promise<PaymentState> {
+        const intent = await this.stripe.paymentIntents.retrieve(providerIntentId);
+        return {
+            providerIntentId: intent.id,
+            paymentAttemptId: intent.metadata.paymentAttemptId || null,
+            status: PAYMENT_STATUS[intent.status],
+        };
+    }
 }
 
 export function createStripePaymentProvider(
@@ -75,9 +94,17 @@ export function createStripePaymentProvider(
         STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
     },
 ): StripePaymentProvider {
+    return new StripePaymentProvider(createStripeClient(environment));
+}
+
+export function createStripeClient(
+    environment: { STRIPE_SECRET_KEY?: string } = {
+        STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
+    },
+): Stripe {
     const secretKey = environment.STRIPE_SECRET_KEY?.trim();
     if (!secretKey) {
         throw new Error('Missing required environment variable: STRIPE_SECRET_KEY');
     }
-    return new StripePaymentProvider(new Stripe(secretKey));
+    return new Stripe(secretKey);
 }

@@ -3,6 +3,7 @@ import type { PaymentAttempt } from '@prisma/client';
 import { calculateItineraryTotal, flightFareCents } from '@/lib/bookingPricing';
 import { lockFlightForUpdate } from '@/lib/flightLock';
 import { prisma } from '@/lib/prisma';
+import { lockPaymentIntentForUpdate } from '@/lib/paymentIntentLock';
 import { assertSeatAvailableForCabin } from '@/lib/seatLayout';
 import {
     checkoutHolderKey,
@@ -130,21 +131,27 @@ export class CheckoutPaymentService {
             });
         });
 
-        const authorization = attempt.providerIntentId
-            ? await this.provider.retrieveAuthorization(attempt.providerIntentId)
+        const createdAuthorization = attempt.providerIntentId
+            ? null
             : await this.provider.createAuthorization({
                 attemptId: attempt.id,
                 amountCents: attempt.amountCents,
                 currency: attempt.currency,
             });
-
-        await prisma.paymentAttempt.update({
-            where: { id: attempt.id },
-            data: {
-                providerIntentId: authorization.providerIntentId,
-                status: authorization.status,
-            },
-        });
+        const providerIntentId = attempt.providerIntentId
+            ?? createdAuthorization!.providerIntentId;
+        const authorization = await prisma.$transaction(async tx => {
+            await lockPaymentIntentForUpdate(tx, providerIntentId);
+            const current = await this.provider.retrieveAuthorization(providerIntentId);
+            await tx.paymentAttempt.update({
+                where: { id: attempt.id },
+                data: {
+                    providerIntentId: current.providerIntentId,
+                    status: current.status,
+                },
+            });
+            return current;
+        }, { maxWait: 5_000, timeout: 15_000 });
 
         return result(attempt, authorization);
     }

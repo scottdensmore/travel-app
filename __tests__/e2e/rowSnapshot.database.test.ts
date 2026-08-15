@@ -43,6 +43,14 @@ async function leaveARowInEveryTrackedTable(): Promise<string> {
         },
     });
     created.paymentAttemptIds.push(paymentAttempt.id);
+    await prisma.paymentWebhookEvent.create({
+        data: {
+            id: `evt_${randomUUID().replaceAll('-', '')}`,
+            eventType: 'payment_intent.processing',
+            providerIntentId: `pi_${randomUUID().replaceAll('-', '')}`,
+            paymentAttemptId: paymentAttempt.id,
+        },
+    });
 
     const guide = await prisma.cityGuide.findFirst({ select: { id: true } });
     if (!guide) throw new Error('This test needs a seeded city guide; run `npx prisma db seed`.');
@@ -117,6 +125,7 @@ const TRACKED_TABLES = [
     'FlightSchedule',
     'Notification',
     'PaymentAttempt',
+    'PaymentWebhookEvent',
     'Review',
     'SeatHold',
     'User',
@@ -148,7 +157,14 @@ describe('the snapshot a Playwright run is judged by', () => {
         // which is the part that says which spec to fix -- a bare cuid does not.
         const message = describeLeakedRows(added)!;
         expect(message).toContain(email);
-        for (const table of ['User', 'PaymentAttempt', 'Review', 'UserFavorite', 'Notification']) {
+        for (const table of [
+            'User',
+            'PaymentAttempt',
+            'PaymentWebhookEvent',
+            'Review',
+            'UserFavorite',
+            'Notification',
+        ]) {
             expect(added[table][0]).toContain(`(${email})`);
         }
         // A flight has no owning account, so it is named by the number a spec

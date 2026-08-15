@@ -1,8 +1,9 @@
 /** @jest-environment node */
 
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { airportCodesForRoute } from '@/lib/airports';
 import { CheckoutPaymentService } from '@/lib/checkoutPaymentService';
+import { PaymentWebhookService } from '@/lib/paymentWebhookService';
 import { lockFlightForUpdate } from '@/lib/flightLock';
 import { checkoutHolderKey, holdSeat, holdSeats } from '@/lib/seatHolds';
 import { prisma } from '@/lib/prisma';
@@ -101,6 +102,11 @@ describe('starting a checkout payment', () => {
             holderKey: checkoutHolderKey(user.id, checkoutId),
         });
         const fake = provider();
+        fake.retrieveAuthorization.mockResolvedValueOnce({
+            providerIntentId: fake.providerIntentId,
+            clientSecret: fake.clientSecret,
+            status: 'REQUIRES_PAYMENT_METHOD',
+        });
 
         await expect(new CheckoutPaymentService(fake.value).startPayment(
             request(user.id, flight.id, checkoutId),
@@ -148,6 +154,120 @@ describe('starting a checkout payment', () => {
         expect(await prisma.paymentAttempt.count({ where: { userId: user.id, checkoutId } })).toBe(1);
     });
 
+    it('does not overwrite webhook state with a stale PaymentIntent create response', async () => {
+        const { user, flight } = await fixture();
+        const checkoutId = randomUUID();
+        const providerIntentId = `pi_${randomUUID().replaceAll('-', '')}`;
+        const clientSecret = `${providerIntentId}_secret_for_elements`;
+        await holdSeat({
+            flightId: flight.id,
+            seatNumber: '2A',
+            holderKey: checkoutHolderKey(user.id, checkoutId),
+        });
+        const retrievePaymentState = jest.fn();
+        const retrieveAuthorization = jest.fn().mockResolvedValue({
+            providerIntentId,
+            clientSecret,
+            status: 'AUTHORIZED' as const,
+        });
+        const createAuthorization = jest.fn().mockImplementation(async ({ attemptId }) => {
+            retrievePaymentState.mockResolvedValue({
+                providerIntentId,
+                paymentAttemptId: attemptId,
+                status: 'AUTHORIZED' as const,
+            });
+            await new PaymentWebhookService({ retrievePaymentState }).reconcile({
+                eventId: `evt_${randomUUID()}`,
+                eventType: 'payment_intent.amount_capturable_updated',
+                providerIntentId,
+            });
+            return {
+                providerIntentId,
+                clientSecret,
+                status: 'REQUIRES_PAYMENT_METHOD' as const,
+            };
+        });
+
+        await expect(new CheckoutPaymentService({
+            createAuthorization,
+            retrieveAuthorization,
+        }).startPayment(request(user.id, flight.id, checkoutId))).resolves.toMatchObject({
+            status: 'AUTHORIZED',
+        });
+        expect(retrieveAuthorization).toHaveBeenCalledWith(providerIntentId);
+        await expect(prisma.paymentAttempt.findUniqueOrThrow({
+            where: { userId_checkoutId: { userId: user.id, checkoutId } },
+        })).resolves.toMatchObject({ status: 'AUTHORIZED' });
+    });
+
+    it('serialises a checkout retry with webhook reconciliation for the same intent', async () => {
+        const { user, flight } = await fixture();
+        const checkoutId = randomUUID();
+        const providerIntentId = `pi_${randomUUID().replaceAll('-', '')}`;
+        const clientSecret = `${providerIntentId}_secret_for_elements`;
+        const input = request(user.id, flight.id, checkoutId);
+        const requestFingerprint = createHash('sha256').update(JSON.stringify([
+            checkoutId,
+            input.flightIds,
+            input.passengers.map(passenger => [passenger.seatNumbers, passenger.cabinClass]),
+        ])).digest('hex');
+        await holdSeat({
+            flightId: flight.id,
+            seatNumber: '2A',
+            holderKey: checkoutHolderKey(user.id, checkoutId),
+        });
+        const saved = await prisma.paymentAttempt.create({
+            data: {
+                id: randomUUID(),
+                userId: user.id,
+                checkoutId,
+                requestFingerprint,
+                amountCents: 60_000,
+                currency: 'USD',
+                providerIntentId,
+                status: 'REQUIRES_PAYMENT_METHOD',
+            },
+        });
+        let releaseCheckout!: () => void;
+        let checkoutRetrieveStarted!: () => void;
+        const checkoutRelease = new Promise<void>(resolve => { releaseCheckout = resolve; });
+        const retrieveStarted = new Promise<void>(resolve => { checkoutRetrieveStarted = resolve; });
+        const retrieveAuthorization = jest.fn().mockImplementation(async () => {
+            checkoutRetrieveStarted();
+            await checkoutRelease;
+            return {
+                providerIntentId,
+                clientSecret,
+                status: 'REQUIRES_PAYMENT_METHOD' as const,
+            };
+        });
+        const checkout = new CheckoutPaymentService({
+            createAuthorization: jest.fn(),
+            retrieveAuthorization,
+        }).startPayment(input);
+        await retrieveStarted;
+
+        const retrievePaymentState = jest.fn().mockResolvedValue({
+            providerIntentId,
+            paymentAttemptId: saved.id,
+            status: 'AUTHORIZED' as const,
+        });
+        const webhook = new PaymentWebhookService({ retrievePaymentState }).reconcile({
+            eventId: `evt_${randomUUID()}`,
+            eventType: 'payment_intent.amount_capturable_updated',
+            providerIntentId,
+        });
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const webhookCallsBeforeRelease = retrievePaymentState.mock.calls.length;
+
+        releaseCheckout();
+        await Promise.all([checkout, webhook]);
+
+        expect(webhookCallsBeforeRelease).toBe(0);
+        await expect(prisma.paymentAttempt.findUniqueOrThrow({ where: { id: saved.id } }))
+            .resolves.toMatchObject({ status: 'AUTHORIZED' });
+    });
+
     it('rejects a changed request that reuses a checkout payment ID', async () => {
         const { user, flight } = await fixture();
         const checkoutId = randomUUID();
@@ -159,6 +279,7 @@ describe('starting a checkout payment', () => {
         const fake = provider();
         const service = new CheckoutPaymentService(fake.value);
         await service.startPayment(request(user.id, flight.id, checkoutId));
+        fake.retrieveAuthorization.mockClear();
 
         await expect(service.startPayment({
             ...request(user.id, flight.id, checkoutId),

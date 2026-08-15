@@ -66,10 +66,12 @@ this application is deployed.
 
 Local verification and recovery email lands in Mailpit at http://localhost:8025.
 
-Starting a checkout payment additionally requires `STRIPE_SECRET_KEY`. Use a
-Stripe test-mode key locally. It is loaded only when that server action runs;
-card numbers, CVCs, expiry dates and PaymentIntent client secrets never belong
-in this application's environment or database.
+Starting a checkout payment additionally requires `STRIPE_SECRET_KEY`, and the
+Stripe endpoint at `POST /api/stripe/webhook` requires
+`STRIPE_WEBHOOK_SECRET`. Use test-mode values locally. They are loaded only when
+the payment action or webhook runs; card numbers, CVCs, expiry dates,
+PaymentIntent client secrets and raw webhook bodies never belong in this
+application's environment, database or logs.
 
 Never commit a secret value or pass one on the command line. Every environment
 that runs this application injects configuration at runtime.
@@ -77,7 +79,7 @@ that runs this application injects configuration at runtime.
 ## Architecture
 
 - `app/actions.ts` — `'use server'`; the primary mutation path for the whole app
-- `app/api/` — auth routes only (register, verify, password reset, NextAuth)
+- `app/api/` — auth routes plus the signed Stripe payment webhook
 - `lib/*Service.ts` — data and business logic, called from server actions
 - `lib/validation.ts` — shared Zod schemas; mutations parse through `parseActionInput`
 - `lib/actionResult.ts` — mutations return `{ ok: false, error }` instead of throwing on validation failure
