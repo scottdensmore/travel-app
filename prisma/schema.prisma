@@ -58,6 +58,7 @@ model User {
   accounts                Account[]
   sessions                Session[]
   bookings                Booking[]
+  paymentAttempts         PaymentAttempt[]
   bookingStatusChanges    BookingStatusChange[]
   favorites               UserFavorite[]
   reviews                 Review[]
@@ -104,6 +105,44 @@ enum BookingStatus {
   CONFIRMED
   CANCELLED
   DISRUPTED
+}
+
+/// The provider state of one checkout's payment session.
+///
+/// `CREATING` closes the crash window between reserving a durable attempt and
+/// calling Stripe. A retry uses the attempt ID as Stripe's idempotency key, so
+/// it can safely finish that call without creating a second intent.
+enum PaymentAttemptStatus {
+  CREATING
+  REQUIRES_PAYMENT_METHOD
+  REQUIRES_CONFIRMATION
+  REQUIRES_ACTION
+  PROCESSING
+  AUTHORIZED
+  CAPTURED
+  CANCELLED
+}
+
+/// Safe server-side payment metadata for one checkout.
+///
+/// Card details stay in Stripe Elements, and even the PaymentIntent client
+/// secret is deliberately not stored here. The request fingerprint binds a
+/// checkout UUID to the itinerary, seats and cabins that produced its quote.
+model PaymentAttempt {
+  id                   String               @id
+  checkoutId           String
+  userId               String?
+  user                 User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  requestFingerprint   String
+  amountCents          Int
+  currency             String               @default("USD")
+  providerIntentId     String?              @unique
+  status               PaymentAttemptStatus @default(CREATING)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  @@unique([userId, checkoutId])
+  @@index([status, updatedAt])
 }
 
 model Booking {

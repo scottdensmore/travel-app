@@ -63,6 +63,16 @@ const TRACKED: Array<{ table: string; ids: () => Promise<string[]> }> = [
         .map(row => owned(row.id, row.email)),
   },
   {
+    // Payment attempts survive account deletion so provider reconciliation is
+    // not erased with a profile. That also means a spec has to clean up the
+    // attempt itself; deleting its test user is not sufficient.
+    table: 'PaymentAttempt',
+    ids: async () =>
+      (await prisma.paymentAttempt.findMany({
+        select: { id: true, checkoutId: true, user: { select: { email: true } } },
+      })).map(row => owned(row.id, row.user?.email ?? `checkout ${row.checkoutId}`)),
+  },
+  {
     table: 'VerificationToken',
     ids: async () =>
       (await prisma.verificationToken.findMany({ select: { identifier: true } }))
