@@ -1,6 +1,10 @@
 /** @jest-environment node */
 
-import { createStripePaymentProvider, StripePaymentProvider } from '@/lib/stripePaymentProvider';
+import {
+    createStripePaymentProvider,
+    getStripePublishableKey,
+    StripePaymentProvider,
+} from '@/lib/stripePaymentProvider';
 
 describe('StripePaymentProvider', () => {
     it('creates a manual-capture PaymentIntent with a stable idempotency key', async () => {
@@ -77,6 +81,88 @@ describe('StripePaymentProvider', () => {
         expect(() => createStripePaymentProvider({ STRIPE_SECRET_KEY: '   ' })).toThrow(
             'Missing required environment variable: STRIPE_SECRET_KEY',
         );
+    });
+
+    it('uses a deterministic provider only for a disposable non-production Playwright database', async () => {
+        const environment = {
+            E2E_STRIPE_MODE: 'playwright',
+            DATABASE_IS_DISPOSABLE: 'true',
+            NODE_ENV: 'development',
+        };
+        const provider = createStripePaymentProvider(environment);
+
+        const created = await provider.createAuthorization({
+            attemptId: 'attempt-playwright',
+            amountCents: 10_000,
+            currency: 'USD',
+        });
+        await expect(provider.retrieveAuthorization(created.providerIntentId)).resolves.toMatchObject({
+            status: 'REQUIRES_PAYMENT_METHOD',
+        });
+        await expect(provider.retrieveAuthorization(created.providerIntentId)).resolves.toMatchObject({
+            status: 'AUTHORIZED',
+        });
+        expect(getStripePublishableKey(environment)).toBe('pk_test_mona_playwright');
+    });
+
+    it('refuses the Playwright provider in production even with a disposable marker', () => {
+        const environment = {
+            E2E_STRIPE_MODE: 'playwright',
+            DATABASE_IS_DISPOSABLE: 'true',
+            NODE_ENV: 'production',
+        };
+
+        expect(() => createStripePaymentProvider(environment)).toThrow(
+            'The Playwright Stripe provider is forbidden in production.',
+        );
+        expect(() => getStripePublishableKey(environment)).toThrow(
+            'The Playwright Stripe provider is forbidden in production.',
+        );
+    });
+
+    it('refuses the Playwright provider against a database not marked disposable', () => {
+        const environment = {
+            E2E_STRIPE_MODE: 'playwright',
+            DATABASE_IS_DISPOSABLE: 'false',
+            NODE_ENV: 'development',
+        };
+
+        expect(() => createStripePaymentProvider(environment)).toThrow(
+            'The Playwright Stripe provider requires DATABASE_IS_DISPOSABLE=true.',
+        );
+        expect(() => getStripePublishableKey(environment)).toThrow(
+            'The Playwright Stripe provider requires DATABASE_IS_DISPOSABLE=true.',
+        );
+    });
+
+    it('refuses an unsupported E2E Stripe provider mode', () => {
+        const environment = {
+            E2E_STRIPE_MODE: 'fake-production',
+            DATABASE_IS_DISPOSABLE: 'true',
+            NODE_ENV: 'development',
+        };
+
+        expect(() => createStripePaymentProvider(environment)).toThrow(
+            'E2E_STRIPE_MODE must be playwright when it is set.',
+        );
+        expect(() => getStripePublishableKey(environment)).toThrow(
+            'E2E_STRIPE_MODE must be playwright when it is set.',
+        );
+    });
+
+    it('returns only a trimmed Stripe publishable key for hosted fields', () => {
+        expect(getStripePublishableKey({
+            STRIPE_PUBLISHABLE_KEY: '  pk_test_public_browser_key  ',
+        })).toBe('pk_test_public_browser_key');
+    });
+
+    it.each([
+        ['', 'Missing required environment variable: STRIPE_PUBLISHABLE_KEY'],
+        ['sk_test_server_secret', 'STRIPE_PUBLISHABLE_KEY must be a Stripe publishable key.'],
+        ['pk_test_mona_playwright', 'STRIPE_PUBLISHABLE_KEY must be a Stripe publishable key.'],
+    ])('refuses an unsafe browser key value', (value, expectedMessage) => {
+        expect(() => getStripePublishableKey({ STRIPE_PUBLISHABLE_KEY: value }))
+            .toThrow(expectedMessage);
     });
 
     it('refuses a PaymentIntent that cannot be confirmed by Stripe Elements', async () => {

@@ -11,7 +11,7 @@ import { heldSeats } from '@/lib/seatOccupancy';
 import TravelGuideService from '@/lib/TravelGuideService';
 import FlightBookingService, { PassengerInput } from '@/lib/FlightBookingService';
 import { CheckoutPaymentService } from '@/lib/checkoutPaymentService';
-import { createStripePaymentProvider } from '@/lib/stripePaymentProvider';
+import { createStripePaymentProvider, getStripePublishableKey } from '@/lib/stripePaymentProvider';
 import CityGuide from '@/lib/types/CityGuide';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -331,6 +331,19 @@ export async function bookFlightAction(bookingData: {
 
     let result;
     try {
+        const payment = await new CheckoutPaymentService(createStripePaymentProvider()).startPayment({
+            checkoutId: bookingData.idempotencyKey,
+            flightIds: bookingData.flightIds,
+            passengers: bookingData.passengers.map(passenger => ({
+                seatNumbers: passenger.seatNumbers,
+                cabinClass: passenger.cabinClass as 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST',
+            })),
+            userId,
+        });
+        if (payment.status !== 'AUTHORIZED' && payment.status !== 'CAPTURED') {
+            return actionValidationFailure('Payment authorization is required before booking.');
+        }
+
         result = await flightBookingService.bookFlight({
             flightIds: bookingData.flightIds,
             userId,
@@ -394,7 +407,8 @@ export async function startCheckoutPaymentAction(paymentData: {
 
     const service = new CheckoutPaymentService(createStripePaymentProvider());
     try {
-        return await service.startPayment({ ...parsed.data, userId });
+        const result = await service.startPayment({ ...parsed.data, userId });
+        return { ...result, publishableKey: getStripePublishableKey() };
     } catch (error) {
         if (!(error instanceof SeatHoldUnavailableError)) throw error;
 

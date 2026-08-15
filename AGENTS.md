@@ -66,12 +66,14 @@ this application is deployed.
 
 Local verification and recovery email lands in Mailpit at http://localhost:8025.
 
-Starting a checkout payment additionally requires `STRIPE_SECRET_KEY`, and the
-Stripe endpoint at `POST /api/stripe/webhook` requires
-`STRIPE_WEBHOOK_SECRET`. Use test-mode values locally. They are loaded only when
-the payment action or webhook runs; card numbers, CVCs, expiry dates,
-PaymentIntent client secrets and raw webhook bodies never belong in this
-application's environment, database or logs.
+Starting a checkout payment additionally requires matching test-mode
+`STRIPE_SECRET_KEY` and `STRIPE_PUBLISHABLE_KEY` values, and the Stripe endpoint
+at `POST /api/stripe/webhook` requires `STRIPE_WEBHOOK_SECRET`. They are loaded
+only when the payment action or webhook runs. The publishable key and
+PaymentIntent client secret may configure Stripe's browser library, but card
+numbers, CVCs and expiry dates stay inside Stripe's hosted fields; none of those
+values, client secrets or raw webhook bodies belong in this application's
+environment, database or logs.
 
 Never commit a secret value or pass one on the command line. Every environment
 that runs this application injects configuration at runtime.
@@ -118,6 +120,11 @@ that runs this application injects configuration at runtime.
   difference is easy to miss
 - Node-environment tests need `/** @jest-environment node */` (jsdom is the Jest default)
 - Playwright runs `workers: 1, fullyParallel: false` on purpose — parallel runs collide on the DB
+- Playwright's app server sets `E2E_STRIPE_MODE=playwright`, which replaces only
+  Stripe's external server/browser boundary so booking journeys remain
+  deterministic without account secrets or automated card entry. The adapter
+  refuses production and any database not marked disposable; browser journeys
+  cross it through `e2e/helpers/checkoutPayment.ts`
 - A Playwright run fails in `global-teardown` if it left accounts, tokens, reviews,
   favorites, notifications, flights or schedules behind. `global-setup` cannot delete
   those — it cannot tell a run's account from a developer's — so each spec deletes what

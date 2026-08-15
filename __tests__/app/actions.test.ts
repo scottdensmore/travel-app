@@ -27,7 +27,7 @@ import FlightScheduleService from '@/lib/FlightScheduleService';
 import { prisma } from '@/lib/prisma';
 import { checkoutHolderKey, SeatHoldUnavailableError } from '@/lib/seatHolds';
 import { CheckoutPaymentService } from '@/lib/checkoutPaymentService';
-import { createStripePaymentProvider } from '@/lib/stripePaymentProvider';
+import { createStripePaymentProvider, getStripePublishableKey } from '@/lib/stripePaymentProvider';
 
 // Keep these heavy/server-only modules out of the unit test.
 jest.mock('next-auth', () => ({ getServerSession: jest.fn() }));
@@ -56,6 +56,7 @@ jest.mock('@/lib/checkoutPaymentService', () => {
 
 jest.mock('@/lib/stripePaymentProvider', () => ({
     createStripePaymentProvider: jest.fn().mockReturnValue({}),
+    getStripePublishableKey: jest.fn().mockReturnValue('pk_test_public'),
 }));
 
 const mockTx = {
@@ -115,6 +116,7 @@ const mockBookFlight = new (FlightBookingService as any)().bookFlight as jest.Mo
 const mockGenerateFlightsForDate = new (FlightScheduleService as any)().generateFlightsForDate as jest.Mock;
 const mockStartPayment = new (CheckoutPaymentService as any)().startPayment as jest.Mock;
 const mockedCreateStripePaymentProvider = createStripePaymentProvider as jest.Mock;
+const mockedGetStripePublishableKey = getStripePublishableKey as jest.Mock;
 const mockedFlightFindMany = (prisma as any).flight.findMany as jest.Mock;
 const mockedFlightFindFirst = (prisma as any).flight.findFirst as jest.Mock;
 const mockedFlightCreate = (prisma as any).flight.create as jest.Mock;
@@ -645,10 +647,52 @@ describe('getFlightRoutesAction', () => {
 });
 
 describe('bookFlightAction', () => {
-    beforeEach(() => jest.clearAllMocks());
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockStartPayment.mockResolvedValue({
+            amountCents: 20_000,
+            currency: 'USD',
+            clientSecret: 'pi_secret_for_elements',
+            status: 'AUTHORIZED',
+        });
+    });
+
+    it('refuses to create a booking until Stripe reports an authorized payment', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        mockStartPayment.mockResolvedValue({
+            amountCents: 20_000,
+            currency: 'USD',
+            clientSecret: 'pi_secret_for_elements',
+            status: 'PROCESSING',
+        });
+
+        await expect(bookFlightAction({
+            flightIds: [42],
+            passengers: [{
+                firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
+                passportNumber: 'AB123456', gender: 'Female', seatNumbers: ['11A'],
+                cabinClass: 'ECONOMY',
+            }],
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+        })).resolves.toEqual({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'Payment authorization is required before booking.',
+                fields: { _root: ['Payment authorization is required before booking.'] },
+            },
+        });
+        expect(mockBookFlight).not.toHaveBeenCalled();
+    });
 
     it('calls FlightBookingService with flightId and userId from session and creates a notification', async () => {
         mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        mockStartPayment.mockResolvedValue({
+            amountCents: 20_000,
+            currency: 'USD',
+            clientSecret: 'pi_secret_for_elements',
+            status: 'CAPTURED',
+        });
         mockBookFlight.mockResolvedValue({
             id: 1,
             flightIds: [42],
@@ -873,9 +917,11 @@ describe('startCheckoutPaymentAction', () => {
             amountCents: 60_000,
             currency: 'USD',
             clientSecret: 'pi_secret_for_elements',
+            publishableKey: 'pk_test_public',
             status: 'REQUIRES_PAYMENT_METHOD',
         });
         expect(mockedCreateStripePaymentProvider).toHaveBeenCalledTimes(1);
+        expect(mockedGetStripePublishableKey).toHaveBeenCalledTimes(1);
         expect(mockStartPayment).toHaveBeenCalledWith({
             ...input,
             userId: 'user-123',

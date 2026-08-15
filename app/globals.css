@@ -1022,6 +1022,7 @@ footer a:hover {
    purple selected-passenger border and the green confirmation action. */
 .booking-checkout-error:focus,
 .booking-passenger-target:focus,
+.booking-payment-heading:focus,
 .booking-review-actions button:focus-visible {
   outline: 3px solid #fbbf24;
   outline-offset: 3px;
