@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { flightRouteInclude } from '@/lib/flightRoute';
 import { createVerifiedAccount, signInWithCredentials } from './helpers/auth';
 import { completeCheckoutPayment } from './helpers/checkoutPayment';
+import { fillOneWayFlightSearch } from './helpers/flightSearch';
 
 test.describe('User Notifications & Alerts Journey', () => {
   const uniqueEmail = `notiftest-${Date.now()}@example.com`;
@@ -83,14 +84,7 @@ test.describe('User Notifications & Alerts Journey', () => {
       throw new Error('No upcoming flights found in the database');
     }
 
-    // This journey books a single flight, so search one way: a round trip
-    // is chosen a leg at a time and booked as one itinerary (#69).
-    await page.getByLabel('One Way').click();
-
-    await page.selectOption('#from', targetFlight.fromAirport.label);
-    await page.selectOption('#to', targetFlight.toAirport.label);
-    const formattedDate = targetFlight.departureDate.toISOString().split('T')[0];
-    await page.fill('#depart', formattedDate);
+    await fillOneWayFlightSearch(page, targetFlight);
     await page.click('button:has-text("Find your trip")');
 
     await expect(page.locator('h2:has-text("Available Flights")')).toBeVisible();

@@ -4,6 +4,7 @@ import { flightRouteInclude, withRouteLabels } from '@/lib/flightRoute';
 import { calculateItineraryTotal } from '../lib/bookingPricing';
 import { registerAndSignIn } from './helpers/auth';
 import { completeCheckoutPayment, openCheckoutPayment } from './helpers/checkoutPayment';
+import { fillOneWayFlightSearch } from './helpers/flightSearch';
 
 test.describe('Flight Booking Journey', () => {
   const runId = Date.now();
@@ -77,17 +78,10 @@ test.describe('Flight Booking Journey', () => {
       throw new Error('No upcoming flights found in the seeded database');
     }
 
-    // This journey books a single flight, so search one way: a round trip is
-    // chosen a leg at a time and booked as one itinerary instead (#69).
-    await page.getByLabel('One Way').click();
-
-    // Fill origin & destination dynamically based on the database flight
-    await page.selectOption('#from', targetFlight.fromAirport.label);
-    await page.selectOption('#to', targetFlight.toAirport.label);
-
-    // Fill departure date formatted as YYYY-MM-DD
-    const formattedDate = targetFlight.departureDate.toISOString().split('T')[0];
-    await page.fill('#depart', formattedDate);
+    // Search the date at the origin airport. A UTC date can be the following
+    // day for an evening departure and would make this seeded journey miss the
+    // flight it just selected (#275).
+    await fillOneWayFlightSearch(page, targetFlight);
 
     // Submit search
     await page.click('button:has-text("Find your trip")');
