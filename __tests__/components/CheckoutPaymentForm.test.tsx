@@ -145,6 +145,32 @@ describe('CheckoutPaymentForm', () => {
         });
     });
 
+    it('retries booking completion without authorizing the hosted payment twice', async () => {
+        const onConfirmed = jest.fn().mockResolvedValue(undefined);
+        confirmPayment.mockResolvedValue({ paymentIntent: { status: 'requires_capture' } });
+        render(
+            <CheckoutPaymentForm
+                publishableKey="pk_test_public"
+                clientSecret="pi_secret_for_elements"
+                amountDisplay="$100"
+                disabled={false}
+                submitting={false}
+                onConfirmed={onConfirmed}
+            />
+        );
+        fireEvent.click(screen.getByText('Hosted Stripe payment fields'));
+        fireEvent.click(screen.getByRole('button', { name: 'Authorize $100 and confirm booking' }));
+
+        await waitFor(() => expect(onConfirmed).toHaveBeenCalledTimes(1));
+        const retry = await screen.findByRole('button', {
+            name: 'Finish payment and confirm booking',
+        });
+        fireEvent.click(retry);
+        await waitFor(() => expect(onConfirmed).toHaveBeenCalledTimes(2));
+
+        expect(confirmPayment).toHaveBeenCalledTimes(1);
+    });
+
     it('shows a recoverable Stripe error and never reports confirmation', async () => {
         const onConfirmed = jest.fn();
         confirmPayment.mockResolvedValue({ error: { message: 'Your card was declined.' } });

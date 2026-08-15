@@ -28,6 +28,15 @@ export interface PaymentProvider {
         currency: string;
     }): Promise<PaymentAuthorization>;
     retrieveAuthorization(providerIntentId: string): Promise<PaymentAuthorization>;
+    captureAuthorization(input: {
+        providerIntentId: string;
+        attemptId: string;
+        amountCents: number;
+    }): Promise<PaymentAuthorization>;
+    cancelAuthorization(input: {
+        providerIntentId: string;
+        attemptId: string;
+    }): Promise<PaymentAuthorization>;
 }
 
 export interface PaymentStateProvider {
@@ -47,6 +56,7 @@ interface PlaywrightIntent {
     amountCents: number;
     currency: string;
     retrievalCount: number;
+    status: PaymentAuthorizationStatus;
 }
 
 const PLAYWRIGHT_PUBLISHABLE_KEY = 'pk_test_mona_playwright';
@@ -78,7 +88,11 @@ class PlaywrightStripePaymentProvider implements PaymentProvider, PaymentStatePr
         currency: string;
     }): Promise<PaymentAuthorization> {
         const providerIntentId = `pi_playwright_${input.attemptId}`;
-        this.intents.set(providerIntentId, { ...input, retrievalCount: 0 });
+        this.intents.set(providerIntentId, {
+            ...input,
+            retrievalCount: 0,
+            status: 'REQUIRES_PAYMENT_METHOD',
+        });
         return {
             providerIntentId,
             clientSecret: `${providerIntentId}_secret_for_e2e_only`,
@@ -90,13 +104,52 @@ class PlaywrightStripePaymentProvider implements PaymentProvider, PaymentStatePr
         const intent = this.intents.get(providerIntentId);
         if (!intent) throw new Error('Playwright payment session was not found.');
         intent.retrievalCount += 1;
+        if (intent.status === 'REQUIRES_PAYMENT_METHOD' && intent.retrievalCount > 1) {
+            intent.status = 'AUTHORIZED';
+        }
         return {
             providerIntentId,
             clientSecret: `${providerIntentId}_secret_for_e2e_only`,
             // Checkout preparation performs the first read. The browser's
             // guarded test button then causes a second server read, modelling
             // Stripe changing requires_payment_method to requires_capture.
-            status: intent.retrievalCount === 1 ? 'REQUIRES_PAYMENT_METHOD' : 'AUTHORIZED',
+            status: intent.status,
+        };
+    }
+
+    async captureAuthorization(input: {
+        providerIntentId: string;
+        attemptId: string;
+        amountCents: number;
+    }): Promise<PaymentAuthorization> {
+        const intent = this.intents.get(input.providerIntentId);
+        if (!intent || intent.attemptId !== input.attemptId) {
+            throw new Error('Playwright payment session was not found.');
+        }
+        if (intent.amountCents !== input.amountCents || intent.status !== 'AUTHORIZED') {
+            throw new Error('Playwright payment session is not capturable.');
+        }
+        intent.status = 'CAPTURED';
+        return {
+            providerIntentId: input.providerIntentId,
+            clientSecret: `${input.providerIntentId}_secret_for_e2e_only`,
+            status: intent.status,
+        };
+    }
+
+    async cancelAuthorization(input: {
+        providerIntentId: string;
+        attemptId: string;
+    }): Promise<PaymentAuthorization> {
+        const intent = this.intents.get(input.providerIntentId);
+        if (!intent || intent.attemptId !== input.attemptId) {
+            throw new Error('Playwright payment session was not found.');
+        }
+        if (intent.status !== 'CAPTURED') intent.status = 'CANCELLED';
+        return {
+            providerIntentId: input.providerIntentId,
+            clientSecret: `${input.providerIntentId}_secret_for_e2e_only`,
+            status: intent.status,
         };
     }
 
@@ -106,7 +159,7 @@ class PlaywrightStripePaymentProvider implements PaymentProvider, PaymentStatePr
         return {
             providerIntentId,
             paymentAttemptId: intent.attemptId,
-            status: intent.retrievalCount > 1 ? 'AUTHORIZED' : 'REQUIRES_PAYMENT_METHOD',
+            status: intent.status,
         };
     }
 }
@@ -154,6 +207,29 @@ export class StripePaymentProvider implements PaymentProvider {
 
     async retrieveAuthorization(providerIntentId: string): Promise<PaymentAuthorization> {
         return paymentAuthorization(await this.stripe.paymentIntents.retrieve(providerIntentId));
+    }
+
+    async captureAuthorization(input: {
+        providerIntentId: string;
+        attemptId: string;
+        amountCents: number;
+    }): Promise<PaymentAuthorization> {
+        return paymentAuthorization(await this.stripe.paymentIntents.capture(
+            input.providerIntentId,
+            { amount_to_capture: input.amountCents },
+            { idempotencyKey: `payment-capture:${input.attemptId}` },
+        ));
+    }
+
+    async cancelAuthorization(input: {
+        providerIntentId: string;
+        attemptId: string;
+    }): Promise<PaymentAuthorization> {
+        return paymentAuthorization(await this.stripe.paymentIntents.cancel(
+            input.providerIntentId,
+            { cancellation_reason: 'abandoned' },
+            { idempotencyKey: `payment-cancel:${input.attemptId}` },
+        ));
     }
 
     async retrievePaymentState(providerIntentId: string): Promise<PaymentState> {

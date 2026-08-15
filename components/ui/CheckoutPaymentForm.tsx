@@ -32,6 +32,7 @@ function PlaywrightPaymentFields({
     onConfirmed,
 }: HostedPaymentFieldsProps) {
     const [confirming, setConfirming] = useState(false);
+    const [paymentConfirmed, setPaymentConfirmed] = useState(false);
     const busy = confirming || submitting;
 
     return (
@@ -41,6 +42,7 @@ function PlaywrightPaymentFields({
                 if (disabled || busy) return;
                 setConfirming(true);
                 try {
+                    setPaymentConfirmed(true);
                     await onConfirmed();
                 } finally {
                     setConfirming(false);
@@ -72,7 +74,11 @@ function PlaywrightPaymentFields({
                     marginTop: '1rem',
                 }}
             >
-                {busy ? 'Confirming booking…' : `Authorize ${amountDisplay} and confirm booking`}
+                {busy
+                    ? 'Confirming booking…'
+                    : paymentConfirmed
+                        ? 'Finish payment and confirm booking'
+                        : `Authorize ${amountDisplay} and confirm booking`}
             </button>
         </form>
     );
@@ -89,6 +95,7 @@ function HostedPaymentFields({
     const [elementReady, setElementReady] = useState(false);
     const [elementLoadFailed, setElementLoadFailed] = useState(false);
     const [confirming, setConfirming] = useState(false);
+    const [paymentConfirmed, setPaymentConfirmed] = useState(false);
     const [paymentError, setPaymentError] = useState<string | null>(null);
     const errorRef = useRef<HTMLDivElement | null>(null);
 
@@ -103,14 +110,17 @@ function HostedPaymentFields({
         setConfirming(true);
         setPaymentError(null);
         try {
-            const result = await stripe.confirmPayment({
-                elements,
-                confirmParams: { return_url: window.location.href },
-                redirect: 'if_required',
-            });
-            if (result.error) {
-                setPaymentError(result.error.message ?? 'Stripe could not authorize this payment.');
-                return;
+            if (!paymentConfirmed) {
+                const result = await stripe.confirmPayment({
+                    elements,
+                    confirmParams: { return_url: window.location.href },
+                    redirect: 'if_required',
+                });
+                if (result.error) {
+                    setPaymentError(result.error.message ?? 'Stripe could not authorize this payment.');
+                    return;
+                }
+                setPaymentConfirmed(true);
             }
 
             // The browser result is deliberately not trusted as authority.
@@ -184,7 +194,9 @@ function HostedPaymentFields({
                     ? 'Authorizing payment…'
                     : submitting
                         ? 'Confirming booking…'
-                        : `Authorize ${amountDisplay} and confirm booking`}
+                        : paymentConfirmed
+                            ? 'Finish payment and confirm booking'
+                            : `Authorize ${amountDisplay} and confirm booking`}
             </button>
             {busy && (
                 <p role="status" style={{ color: 'rgba(255,255,255,0.7)', textAlign: 'center', margin: '0.75rem 0 0' }}>

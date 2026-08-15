@@ -77,6 +77,55 @@ describe('StripePaymentProvider', () => {
         expect(retrieve).toHaveBeenCalledWith('pi_current');
     });
 
+    it('captures the authorized amount with a stable attempt idempotency key', async () => {
+        const capture = jest.fn().mockResolvedValue({
+            id: 'pi_authorized',
+            client_secret: 'pi_authorized_secret_for_elements',
+            status: 'succeeded',
+        });
+        const provider = new StripePaymentProvider({
+            paymentIntents: { capture },
+        } as never);
+
+        await expect(provider.captureAuthorization({
+            providerIntentId: 'pi_authorized',
+            attemptId: 'attempt-123',
+            amountCents: 45_000,
+        })).resolves.toMatchObject({
+            providerIntentId: 'pi_authorized',
+            status: 'CAPTURED',
+        });
+        expect(capture).toHaveBeenCalledWith(
+            'pi_authorized',
+            { amount_to_capture: 45_000 },
+            { idempotencyKey: 'payment-capture:attempt-123' },
+        );
+    });
+
+    it('cancels an unused authorization with a stable attempt idempotency key', async () => {
+        const cancel = jest.fn().mockResolvedValue({
+            id: 'pi_abandoned',
+            client_secret: 'pi_abandoned_secret_for_elements',
+            status: 'canceled',
+        });
+        const provider = new StripePaymentProvider({
+            paymentIntents: { cancel },
+        } as never);
+
+        await expect(provider.cancelAuthorization({
+            providerIntentId: 'pi_abandoned',
+            attemptId: 'attempt-123',
+        })).resolves.toMatchObject({
+            providerIntentId: 'pi_abandoned',
+            status: 'CANCELLED',
+        });
+        expect(cancel).toHaveBeenCalledWith(
+            'pi_abandoned',
+            { cancellation_reason: 'abandoned' },
+            { idempotencyKey: 'payment-cancel:attempt-123' },
+        );
+    });
+
     it('refuses to construct a provider without the server secret', () => {
         expect(() => createStripePaymentProvider({ STRIPE_SECRET_KEY: '   ' })).toThrow(
             'Missing required environment variable: STRIPE_SECRET_KEY',

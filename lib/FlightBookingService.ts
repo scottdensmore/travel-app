@@ -107,8 +107,9 @@ export default class FlightBookingService {
         userId: string;
         passengers: PassengerInput[];
         idempotencyKey: string;
+        paymentIntentId?: string | null;
     }) {
-        const { flightIds, userId, passengers, idempotencyKey } = parseInput(
+        const { flightIds, userId, passengers, idempotencyKey, paymentIntentId } = parseInput(
             flightBookingServiceSchema,
             bookingData
         );
@@ -156,6 +157,9 @@ export default class FlightBookingService {
                 }
             });
             if (existingRequest) {
+                if (existingRequest.paymentIntentId !== paymentIntentId) {
+                    throw new Error('Booking request ID was already used with a different payment.');
+                }
                 if (!matchesPersistedRequest(
                     bookingFlights(existingRequest).map(flight => flight.id),
                     existingRequest.passengers,
@@ -290,7 +294,7 @@ export default class FlightBookingService {
                             flightId,
                         })),
                     },
-                    paymentIntentId: null,
+                    paymentIntentId,
                     idempotencyKey,
                     passengers: {
                         create: protectedPassengers

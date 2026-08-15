@@ -15,6 +15,7 @@ jest.mock('@/lib/flightLock', () => {
 });
 
 const created = {
+    bookingIds: [] as number[],
     flightIds: [] as number[],
     userIds: [] as string[],
 };
@@ -75,16 +76,34 @@ function provider() {
         clientSecret,
         status: 'AUTHORIZED' as const,
     });
+    const captureAuthorization = jest.fn().mockResolvedValue({
+        providerIntentId,
+        clientSecret,
+        status: 'CAPTURED' as const,
+    });
+    const cancelAuthorization = jest.fn().mockResolvedValue({
+        providerIntentId,
+        clientSecret,
+        status: 'CANCELLED' as const,
+    });
     return {
-        value: { createAuthorization, retrieveAuthorization } satisfies PaymentProvider,
+        value: {
+            createAuthorization,
+            retrieveAuthorization,
+            captureAuthorization,
+            cancelAuthorization,
+        } satisfies PaymentProvider,
         createAuthorization,
         retrieveAuthorization,
+        captureAuthorization,
+        cancelAuthorization,
         providerIntentId,
         clientSecret,
     };
 }
 
 afterAll(async () => {
+    await prisma.booking.deleteMany({ where: { id: { in: created.bookingIds } } });
     await prisma.paymentAttempt.deleteMany({ where: { userId: { in: created.userIds } } });
     await prisma.seatHold.deleteMany({ where: { flightId: { in: created.flightIds } } });
     await prisma.flight.deleteMany({ where: { id: { in: created.flightIds } } });
@@ -114,6 +133,7 @@ describe('starting a checkout payment', () => {
             amountCents: 60_000,
             currency: 'USD',
             clientSecret: fake.clientSecret,
+            providerIntentId: fake.providerIntentId,
             status: 'REQUIRES_PAYMENT_METHOD',
         });
         expect(fake.createAuthorization).toHaveBeenCalledWith({
@@ -154,6 +174,35 @@ describe('starting a checkout payment', () => {
         expect(await prisma.paymentAttempt.count({ where: { userId: user.id, checkoutId } })).toBe(1);
     });
 
+    it('retrieves a booked checkout after its consumed seat hold is gone', async () => {
+        const { user, flight } = await fixture();
+        const checkoutId = randomUUID();
+        await holdSeat({
+            flightId: flight.id,
+            seatNumber: '2A',
+            holderKey: checkoutHolderKey(user.id, checkoutId),
+        });
+        const fake = provider();
+        const service = new CheckoutPaymentService(fake.value);
+        const input = request(user.id, flight.id, checkoutId);
+        await service.startPayment(input);
+        const saved = await prisma.booking.create({
+            data: {
+                userId: user.id,
+                idempotencyKey: checkoutId,
+                paymentIntentId: fake.providerIntentId,
+            },
+        });
+        created.bookingIds.push(saved.id);
+        await prisma.seatHold.deleteMany({ where: { flightId: flight.id } });
+
+        await expect(service.startPayment(input)).resolves.toMatchObject({
+            providerIntentId: fake.providerIntentId,
+            status: 'AUTHORIZED',
+        });
+        expect(fake.createAuthorization).toHaveBeenCalledTimes(1);
+    });
+
     it('does not overwrite webhook state with a stale PaymentIntent create response', async () => {
         const { user, flight } = await fixture();
         const checkoutId = randomUUID();
@@ -191,6 +240,8 @@ describe('starting a checkout payment', () => {
         await expect(new CheckoutPaymentService({
             createAuthorization,
             retrieveAuthorization,
+            captureAuthorization: jest.fn(),
+            cancelAuthorization: jest.fn(),
         }).startPayment(request(user.id, flight.id, checkoutId))).resolves.toMatchObject({
             status: 'AUTHORIZED',
         });
@@ -244,6 +295,8 @@ describe('starting a checkout payment', () => {
         const checkout = new CheckoutPaymentService({
             createAuthorization: jest.fn(),
             retrieveAuthorization,
+            captureAuthorization: jest.fn(),
+            cancelAuthorization: jest.fn(),
         }).startPayment(input);
         await retrieveStarted;
 
@@ -536,5 +589,256 @@ describe('starting a checkout payment', () => {
         } finally {
             lockSpy.mockClear();
         }
+    });
+});
+
+describe('settling a checkout payment', () => {
+    async function authorizedFixture() {
+        const { user, flight } = await fixture();
+        const checkoutId = randomUUID();
+        await holdSeat({
+            flightId: flight.id,
+            seatNumber: '2A',
+            holderKey: checkoutHolderKey(user.id, checkoutId),
+        });
+        const fake = provider();
+        const service = new CheckoutPaymentService(fake.value);
+        await service.startPayment(request(user.id, flight.id, checkoutId));
+        const attempt = await prisma.paymentAttempt.findUniqueOrThrow({
+            where: { userId_checkoutId: { userId: user.id, checkoutId } },
+        });
+        const booking = await prisma.booking.create({
+            data: {
+                userId: user.id,
+                idempotencyKey: checkoutId,
+                paymentIntentId: fake.providerIntentId,
+                totalPriceCents: attempt.amountCents,
+                currency: attempt.currency,
+            },
+        });
+        created.bookingIds.push(booking.id);
+        return { user, checkoutId, fake, service, attempt, booking };
+    }
+
+    it('captures the exact authorized amount for the linked booking', async () => {
+        const { user, checkoutId, fake, service, attempt, booking } = await authorizedFixture();
+
+        await expect(service.capturePayment({
+            userId: user.id,
+            checkoutId,
+            bookingId: booking.id,
+        })).resolves.toEqual({ status: 'CAPTURED', wasCaptured: true });
+        expect(fake.captureAuthorization).toHaveBeenCalledWith({
+            providerIntentId: fake.providerIntentId,
+            attemptId: attempt.id,
+            amountCents: attempt.amountCents,
+        });
+        await expect(prisma.paymentAttempt.findUniqueOrThrow({ where: { id: attempt.id } }))
+            .resolves.toMatchObject({ status: 'CAPTURED' });
+    });
+
+    it('reconciles a capture whose Stripe response was lost', async () => {
+        const { user, checkoutId, fake, service, attempt, booking } = await authorizedFixture();
+        fake.captureAuthorization.mockRejectedValueOnce(new Error('connection ended after capture'));
+        fake.retrieveAuthorization.mockResolvedValueOnce({
+            providerIntentId: fake.providerIntentId,
+            clientSecret: fake.clientSecret,
+            status: 'CAPTURED',
+        });
+
+        await expect(service.capturePayment({
+            userId: user.id,
+            checkoutId,
+            bookingId: booking.id,
+        })).resolves.toEqual({ status: 'CAPTURED', wasCaptured: true });
+        expect(fake.retrieveAuthorization).toHaveBeenCalledWith(fake.providerIntentId);
+        await expect(prisma.paymentAttempt.findUniqueOrThrow({ where: { id: attempt.id } }))
+            .resolves.toMatchObject({ status: 'CAPTURED' });
+    });
+
+    it('does not ask Stripe to capture an attempt already recorded as captured', async () => {
+        const { user, checkoutId, fake, service, booking } = await authorizedFixture();
+        await service.capturePayment({ userId: user.id, checkoutId, bookingId: booking.id });
+        fake.captureAuthorization.mockClear();
+
+        await expect(service.capturePayment({
+            userId: user.id,
+            checkoutId,
+            bookingId: booking.id,
+        })).resolves.toEqual({ status: 'CAPTURED', wasCaptured: false });
+        expect(fake.captureAuthorization).not.toHaveBeenCalled();
+    });
+
+    it('refuses to capture when the booking is not linked to the checkout intent', async () => {
+        const { user, checkoutId, fake, service, booking } = await authorizedFixture();
+        await prisma.booking.update({
+            where: { id: booking.id },
+            data: { paymentIntentId: 'pi_different' },
+        });
+
+        await expect(service.capturePayment({
+            userId: user.id,
+            checkoutId,
+            bookingId: booking.id,
+        })).rejects.toThrow('Booking is not linked to this payment attempt.');
+        expect(fake.captureAuthorization).not.toHaveBeenCalled();
+    });
+
+    it('does not record capture until Stripe reports the captured state', async () => {
+        const { user, checkoutId, fake, service, attempt, booking } = await authorizedFixture();
+        fake.captureAuthorization.mockResolvedValueOnce({
+            providerIntentId: fake.providerIntentId,
+            clientSecret: fake.clientSecret,
+            status: 'AUTHORIZED',
+        });
+
+        await expect(service.capturePayment({
+            userId: user.id,
+            checkoutId,
+            bookingId: booking.id,
+        })).rejects.toThrow('Stripe has not confirmed payment capture.');
+        await expect(prisma.paymentAttempt.findUniqueOrThrow({ where: { id: attempt.id } }))
+            .resolves.toMatchObject({ status: 'AUTHORIZED' });
+    });
+
+    it('does not ask Stripe to capture a non-authorized attempt', async () => {
+        const { user, checkoutId, fake, service, attempt, booking } = await authorizedFixture();
+        await prisma.paymentAttempt.update({
+            where: { id: attempt.id },
+            data: { status: 'PROCESSING' },
+        });
+
+        await expect(service.capturePayment({
+            userId: user.id,
+            checkoutId,
+            bookingId: booking.id,
+        })).rejects.toThrow('Stripe has not confirmed payment capture.');
+        expect(fake.captureAuthorization).not.toHaveBeenCalled();
+    });
+
+    it('cancels an authorized attempt that did not create a booking', async () => {
+        const { user, flight } = await fixture();
+        const checkoutId = randomUUID();
+        await holdSeat({
+            flightId: flight.id,
+            seatNumber: '2A',
+            holderKey: checkoutHolderKey(user.id, checkoutId),
+        });
+        const fake = provider();
+        const service = new CheckoutPaymentService(fake.value);
+        await service.startPayment(request(user.id, flight.id, checkoutId));
+        const attempt = await prisma.paymentAttempt.findUniqueOrThrow({
+            where: { userId_checkoutId: { userId: user.id, checkoutId } },
+        });
+
+        await expect(service.cancelPayment({ userId: user.id, checkoutId }))
+            .resolves.toEqual({ status: 'CANCELLED', wasCancelled: true });
+        expect(fake.cancelAuthorization).toHaveBeenCalledWith({
+            providerIntentId: fake.providerIntentId,
+            attemptId: attempt.id,
+        });
+        await expect(prisma.paymentAttempt.findUniqueOrThrow({ where: { id: attempt.id } }))
+            .resolves.toMatchObject({ status: 'CANCELLED' });
+    });
+
+    it('does not record cancellation until Stripe reports the cancelled state', async () => {
+        const { user, flight } = await fixture();
+        const checkoutId = randomUUID();
+        await holdSeat({
+            flightId: flight.id,
+            seatNumber: '2A',
+            holderKey: checkoutHolderKey(user.id, checkoutId),
+        });
+        const fake = provider();
+        const service = new CheckoutPaymentService(fake.value);
+        await service.startPayment(request(user.id, flight.id, checkoutId));
+        fake.cancelAuthorization.mockResolvedValueOnce({
+            providerIntentId: fake.providerIntentId,
+            clientSecret: fake.clientSecret,
+            status: 'AUTHORIZED',
+        });
+
+        await expect(service.cancelPayment({ userId: user.id, checkoutId }))
+            .rejects.toThrow('Stripe has not confirmed payment cancellation.');
+        await expect(prisma.paymentAttempt.findUniqueOrThrow({
+            where: { userId_checkoutId: { userId: user.id, checkoutId } },
+        })).resolves.toMatchObject({ status: 'AUTHORIZED' });
+    });
+
+    it('does not cancel a payment already linked to a booking', async () => {
+        const { user, checkoutId, fake, service } = await authorizedFixture();
+
+        await expect(service.cancelPayment({ userId: user.id, checkoutId }))
+            .rejects.toThrow('A booking already uses this payment attempt.');
+        expect(fake.cancelAuthorization).not.toHaveBeenCalled();
+    });
+
+    it('does not cancel an attempt already recorded as captured', async () => {
+        const { user, flight } = await fixture();
+        const checkoutId = randomUUID();
+        await holdSeat({
+            flightId: flight.id,
+            seatNumber: '2A',
+            holderKey: checkoutHolderKey(user.id, checkoutId),
+        });
+        const fake = provider();
+        const service = new CheckoutPaymentService(fake.value);
+        await service.startPayment(request(user.id, flight.id, checkoutId));
+        await prisma.paymentAttempt.update({
+            where: { userId_checkoutId: { userId: user.id, checkoutId } },
+            data: { status: 'CAPTURED' },
+        });
+
+        await expect(service.cancelPayment({ userId: user.id, checkoutId }))
+            .rejects.toThrow('Stripe has not confirmed payment cancellation.');
+        expect(fake.cancelAuthorization).not.toHaveBeenCalled();
+    });
+
+    it('does not ask Stripe to cancel an attempt already recorded as cancelled', async () => {
+        const { user, flight } = await fixture();
+        const checkoutId = randomUUID();
+        await holdSeat({
+            flightId: flight.id,
+            seatNumber: '2A',
+            holderKey: checkoutHolderKey(user.id, checkoutId),
+        });
+        const fake = provider();
+        const service = new CheckoutPaymentService(fake.value);
+        await service.startPayment(request(user.id, flight.id, checkoutId));
+        await prisma.paymentAttempt.update({
+            where: { userId_checkoutId: { userId: user.id, checkoutId } },
+            data: { status: 'CANCELLED' },
+        });
+        fake.cancelAuthorization.mockClear();
+
+        await expect(service.cancelPayment({ userId: user.id, checkoutId }))
+            .resolves.toEqual({ status: 'CANCELLED', wasCancelled: false });
+        expect(fake.cancelAuthorization).not.toHaveBeenCalled();
+    });
+
+    it('reconciles a cancellation whose Stripe response was lost', async () => {
+        const { user, flight } = await fixture();
+        const checkoutId = randomUUID();
+        await holdSeat({
+            flightId: flight.id,
+            seatNumber: '2A',
+            holderKey: checkoutHolderKey(user.id, checkoutId),
+        });
+        const fake = provider();
+        const service = new CheckoutPaymentService(fake.value);
+        await service.startPayment(request(user.id, flight.id, checkoutId));
+        fake.cancelAuthorization.mockRejectedValueOnce(new Error('connection ended after cancel'));
+        fake.retrieveAuthorization.mockResolvedValueOnce({
+            providerIntentId: fake.providerIntentId,
+            clientSecret: fake.clientSecret,
+            status: 'CANCELLED',
+        });
+
+        await expect(service.cancelPayment({ userId: user.id, checkoutId }))
+            .resolves.toEqual({ status: 'CANCELLED', wasCancelled: true });
+        expect(fake.retrieveAuthorization).toHaveBeenCalledWith(fake.providerIntentId);
+        await expect(prisma.paymentAttempt.findUniqueOrThrow({
+            where: { userId_checkoutId: { userId: user.id, checkoutId } },
+        })).resolves.toMatchObject({ status: 'CANCELLED' });
     });
 });

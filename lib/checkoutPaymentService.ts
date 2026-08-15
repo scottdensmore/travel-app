@@ -32,7 +32,33 @@ interface CheckoutPaymentResult {
     amountCents: number;
     currency: string;
     clientSecret: string;
+    providerIntentId: string;
     status: PaymentAuthorizationStatus;
+}
+
+interface CapturePaymentInput {
+    userId: string;
+    checkoutId: string;
+    bookingId: number;
+}
+
+interface CancelPaymentInput {
+    userId: string;
+    checkoutId: string;
+}
+
+export class PaymentCaptureIncompleteError extends Error {
+    constructor() {
+        super('Stripe has not confirmed payment capture.');
+        this.name = 'PaymentCaptureIncompleteError';
+    }
+}
+
+export class PaymentCancellationIncompleteError extends Error {
+    constructor() {
+        super('Stripe has not confirmed payment cancellation.');
+        this.name = 'PaymentCancellationIncompleteError';
+    }
 }
 
 function requestFingerprint(input: Omit<CheckoutPaymentInput, 'userId'>): string {
@@ -51,6 +77,7 @@ function result(
         amountCents: attempt.amountCents,
         currency: attempt.currency,
         clientSecret: authorization.clientSecret,
+        providerIntentId: authorization.providerIntentId,
         status: authorization.status,
     };
 }
@@ -97,6 +124,17 @@ export class CheckoutPaymentService {
                 throw new Error('Checkout payment ID was already used for a different request.');
             }
 
+            const linkedBooking = existing?.providerIntentId
+                ? await tx.booking.findFirst({
+                    where: {
+                        userId: input.userId,
+                        idempotencyKey: input.checkoutId,
+                        paymentIntentId: existing.providerIntentId,
+                    },
+                    select: { id: true },
+                })
+                : null;
+
             const claims: SeatClaim[] = flights.flatMap((flight, legIndex) => (
                 input.passengers.map(passenger => {
                     const seatNumber = passenger.seatNumbers[legIndex];
@@ -104,9 +142,11 @@ export class CheckoutPaymentService {
                     return { flightId: flight.id, seatNumber, holderKey };
                 })
             ));
-            for (const claim of claims) {
-                if (!await hasLiveSeatHold(tx, claim)) {
-                    throw new SeatHoldUnavailableError(claim);
+            if (!linkedBooking) {
+                for (const claim of claims) {
+                    if (!await hasLiveSeatHold(tx, claim)) {
+                        throw new SeatHoldUnavailableError(claim);
+                    }
                 }
             }
 
@@ -154,5 +194,131 @@ export class CheckoutPaymentService {
         }, { maxWait: 5_000, timeout: 15_000 });
 
         return result(attempt, authorization);
+    }
+
+    async capturePayment(input: CapturePaymentInput): Promise<{
+        status: 'CAPTURED';
+        wasCaptured: boolean;
+    }> {
+        return prisma.$transaction(async tx => {
+            const initial = await tx.paymentAttempt.findUnique({
+                where: {
+                    userId_checkoutId: {
+                        userId: input.userId,
+                        checkoutId: input.checkoutId,
+                    },
+                },
+            });
+            if (!initial?.providerIntentId) {
+                throw new Error('Checkout payment attempt was not found.');
+            }
+            const providerIntentId = initial.providerIntentId;
+
+            await lockPaymentIntentForUpdate(tx, providerIntentId);
+            const [attempt, booking] = await Promise.all([
+                tx.paymentAttempt.findUniqueOrThrow({ where: { id: initial.id } }),
+                tx.booking.findFirst({
+                    where: {
+                        id: input.bookingId,
+                        userId: input.userId,
+                        idempotencyKey: input.checkoutId,
+                    },
+                    select: { paymentIntentId: true },
+                }),
+            ]);
+            if (!booking || booking.paymentIntentId !== attempt.providerIntentId) {
+                throw new Error('Booking is not linked to this payment attempt.');
+            }
+            if (attempt.status === 'CAPTURED') {
+                return { status: 'CAPTURED', wasCaptured: false };
+            }
+            if (attempt.status !== 'AUTHORIZED') {
+                throw new PaymentCaptureIncompleteError();
+            }
+
+            let authorization: PaymentAuthorization;
+            try {
+                authorization = await this.provider.captureAuthorization({
+                    providerIntentId,
+                    attemptId: attempt.id,
+                    amountCents: attempt.amountCents,
+                });
+            } catch {
+                // A missing API response does not say whether Stripe captured.
+                // Re-read the intent before deciding; a later retry uses the
+                // same capture idempotency key if this read is also uncertain.
+                authorization = await this.provider.retrieveAuthorization(providerIntentId);
+            }
+            if (
+                authorization.providerIntentId !== providerIntentId
+                || authorization.status !== 'CAPTURED'
+            ) {
+                throw new PaymentCaptureIncompleteError();
+            }
+            await tx.paymentAttempt.update({
+                where: { id: attempt.id },
+                data: { status: 'CAPTURED' },
+            });
+            return { status: 'CAPTURED', wasCaptured: true };
+        }, { maxWait: 5_000, timeout: 15_000 });
+    }
+
+    async cancelPayment(input: CancelPaymentInput): Promise<{
+        status: 'CANCELLED';
+        wasCancelled: boolean;
+    }> {
+        return prisma.$transaction(async tx => {
+            const initial = await tx.paymentAttempt.findUnique({
+                where: {
+                    userId_checkoutId: {
+                        userId: input.userId,
+                        checkoutId: input.checkoutId,
+                    },
+                },
+            });
+            if (!initial?.providerIntentId) {
+                throw new Error('Checkout payment attempt was not found.');
+            }
+            const providerIntentId = initial.providerIntentId;
+
+            await lockPaymentIntentForUpdate(tx, providerIntentId);
+            const [attempt, linkedBooking] = await Promise.all([
+                tx.paymentAttempt.findUniqueOrThrow({ where: { id: initial.id } }),
+                tx.booking.findFirst({
+                    where: { paymentIntentId: providerIntentId },
+                    select: { id: true },
+                }),
+            ]);
+            if (linkedBooking) {
+                throw new Error('A booking already uses this payment attempt.');
+            }
+            if (attempt.status === 'CANCELLED') {
+                return { status: 'CANCELLED', wasCancelled: false };
+            }
+            if (attempt.status === 'CAPTURED') {
+                throw new PaymentCancellationIncompleteError();
+            }
+
+            let authorization: PaymentAuthorization;
+            try {
+                authorization = await this.provider.cancelAuthorization({
+                    providerIntentId,
+                    attemptId: attempt.id,
+                });
+            } catch {
+                authorization = await this.provider.retrieveAuthorization(providerIntentId);
+            }
+            if (
+                authorization.providerIntentId !== providerIntentId
+                || authorization.status !== 'CANCELLED'
+            ) {
+                throw new PaymentCancellationIncompleteError();
+            }
+            await tx.paymentAttempt.update({
+                where: { id: attempt.id },
+                data: { status: 'CANCELLED' },
+            });
+            return { status: 'CANCELLED', wasCancelled: true };
+        }, { maxWait: 5_000, timeout: 15_000 });
     }
 }

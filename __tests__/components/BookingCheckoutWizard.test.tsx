@@ -599,6 +599,73 @@ describe('BookingCheckoutWizard', () => {
         expect(mockBookFlightAction).not.toHaveBeenCalled();
     });
 
+    it('keeps a secured booking retryable when capture confirmation is interrupted', async () => {
+        mockStartCheckoutPaymentAction
+            .mockResolvedValueOnce({
+                amountCents: 10_000,
+                currency: 'USD',
+                clientSecret: 'pi_secret_for_elements',
+                publishableKey: 'pk_test_public',
+                status: 'REQUIRES_PAYMENT_METHOD',
+            })
+            .mockResolvedValueOnce({
+                amountCents: 10_000,
+                currency: 'USD',
+                clientSecret: 'pi_secret_for_elements',
+                publishableKey: 'pk_test_public',
+                status: 'AUTHORIZED',
+            })
+            .mockRejectedValueOnce(new Error('provider response contained sensitive data'));
+        mockBookFlightAction.mockResolvedValue({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'Your booking and seats are secured, but payment capture is still being confirmed. Try again to finish payment.',
+                fields: {
+                    'payment.capture': [
+                        'Your booking and seats are secured, but payment capture is still being confirmed. Try again to finish payment.',
+                    ],
+                },
+            },
+        });
+
+        const { container } = render(
+            <BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />
+        );
+        fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Ada' } });
+        fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Lovelace' } });
+        fireEvent.change(container.querySelector('input[type="date"]')!, {
+            target: { value: '1990-01-01' },
+        });
+        fireEvent.change(screen.getByPlaceholderText('A00000000'), {
+            target: { value: 'US5550000' },
+        });
+        fireEvent.click(screen.getByText('Select Seats →'));
+        fireEvent.click(screen.getByTitle('Select Seat 11A'));
+        fireEvent.click(screen.getByText('Review Booking →'));
+        await screen.findByText('Review Booking');
+        const paymentButton = await preparePayment('$100');
+
+        fireEvent.click(paymentButton);
+        const captureAlert = await screen.findByRole('alert');
+        expect(captureAlert).toHaveTextContent('Your booking and seats are secured');
+        await waitFor(() => expect(captureAlert).toHaveFocus());
+        expect(screen.getByText(
+            'Stripe authorized $100. Finish payment capture to complete this booking.',
+        )).toBeInTheDocument();
+        expect(screen.queryByText('This step does not capture funds.', { exact: false }))
+            .not.toBeInTheDocument();
+        expect(paymentButton).toBeEnabled();
+
+        fireEvent.click(paymentButton);
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Your booking and seats remain secured, but we could not verify payment capture just now. Try again.',
+        );
+        expect(screen.getByRole('alert')).not.toHaveTextContent('No booking has been created yet.');
+        expect(screen.getByRole('alert')).not.toHaveTextContent(/sensitive data/i);
+        expect(mockBookFlightAction).toHaveBeenCalledTimes(1);
+    });
+
     it('shows a recoverable error when secure payment preparation fails', async () => {
         mockStartCheckoutPaymentAction.mockRejectedValueOnce(new Error('Stripe unavailable'));
 

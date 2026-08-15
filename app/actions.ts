@@ -10,7 +10,10 @@ import {
 import { heldSeats } from '@/lib/seatOccupancy';
 import TravelGuideService from '@/lib/TravelGuideService';
 import FlightBookingService, { PassengerInput } from '@/lib/FlightBookingService';
-import { CheckoutPaymentService } from '@/lib/checkoutPaymentService';
+import {
+    CheckoutPaymentService,
+    PaymentCaptureIncompleteError,
+} from '@/lib/checkoutPaymentService';
 import { createStripePaymentProvider, getStripePublishableKey } from '@/lib/stripePaymentProvider';
 import CityGuide from '@/lib/types/CityGuide';
 import { getServerSession } from 'next-auth';
@@ -330,8 +333,10 @@ export async function bookFlightAction(bookingData: {
     bookingData = parsed.data as typeof bookingData;
 
     let result;
+    let capture;
+    const paymentService = new CheckoutPaymentService(createStripePaymentProvider());
     try {
-        const payment = await new CheckoutPaymentService(createStripePaymentProvider()).startPayment({
+        const payment = await paymentService.startPayment({
             checkoutId: bookingData.idempotencyKey,
             flightIds: bookingData.flightIds,
             passengers: bookingData.passengers.map(passenger => ({
@@ -348,10 +353,40 @@ export async function bookFlightAction(bookingData: {
             flightIds: bookingData.flightIds,
             userId,
             passengers: bookingData.passengers,
-            idempotencyKey: bookingData.idempotencyKey
+            idempotencyKey: bookingData.idempotencyKey,
+            paymentIntentId: payment.providerIntentId,
         });
+        try {
+            capture = await paymentService.capturePayment({
+                userId,
+                checkoutId: bookingData.idempotencyKey,
+                bookingId: result.id,
+            });
+        } catch {
+            // The booking transaction has committed at this point. Whatever
+            // failed at the provider/settlement boundary, the truthful and
+            // safe recovery state is a secured booking with capture pending.
+            throw new PaymentCaptureIncompleteError();
+        }
     } catch (error) {
+        if (error instanceof PaymentCaptureIncompleteError) {
+            return actionValidationFailure(
+                'Your booking and seats are secured, but payment capture is still being confirmed. Try again to finish payment.',
+                'payment.capture',
+            );
+        }
         if (!(error instanceof SeatHoldUnavailableError)) throw error;
+
+        try {
+            await paymentService.cancelPayment({
+                userId,
+                checkoutId: bookingData.idempotencyKey,
+            });
+        } catch {
+            // The seat error remains the useful recovery path. Stripe will
+            // expire an authorization that cannot be cancelled immediately,
+            // while a later webhook still reconciles its durable state.
+        }
 
         const legIndex = bookingData.flightIds.indexOf(error.claim.flightId);
         const passengerIndex = bookingData.passengers.findIndex(
@@ -371,7 +406,7 @@ export async function bookFlightAction(bookingData: {
             where: { id: outboundFlightId },
             include: flightRouteInclude,
         });
-        if (flight && result.wasCreated) {
+        if (flight && (result.wasCreated || capture.wasCaptured)) {
             const points = Math.floor(bookingTotalCents(result, flight) / 100);
             await prisma.notification.create({
                 data: {
@@ -408,7 +443,13 @@ export async function startCheckoutPaymentAction(paymentData: {
     const service = new CheckoutPaymentService(createStripePaymentProvider());
     try {
         const result = await service.startPayment({ ...parsed.data, userId });
-        return { ...result, publishableKey: getStripePublishableKey() };
+        return {
+            amountCents: result.amountCents,
+            currency: result.currency,
+            clientSecret: result.clientSecret,
+            status: result.status,
+            publishableKey: getStripePublishableKey(),
+        };
     } catch (error) {
         if (!(error instanceof SeatHoldUnavailableError)) throw error;
 

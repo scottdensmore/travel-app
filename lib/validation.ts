@@ -347,7 +347,10 @@ export const bookingRequestSchema = z.object({
 });
 
 export const flightBookingServiceSchema = bookingRequestSchema.extend({
-    userId: requiredText('User ID', 128)
+    userId: requiredText('User ID', 128),
+    // This is a server-owned value. The default preserves older internal
+    // callers and legacy bookings; the checkout action always supplies it.
+    paymentIntentId: requiredText('Payment intent ID', 255).nullable().default(null),
 });
 
 const seatChangeSchema = z.object({

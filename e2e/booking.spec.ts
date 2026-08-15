@@ -173,8 +173,15 @@ test.describe('Flight Booking Journey', () => {
     });
     const expectedTotal = calculateItineraryTotal([targetFlight.priceCents], [{ cabinClass: 'ECONOMY' }]);
     expect(persistedBooking.totalPriceCents).toBe(expectedTotal.cents);
-    expect(persistedBooking.paymentIntentId).toBeNull();
+    expect(persistedBooking.paymentIntentId).toMatch(/^pi_playwright_/);
     expect(persistedBooking.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/i);
+    await expect(prisma.paymentAttempt.findUniqueOrThrow({
+      where: { providerIntentId: persistedBooking.paymentIntentId! }
+    })).resolves.toMatchObject({
+      checkoutId: persistedBooking.idempotencyKey,
+      amountCents: expectedTotal.cents,
+      status: 'CAPTURED'
+    });
     
     // Navigate to profile bookings
     await page.click('a:has-text("View Profile Bookings")');
