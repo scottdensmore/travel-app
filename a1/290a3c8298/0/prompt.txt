@@ -1,0 +1,22 @@
+Ok lets do that
+
+---
+
+<environment_context>
+  <current_date>2026-08-15</current_date>
+  <timezone>America/Los_Angeles</timezone>
+  <filesystem><workspace_roots><root>/home/scottdensmore/Developer/scottdensmore/travel-app</root></workspace_roots><permission_profile type="managed"><file_system type="restricted"><entry access="read"><special>:root</special></entry><entry access="write"><path>/home/scottdensmore/Developer/scottdensmore/travel-app</path></entry><entry access="write"><special>:slash_tmp</special></entry><entry access="write"><special>:tmpdir</special></entry><entry access="read"><path>/home/scottdensmore/Developer/scottdensmore/travel-app/.git</path></entry><entry access="read"><path>/home/scottdensmore/Developer/scottdensmore/travel-app/.agents</path></entry><entry access="read"><path>/home/scottdensmore/Developer/scottdensmore/travel-app/.codex</path></entry></file_system></permission_profile></filesystem>
+  <subagents>
+    - ui_review: Locke
+    - verifier: Herschel
+    - wizard_test_triage: Sartre
+  </subagents>
+</environment_context>
+
+---
+
+What is next
+
+---
+
+Ok lets do the next slice
