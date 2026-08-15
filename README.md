@@ -63,21 +63,25 @@ locally generated secrets:
   32 random bytes generated with `openssl rand -base64 32`.
 - `STAFF_MFA_ENCRYPTION_KEYS`: the same format, using a different random key.
 
-Starting a checkout payment also requires `STRIPE_SECRET_KEY`. Use a Stripe
-test-mode secret key for local development; the application sends only the
-server-calculated amount and its internal payment-attempt ID to Stripe. Signed
-payment status delivery at `POST /api/stripe/webhook` additionally requires
-`STRIPE_WEBHOOK_SECRET`. To forward test events locally, run:
+Starting a checkout payment requires a matching Stripe test-mode
+`STRIPE_SECRET_KEY` and `STRIPE_PUBLISHABLE_KEY`. The application sends only
+the server-calculated amount and its internal payment-attempt ID to Stripe,
+then embeds Stripe's hosted Payment Element. Signed payment status delivery at
+`POST /api/stripe/webhook` additionally requires `STRIPE_WEBHOOK_SECRET`. To
+forward test events locally, run:
 
 ```bash
 stripe listen --forward-to localhost:3000/api/stripe/webhook
 ```
 
 Copy the command's `whsec_...` signing secret into `.env`; do not commit it.
-Card details belong in Stripe Elements and must never be added to `.env`, an
-action, a webhook log, or this application's database. The application stores
-only the event ID, event type, PaymentIntent ID and local payment-attempt link
-after a successful reconciliation; it does not retain webhook request bodies.
+Card details belong in Stripe Elements and must never be added to `.env`, React
+state, an action, a webhook log, or this application's database. The
+publishable key and PaymentIntent client secret configure Stripe's browser
+library; hosted fields send card details directly to Stripe. The application
+stores only the event ID, event type, PaymentIntent ID and local
+payment-attempt link after successful reconciliation; it does not retain
+webhook request bodies or client secrets.
 
 Never commit `.env` or reuse its local values in a deployment.
 

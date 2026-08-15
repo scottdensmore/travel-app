@@ -7,12 +7,13 @@ import Link from 'next/link';
 // browser. SWC elides this today because the binding is only used as a type —
 // this makes that a guarantee rather than an optimisation.
 import type { PassengerInput } from '@/lib/FlightBookingService';
-import { bookFlightAction, holdChosenSeatsAction } from '@/app/actions';
-import { isActionValidationFailure } from '@/lib/actionResult';
+import { bookFlightAction, holdChosenSeatsAction, startCheckoutPaymentAction } from '@/app/actions';
+import { isActionValidationFailure, type ActionValidationFailure } from '@/lib/actionResult';
 import { CABIN_FARE_PERCENT, calculatePassengerFareCents, flightFareCents, formatPrice } from '@/lib/bookingPricing';
 import { BRAND } from '@/lib/brand';
 import { cabinLabel, legDirectionLabel } from '@/lib/bookingItinerary';
 import { flightDeparture } from '@/lib/flightTime';
+import CheckoutPaymentForm from '@/components/ui/CheckoutPaymentForm';
 
 interface Flight {
     id: number;
@@ -178,6 +179,13 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
     const [serverFieldErrors, setServerFieldErrors] = useState<Record<string, string[]>>({});
     const [holdDeadline, setHoldDeadline] = useState<number | null>(null);
     const [holdSecondsRemaining, setHoldSecondsRemaining] = useState(0);
+    const [paymentSession, setPaymentSession] = useState<{
+        amountCents: number;
+        currency: string;
+        clientSecret: string;
+        publishableKey: string;
+    } | null>(null);
+    const [isPreparingPayment, setIsPreparingPayment] = useState(false);
     const [bookingResult, setBookingResult] = useState<{
         id: number;
         totalPriceCents: number | null;
@@ -316,8 +324,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
             // An expired session or a dropped connection. Without this the
             // promise rejects into nothing: no message, and a button that
             // simply stops working.
-            errorClaimsFocus.current = true;
-            setErrorMessage('We could not hold those seats just now. Please try again.');
+            showFocusedError('We could not hold those seats just now. Please try again.');
             return false;
         }
 
@@ -362,8 +369,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
             // "Being held" rather than "taken": the other checkout may yet be
             // abandoned, and claiming a sale that has not happened is often
             // untrue. A checkout may belong to this same signed-in customer.
-            errorClaimsFocus.current = true;
-            setErrorMessage(
+            showFocusedError(
                 names.length === 1
                     ? `Seat ${names[0]} is being held in another checkout. Please choose a different one.`
                     : `Seats ${names.join(' and ')} are being held in other checkouts. Please choose different ones.`,
@@ -371,13 +377,13 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
             return false;
         }
 
-        errorClaimsFocus.current = true;
-        setErrorMessage(result.error?.message ?? 'Those seats could not be held. Please try again.');
+        showFocusedError(result.error?.message ?? 'Those seats could not be held. Please try again.');
         return false;
     };
 
     const errorRef = useRef<HTMLDivElement | null>(null);
     const confirmationHeadingRef = useRef<HTMLHeadingElement | null>(null);
+    const paymentHeadingRef = useRef<HTMLHeadingElement | null>(null);
     /**
      * Whether this error is the banner's to own.
      *
@@ -387,6 +393,10 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
      */
     const errorClaimsFocus = useRef(false);
     const pendingValidationFocusPath = useRef<string | null>(null);
+    const showFocusedError = (message: string) => {
+        errorClaimsFocus.current = true;
+        setErrorMessage(message);
+    };
 
     /**
      * Put the error where the customer is looking.
@@ -433,6 +443,12 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
     }, [bookingResult, step]);
 
     useEffect(() => {
+        if (step === 3 && paymentSession) {
+            paymentHeadingRef.current?.focus();
+        }
+    }, [paymentSession, step]);
+
+    useEffect(() => {
         if (step !== 3 || holdDeadline === null) return;
 
         const reconcileWithDeadline = () => {
@@ -458,6 +474,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
         if (step !== 3 || holdDeadline === null || holdSecondsRemaining !== 0) return;
 
         setHoldDeadline(null);
+        setPaymentSession(null);
         setActiveLegIndex(0);
         setActivePassengerIndex(0);
         setPassengers(current => current.map(passenger => ({
@@ -764,6 +781,77 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
         setHoveredSuggestedSeats([]);
     };
 
+    const routeActionValidationFailure = (failure: ActionValidationFailure) => {
+        setErrorMessage(failure.error.message);
+        setServerFieldErrors(failure.error.fields);
+        const firstFieldPath = Object.keys(failure.error.fields)[0];
+        const passengerMatch = /^passengers\.(\d+)\.(\w+)(?:\.\d+)?$/.exec(firstFieldPath || '');
+        if (!passengerMatch) return;
+
+        const passengerIndex = Number(passengerMatch[1]);
+        pendingValidationFocusPath.current = firstFieldPath.replace(
+            /^(passengers\.\d+\.seatNumbers)(?:\.\d+)?$/,
+            'passengers.$#.seatNumber',
+        ).replace('$#', String(passengerIndex));
+        setActivePassengerIndex(passengerIndex);
+        setStep(passengerMatch[2] === 'seatNumbers' ? 2 : 1);
+
+        const legMatch = /^passengers\.\d+\.seatNumbers\.(\d+)$/.exec(firstFieldPath);
+        if (!legMatch) return;
+
+        const legIndex = Number(legMatch[1]);
+        setActiveLegIndex(legIndex);
+        setPaymentSession(null);
+        idempotencyKeyRef.current = null;
+        setPassengers(current => current.map((passenger, index) => (
+            index === passengerIndex
+                ? {
+                    ...passenger,
+                    seatNumbers: passenger.seatNumbers.map((seat, index) =>
+                        index === legIndex ? '' : seat),
+                }
+                : passenger
+        )));
+    };
+
+    const checkoutPaymentInput = () => ({
+        checkoutId: idempotencyKeyRef.current!,
+        flightIds: flights.map(leg => leg.id),
+        passengers: passengers.map(passenger => ({
+            seatNumbers: passenger.seatNumbers,
+            cabinClass: passenger.cabinClass,
+        })),
+    });
+
+    const handlePreparePayment = async () => {
+        if (holdDeadline === null || holdDeadline <= Date.now() || isPreparingPayment) {
+            setHoldSecondsRemaining(0);
+            return;
+        }
+
+        setIsPreparingPayment(true);
+        setErrorMessage(null);
+        setServerFieldErrors({});
+        try {
+            idempotencyKeyRef.current ??= createBookingRequestId();
+            const result = await startCheckoutPaymentAction(checkoutPaymentInput());
+            if (isActionValidationFailure(result)) {
+                routeActionValidationFailure(result);
+                return;
+            }
+            setPaymentSession({
+                amountCents: result.amountCents,
+                currency: result.currency,
+                clientSecret: result.clientSecret,
+                publishableKey: result.publishableKey,
+            });
+        } catch {
+            showFocusedError('We could not prepare secure payment just now. Please try again.');
+        } finally {
+            setIsPreparingPayment(false);
+        }
+    };
+
     const handleSubmitBooking = async () => {
         if (holdDeadline === null || holdDeadline <= Date.now()) {
             setHoldSecondsRemaining(0);
@@ -787,6 +875,26 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
             }));
 
             idempotencyKeyRef.current ??= createBookingRequestId();
+            let payment;
+            try {
+                payment = await startCheckoutPaymentAction(checkoutPaymentInput());
+            } catch {
+                showFocusedError(
+                    'We could not verify the payment authorization just now. No booking has been created yet.',
+                );
+                return;
+            }
+            if (isActionValidationFailure(payment)) {
+                routeActionValidationFailure(payment);
+                return;
+            }
+            if (payment.status !== 'AUTHORIZED' && payment.status !== 'CAPTURED') {
+                showFocusedError(payment.status === 'PROCESSING'
+                    ? 'Your payment is still processing. No booking has been created yet.'
+                    : 'Stripe has not authorized this payment. No booking has been created yet.');
+                return;
+            }
+
             const result = await bookFlightAction({
                 flightIds: flights.map(leg => leg.id),
                 passengers: formattedPassengers,
@@ -794,41 +902,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
             });
 
             if (isActionValidationFailure(result)) {
-                setErrorMessage(result.error.message);
-                setServerFieldErrors(result.error.fields);
-                const firstFieldPath = Object.keys(result.error.fields)[0];
-                const passengerMatch = /^passengers\.(\d+)\.(\w+)(?:\.\d+)?$/.exec(firstFieldPath || '');
-                if (passengerMatch) {
-                    const passengerIndex = Number(passengerMatch[1]);
-                    // A seat error names its leg, so the path carries a
-                    // trailing index the target element does not.
-                    pendingValidationFocusPath.current = firstFieldPath.replace(
-                        /^(passengers\.\d+\.seatNumbers)(?:\.\d+)?$/,
-                        'passengers.$#.seatNumber',
-                    ).replace('$#', String(passengerIndex));
-                    setActivePassengerIndex(passengerIndex);
-                    setStep(passengerMatch[2] === 'seatNumbers' ? 2 : 1);
-                    // The trailing index names the leg, so show the map the
-                    // error is about rather than whichever leg was open.
-                    const legMatch = /^passengers\.\d+\.seatNumbers\.(\d+)$/.exec(firstFieldPath);
-                    if (legMatch) {
-                        const legIndex = Number(legMatch[1]);
-                        setActiveLegIndex(legIndex);
-                        // A failed conversion means this checkout no longer
-                        // owns the displayed selection. Clear it before
-                        // returning to the map so Confirm cannot repeat the
-                        // same impossible request.
-                        setPassengers(current => current.map((passenger, index) => (
-                            index === passengerIndex
-                                ? {
-                                    ...passenger,
-                                    seatNumbers: passenger.seatNumbers.map((seat, index) =>
-                                        index === legIndex ? '' : seat),
-                                }
-                                : passenger
-                        )));
-                    }
-                }
+                routeActionValidationFailure(result);
                 return;
             }
 
@@ -853,9 +927,8 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                 }))
             });
             setStep(4);
-        } catch (error: unknown) {
-            const msg = error instanceof Error ? error.message : 'We couldn’t confirm your booking. Please try again.';
-            setErrorMessage(msg);
+        } catch {
+            showFocusedError('We couldn’t confirm your booking. Please try again.');
         } finally {
             setIsSubmitting(false);
         }
@@ -1549,33 +1622,52 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                                 </div>
                             </div>
                             <p role="note" style={{ color: 'rgba(255,255,255,0.65)', margin: '1rem 0 0', fontSize: '0.9rem' }}>
-                                Payment is not collected in this demo. The server will confirm the current fare and seat availability when you book.
+                                The server confirms the current fare and seat hold before Stripe securely collects payment details.
                             </p>
                         </div>
 
-                        {isSubmitting && (
-                            <p role="status" aria-live="polite" style={{ color: '#a7f3d0', margin: '0 0 1rem', fontWeight: 600 }}>
-                                Confirming booking and checking availability.
-                            </p>
+                        {paymentSession ? (
+                            <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1.5rem' }}>
+                                <h3
+                                    ref={paymentHeadingRef}
+                                    tabIndex={-1}
+                                    className="booking-payment-heading"
+                                    style={{ color: '#c084fc', margin: '0 0 0.5rem' }}
+                                >
+                                    Secure payment
+                                </h3>
+                                <p style={{ color: 'rgba(255,255,255,0.65)', margin: '0 0 1rem' }}>
+                                    Stripe will authorize {formatPrice(paymentSession.amountCents)}. This step does not capture funds.
+                                </p>
+                                <CheckoutPaymentForm
+                                    publishableKey={paymentSession.publishableKey}
+                                    clientSecret={paymentSession.clientSecret}
+                                    amountDisplay={formatPrice(paymentSession.amountCents)}
+                                    disabled={holdSecondsRemaining === 0}
+                                    submitting={isSubmitting}
+                                    onConfirmed={handleSubmitBooking}
+                                />
+                            </div>
+                        ) : (
+                            <div className="booking-wizard-actions booking-review-actions">
+                                <button
+                                    type="button"
+                                    onClick={handlePrevStep}
+                                    disabled={isPreparingPayment}
+                                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
+                                    ← Back
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handlePreparePayment}
+                                    disabled={isPreparingPayment || holdSecondsRemaining === 0}
+                                    aria-busy={isPreparingPayment}
+                                    aria-describedby="seat-hold-timer"
+                                    style={{ backgroundColor: '#8b5cf6', color: '#fff', border: 'none', padding: '12px 32px', borderRadius: '8px', cursor: isPreparingPayment || holdSecondsRemaining === 0 ? 'not-allowed' : 'pointer', opacity: isPreparingPayment || holdSecondsRemaining === 0 ? 0.65 : 1, fontWeight: 'bold' }}>
+                                    {isPreparingPayment ? 'Preparing secure payment…' : 'Continue to secure payment'}
+                                </button>
+                            </div>
                         )}
-                        <div className="booking-wizard-actions booking-review-actions">
-                            <button
-                                type="button"
-                                onClick={handlePrevStep}
-                                disabled={isSubmitting}
-                                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
-                                ← Back
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handleSubmitBooking}
-                                disabled={isSubmitting || holdSecondsRemaining === 0}
-                                aria-busy={isSubmitting}
-                                aria-describedby="seat-hold-timer"
-                                style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '12px 32px', borderRadius: '8px', cursor: isSubmitting || holdSecondsRemaining === 0 ? 'not-allowed' : 'pointer', opacity: isSubmitting || holdSecondsRemaining === 0 ? 0.65 : 1, fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                                {isSubmitting ? 'Confirming Booking...' : `Confirm ${totalPriceDisplay} booking`}
-                            </button>
-                        </div>
                     </div>
                 )}
 
@@ -1604,7 +1696,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                         >
                             Booking Confirmed!
                         </h2>
-                        <p style={{ color: 'rgba(255,255,255,0.6)', marginBottom: '0.5rem' }}>Your booking is confirmed. Payment is not collected in this demo.</p>
+                        <p style={{ color: 'rgba(255,255,255,0.6)', marginBottom: '0.5rem' }}>Your booking was created after Stripe approved the payment.</p>
                         <p style={{ color: '#34d399', marginBottom: '2rem', fontWeight: 'bold' }}>Confirmed total: {bookingResult.totalPriceCents !== null ? formatPrice(bookingResult.totalPriceCents) : totalPriceDisplay}</p>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', alignItems: 'center', marginBottom: '2.5rem' }}>

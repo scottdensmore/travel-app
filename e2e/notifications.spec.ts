@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { prisma } from '../lib/prisma';
 import { flightRouteInclude } from '@/lib/flightRoute';
 import { createVerifiedAccount, signInWithCredentials } from './helpers/auth';
+import { completeCheckoutPayment } from './helpers/checkoutPayment';
 
 test.describe('User Notifications & Alerts Journey', () => {
   const uniqueEmail = `notiftest-${Date.now()}@example.com`;
@@ -38,6 +39,9 @@ test.describe('User Notifications & Alerts Journey', () => {
           where: { userId: user.id }
         });
         await prisma.notification.deleteMany({
+          where: { userId: user.id }
+        });
+        await prisma.paymentAttempt.deleteMany({
           where: { userId: user.id }
         });
         await prisma.user.delete({
@@ -109,7 +113,7 @@ test.describe('User Notifications & Alerts Journey', () => {
 
     // Confirm booking
     await expect(page.locator('h2:has-text("Review Booking")')).toBeVisible();
-    await page.click('button:has-text("Confirm $")');
+    await completeCheckoutPayment(page);
 
     // Expect confirmation
     await expect(page.locator('h2:has-text("Booking Confirmed!")')).toBeVisible({ timeout: 12000 });

@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { flightRouteInclude, withRouteLabels } from '@/lib/flightRoute';
 import { calculateItineraryTotal } from '../lib/bookingPricing';
 import { registerAndSignIn } from './helpers/auth';
+import { completeCheckoutPayment, openCheckoutPayment } from './helpers/checkoutPayment';
 
 test.describe('Flight Booking Journey', () => {
   const runId = Date.now();
@@ -43,6 +44,9 @@ test.describe('Flight Booking Journey', () => {
           });
         }
         await prisma.booking.deleteMany({
+          where: { userId: user.id }
+        });
+        await prisma.paymentAttempt.deleteMany({
           where: { userId: user.id }
         });
         await prisma.user.delete({
@@ -142,20 +146,21 @@ test.describe('Flight Booking Journey', () => {
     await expect(page.getByTestId('review-leg')).toContainText('Seat 11A');
     await expect(page.locator('text=Class: Economy').first()).toBeVisible();
 
-    await expect(page.locator('text=Payment is not collected in this demo')).toBeVisible();
+    await expect(page.getByText(/server confirms the current fare and seat hold/i)).toBeVisible();
     await expect(page.locator('input[placeholder="4111 2222 3333 4444"]')).not.toBeVisible();
 
     const reviewActions = page.locator('.booking-review-actions');
     await expect(reviewActions).toHaveCSS('flex-direction', 'column');
-    const confirmButton = page.locator('button:has-text("Confirm $")');
+    const confirmButton = page.getByRole('button', { name: 'Continue to secure payment' });
     const actionsBox = await reviewActions.boundingBox();
     const confirmBox = await confirmButton.boundingBox();
     expect(actionsBox).not.toBeNull();
     expect(confirmBox).not.toBeNull();
     expect(confirmBox!.width).toBeLessThanOrEqual(actionsBox!.width);
 
-    // Confirm Booking
-    await confirmButton.click();
+    // Authorize payment through the guarded E2E provider, then confirm.
+    const authorizeButton = await openCheckoutPayment(page);
+    await authorizeButton.click();
 
     // --- STEP 4: Success & Boarding Pass ---
     await expect(page.locator('h2:has-text("Booking Confirmed!")')).toBeVisible({ timeout: 10000 });
@@ -266,7 +271,7 @@ test.describe('Flight Booking Journey', () => {
     await page.getByRole('button', { name: 'Review Booking →' }).click();
 
     await expect(page.getByRole('timer')).toContainText(/Seat hold expires in (?:09:\d{2}|10:00)/);
-    const confirmButton = page.getByRole('button', { name: /Confirm .* booking/ });
+    const confirmButton = page.getByRole('button', { name: 'Continue to secure payment' });
     await page.getByRole('button', { name: '← Back' }).focus();
     await page.keyboard.press('Tab');
     await expect(confirmButton).toBeFocused();
@@ -367,7 +372,7 @@ test.describe('Flight Booking Journey', () => {
 
     // Completing one checkout atomically replaces only its claim with a seat
     // assignment. The other tab remains on review with its live claim.
-    await page.locator('button:has-text("Confirm $")').click();
+    await completeCheckoutPayment(page);
     await expect(page.getByRole('heading', { name: 'Booking Confirmed!' })).toBeVisible();
     await expect(prisma.seatHold.findMany({
       where: {
@@ -500,7 +505,7 @@ test.describe('Flight Booking Journey', () => {
     await expect(reviewLegs.nth(1)).toContainText('Returning');
     await expect(reviewLegs.nth(1)).toContainText(`Seat ${inboundSeatName}`);
 
-    await page.locator('button:has-text("Confirm $")').click();
+    await completeCheckoutPayment(page);
     await expect(page.locator('h2:has-text("Booking Confirmed!")')).toBeVisible({ timeout: 10000 });
 
     // --- Persistence: two legs in itinerary order, one seat on each ---

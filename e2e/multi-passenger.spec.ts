@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { flightRouteInclude } from '@/lib/flightRoute';
 import { calculateItineraryTotal } from '../lib/bookingPricing';
 import { registerAndSignIn } from './helpers/auth';
+import { completeCheckoutPayment } from './helpers/checkoutPayment';
 
 test.describe('Multi-Passenger Booking Journey', () => {
   const uniqueEmail = `multibook-${Date.now()}@example.com`;
@@ -30,6 +31,9 @@ test.describe('Multi-Passenger Booking Journey', () => {
           });
         }
         await prisma.booking.deleteMany({
+          where: { userId: user.id }
+        });
+        await prisma.paymentAttempt.deleteMany({
           where: { userId: user.id }
         });
         await prisma.user.delete({
@@ -136,8 +140,8 @@ test.describe('Multi-Passenger Booking Journey', () => {
     await expect(reviewLeg.locator('li', { hasText: 'Bob Jones' })).toContainText('Seat 11B');
     await expect(page.locator('text=Class: Economy').first()).toBeVisible();
 
-    // Confirm
-    await page.click('button:has-text("Confirm $")');
+    // Authorize through the guarded E2E payment boundary and confirm.
+    await completeCheckoutPayment(page);
 
     // --- STEP 4: Confirmation & Boarding Passes ---
     await expect(page.locator('h2:has-text("Booking Confirmed!")')).toBeVisible({ timeout: 12000 });

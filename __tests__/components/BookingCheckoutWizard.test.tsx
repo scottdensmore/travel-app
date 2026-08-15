@@ -2,16 +2,47 @@ import React from 'react';
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import BookingCheckoutWizard from '@/components/ui/BookingCheckoutWizard';
-import { bookFlightAction, holdChosenSeatsAction } from '@/app/actions';
+import { bookFlightAction, holdChosenSeatsAction, startCheckoutPaymentAction } from '@/app/actions';
 
 // Mock the server actions
 jest.mock('@/app/actions', () => ({
     bookFlightAction: jest.fn(),
     holdChosenSeatsAction: jest.fn(),
+    startCheckoutPaymentAction: jest.fn(),
+}));
+
+jest.mock('@/components/ui/CheckoutPaymentForm', () => ({
+    __esModule: true,
+    default: ({
+        amountDisplay,
+        disabled,
+        submitting,
+        onConfirmed,
+    }: {
+        amountDisplay: string;
+        disabled: boolean;
+        submitting: boolean;
+        onConfirmed: () => void;
+    }) => (
+        <div>
+            <p>Secure Stripe Payment Element</p>
+            <button
+                type="button"
+                disabled={disabled || submitting}
+                aria-busy={submitting}
+                style={{ opacity: submitting ? 0.65 : 1, cursor: submitting ? 'not-allowed' : 'pointer' }}
+                onClick={onConfirmed}
+            >
+                {submitting ? 'Confirming booking…' : `Authorize ${amountDisplay} and confirm booking`}
+            </button>
+            {submitting && <p role="status">Confirming booking and checking availability.</p>}
+        </div>
+    ),
 }));
 
 const mockBookFlightAction = bookFlightAction as jest.Mock;
 const mockHoldChosenSeatsAction = holdChosenSeatsAction as jest.Mock;
+const mockStartCheckoutPaymentAction = startCheckoutPaymentAction as jest.Mock;
 
 const sampleFlight = {
     id: 42,
@@ -26,9 +57,18 @@ const sampleFlight = {
     priceCents: 10000
 };
 
+async function preparePayment(amount: string) {
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to secure payment' }));
+    return screen.findByRole('button', { name: `Authorize ${amount} and confirm booking` });
+}
+
 describe('BookingCheckoutWizard', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        // `clearAllMocks` does not discard queued `mockResolvedValueOnce`
+        // responses. A failed test could otherwise hand its payment state to
+        // the next checkout and make the failure order-dependent.
+        mockStartCheckoutPaymentAction.mockReset();
         // Leaving the seat map holds the chosen seats (#74). Every test that
         // reaches step 3 goes through it, so the default is the ordinary
         // answer; the tests that care about a refusal say so themselves.
@@ -37,6 +77,13 @@ describe('BookingCheckoutWizard', () => {
             holdExpiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
             holdExpiresInMilliseconds: 10 * 60_000,
         });
+        mockStartCheckoutPaymentAction.mockImplementation(async ({ flightIds }) => ({
+            amountCents: flightIds.length === 2 ? 25_000 : 10_000,
+            currency: 'USD',
+            clientSecret: 'pi_secret_for_elements',
+            publishableKey: 'pk_test_public',
+            status: 'AUTHORIZED',
+        }));
     });
 
     it('renders Step 1 (Travelers) and calculates prices correctly based on cabin class and additions', async () => {
@@ -279,7 +326,7 @@ describe('BookingCheckoutWizard', () => {
             await act(async () => {});
 
             jest.setSystemTime(new Date('2026-08-14T12:01:01.000Z'));
-            fireEvent.click(screen.getByRole('button', { name: /Confirm \$100 booking/i }));
+            fireEvent.click(screen.getByRole('button', { name: 'Continue to secure payment' }));
 
             expect(screen.getByRole('heading', { name: 'Select Your Seats' })).toBeInTheDocument();
             expect(mockBookFlightAction).not.toHaveBeenCalled();
@@ -387,7 +434,22 @@ describe('BookingCheckoutWizard', () => {
         expect(screen.queryByTitle('Select Seat 11A')).not.toBeInTheDocument();
     });
 
-    it('confirms a server-priced booking without collecting payment card data', async () => {
+    it('confirms a server-priced booking through hosted payment fields without collecting card data', async () => {
+        mockStartCheckoutPaymentAction
+            .mockResolvedValueOnce({
+                amountCents: 10_000,
+                currency: 'USD',
+                clientSecret: 'pi_secret_for_elements',
+                publishableKey: 'pk_test_public',
+                status: 'REQUIRES_PAYMENT_METHOD',
+            })
+            .mockResolvedValueOnce({
+                amountCents: 10_000,
+                currency: 'USD',
+                clientSecret: 'pi_secret_for_elements',
+                publishableKey: 'pk_test_public',
+                status: 'CAPTURED',
+            });
         mockBookFlightAction.mockResolvedValue({
             id: 12345,
             totalPriceCents: 10000,
@@ -430,14 +492,18 @@ describe('BookingCheckoutWizard', () => {
         expect(screen.getByText('Estimated Total')).toBeInTheDocument();
 
         expect(screen.queryByPlaceholderText('4111 2222 3333 4444')).not.toBeInTheDocument();
-        expect(screen.getByText(/Payment is not collected in this demo/i)).toBeInTheDocument();
+        const paymentButton = await preparePayment('$100');
+        expect(screen.getByText('Secure Stripe Payment Element')).toBeInTheDocument();
+        expect(screen.queryByLabelText(/card number/i)).not.toBeInTheDocument();
 
         // Submit Booking
-        fireEvent.click(screen.getByRole('button', { name: /Confirm \$100 booking/i }));
+        fireEvent.click(paymentButton);
 
         // Wait for step 4 success page
         await waitFor(() => {
             expect(screen.getByText('Booking Confirmed!')).toBeInTheDocument();
+            expect(screen.getByText('Your booking was created after Stripe approved the payment.'))
+                .toBeInTheDocument();
             expect(mockBookFlightAction).toHaveBeenCalledTimes(1);
             expect(mockBookFlightAction).toHaveBeenCalledWith({
                 flightIds: [42],
@@ -454,6 +520,13 @@ describe('BookingCheckoutWizard', () => {
             });
         });
 
+        const checkoutId = mockHoldChosenSeatsAction.mock.calls[0][0].checkoutId;
+        expect(mockStartCheckoutPaymentAction).toHaveBeenCalledWith({
+            checkoutId,
+            flightIds: [42],
+            passengers: [{ seatNumbers: ['11C'], cabinClass: 'ECONOMY' }],
+        });
+
         // Verify Boarding Pass renders details
         expect(screen.getByText('Robert Jones')).toBeInTheDocument();
         expect(screen.getByText('GA404')).toBeInTheDocument();
@@ -461,8 +534,125 @@ describe('BookingCheckoutWizard', () => {
         expect(screen.getByText('Economy')).toBeInTheDocument();
     });
 
-    it('shows action booking submission error on API failure', async () => {
-        mockBookFlightAction.mockRejectedValue(new Error('Seats already taken!'));
+    it('does not create a booking when the server has not observed authorization', async () => {
+        mockStartCheckoutPaymentAction
+            .mockResolvedValueOnce({
+                amountCents: 10_000,
+                currency: 'USD',
+                clientSecret: 'pi_secret_for_elements',
+                publishableKey: 'pk_test_public',
+                status: 'REQUIRES_PAYMENT_METHOD',
+            })
+            .mockResolvedValueOnce({
+                amountCents: 10_000,
+                currency: 'USD',
+                clientSecret: 'pi_secret_for_elements',
+                publishableKey: 'pk_test_public',
+                status: 'PROCESSING',
+            });
+
+        const { container } = render(<BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />);
+        fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Ada' } });
+        fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Lovelace' } });
+        fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1990-01-01' } });
+        fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US5550000' } });
+        fireEvent.click(screen.getByText('Select Seats →'));
+        fireEvent.click(screen.getByTitle('Select Seat 11A'));
+        fireEvent.click(screen.getByText('Review Booking →'));
+        await screen.findByText('Review Booking');
+
+        fireEvent.click(await preparePayment('$100'));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Your payment is still processing. No booking has been created yet.',
+        );
+        expect(mockBookFlightAction).not.toHaveBeenCalled();
+    });
+
+    it('does not expose a Stripe server error when authorization cannot be rechecked', async () => {
+        mockStartCheckoutPaymentAction
+            .mockResolvedValueOnce({
+                amountCents: 10_000,
+                currency: 'USD',
+                clientSecret: 'pi_secret_for_elements',
+                publishableKey: 'pk_test_public',
+                status: 'REQUIRES_PAYMENT_METHOD',
+            })
+            .mockRejectedValueOnce(new Error('provider request included a sensitive value'));
+
+        const { container } = render(<BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />);
+        fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Ada' } });
+        fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Lovelace' } });
+        fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1990-01-01' } });
+        fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US5550000' } });
+        fireEvent.click(screen.getByText('Select Seats →'));
+        fireEvent.click(screen.getByTitle('Select Seat 11A'));
+        fireEvent.click(screen.getByText('Review Booking →'));
+        await screen.findByText('Review Booking');
+
+        fireEvent.click(await preparePayment('$100'));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'We could not verify the payment authorization just now. No booking has been created yet.',
+        );
+        expect(screen.queryByText(/sensitive value/i)).not.toBeInTheDocument();
+        expect(mockBookFlightAction).not.toHaveBeenCalled();
+    });
+
+    it('shows a recoverable error when secure payment preparation fails', async () => {
+        mockStartCheckoutPaymentAction.mockRejectedValueOnce(new Error('Stripe unavailable'));
+
+        const { container } = render(<BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />);
+        fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Ada' } });
+        fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Lovelace' } });
+        fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1990-01-01' } });
+        fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US5550000' } });
+        fireEvent.click(screen.getByText('Select Seats →'));
+        fireEvent.click(screen.getByTitle('Select Seat 11A'));
+        fireEvent.click(screen.getByText('Review Booking →'));
+        await screen.findByText('Review Booking');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Continue to secure payment' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'We could not prepare secure payment just now. Please try again.',
+        );
+        expect(screen.getByRole('button', { name: 'Continue to secure payment' })).toBeEnabled();
+        expect(mockBookFlightAction).not.toHaveBeenCalled();
+    });
+
+    it('uses the server-priced amount in the authorization action', async () => {
+        mockStartCheckoutPaymentAction.mockResolvedValueOnce({
+            amountCents: 12_345,
+            currency: 'USD',
+            clientSecret: 'pi_secret_for_elements',
+            publishableKey: 'pk_test_public',
+            status: 'REQUIRES_PAYMENT_METHOD',
+        });
+
+        const { container } = render(<BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />);
+        fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Ada' } });
+        fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Lovelace' } });
+        fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1990-01-01' } });
+        fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US5550000' } });
+        fireEvent.click(screen.getByText('Select Seats →'));
+        fireEvent.click(screen.getByTitle('Select Seat 11A'));
+        fireEvent.click(screen.getByText('Review Booking →'));
+        await screen.findByText('Review Booking');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Continue to secure payment' }));
+
+        const paymentHeading = await screen.findByRole('heading', { name: 'Secure payment' });
+        await waitFor(() => expect(paymentHeading).toHaveFocus());
+        expect(await screen.findByRole('button', {
+            name: 'Authorize $123.45 and confirm booking',
+        })).toBeEnabled();
+        expect(screen.getByText('Stripe will authorize $123.45. This step does not capture funds.'))
+            .toBeInTheDocument();
+    });
+
+    it('does not expose a server error when booking fails after payment authorization', async () => {
+        mockBookFlightAction.mockRejectedValue(new Error('provider request included a sensitive value'));
 
         const { container } = render(<BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />);
 
@@ -483,12 +673,11 @@ describe('BookingCheckoutWizard', () => {
         await screen.findByText('Review Booking');
 
         // Submit Booking
-        fireEvent.click(screen.getByRole('button', { name: /Confirm \$100 booking/i }));
+        fireEvent.click(await preparePayment('$100'));
 
-        // Check if error is displayed
-        await waitFor(() => {
-            expect(screen.getByText(/Seats already taken!/i)).toBeInTheDocument();
-        });
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent('We couldn’t confirm your booking. Please try again.');
+        expect(alert).not.toHaveTextContent(/sensitive value/i);
     });
 
     it('announces and visibly disables the confirmation action while booking', async () => {
@@ -513,18 +702,21 @@ describe('BookingCheckoutWizard', () => {
         // after the click rather than during it.
         await screen.findByText('Review Booking');
 
-        fireEvent.click(screen.getByRole('button', { name: /Confirm \$100 booking/i }));
+        fireEvent.click(await preparePayment('$100'));
 
-        const pendingButton = screen.getByRole('button', { name: /Confirming Booking/i });
+        const pendingButton = screen.getByRole('button', { name: /Confirming booking/i });
         expect(pendingButton).toBeDisabled();
         expect(pendingButton).toHaveAttribute('aria-busy', 'true');
         expect(pendingButton).toHaveStyle({ opacity: '0.65', cursor: 'not-allowed' });
         expect(screen.getByRole('status')).toHaveTextContent('Confirming booking and checking availability.');
 
-        resolveBooking({
-            id: 12345,
-            totalPriceCents: 10000,
-            passengers: [{ firstName: 'Bob', lastName: 'Jones', seatNumbers: ['11C'], cabinClass: 'ECONOMY' }]
+        await waitFor(() => expect(mockBookFlightAction).toHaveBeenCalledTimes(1));
+        await act(async () => {
+            resolveBooking({
+                id: 12345,
+                totalPriceCents: 10000,
+                passengers: [{ firstName: 'Bob', lastName: 'Jones', seatNumbers: ['11C'], cabinClass: 'ECONOMY' }]
+            });
         });
         const confirmationHeading = await screen.findByRole('heading', { name: 'Booking Confirmed!' });
         await waitFor(() => expect(confirmationHeading).toHaveFocus());
@@ -544,7 +736,7 @@ describe('BookingCheckoutWizard', () => {
         // Advancing now awaits the seat hold (#74), so step 3 arrives
         // after the click rather than during it.
         await screen.findByText('Review Booking');
-        fireEvent.click(screen.getByRole('button', { name: /Confirm \$100 booking/i }));
+        fireEvent.click(await preparePayment('$100'));
 
         await waitFor(() => {
             expect(screen.getByRole('alert')).toHaveTextContent('We couldn’t confirm your booking. Please try again.');
@@ -573,7 +765,7 @@ describe('BookingCheckoutWizard', () => {
         // Advancing now awaits the seat hold (#74), so step 3 arrives
         // after the click rather than during it.
         await screen.findByText('Review Booking');
-        fireEvent.click(screen.getByRole('button', { name: /Confirm \$100 booking/i }));
+        fireEvent.click(await preparePayment('$100'));
 
         await waitFor(() => expect(screen.getByText('Traveler Information')).toBeInTheDocument());
         expect(screen.getByRole('alert')).toHaveTextContent('First name is required.');
@@ -605,7 +797,7 @@ describe('BookingCheckoutWizard', () => {
         // Advancing now awaits the seat hold (#74), so step 3 arrives
         // after the click rather than during it.
         await screen.findByText('Review Booking');
-        fireEvent.click(screen.getByRole('button', { name: /Confirm \$100 booking/i }));
+        fireEvent.click(await preparePayment('$100'));
 
         await waitFor(() => expect(screen.getByText('Select Your Seats')).toBeInTheDocument());
         const passengerTarget = screen.getByRole('button', { name: /Bob Jones.*Seat: Not Chosen/i });
@@ -637,7 +829,7 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.click(screen.getByTitle('Select Seat 11C'));
         fireEvent.click(screen.getByText('Review Booking →'));
         await screen.findByText('Review Booking');
-        fireEvent.click(screen.getByRole('button', { name: /Confirm \$100 booking/i }));
+        fireEvent.click(await preparePayment('$100'));
 
         await screen.findByText('Select Your Seats');
         const passengerTarget = screen.getByRole('button', { name: /Bob Jones.*Seat: Not Chosen/i });
@@ -894,7 +1086,7 @@ describe('BookingCheckoutWizard', () => {
         // Advancing now awaits the seat hold (#74), so step 3 arrives
         // after the click rather than during it.
         await screen.findByText('Review Booking');
-            fireEvent.click(screen.getByRole('button', { name: /Confirm \$250 booking/i }));
+            fireEvent.click(await preparePayment('$250'));
 
             // The error names leg 1, so the returning map must be the one shown.
             await waitFor(() =>
@@ -1215,7 +1407,7 @@ describe('BookingCheckoutWizard', () => {
             expect(departing).toHaveTextContent('Seat 11A');
             expect(returning).toHaveTextContent('Seat 12C');
 
-            fireEvent.click(screen.getByRole('button', { name: /Confirm \$250 booking/i }));
+            fireEvent.click(await preparePayment('$250'));
 
             await waitFor(() => {
                 const checkoutId = mockHoldChosenSeatsAction.mock.calls[0][0].checkoutId;
@@ -1265,7 +1457,7 @@ describe('BookingCheckoutWizard', () => {
         // Advancing now awaits the seat hold (#74), so step 3 arrives
         // after the click rather than during it.
         await screen.findByText('Review Booking');
-            fireEvent.click(screen.getByRole('button', { name: /Confirm \$250 booking/i }));
+            fireEvent.click(await preparePayment('$250'));
 
             await waitFor(() => {
                 expect(screen.getByText('Booking Confirmed!')).toBeInTheDocument();
@@ -1313,7 +1505,7 @@ describe('BookingCheckoutWizard', () => {
         // Advancing now awaits the seat hold (#74), so step 3 arrives
         // after the click rather than during it.
         await screen.findByText('Review Booking');
-            fireEvent.click(screen.getByRole('button', { name: /Confirm \$250 booking/i }));
+            fireEvent.click(await preparePayment('$250'));
 
             await waitFor(() => {
                 expect(screen.getByText('Booking Confirmed!')).toBeInTheDocument();

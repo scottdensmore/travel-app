@@ -35,6 +35,10 @@ export default defineConfig({
   /* Run your local dev server before starting the tests */
   webServer: {
     command: 'npm run dev',
+    env: {
+      ...process.env,
+      E2E_STRIPE_MODE: 'playwright',
+    },
     url: 'http://localhost:3000',
     // Never reuse a server this run did not start.
     //

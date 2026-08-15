@@ -34,6 +34,83 @@ export interface PaymentStateProvider {
     retrievePaymentState(providerIntentId: string): Promise<PaymentState>;
 }
 
+interface StripeEnvironment {
+    STRIPE_SECRET_KEY?: string;
+    STRIPE_PUBLISHABLE_KEY?: string;
+    E2E_STRIPE_MODE?: string;
+    DATABASE_IS_DISPOSABLE?: string;
+    NODE_ENV?: string;
+}
+
+interface PlaywrightIntent {
+    attemptId: string;
+    amountCents: number;
+    currency: string;
+    retrievalCount: number;
+}
+
+const PLAYWRIGHT_PUBLISHABLE_KEY = 'pk_test_mona_playwright';
+const globalForPlaywrightStripe = globalThis as typeof globalThis & {
+    monaPlaywrightStripeIntents?: Map<string, PlaywrightIntent>;
+};
+
+function requirePlaywrightEnvironment(environment: StripeEnvironment): boolean {
+    if (!environment.E2E_STRIPE_MODE) return false;
+    if (environment.E2E_STRIPE_MODE !== 'playwright') {
+        throw new Error('E2E_STRIPE_MODE must be playwright when it is set.');
+    }
+    if (environment.NODE_ENV === 'production') {
+        throw new Error('The Playwright Stripe provider is forbidden in production.');
+    }
+    if (environment.DATABASE_IS_DISPOSABLE !== 'true') {
+        throw new Error('The Playwright Stripe provider requires DATABASE_IS_DISPOSABLE=true.');
+    }
+    return true;
+}
+
+class PlaywrightStripePaymentProvider implements PaymentProvider, PaymentStateProvider {
+    private readonly intents = globalForPlaywrightStripe.monaPlaywrightStripeIntents
+        ??= new Map<string, PlaywrightIntent>();
+
+    async createAuthorization(input: {
+        attemptId: string;
+        amountCents: number;
+        currency: string;
+    }): Promise<PaymentAuthorization> {
+        const providerIntentId = `pi_playwright_${input.attemptId}`;
+        this.intents.set(providerIntentId, { ...input, retrievalCount: 0 });
+        return {
+            providerIntentId,
+            clientSecret: `${providerIntentId}_secret_for_e2e_only`,
+            status: 'REQUIRES_PAYMENT_METHOD',
+        };
+    }
+
+    async retrieveAuthorization(providerIntentId: string): Promise<PaymentAuthorization> {
+        const intent = this.intents.get(providerIntentId);
+        if (!intent) throw new Error('Playwright payment session was not found.');
+        intent.retrievalCount += 1;
+        return {
+            providerIntentId,
+            clientSecret: `${providerIntentId}_secret_for_e2e_only`,
+            // Checkout preparation performs the first read. The browser's
+            // guarded test button then causes a second server read, modelling
+            // Stripe changing requires_payment_method to requires_capture.
+            status: intent.retrievalCount === 1 ? 'REQUIRES_PAYMENT_METHOD' : 'AUTHORIZED',
+        };
+    }
+
+    async retrievePaymentState(providerIntentId: string): Promise<PaymentState> {
+        const intent = this.intents.get(providerIntentId);
+        if (!intent) throw new Error('Playwright payment session was not found.');
+        return {
+            providerIntentId,
+            paymentAttemptId: intent.attemptId,
+            status: intent.retrievalCount > 1 ? 'AUTHORIZED' : 'REQUIRES_PAYMENT_METHOD',
+        };
+    }
+}
+
 const PAYMENT_STATUS: Record<Stripe.PaymentIntent.Status, PaymentAuthorizationStatus> = {
     requires_payment_method: 'REQUIRES_PAYMENT_METHOD',
     requires_confirmation: 'REQUIRES_CONFIRMATION',
@@ -90,10 +167,16 @@ export class StripePaymentProvider implements PaymentProvider {
 }
 
 export function createStripePaymentProvider(
-    environment: { STRIPE_SECRET_KEY?: string } = {
+    environment: StripeEnvironment = {
         STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
+        E2E_STRIPE_MODE: process.env.E2E_STRIPE_MODE,
+        DATABASE_IS_DISPOSABLE: process.env.DATABASE_IS_DISPOSABLE,
+        NODE_ENV: process.env.NODE_ENV,
     },
-): StripePaymentProvider {
+): PaymentProvider & PaymentStateProvider {
+    if (requirePlaywrightEnvironment(environment)) {
+        return new PlaywrightStripePaymentProvider();
+    }
     return new StripePaymentProvider(createStripeClient(environment));
 }
 
@@ -107,4 +190,26 @@ export function createStripeClient(
         throw new Error('Missing required environment variable: STRIPE_SECRET_KEY');
     }
     return new Stripe(secretKey);
+}
+
+export function getStripePublishableKey(
+    environment: StripeEnvironment = {
+        STRIPE_PUBLISHABLE_KEY: process.env.STRIPE_PUBLISHABLE_KEY,
+        E2E_STRIPE_MODE: process.env.E2E_STRIPE_MODE,
+        DATABASE_IS_DISPOSABLE: process.env.DATABASE_IS_DISPOSABLE,
+        NODE_ENV: process.env.NODE_ENV,
+    },
+): string {
+    if (requirePlaywrightEnvironment(environment)) return PLAYWRIGHT_PUBLISHABLE_KEY;
+    const publishableKey = environment.STRIPE_PUBLISHABLE_KEY?.trim();
+    if (!publishableKey) {
+        throw new Error('Missing required environment variable: STRIPE_PUBLISHABLE_KEY');
+    }
+    if (
+        publishableKey === PLAYWRIGHT_PUBLISHABLE_KEY
+        || (!publishableKey.startsWith('pk_test_') && !publishableKey.startsWith('pk_live_'))
+    ) {
+        throw new Error('STRIPE_PUBLISHABLE_KEY must be a Stripe publishable key.');
+    }
+    return publishableKey;
 }
