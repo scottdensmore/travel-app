@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "cd556ce87fce",
+  "strategy": "manual-commit",
+  "branch": "fix/275-airport-local-playwright-dates",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "__tests__/e2e/flightSearch.test.ts",
+    "e2e/booking.spec.ts",
+    "e2e/helpers/flightSearch.ts",
+    "e2e/multi-passenger.spec.ts",
+    "e2e/notifications.spec.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/cd/556ce87fce/0/metadata.json",
+      "transcript": "/cd/556ce87fce/0/full.jsonl",
+      "compact_transcript": "/cd/556ce87fce/0/transcript.jsonl",
+      "content_hash": "/cd/556ce87fce/0/content_hash.txt",
+      "prompt": "/cd/556ce87fce/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 355949,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 15015168,
+    "output_tokens": 23896,
+    "api_call_count": 111
+  }
+}

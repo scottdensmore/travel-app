@@ -1,0 +1,53 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "cd556ce87fce",
+  "session_id": "019ffe5b-1054-7c22-8afc-e97cb84c7b73",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-15T23:31:24.197344309Z",
+  "branch": "fix/275-airport-local-playwright-dates",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "__tests__/e2e/flightSearch.test.ts",
+    "e2e/booking.spec.ts",
+    "e2e/helpers/flightSearch.ts",
+    "e2e/multi-passenger.spec.ts",
+    "e2e/notifications.spec.ts"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.6-sol",
+  "turn_id": "93addd8bea40",
+  "checkpoint_transcript_start": 16654,
+  "transcript_lines_at_start": 16654,
+  "compact_transcript_start": 2643,
+  "token_usage": {
+    "input_tokens": 355949,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 15015168,
+    "output_tokens": 23896,
+    "api_call_count": 111
+  },
+  "session_metrics": {
+    "turn_count": 15
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-15T23:31:15.719793372Z",
+    "agent_lines": 74,
+    "agent_removed": 28,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 74,
+    "total_lines_changed": 102,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
