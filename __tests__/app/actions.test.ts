@@ -18,6 +18,7 @@ import {
     generateFlightOccurrencesAction,
     getOccupiedSeatsAction,
     holdChosenSeatsAction,
+    startCheckoutPaymentAction,
 } from '@/app/actions';
 import { getServerSession } from 'next-auth';
 import TravelGuideService from '@/lib/TravelGuideService';
@@ -25,6 +26,8 @@ import FlightBookingService from '@/lib/FlightBookingService';
 import FlightScheduleService from '@/lib/FlightScheduleService';
 import { prisma } from '@/lib/prisma';
 import { checkoutHolderKey, SeatHoldUnavailableError } from '@/lib/seatHolds';
+import { CheckoutPaymentService } from '@/lib/checkoutPaymentService';
+import { createStripePaymentProvider } from '@/lib/stripePaymentProvider';
 
 // Keep these heavy/server-only modules out of the unit test.
 jest.mock('next-auth', () => ({ getServerSession: jest.fn() }));
@@ -45,6 +48,15 @@ jest.mock('@/lib/TravelGuideService', () => {
     const saveCityGuide = jest.fn();
     return jest.fn().mockImplementation(() => ({ saveCityGuide }));
 });
+
+jest.mock('@/lib/checkoutPaymentService', () => {
+    const startPayment = jest.fn();
+    return { CheckoutPaymentService: jest.fn().mockImplementation(() => ({ startPayment })) };
+});
+
+jest.mock('@/lib/stripePaymentProvider', () => ({
+    createStripePaymentProvider: jest.fn().mockReturnValue({}),
+}));
 
 const mockTx = {
     $queryRaw: jest.fn(),
@@ -101,6 +113,8 @@ function routed<T extends { from: string; to: string }>(flight: T) {
 const mockSaveCityGuide = new (TravelGuideService as any)().saveCityGuide as jest.Mock;
 const mockBookFlight = new (FlightBookingService as any)().bookFlight as jest.Mock;
 const mockGenerateFlightsForDate = new (FlightScheduleService as any)().generateFlightsForDate as jest.Mock;
+const mockStartPayment = new (CheckoutPaymentService as any)().startPayment as jest.Mock;
+const mockedCreateStripePaymentProvider = createStripePaymentProvider as jest.Mock;
 const mockedFlightFindMany = (prisma as any).flight.findMany as jest.Mock;
 const mockedFlightFindFirst = (prisma as any).flight.findFirst as jest.Mock;
 const mockedFlightCreate = (prisma as any).flight.create as jest.Mock;
@@ -834,6 +848,94 @@ describe('bookFlightAction', () => {
         });
 
         expect(mockedNotificationCreate).not.toHaveBeenCalled();
+    });
+});
+
+describe('startCheckoutPaymentAction', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    const input = {
+        checkoutId: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+        flightIds: [42],
+        passengers: [{ seatNumbers: ['2a'], cabinClass: 'BUSINESS' as const }],
+    };
+
+    it('starts a server-owned payment for the authenticated checkout', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        mockStartPayment.mockResolvedValue({
+            amountCents: 60_000,
+            currency: 'USD',
+            clientSecret: 'pi_secret_for_elements',
+            status: 'REQUIRES_PAYMENT_METHOD',
+        });
+
+        await expect(startCheckoutPaymentAction(input)).resolves.toEqual({
+            amountCents: 60_000,
+            currency: 'USD',
+            clientSecret: 'pi_secret_for_elements',
+            status: 'REQUIRES_PAYMENT_METHOD',
+        });
+        expect(mockedCreateStripePaymentProvider).toHaveBeenCalledTimes(1);
+        expect(mockStartPayment).toHaveBeenCalledWith({
+            ...input,
+            userId: 'user-123',
+            passengers: [{ seatNumbers: ['2A'], cabinClass: 'BUSINESS' }],
+        });
+    });
+
+    it('rejects card data and client prices before constructing a provider', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+
+        await expect(startCheckoutPaymentAction({
+            ...input,
+            cardNumber: '4242424242424242',
+            cvc: '123',
+            totalPriceCents: 1,
+            paymentIntentId: 'pi_forged',
+        } as never)).resolves.toMatchObject({
+            ok: false,
+            error: { code: 'VALIDATION_ERROR' },
+        });
+        expect(mockedCreateStripePaymentProvider).not.toHaveBeenCalled();
+        expect(mockStartPayment).not.toHaveBeenCalled();
+    });
+
+    it('rejects an unauthenticated caller before constructing a provider', async () => {
+        mockedGetServerSession.mockResolvedValue(null);
+
+        await expect(startCheckoutPaymentAction(input)).rejects.toThrow('Unauthorized');
+        expect(mockedCreateStripePaymentProvider).not.toHaveBeenCalled();
+        expect(mockStartPayment).not.toHaveBeenCalled();
+    });
+
+    it('returns recoverable field feedback when a payment checkout loses its hold', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        const paymentInput = {
+            checkoutId: input.checkoutId,
+            flightIds: [42, 43],
+            passengers: [
+                { seatNumbers: ['2A', '2A'], cabinClass: 'BUSINESS' as const },
+                { seatNumbers: ['2B', '2B'], cabinClass: 'BUSINESS' as const },
+            ],
+        };
+        mockStartPayment.mockRejectedValue(new SeatHoldUnavailableError({
+            flightId: 43,
+            seatNumber: '2B',
+            holderKey: checkoutHolderKey('user-123', input.checkoutId),
+        }));
+
+        await expect(startCheckoutPaymentAction(paymentInput)).resolves.toEqual({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'Seat 2B is no longer held for this checkout. Please choose a seat again.',
+                fields: {
+                    'passengers.1.seatNumbers.1': [
+                        'Seat 2B is no longer held for this checkout. Please choose a seat again.',
+                    ],
+                },
+            },
+        });
     });
 });
 

@@ -10,6 +10,8 @@ import {
 import { heldSeats } from '@/lib/seatOccupancy';
 import TravelGuideService from '@/lib/TravelGuideService';
 import FlightBookingService, { PassengerInput } from '@/lib/FlightBookingService';
+import { CheckoutPaymentService } from '@/lib/checkoutPaymentService';
+import { createStripePaymentProvider } from '@/lib/stripePaymentProvider';
 import CityGuide from '@/lib/types/CityGuide';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -49,6 +51,7 @@ import {
     searchFlightsSchema,
     seatChangesSchema,
     checkoutSeatClaimsSchema,
+    checkoutPaymentRequestSchema,
     stringIdSchema
 } from '@/lib/validation';
 
@@ -372,6 +375,38 @@ export async function bookFlightAction(bookingData: {
 
     revalidatePath('/profile');
     return result;
+}
+
+export async function startCheckoutPaymentAction(paymentData: {
+    checkoutId: string;
+    flightIds: number[];
+    passengers: Array<{
+        seatNumbers: string[];
+        cabinClass: 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST';
+    }>;
+}) {
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.id;
+    if (!userId) throw new Error('Unauthorized');
+
+    const parsed = parseActionInput(checkoutPaymentRequestSchema, paymentData);
+    if (!parsed.ok) return parsed;
+
+    const service = new CheckoutPaymentService(createStripePaymentProvider());
+    try {
+        return await service.startPayment({ ...parsed.data, userId });
+    } catch (error) {
+        if (!(error instanceof SeatHoldUnavailableError)) throw error;
+
+        const legIndex = parsed.data.flightIds.indexOf(error.claim.flightId);
+        const passengerIndex = parsed.data.passengers.findIndex(
+            passenger => passenger.seatNumbers[legIndex] === error.claim.seatNumber,
+        );
+        const field = legIndex >= 0 && passengerIndex >= 0
+            ? `passengers.${passengerIndex}.seatNumbers.${legIndex}`
+            : '_root';
+        return actionValidationFailure(error.message, field);
+    }
 }
 
 /**

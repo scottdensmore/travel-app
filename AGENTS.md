@@ -66,6 +66,11 @@ this application is deployed.
 
 Local verification and recovery email lands in Mailpit at http://localhost:8025.
 
+Starting a checkout payment additionally requires `STRIPE_SECRET_KEY`. Use a
+Stripe test-mode key locally. It is loaded only when that server action runs;
+card numbers, CVCs, expiry dates and PaymentIntent client secrets never belong
+in this application's environment or database.
+
 Never commit a secret value or pass one on the command line. Every environment
 that runs this application injects configuration at runtime.
 

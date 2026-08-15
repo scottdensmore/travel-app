@@ -263,6 +263,57 @@ export const passengerSchema = z.object({
 
 export const bookingRequestIdSchema = z.uuid('Booking request ID must be a UUID.');
 
+const checkoutPaymentPassengerSchema = z.object({
+    seatNumbers: z.array(seatNumberSchema, { error: 'A seat is required for each flight.' })
+        .min(1, 'A seat is required for each flight.')
+        .max(MAX_ITINERARY_LEGS),
+    cabinClass: z.enum(['ECONOMY', 'PREMIUM_ECONOMY', 'BUSINESS', 'FIRST']),
+}).strict();
+
+export const checkoutPaymentRequestSchema = z.object({
+    checkoutId: bookingRequestIdSchema,
+    flightIds: z.array(positiveId('Flight ID'), { error: 'A flight is required.' })
+        .min(1, 'A flight is required.')
+        .max(MAX_ITINERARY_LEGS),
+    passengers: z.array(checkoutPaymentPassengerSchema, {
+        error: 'At least one passenger is required.',
+    }).min(1, 'At least one passenger is required.').max(MAX_PASSENGERS_PER_BOOKING),
+}).strict().superRefine(({ flightIds, passengers }, context) => {
+    if (new Set(flightIds).size !== flightIds.length) {
+        context.addIssue({
+            code: 'custom',
+            path: ['flightIds'],
+            message: 'An itinerary cannot repeat a flight.',
+        });
+    }
+
+    passengers.forEach((passenger, passengerIndex) => {
+        if (passenger.seatNumbers.length !== flightIds.length) {
+            context.addIssue({
+                code: 'custom',
+                path: ['passengers', passengerIndex, 'seatNumbers'],
+                message: 'A seat is required for each flight.',
+            });
+        }
+    });
+
+    flightIds.forEach((_, legIndex) => {
+        const claimedSeats = passengers.map(passenger => passenger.seatNumbers[legIndex]);
+        if (new Set(claimedSeats).size !== claimedSeats.length) {
+            context.addIssue({
+                code: 'custom',
+                path: ['passengers'],
+                message: 'Travellers cannot select the same seat on one flight.',
+            });
+        }
+    });
+
+});
+
+export const checkoutPaymentServiceSchema = checkoutPaymentRequestSchema.extend({
+    userId: requiredText('User ID', 128),
+});
+
 export const bookingRequestSchema = z.object({
     /// The itinerary, in leg order. One flight for a one-way trip, two for a
     /// round trip.

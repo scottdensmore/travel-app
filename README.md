@@ -55,13 +55,19 @@ cp .env.example .env
 ```
 
 Before starting the application, edit `.env` and populate three independent
-secrets:
+locally generated secrets:
 
 - `NEXTAUTH_SECRET`: a cryptographically random value at least 32 characters
   long.
 - `PASSENGER_DATA_ENCRYPTION_KEYS`: `local-v1:<base64-key>`, where the key is
   32 random bytes generated with `openssl rand -base64 32`.
 - `STAFF_MFA_ENCRYPTION_KEYS`: the same format, using a different random key.
+
+Starting a checkout payment also requires `STRIPE_SECRET_KEY`. Use a Stripe
+test-mode secret key for local development; the application sends only the
+server-calculated amount and its internal payment-attempt ID to Stripe. Card
+details belong in Stripe Elements and must never be added to `.env`, an action,
+or this application's database.
 
 Never commit `.env` or reuse its local values in a deployment.
 

@@ -25,12 +25,24 @@ const created = {
     identifiers: [] as string[],
     flightIds: [] as number[],
     scheduleIds: [] as number[],
+    paymentAttemptIds: [] as string[],
 };
 
 async function leaveARowInEveryTrackedTable(): Promise<string> {
     const email = `snapshot-${randomUUID()}@example.com`;
     const user = await prisma.user.create({ data: { email } });
     created.userIds.push(user.id);
+
+    const paymentAttempt = await prisma.paymentAttempt.create({
+        data: {
+            id: randomUUID(),
+            checkoutId: randomUUID(),
+            userId: user.id,
+            requestFingerprint: 'a'.repeat(64),
+            amountCents: 35_000,
+        },
+    });
+    created.paymentAttemptIds.push(paymentAttempt.id);
 
     const guide = await prisma.cityGuide.findFirst({ select: { id: true } });
     if (!guide) throw new Error('This test needs a seeded city guide; run `npx prisma db seed`.');
@@ -92,6 +104,7 @@ async function leaveARowInEveryTrackedTable(): Promise<string> {
 }
 
 afterAll(async () => {
+    await prisma.paymentAttempt.deleteMany({ where: { id: { in: created.paymentAttemptIds } } });
     await prisma.user.deleteMany({ where: { id: { in: created.userIds } } });
     await prisma.verificationToken.deleteMany({ where: { identifier: { in: created.identifiers } } });
     await prisma.flight.deleteMany({ where: { id: { in: created.flightIds } } });
@@ -103,6 +116,7 @@ const TRACKED_TABLES = [
     'Flight',
     'FlightSchedule',
     'Notification',
+    'PaymentAttempt',
     'Review',
     'SeatHold',
     'User',
@@ -134,7 +148,7 @@ describe('the snapshot a Playwright run is judged by', () => {
         // which is the part that says which spec to fix -- a bare cuid does not.
         const message = describeLeakedRows(added)!;
         expect(message).toContain(email);
-        for (const table of ['User', 'Review', 'UserFavorite', 'Notification']) {
+        for (const table of ['User', 'PaymentAttempt', 'Review', 'UserFavorite', 'Notification']) {
             expect(added[table][0]).toContain(`(${email})`);
         }
         // A flight has no owning account, so it is named by the number a spec

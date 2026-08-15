@@ -284,6 +284,23 @@ export async function consumeSeatHold(
     return consumed === 1;
 }
 
+/** Check one claim against the database clock while its Flight row is locked. */
+export async function hasLiveSeatHold(
+    tx: Prisma.TransactionClient,
+    { flightId, seatNumber, holderKey }: SeatClaim,
+): Promise<boolean> {
+    const [result] = await tx.$queryRaw<{ held: boolean }[]>`
+        SELECT EXISTS (
+            SELECT 1 FROM "SeatHold"
+            WHERE "flightId" = ${flightId}
+              AND "seatNumber" = ${seatNumber}
+              AND "holderKey" = ${holderKey}
+              AND "expiresAt" > statement_timestamp()
+        ) AS "held"
+    `;
+    return result?.held === true;
+}
+
 /**
  * Give up a claim.
  *

@@ -2,6 +2,7 @@
 import {
     bookingRequestSchema,
     cityGuideSchema,
+    checkoutPaymentRequestSchema,
     favoriteSchema,
     flightBookingServiceSchema,
     flightStatusSchema,
@@ -16,6 +17,46 @@ import {
     searchFlightsSchema,
     seatChangesSchema
 } from '@/lib/validation';
+
+describe('checkout payment request integrity', () => {
+    const checkoutId = '8ea59a65-9251-45b3-95d0-3920c49f5735';
+    const valid = {
+        checkoutId,
+        flightIds: [41, 42],
+        passengers: [
+            { seatNumbers: ['2A', '2A'], cabinClass: 'BUSINESS' },
+            { seatNumbers: ['2B', '2B'], cabinClass: 'BUSINESS' },
+        ],
+    };
+
+    it('accepts one seat per traveller and leg', () => {
+        expect(checkoutPaymentRequestSchema.safeParse(valid).success).toBe(true);
+    });
+
+    it('rejects a repeated flight', () => {
+        expect(checkoutPaymentRequestSchema.safeParse({
+            ...valid,
+            flightIds: [41, 41],
+        }).success).toBe(false);
+    });
+
+    it('rejects a traveller without one seat per leg', () => {
+        expect(checkoutPaymentRequestSchema.safeParse({
+            ...valid,
+            passengers: [{ seatNumbers: ['2A'], cabinClass: 'BUSINESS' }],
+        }).success).toBe(false);
+    });
+
+    it('rejects two travellers claiming the same seat on one flight', () => {
+        expect(checkoutPaymentRequestSchema.safeParse({
+            ...valid,
+            passengers: [
+                valid.passengers[0],
+                { seatNumbers: ['2A', '2B'], cabinClass: 'BUSINESS' },
+            ],
+        }).success).toBe(false);
+    });
+});
 
 /**
  * A schedule must say how long its flight takes.
