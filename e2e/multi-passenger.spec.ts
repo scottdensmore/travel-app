@@ -4,6 +4,7 @@ import { flightRouteInclude } from '@/lib/flightRoute';
 import { calculateItineraryTotal } from '../lib/bookingPricing';
 import { registerAndSignIn } from './helpers/auth';
 import { completeCheckoutPayment } from './helpers/checkoutPayment';
+import { fillOneWayFlightSearch } from './helpers/flightSearch';
 
 test.describe('Multi-Passenger Booking Journey', () => {
   const uniqueEmail = `multibook-${Date.now()}@example.com`;
@@ -64,15 +65,7 @@ test.describe('Multi-Passenger Booking Journey', () => {
       throw new Error('No upcoming flights found in the database');
     }
 
-    // This journey books a single flight, so search one way: a round trip
-    // is chosen a leg at a time and booked as one itinerary (#69).
-    await page.getByLabel('One Way').click();
-
-    // Fill origin & destination
-    await page.selectOption('#from', targetFlight.fromAirport.label);
-    await page.selectOption('#to', targetFlight.toAirport.label);
-    const formattedDate = targetFlight.departureDate.toISOString().split('T')[0];
-    await page.fill('#depart', formattedDate);
+    await fillOneWayFlightSearch(page, targetFlight);
     await page.click('button:has-text("Find your trip")');
 
     // Wait for flights and book
