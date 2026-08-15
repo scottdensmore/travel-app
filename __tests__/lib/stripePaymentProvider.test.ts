@@ -51,6 +51,28 @@ describe('StripePaymentProvider', () => {
         expect(create).not.toHaveBeenCalled();
     });
 
+    it('retrieves current reconciliation state without returning the client secret', async () => {
+        const retrieve = jest.fn().mockResolvedValue({
+            id: 'pi_current',
+            client_secret: 'pi_current_secret_must_not_escape',
+            status: 'requires_capture',
+            metadata: { paymentAttemptId: 'attempt-current' },
+        });
+        const provider = new StripePaymentProvider({
+            paymentIntents: { create: jest.fn(), retrieve },
+        } as never);
+
+        const state = await provider.retrievePaymentState('pi_current');
+        expect(state).toEqual({
+            providerIntentId: 'pi_current',
+            paymentAttemptId: 'attempt-current',
+            status: 'AUTHORIZED',
+        });
+        expect(JSON.stringify(state))
+            .not.toContain('pi_current_secret_must_not_escape');
+        expect(retrieve).toHaveBeenCalledWith('pi_current');
+    });
+
     it('refuses to construct a provider without the server secret', () => {
         expect(() => createStripePaymentProvider({ STRIPE_SECRET_KEY: '   ' })).toThrow(
             'Missing required environment variable: STRIPE_SECRET_KEY',

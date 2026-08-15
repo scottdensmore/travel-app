@@ -12,6 +12,7 @@ services:
       PASSENGER_DATA_ENCRYPTION_KEYS: ${PASSENGER_DATA_ENCRYPTION_KEYS:?PASSENGER_DATA_ENCRYPTION_KEYS is required}
       STAFF_MFA_ENCRYPTION_KEYS: ${STAFF_MFA_ENCRYPTION_KEYS:?STAFF_MFA_ENCRYPTION_KEYS is required}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       # The bundled proxy below is the single trusted right-most proxy.
       AUTH_TRUSTED_PROXY_HOPS: "1"
       AUTH_EMAIL_FROM: "${AUTH_EMAIL_FROM:-Mona Airways <no-reply@localhost>}"

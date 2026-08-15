@@ -140,9 +140,26 @@ model PaymentAttempt {
   status               PaymentAttemptStatus @default(CREATING)
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
+  webhookEvents        PaymentWebhookEvent[]
 
   @@unique([userId, checkoutId])
   @@index([status, updatedAt])
+}
+
+/// One successfully reconciled Stripe event.
+///
+/// The raw webhook body is deliberately absent: it may contain customer and
+/// payment-provider data that is unnecessary after signature verification.
+model PaymentWebhookEvent {
+  id                 String         @id
+  eventType          String
+  providerIntentId   String
+  paymentAttemptId   String
+  paymentAttempt     PaymentAttempt @relation(fields: [paymentAttemptId], references: [id], onDelete: Cascade)
+  createdAt          DateTime       @default(now())
+
+  @@index([providerIntentId])
+  @@index([paymentAttemptId])
 }
 
 model Booking {
