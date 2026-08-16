@@ -1,0 +1,34 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "d954b3f2ff22",
+  "strategy": "manual-commit",
+  "branch": "feat/234-replacement-search",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "__tests__/app/activeItineraryReads.test.tsx",
+    "__tests__/components/ProfileClient.test.tsx",
+    "__tests__/lib/itineraryReplacementSearch.database.test.ts",
+    "__tests__/lib/itineraryReplacementSearch.test.ts",
+    "app/globals.css",
+    "app/profile/page.tsx",
+    "components/ui/ProfileClient.tsx",
+    "e2e/disruption.spec.ts",
+    "lib/itineraryReplacementSearch.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/d9/54b3f2ff22/0/metadata.json",
+      "transcript": "/d9/54b3f2ff22/0/full.jsonl",
+      "compact_transcript": "/d9/54b3f2ff22/0/transcript.jsonl",
+      "content_hash": "/d9/54b3f2ff22/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 403497,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 33998336,
+    "output_tokens": 70951,
+    "api_call_count": 241
+  }
+}
