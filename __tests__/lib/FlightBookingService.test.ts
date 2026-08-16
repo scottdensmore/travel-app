@@ -177,6 +177,7 @@ describe('FlightBookingService', () => {
             },
             include: {
                 legs: {
+                    where: { supersededAt: null },
                     include: { flight: true },
                     orderBy: { sequence: 'asc' },
                 },
@@ -186,6 +187,7 @@ describe('FlightBookingService', () => {
                         dateOfBirthEncrypted: true,
                         passportNumberEncrypted: true,
                         seatAssignments: {
+                            where: { leg: { supersededAt: null } },
                             select: {
                                 seatNumber: true,
                                 // The cabin is recorded per leg now that the
@@ -235,7 +237,10 @@ describe('FlightBookingService', () => {
             },
             include: {
                 passengers: { select: safePassengerSelect },
-                legs: { orderBy: { sequence: 'asc' } }
+                legs: {
+                    where: { supersededAt: null },
+                    orderBy: { sequence: 'asc' },
+                }
             }
         });
 

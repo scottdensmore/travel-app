@@ -7,24 +7,42 @@
  *
  * The Prisma include has to load the legs and their flights:
  *
- *     include: { legs: { include: { flight: true }, orderBy: { sequence: 'asc' } } }
+ *     include: { legs: {
+ *         where: activeItineraryLegWhere,
+ *         include: { flight: true },
+ *         orderBy: { sequence: 'asc' },
+ *     } }
  */
 
 /** The shape these need, kept structural so callers can pass richer rows. */
 export interface BookingLegs<TFlight> {
-    legs: Array<{ sequence: number; flight: TFlight | null }>;
+    legs: Array<{
+        sequence: number;
+        flight: TFlight | null;
+        supersededAt?: Date | string | null;
+    }>;
 }
+
+/** The database half of the active-leg rule, shared by every relation read. */
+export const activeItineraryLegWhere = { supersededAt: null } as const;
 
 /**
  * The legs of a booking in itinerary order.
  *
- * Sorted here rather than trusting the query, because a caller that forgets
- * `orderBy` would otherwise render the return leg first.
+ * Historical legs stay attached to the booking after a rebooking. Filter them
+ * here as a final product-code guard, then sort rather than trusting the query:
+ * a caller that forgets either database clause must not render two flights at
+ * the same itinerary position or put the return first.
  */
-export function orderedLegs<TLeg extends { sequence: number }>(
+export function orderedLegs<TLeg extends {
+    sequence: number;
+    supersededAt?: Date | string | null;
+}>(
     booking: { legs: TLeg[] }
 ): TLeg[] {
-    return [...booking.legs].sort((left, right) => left.sequence - right.sequence);
+    return booking.legs
+        .filter(leg => leg.supersededAt === undefined || leg.supersededAt === null)
+        .sort((left, right) => left.sequence - right.sequence);
 }
 
 /**

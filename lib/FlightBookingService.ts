@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { heldSeats } from '@/lib/seatOccupancy';
-import { bookingFlights } from '@/lib/bookingItinerary';
+import { activeItineraryLegWhere, bookingFlights } from '@/lib/bookingItinerary';
 import { prisma } from '@/lib/prisma';
 import { assertSeatAvailableForCabin } from '@/lib/seatLayout';
 import { lockFlightForUpdate } from '@/lib/flightLock';
@@ -137,6 +137,7 @@ export default class FlightBookingService {
                 where: { userId, idempotencyKey },
                 include: {
                     legs: {
+                        where: activeItineraryLegWhere,
                         include: { flight: true },
                         orderBy: { sequence: 'asc' },
                     },
@@ -146,6 +147,7 @@ export default class FlightBookingService {
                             dateOfBirthEncrypted: true,
                             passportNumberEncrypted: true,
                             seatAssignments: {
+                                where: { leg: activeItineraryLegWhere },
                                 select: {
                                     seatNumber: true,
                                     cabinClass: true,
@@ -302,7 +304,10 @@ export default class FlightBookingService {
                 },
                 include: {
                     passengers: { select: safePassengerSelect },
-                    legs: { orderBy: { sequence: 'asc' } }
+                    legs: {
+                        where: activeItineraryLegWhere,
+                        orderBy: { sequence: 'asc' },
+                    }
                 }
             });
 

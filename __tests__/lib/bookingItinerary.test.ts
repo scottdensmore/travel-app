@@ -42,6 +42,22 @@ describe('booking itinerary', () => {
         expect(outboundFlight(booking)).toEqual(seattle);
     });
 
+    it('reads only the active leg after one itinerary position is replaced', () => {
+        const booking = {
+            legs: [
+                {
+                    sequence: 1,
+                    flight: seattle,
+                    supersededAt: new Date('2026-08-16T12:00:00.000Z'),
+                },
+                { sequence: 1, flight: detroit, supersededAt: null },
+            ],
+        };
+
+        expect(bookingFlights(booking)).toEqual([detroit]);
+        expect(outboundFlight(booking)).toEqual(detroit);
+    });
+
     it('yields nothing for a booking with no legs', () => {
         // A booking whose flight was removed, or one read without its legs.
         expect(bookingFlights({ legs: [] })).toEqual([]);
@@ -179,4 +195,3 @@ describe('seatLabel', () => {
         expect(seatLabel(undefined)).toBe('No seat assigned');
     });
 });
-

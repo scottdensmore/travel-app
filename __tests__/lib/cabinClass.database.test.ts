@@ -72,12 +72,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-    for (const bookingId of created.bookingIds) {
-        await prisma.seatAssignment.deleteMany({ where: { leg: { bookingId } } });
-        await prisma.itineraryLeg.deleteMany({ where: { bookingId } });
-        await prisma.passenger.deleteMany({ where: { bookingId } });
-        await prisma.booking.deleteMany({ where: { id: bookingId } });
-    }
+    await prisma.booking.deleteMany({ where: { id: { in: created.bookingIds } } });
     await prisma.flight.deleteMany({ where: { id: { in: created.flightIds } } });
     await prisma.user.deleteMany({ where: { id: { in: created.userIds } } });
     await prisma.$disconnect();

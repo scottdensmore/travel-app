@@ -1341,6 +1341,7 @@ describe('cancelBookingAction', () => {
             where: { id: 1 },
             include: {
                 legs: {
+                    where: { supersededAt: null },
                     include: {
                         flight: true,
                         seatAssignments: { select: { cabinClass: true } },
@@ -1348,6 +1349,19 @@ describe('cancelBookingAction', () => {
                     orderBy: { sequence: 'asc' },
                 },
             }
+        });
+        expect(mockTx.booking.findUnique).toHaveBeenCalledWith({
+            where: { id: 1 },
+            include: {
+                legs: {
+                    where: { supersededAt: null },
+                    include: {
+                        flight: true,
+                        seatAssignments: { select: { cabinClass: true } },
+                    },
+                    orderBy: { sequence: 'asc' },
+                },
+            },
         });
         expect(mockTx.booking.update).toHaveBeenCalledWith({
             where: { id: 1 },
@@ -1813,6 +1827,16 @@ describe('changeBookingSeatsAction', () => {
             { passengerId: 'p-1', legId: 50, seatNumber: '12B' }
         ]);
 
+        expect(mockedBookingFindUnique).toHaveBeenCalledWith({
+            where: { id: 1 },
+            include: {
+                legs: {
+                    where: { supersededAt: null },
+                    include: { flight: true },
+                    orderBy: { sequence: 'asc' },
+                },
+            },
+        });
         expect(mockTx.seatAssignment.findMany).toHaveBeenCalled();
         // Scoped to the leg: a passenger on a round trip holds an assignment
         // per leg, so updating by passenger alone would overwrite the other.
@@ -2212,7 +2236,10 @@ describe('admin flight schedule actions', () => {
                     id: true,
                     status: true,
                     userId: true,
-                    legs: { select: { flight: { select: { status: true } } } },
+                    legs: {
+                        where: { supersededAt: null },
+                        select: { flight: { select: { status: true } } },
+                    },
                 },
             });
             // A delay moves nobody's booking status.

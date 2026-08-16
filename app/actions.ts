@@ -34,7 +34,11 @@ import {
     parsePriceToCents,
     type CabinClass,
 } from '@/lib/bookingPricing';
-import { bookingFlights, outboundFlight } from '@/lib/bookingItinerary';
+import {
+    activeItineraryLegWhere,
+    bookingFlights,
+    outboundFlight,
+} from '@/lib/bookingItinerary';
 import { cancellableBooking, cancellationNote, cancellationOutcome } from '@/lib/cancellationPolicy';
 import { buildFlightRoutes, findNearbyOperatingDates } from '@/lib/flightSearch';
 import { airportCodeFor, airportCodesForRoute, airportTimeZoneFor } from '@/lib/airports';
@@ -658,6 +662,7 @@ export async function cancelBookingAction(bookingId: number) {
         where: { id: bookingId },
         include: {
             legs: {
+                where: activeItineraryLegWhere,
                 include: {
                     flight: true,
                     // The cabin is held per traveller per leg, and the fee is a
@@ -707,6 +712,7 @@ export async function cancelBookingAction(bookingId: number) {
             where: { id: bookingId },
             include: {
                 legs: {
+                    where: activeItineraryLegWhere,
                     include: {
                         flight: true,
                         seatAssignments: { select: { cabinClass: true } },
@@ -866,6 +872,7 @@ export async function changeBookingSeatsAction(
         where: { id: bookingId },
         include: {
             legs: {
+                where: activeItineraryLegWhere,
                 include: { flight: true },
                 orderBy: { sequence: 'asc' },
             },
@@ -1416,7 +1423,10 @@ export async function updateFlightStatusAction(flightId: number, status: 'ON_TIM
                 id: true,
                 status: true,
                 userId: true,
-                legs: { select: { flight: { select: { status: true } } } },
+                legs: {
+                    where: activeItineraryLegWhere,
+                    select: { flight: { select: { status: true } } },
+                },
             },
         });
 

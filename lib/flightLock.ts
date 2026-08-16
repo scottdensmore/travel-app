@@ -33,7 +33,9 @@ export async function lockBookingsOnFlightForUpdate(
         FROM "Booking" b
         WHERE EXISTS (
             SELECT 1 FROM "ItineraryLeg" l
-            WHERE l."bookingId" = b."id" AND l."flightId" = ${flightId}
+            WHERE l."bookingId" = b."id"
+              AND l."flightId" = ${flightId}
+              AND l."supersededAt" IS NULL
         )
         AND b."status" <> 'CANCELLED'
         ORDER BY b."id"

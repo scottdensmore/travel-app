@@ -107,6 +107,13 @@ enum BookingStatus {
   DISRUPTED
 }
 
+/// An airline-caused replacement keeps the original captured fare. The
+/// replacement may catalogue higher or lower, but neither an extra charge nor
+/// a partial refund is created: the customer can still choose the full refund.
+enum RebookingFarePolicy {
+  DISRUPTION_WAIVER
+}
+
 /// The provider state of one checkout's payment session.
 ///
 /// `CREATING` closes the crash window between reserving a durable attempt and
@@ -188,6 +195,7 @@ model Booking {
   passengers    Passenger[]
   legs          ItineraryLeg[]
   statusChanges BookingStatusChange[]
+  rebookings    BookingRebooking[]
 
   @@unique([userId, idempotencyKey])
 }
@@ -223,10 +231,42 @@ model BookingStatusChange {
   actorUserId String?
   actor       User?          @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
   paymentRefund PaymentRefund?
+  rebooking   BookingRebooking?
   createdAt   DateTime       @default(now())
 
   @@index([bookingId, createdAt])
   @@index([bookingId, sequence])
+}
+
+/// The immutable audit event for replacing one or more disrupted itinerary
+/// legs while retaining the booking, passengers, reference and captured fare.
+/// The status change records the customer-visible DISRUPTED -> CONFIRMED move;
+/// this row records why it happened and which legs replaced which.
+model BookingRebooking {
+  id                    String                @id @default(cuid())
+  bookingId             Int
+  booking               Booking               @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingStatusChangeId String                @unique
+  bookingStatusChange   BookingStatusChange   @relation(fields: [bookingStatusChangeId], references: [id], onDelete: NoAction)
+  farePolicy            RebookingFarePolicy   @default(DISRUPTION_WAIVER)
+  legs                  BookingRebookingLeg[]
+  createdAt             DateTime              @default(now())
+
+  @@index([bookingId, createdAt])
+}
+
+/// One old-to-new leg mapping within a rebooking. PostgreSQL additionally
+/// requires both legs to belong to the event's booking and occupy the same
+/// itinerary position, with only the destination leg still active.
+model BookingRebookingLeg {
+  rebookingId String
+  rebooking   BookingRebooking @relation(fields: [rebookingId], references: [id], onDelete: Cascade)
+  fromLegId   Int              @unique
+  fromLeg     ItineraryLeg     @relation("RebookingFromLeg", fields: [fromLegId], references: [id], onDelete: Cascade)
+  toLegId     Int              @unique
+  toLeg       ItineraryLeg     @relation("RebookingToLeg", fields: [toLegId], references: [id], onDelete: Cascade)
+
+  @@id([rebookingId, fromLegId])
 }
 
 /// One provider refund for the exact amount recorded by a cancellation.
@@ -425,13 +465,23 @@ model ItineraryLeg {
   flightId  Int
   flight    Flight  @relation(fields: [flightId], references: [id])
 
-  seatAssignments SeatAssignment[]
+  /// Set once this position is replaced. Historical legs and their released
+  /// seats stay attached to the booking; every current reader selects only
+  /// rows where this is null.
+  supersededAt DateTime?
 
-  @@unique([bookingId, sequence])
+  seatAssignments       SeatAssignment[]
+  rebookingOrigins      BookingRebookingLeg[] @relation("RebookingFromLeg")
+  rebookingDestinations BookingRebookingLeg[] @relation("RebookingToLeg")
+
+  /// The one-active-leg-per-position rule is a partial unique index where
+  /// supersededAt IS NULL, which Prisma cannot express. The rebooking
+  /// migration creates it and replaces the former unconditional unique key.
   /// Lets a seat assignment reference (legId, flightId) together, so its
   /// denormalised flightId can never disagree with the leg's flight.
   @@unique([id, flightId])
   @@index([flightId])
+  @@index([bookingId, supersededAt, sequence])
 }
 
 /// The cabins the airline sells.
