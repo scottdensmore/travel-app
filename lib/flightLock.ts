@@ -6,6 +6,13 @@ export async function lockFlightForUpdate(tx: FlightLockClient, flightId: number
     await tx.$queryRaw`SELECT "id" FROM "Flight" WHERE "id" = ${flightId} FOR UPDATE`;
 }
 
+export async function lockBookingForUpdate(
+    tx: FlightLockClient,
+    bookingId: number,
+): Promise<void> {
+    await tx.$queryRaw`SELECT "id" FROM "Booking" WHERE "id" = ${bookingId} FOR UPDATE`;
+}
+
 /**
  * Locks the bookings touching a flight, so two staff transactions changing two
  * legs of one itinerary cannot both decide its status from a stale snapshot.
