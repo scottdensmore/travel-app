@@ -2,7 +2,7 @@ import React from 'react';
 import { prisma } from '@/lib/prisma';
 import { flightRouteInclude, withLegRouteLabels } from '@/lib/flightRoute';
 import Link from 'next/link';
-import { outboundFlight } from '@/lib/bookingItinerary';
+import { activeItineraryLegWhere, outboundFlight } from '@/lib/bookingItinerary';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +23,7 @@ export default async function AdminDashboard() {
                 },
             },
             legs: {
+                where: activeItineraryLegWhere,
                 include: { flight: { include: flightRouteInclude } },
                 orderBy: { sequence: 'asc' },
             },

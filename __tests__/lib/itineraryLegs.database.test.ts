@@ -18,7 +18,6 @@ describe('itinerary legs in PostgreSQL', () => {
     const created = { flightIds: [] as number[], bookingIds: [] as number[] };
 
     afterAll(async () => {
-        await prisma.itineraryLeg.deleteMany({ where: { bookingId: { in: created.bookingIds } } });
         await prisma.booking.deleteMany({ where: { id: { in: created.bookingIds } } });
         await prisma.flight.deleteMany({ where: { id: { in: created.flightIds } } });
         await prisma.$disconnect();

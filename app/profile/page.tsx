@@ -8,6 +8,7 @@ import { flightRouteInclude, withLegRouteLabels } from "@/lib/flightRoute";
 import ProfileClient from "@/components/ui/ProfileClient";
 import { serverRenderTime } from "@/lib/serverClock";
 import { safePassengerSelect } from "@/lib/passengerDataAccess";
+import { activeItineraryLegWhere, orderedLegs } from '@/lib/bookingItinerary';
 
 export const metadata: Metadata = {
     title: 'Your profile',
@@ -37,6 +38,7 @@ export default async function ProfilePage() {
       // Read the itinerary through its legs, so a round trip needs no change
       // here beyond rendering more than one (#69).
       legs: {
+        where: activeItineraryLegWhere,
         include: {
           flight: { include: flightRouteInclude },
           // The seat is held per leg, so a round trip has a different one on
@@ -119,7 +121,7 @@ export default async function ProfilePage() {
   // keep receiving a flight with `from` and `to` on it (#73).
   const bookings = userBookings.map(booking => ({
     ...booking,
-    legs: booking.legs.map(withLegRouteLabels),
+    legs: orderedLegs(booking).map(withLegRouteLabels),
   }));
   const customerBookings = bookings.map(booking => {
     const capturedPayment = booking.paymentIntentId

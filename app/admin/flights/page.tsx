@@ -6,7 +6,7 @@ import DeleteScheduleButton from './DeleteScheduleButton';
 import AdminFlightsTable from './AdminFlightsTable';
 import ManualOccurrenceBuilder from '@/components/ui/ManualOccurrenceBuilder';
 import { safePassengerSelect } from '@/lib/passengerDataAccess';
-import { passengersSeatedOnLeg } from '@/lib/bookingItinerary';
+import { activeItineraryLegWhere, passengersSeatedOnLeg } from '@/lib/bookingItinerary';
 import { flightRouteInclude, withRouteLabels } from '@/lib/flightRoute';
 import { formatPrice } from '@/lib/bookingPricing';
 
@@ -32,6 +32,7 @@ export default async function AdminFlightsPage() {
         include: {
             ...flightRouteInclude,
             itineraryLegs: {
+                where: activeItineraryLegWhere,
                 include: {
                     // The seats held on this flight. A traveller on a round trip
                     // sits somewhere else on the other leg, so the manifest has

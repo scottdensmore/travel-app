@@ -1,0 +1,72 @@
+/** @jest-environment node */
+
+jest.mock('@/lib/prisma', () => ({
+    prisma: {
+        booking: { count: jest.fn(), findMany: jest.fn() },
+        cityGuide: { count: jest.fn() },
+        flight: { findMany: jest.fn() },
+        flightSchedule: { findMany: jest.fn() },
+        paymentAttempt: { findMany: jest.fn() },
+        review: { findMany: jest.fn() },
+        user: { count: jest.fn() },
+        userFavorite: { findMany: jest.fn() },
+    },
+}));
+jest.mock('next-auth', () => ({ getServerSession: jest.fn() }));
+jest.mock('@/lib/auth', () => ({ authOptions: {} }));
+jest.mock('@/lib/serverClock', () => ({ serverRenderTime: jest.fn() }));
+
+import { getServerSession } from 'next-auth';
+import AdminFlightsPage from '@/app/admin/flights/page';
+import AdminDashboard from '@/app/admin/page';
+import ProfilePage from '@/app/profile/page';
+import { prisma } from '@/lib/prisma';
+import { serverRenderTime } from '@/lib/serverClock';
+
+const bookingCount = prisma.booking.count as unknown as jest.Mock;
+const bookingFindMany = prisma.booking.findMany as unknown as jest.Mock;
+const cityGuideCount = prisma.cityGuide.count as unknown as jest.Mock;
+const flightFindMany = prisma.flight.findMany as unknown as jest.Mock;
+const scheduleFindMany = prisma.flightSchedule.findMany as unknown as jest.Mock;
+const reviewFindMany = prisma.review.findMany as unknown as jest.Mock;
+const userCount = prisma.user.count as unknown as jest.Mock;
+const userFavoriteFindMany = prisma.userFavorite.findMany as unknown as jest.Mock;
+const mockedGetServerSession = getServerSession as unknown as jest.Mock;
+const mockedServerRenderTime = serverRenderTime as unknown as jest.Mock;
+
+beforeEach(() => {
+    jest.clearAllMocks();
+    bookingCount.mockResolvedValue(0);
+    bookingFindMany.mockResolvedValue([]);
+    cityGuideCount.mockResolvedValue(0);
+    flightFindMany.mockResolvedValue([]);
+    scheduleFindMany.mockResolvedValue([]);
+    reviewFindMany.mockResolvedValue([]);
+    userCount.mockResolvedValue(0);
+    userFavoriteFindMany.mockResolvedValue([]);
+    mockedGetServerSession.mockResolvedValue({ user: { id: 'traveller-1' } });
+    mockedServerRenderTime.mockResolvedValue(Date.now());
+});
+
+describe('active itinerary page reads', () => {
+    it('loads only active legs for the customer profile', async () => {
+        await ProfilePage();
+
+        expect(bookingFindMany.mock.calls[0][0].include.legs.where)
+            .toEqual({ supersededAt: null });
+    });
+
+    it('loads only active legs for recent bookings on the admin dashboard', async () => {
+        await AdminDashboard();
+
+        expect(bookingFindMany.mock.calls[0][0].include.legs.where)
+            .toEqual({ supersededAt: null });
+    });
+
+    it('loads only active booking legs for the admin flight manifest', async () => {
+        await AdminFlightsPage();
+
+        expect(flightFindMany.mock.calls[0][0].include.itineraryLegs.where)
+            .toEqual({ supersededAt: null });
+    });
+});
