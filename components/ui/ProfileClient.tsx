@@ -59,6 +59,11 @@ interface Booking {
     // The itinerary. One leg today; a round trip adds the inbound (#69).
     legs: BookingLeg[];
     passengers: Passenger[];
+    paymentReceipt?: {
+        amountCents: number;
+        currency: string;
+        paidAt: Date | string;
+    } | null;
     statusChanges?: Array<{
         refundCents: number | null;
         paymentRefund: {
@@ -66,6 +71,15 @@ interface Booking {
             status: 'PENDING' | 'REQUIRES_ACTION' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
         } | null;
     }>;
+}
+
+function formatReceiptDate(value: Date | string): string {
+    return new Intl.DateTimeFormat('en-US', {
+        day: 'numeric',
+        month: 'long',
+        timeZone: 'UTC',
+        year: 'numeric',
+    }).format(new Date(value));
 }
 
 interface CityGuide {
@@ -212,6 +226,7 @@ export default function ProfileClient({
     } | null>(null);
     const refundFeedbackRef = useRef<HTMLParagraphElement | null>(null);
     const bookingsRegionRef = useRef<HTMLDivElement | null>(null);
+    const receiptBookings = bookings.filter(booking => booking.paymentReceipt);
 
     useEffect(() => {
         if (refundFeedback?.focus) refundFeedbackRef.current?.focus();
@@ -682,6 +697,52 @@ export default function ProfileClient({
                         <p className="text-gray-500 italic">You have no bookings yet.</p>
                     )}
                 </div>
+
+                <section className="profile-card mt-8" aria-labelledby="payment-history-heading">
+                    <h2 id="payment-history-heading" className="text-2xl font-bold mb-4">Payment history</h2>
+                    {receiptBookings.length > 0 ? (
+                        <div className="payment-history-list">
+                            {receiptBookings.map(booking => {
+                                const receipt = booking.paymentReceipt!;
+                                const flightNumbers = orderedLegs(booking)
+                                    .flatMap(leg => leg.flight ? [leg.flight.flightNumber] : []);
+                                const refund = booking.statusChanges?.[0]?.paymentRefund ?? null;
+                                const refundOutcome = refund
+                                    ? refund.status === 'SUCCEEDED'
+                                        ? `${formatPrice(refund.amountCents)} ${receipt.currency} refunded`
+                                        : refund.status === 'PENDING'
+                                            ? `${formatPrice(refund.amountCents)} ${receipt.currency} refund pending`
+                                            : `${formatPrice(refund.amountCents)} ${receipt.currency} refund needs attention`
+                                    : null;
+                                return (
+                                    <article
+                                        key={booking.id}
+                                        className="payment-receipt-card"
+                                        aria-label={`Receipt for booking ${booking.id}`}
+                                    >
+                                        <div>
+                                            <p className="payment-receipt-eyebrow">Payment receipt</p>
+                                            <h3>Booking {booking.id}</h3>
+                                        </div>
+                                        <div className="payment-receipt-details">
+                                            <p>Paid <strong>{formatPrice(receipt.amountCents)} {receipt.currency}</strong></p>
+                                            <p>
+                                                <span>Payment date </span>
+                                                <time dateTime={new Date(receipt.paidAt).toISOString()}>
+                                                    {formatReceiptDate(receipt.paidAt)}
+                                                </time>
+                                            </p>
+                                            <p>Flights {flightNumbers.join(', ') || 'unavailable'}</p>
+                                            {refundOutcome && <p>{refundOutcome}</p>}
+                                        </div>
+                                    </article>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <p className="text-gray-500 italic">No payment receipts yet.</p>
+                    )}
+                </section>
 
                 {/* Favorites Section */}
                 <div className="profile-card mt-8">

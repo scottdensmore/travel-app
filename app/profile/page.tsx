@@ -69,6 +69,39 @@ export default async function ProfilePage() {
     },
   });
 
+  // A booking exists only after capture, but the durable attempt remains the
+  // authoritative payment record. Select only captured rows, then project a
+  // receipt below without sending Stripe IDs, checkout IDs or fingerprints to
+  // the client (#75).
+  const providerIntentIds = userBookings.flatMap(booking =>
+    booking.paymentIntentId ? [booking.paymentIntentId] : []
+  );
+  const capturedPayments = providerIntentIds.length > 0
+    ? await prisma.paymentAttempt.findMany({
+        where: {
+          providerIntentId: { in: providerIntentIds },
+          status: 'CAPTURED',
+          capturedAt: { not: null },
+        },
+        select: {
+          providerIntentId: true,
+          amountCents: true,
+          currency: true,
+          capturedAt: true,
+        },
+      })
+    : [];
+  const capturedPaymentByIntent = new Map(
+    capturedPayments.flatMap(payment => payment.providerIntentId && payment.capturedAt
+      ? [[payment.providerIntentId, {
+          amountCents: payment.amountCents,
+          currency: payment.currency,
+          capturedAt: payment.capturedAt,
+        }] as const]
+      : []
+    )
+  );
+
   const userFavorites = await prisma.userFavorite.findMany({
     where: { userId },
     include: { cityGuide: true },
@@ -88,6 +121,30 @@ export default async function ProfilePage() {
     ...booking,
     legs: booking.legs.map(withLegRouteLabels),
   }));
+  const customerBookings = bookings.map(booking => {
+    const capturedPayment = booking.paymentIntentId
+      ? capturedPaymentByIntent.get(booking.paymentIntentId)
+      : undefined;
+    // These identifiers are useful only to server-side idempotency and provider
+    // reconciliation. Do not make them part of customer-facing history.
+    const {
+      paymentIntentId: _paymentIntentId,
+      idempotencyKey: _idempotencyKey,
+      userId: _userId,
+      ...customerBooking
+    } = booking;
+
+    return {
+      ...customerBooking,
+      paymentReceipt: capturedPayment
+        ? {
+            amountCents: capturedPayment.amountCents,
+            currency: capturedPayment.currency,
+            paidAt: capturedPayment.capturedAt,
+          }
+        : null,
+    };
+  });
 
   const pointsActivityService = new PointsActivityService(bookings);
   const activityData = pointsActivityService.getPointsActivity();
@@ -101,7 +158,7 @@ export default async function ProfilePage() {
       userAvatar={userAvatar}
       currentStatus={currentStatus}
       currentPoints={currentPoints}
-      bookings={bookings}
+      bookings={customerBookings}
       favorites={userFavorites}
       reviews={userReviews}
       activityData={activityData}

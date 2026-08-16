@@ -188,6 +188,25 @@ test.describe('Flight Booking Journey', () => {
     
     const bookingRows = page.locator('table tbody tr');
     await expect(bookingRows.first()).toBeVisible();
+
+    const receipt = page.getByRole('article', {
+      name: `Receipt for booking ${persistedBooking.id}`,
+    });
+    await expect(receipt).toBeVisible();
+    await expect(receipt).toContainText(`Paid ${expectedTotal.formatted} USD`);
+    await expect(receipt).toContainText(targetFlight.flightNumber);
+    await expect(page.getByText(persistedBooking.paymentIntentId!)).toHaveCount(0);
+    await expect(page.getByText(persistedBooking.idempotencyKey!)).toHaveCount(0);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const phoneReceiptBox = await receipt.boundingBox();
+    expect(phoneReceiptBox).not.toBeNull();
+    expect(phoneReceiptBox!.x).toBeGreaterThanOrEqual(0);
+    expect(phoneReceiptBox!.x + phoneReceiptBox!.width).toBeLessThanOrEqual(390);
+    await expect.poll(() => page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }))).toEqual({ clientWidth: 390, scrollWidth: 390 });
+    await page.setViewportSize({ width: 1280, height: 720 });
     
     // Verify points balance has increased (non-zero status points)
     const pointsText = await page.locator('p:has-text("Status Points")').textContent();
@@ -247,6 +266,7 @@ test.describe('Flight Booking Journey', () => {
     const expectedRefundCents = expectedTotal.cents - Math.floor(expectedTotal.cents * 20 / 100);
     await expect(page.getByTestId(`booking-refund-${persistedBooking.id}`))
       .toHaveText(`${formatPrice(expectedRefundCents)} refund sent.`);
+    await expect(receipt).toContainText(`${formatPrice(expectedRefundCents)} USD refunded`);
     await expect(page.getByRole('button', { name: 'Retry Refund' })).toHaveCount(0);
     const refund = await prisma.paymentRefund.findFirstOrThrow({
       where: { bookingStatusChange: { bookingId: persistedBooking.id } },

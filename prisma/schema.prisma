@@ -146,6 +146,7 @@ model PaymentAttempt {
   currency             String               @default("USD")
   providerIntentId     String?              @unique
   status               PaymentAttemptStatus @default(CREATING)
+  capturedAt           DateTime?
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
   webhookEvents        PaymentWebhookEvent[]
