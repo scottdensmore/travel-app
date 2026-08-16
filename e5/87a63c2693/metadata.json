@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "e587a63c2693",
+  "strategy": "manual-commit",
+  "branch": "feat/75-staff-payment-reconciliation",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "__tests__/app/actions.test.ts",
+    "__tests__/app/adminPaymentsPage.test.tsx",
+    "__tests__/components/PaymentRecoveryQueue.test.tsx",
+    "__tests__/lib/paymentRecovery.database.test.ts",
+    "__tests__/lib/paymentWebhookService.database.test.ts",
+    "app/actions.ts",
+    "app/admin/page.tsx",
+    "app/admin/payments/page.tsx",
+    "app/globals.css",
+    "components/ui/PaymentRecoveryQueue.tsx",
+    "e2e/payment-recovery.spec.ts",
+    "lib/paymentRecovery.ts",
+    "lib/paymentWebhookService.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/e5/87a63c2693/0/metadata.json",
+      "transcript": "/e5/87a63c2693/0/full.jsonl",
+      "compact_transcript": "/e5/87a63c2693/0/transcript.jsonl",
+      "content_hash": "/e5/87a63c2693/0/content_hash.txt",
+      "prompt": "/e5/87a63c2693/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": -136116736,
+    "output_tokens": -229508,
+    "api_call_count": 265
+  }
+}
