@@ -20,6 +20,7 @@ import {
     holdChosenSeatsAction,
     startCheckoutPaymentAction,
     retryBookingRefundAction,
+    reconcilePaymentAttemptAction,
 } from '@/app/actions';
 import { getServerSession } from 'next-auth';
 import TravelGuideService from '@/lib/TravelGuideService';
@@ -32,6 +33,8 @@ import {
 } from '@/lib/checkoutPaymentService';
 import { createStripePaymentProvider, getStripePublishableKey } from '@/lib/stripePaymentProvider';
 import { PaymentRefundService } from '@/lib/paymentRefundService';
+import { PaymentAttemptReconciliationService } from '@/lib/paymentWebhookService';
+import { revalidatePath } from 'next/cache';
 
 // Keep these heavy/server-only modules out of the unit test.
 jest.mock('next-auth', () => ({ getServerSession: jest.fn() }));
@@ -72,6 +75,15 @@ jest.mock('@/lib/paymentRefundService', () => {
     const settleRefund = jest.fn();
     return {
         PaymentRefundService: jest.fn().mockImplementation(() => ({ settleRefund })),
+    };
+});
+
+jest.mock('@/lib/paymentWebhookService', () => {
+    const reconcileAttempt = jest.fn();
+    return {
+        PaymentAttemptReconciliationService: jest.fn().mockImplementation(() => ({
+            reconcileAttempt,
+        })),
     };
 });
 
@@ -141,7 +153,10 @@ const mockStartPayment = new (CheckoutPaymentService as any)().startPayment as j
 const mockCapturePayment = new (CheckoutPaymentService as any)().capturePayment as jest.Mock;
 const mockCancelPayment = new (CheckoutPaymentService as any)().cancelPayment as jest.Mock;
 const mockSettleRefund = new (PaymentRefundService as any)({}).settleRefund as jest.Mock;
+const mockReconcilePaymentAttempt = new (PaymentAttemptReconciliationService as any)({})
+    .reconcileAttempt as jest.Mock;
 const mockedCreateStripePaymentProvider = createStripePaymentProvider as jest.Mock;
+const mockedRevalidatePath = revalidatePath as jest.Mock;
 const mockedGetStripePublishableKey = getStripePublishableKey as jest.Mock;
 const mockedFlightFindMany = (prisma as any).flight.findMany as jest.Mock;
 const mockedFlightFindFirst = (prisma as any).flight.findFirst as jest.Mock;
@@ -1096,6 +1111,85 @@ describe('startCheckoutPaymentAction', () => {
                 },
             },
         });
+    });
+});
+
+describe('reconcilePaymentAttemptAction', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it('lets verified staff refresh one payment attempt and revalidates the queue', async () => {
+        mockedGetServerSession.mockResolvedValue({
+            user: { id: 'admin-123', role: 'ADMIN', staffMfaVerified: true },
+        });
+        mockReconcilePaymentAttempt.mockResolvedValue({
+            attemptId: 'attempt-123',
+            previousStatus: 'PROCESSING',
+            status: 'CAPTURED',
+            changed: true,
+            updatedAt: new Date('2026-08-15T10:15:00.000Z'),
+        });
+
+        await expect(reconcilePaymentAttemptAction(' attempt-123 ')).resolves.toEqual({
+            ok: true,
+            attemptId: 'attempt-123',
+            previousStatus: 'PROCESSING',
+            status: 'CAPTURED',
+            changed: true,
+            updatedAt: '2026-08-15T10:15:00.000Z',
+        });
+        expect(mockedCreateStripePaymentProvider).toHaveBeenCalledTimes(1);
+        expect(mockReconcilePaymentAttempt).toHaveBeenCalledWith('attempt-123');
+        expect(mockedRevalidatePath).toHaveBeenCalledWith('/admin/payments');
+    });
+
+    it('rejects callers without verified staff access before constructing Stripe', async () => {
+        mockedGetServerSession.mockResolvedValue({
+            user: { id: 'admin-123', role: 'ADMIN', staffMfaVerified: false },
+        });
+
+        await expect(reconcilePaymentAttemptAction('attempt-123')).rejects.toThrow('Unauthorized');
+        expect(mockedCreateStripePaymentProvider).not.toHaveBeenCalled();
+        expect(mockReconcilePaymentAttempt).not.toHaveBeenCalled();
+    });
+
+    it('rejects an invalid attempt ID before constructing Stripe', async () => {
+        mockedGetServerSession.mockResolvedValue({
+            user: { id: 'admin-123', role: 'ADMIN', staffMfaVerified: true },
+        });
+
+        await expect(reconcilePaymentAttemptAction('   ')).resolves.toMatchObject({
+            ok: false,
+            error: { code: 'VALIDATION_ERROR' },
+        });
+        expect(mockedCreateStripePaymentProvider).not.toHaveBeenCalled();
+        expect(mockReconcilePaymentAttempt).not.toHaveBeenCalled();
+    });
+
+    it('returns safe recoverable feedback when Stripe reconciliation fails', async () => {
+        mockedGetServerSession.mockResolvedValue({
+            user: { id: 'admin-123', role: 'ADMIN', staffMfaVerified: true },
+        });
+        mockReconcilePaymentAttempt.mockRejectedValue(
+            new Error('provider response included client_secret_sensitive'),
+        );
+        const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+        await expect(reconcilePaymentAttemptAction('attempt-123')).resolves.toEqual({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'Payment status could not be refreshed. Try again later.',
+                fields: {
+                    paymentAttemptId: ['Payment status could not be refreshed. Try again later.'],
+                },
+            },
+        });
+        expect(consoleError).toHaveBeenCalledWith({
+            message: 'Staff payment reconciliation failed.',
+            paymentAttemptId: 'attempt-123',
+        });
+        expect(JSON.stringify(consoleError.mock.calls)).not.toContain('client_secret_sensitive');
+        consoleError.mockRestore();
     });
 });
 
