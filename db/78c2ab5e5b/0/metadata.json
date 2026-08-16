@@ -1,0 +1,55 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "db78c2ab5e5b",
+  "session_id": "019ffe5b-1054-7c22-8afc-e97cb84c7b73",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-16T02:07:36.911727488Z",
+  "branch": "feat/75-cancellation-refunds",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "__tests__/app/actions.test.ts",
+    "__tests__/components/ProfileClient.test.tsx",
+    "__tests__/e2e/rowSnapshot.database.test.ts",
+    "__tests__/lib/paymentRefundIntegrity.database.test.ts",
+    "__tests__/lib/paymentRefundService.database.test.ts",
+    "__tests__/lib/stripePaymentProvider.test.ts",
+    "app/actions.ts",
+    "app/globals.css",
+    "app/profile/page.tsx",
+    "components/ui/ProfileClient.tsx",
+    "e2e/booking.spec.ts",
+    "e2e/helpers/rowSnapshot.ts",
+    "lib/paymentRefundService.ts",
+    "lib/stripePaymentProvider.ts",
+    "prisma/migrations/20260815210000_add_payment_refunds/migration.sql",
+    "prisma/schema.prisma"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.6-sol",
+  "turn_id": "93addd8bea40",
+  "checkpoint_transcript_start": 17276,
+  "transcript_lines_at_start": 17276,
+  "compact_transcript_start": 2752,
+  "token_usage": {
+    "input_tokens": 761435,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 68927744,
+    "output_tokens": 114553,
+    "api_call_count": 454
+  },
+  "session_metrics": {
+    "turn_count": 15
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-16T02:07:26.087182469Z",
+    "agent_lines": 1678,
+    "agent_removed": 42,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1678,
+    "total_lines_changed": 1720,
+    "agent_percentage": 100,
+    "metric_version": 2
+  }
+}
