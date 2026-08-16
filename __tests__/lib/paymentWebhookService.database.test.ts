@@ -1,12 +1,16 @@
 /** @jest-environment node */
 
 import { randomUUID } from 'node:crypto';
-import { PaymentWebhookService } from '@/lib/paymentWebhookService';
+import {
+    PaymentAttemptReconciliationService,
+    PaymentWebhookService,
+} from '@/lib/paymentWebhookService';
 import { prisma } from '@/lib/prisma';
 import type {
     PaymentAuthorizationStatus,
     PaymentStateProvider,
 } from '@/lib/stripePaymentProvider';
+import { lockPaymentIntentForUpdate } from '@/lib/paymentIntentLock';
 
 const createdAttemptIds: string[] = [];
 
@@ -238,5 +242,172 @@ describe('reconciling Stripe PaymentIntent webhooks', () => {
         expect(callsBeforeRelease).toBe(1);
         await expect(prisma.paymentAttempt.findUniqueOrThrow({ where: { id: saved.id } }))
             .resolves.toMatchObject({ status: 'CAPTURED' });
+    });
+});
+
+describe('staff reconciliation of one payment attempt', () => {
+    it('refreshes the durable attempt from current provider state without inventing a webhook', async () => {
+        const providerIntentId = `pi_${randomUUID().replaceAll('-', '')}`;
+        const saved = await attempt(providerIntentId);
+        const fake = provider({
+            providerIntentId,
+            paymentAttemptId: saved.id,
+            status: 'AUTHORIZED',
+        });
+
+        const result = await new PaymentAttemptReconciliationService(fake.value)
+            .reconcileAttempt(saved.id);
+
+        expect(result).toMatchObject({
+            attemptId: saved.id,
+            previousStatus: 'CREATING',
+            status: 'AUTHORIZED',
+            changed: true,
+            updatedAt: expect.any(Date),
+        });
+        await expect(prisma.paymentAttempt.findUniqueOrThrow({ where: { id: saved.id } }))
+            .resolves.toMatchObject({ status: 'AUTHORIZED', updatedAt: result.updatedAt });
+        expect(await prisma.paymentWebhookEvent.count({ where: { paymentAttemptId: saved.id } }))
+            .toBe(0);
+    });
+
+    it('rejects an attempt that has no provider intent before contacting Stripe', async () => {
+        const saved = await attempt();
+        const fake = provider({
+            providerIntentId: `pi_${randomUUID().replaceAll('-', '')}`,
+            paymentAttemptId: saved.id,
+            status: 'AUTHORIZED',
+        });
+
+        await expect(new PaymentAttemptReconciliationService(fake.value).reconcileAttempt(saved.id))
+            .rejects.toThrow('Payment attempt cannot be reconciled without a provider intent.');
+        expect(fake.retrievePaymentState).not.toHaveBeenCalled();
+    });
+
+    it('reports an unchanged current provider state without claiming a transition', async () => {
+        const providerIntentId = `pi_${randomUUID().replaceAll('-', '')}`;
+        const saved = await attempt(providerIntentId);
+        await prisma.paymentAttempt.update({
+            where: { id: saved.id },
+            data: { status: 'PROCESSING' },
+        });
+        const fake = provider({
+            providerIntentId,
+            paymentAttemptId: saved.id,
+            status: 'PROCESSING',
+        });
+
+        await expect(new PaymentAttemptReconciliationService(fake.value).reconcileAttempt(saved.id))
+            .resolves.toMatchObject({
+                previousStatus: 'PROCESSING',
+                status: 'PROCESSING',
+                changed: false,
+            });
+    });
+
+    it('rolls back when provider metadata points at another attempt', async () => {
+        const providerIntentId = `pi_${randomUUID().replaceAll('-', '')}`;
+        const saved = await attempt(providerIntentId);
+        const fake = provider({
+            providerIntentId,
+            paymentAttemptId: randomUUID(),
+            status: 'AUTHORIZED',
+        });
+
+        await expect(new PaymentAttemptReconciliationService(fake.value).reconcileAttempt(saved.id))
+            .rejects.toThrow('Stripe PaymentIntent is bound to a different payment attempt.');
+        await expect(prisma.paymentAttempt.findUniqueOrThrow({ where: { id: saved.id } }))
+            .resolves.toMatchObject({ status: 'CREATING' });
+    });
+
+    it('serialises two staff refreshes so an older provider read cannot win last', async () => {
+        const providerIntentId = `pi_${randomUUID().replaceAll('-', '')}`;
+        const saved = await attempt(providerIntentId);
+        let releaseFirst!: () => void;
+        let firstStarted!: () => void;
+        const firstRelease = new Promise<void>(resolve => { releaseFirst = resolve; });
+        const started = new Promise<void>(resolve => { firstStarted = resolve; });
+        let call = 0;
+        const retrievePaymentState = jest.fn().mockImplementation(async () => {
+            call += 1;
+            if (call === 1) {
+                firstStarted();
+                await firstRelease;
+                return {
+                    providerIntentId,
+                    paymentAttemptId: saved.id,
+                    status: 'AUTHORIZED' as const,
+                };
+            }
+            return {
+                providerIntentId,
+                paymentAttemptId: saved.id,
+                status: 'CAPTURED' as const,
+            };
+        });
+        const service = new PaymentAttemptReconciliationService({ retrievePaymentState });
+
+        const first = service.reconcileAttempt(saved.id);
+        await started;
+        const second = service.reconcileAttempt(saved.id);
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        const callsBeforeRelease = retrievePaymentState.mock.calls.length;
+        releaseFirst();
+        await Promise.all([first, second]);
+
+        expect(callsBeforeRelease).toBe(1);
+        await expect(prisma.paymentAttempt.findUniqueOrThrow({ where: { id: saved.id } }))
+            .resolves.toMatchObject({ status: 'CAPTURED' });
+    });
+
+    it('refuses a provider binding changed while the staff refresh waits for its lock', async () => {
+        const providerIntentId = `pi_${randomUUID().replaceAll('-', '')}`;
+        const replacementIntentId = `pi_${randomUUID().replaceAll('-', '')}`;
+        const saved = await attempt(providerIntentId);
+        let releaseLock!: () => void;
+        let lockHeld!: () => void;
+        const release = new Promise<void>(resolve => { releaseLock = resolve; });
+        const locked = new Promise<void>(resolve => { lockHeld = resolve; });
+        const holder = prisma.$transaction(async tx => {
+            await lockPaymentIntentForUpdate(tx, providerIntentId);
+            lockHeld();
+            await release;
+        });
+        await locked;
+        const fake = provider({
+            providerIntentId,
+            paymentAttemptId: saved.id,
+            status: 'AUTHORIZED',
+        });
+        const reconciliation = new PaymentAttemptReconciliationService(fake.value)
+            .reconcileAttempt(saved.id);
+
+        try {
+            for (let attemptNumber = 0; attemptNumber < 50; attemptNumber += 1) {
+                const [waiting] = await prisma.$queryRaw<Array<{ count: number }>>`
+                    SELECT count(*)::int AS "count"
+                    FROM pg_stat_activity
+                    WHERE datname = current_database()
+                      AND wait_event = 'advisory'
+                `;
+                if (waiting.count > 0) break;
+                await new Promise(resolve => setTimeout(resolve, 20));
+                if (attemptNumber === 49) {
+                    throw new Error('Staff reconciliation never waited on its advisory lock.');
+                }
+            }
+            await prisma.paymentAttempt.update({
+                where: { id: saved.id },
+                data: { providerIntentId: replacementIntentId },
+            });
+        } finally {
+            releaseLock();
+            await holder;
+        }
+
+        await expect(reconciliation)
+            .rejects.toThrow('Payment attempt provider binding changed during reconciliation.');
+        expect(fake.retrievePaymentState).not.toHaveBeenCalled();
     });
 });

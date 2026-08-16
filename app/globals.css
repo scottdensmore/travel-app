@@ -1216,6 +1216,91 @@ footer a:hover {
   box-shadow: 0 0 0 5px rgba(251, 191, 36, 0.28);
 }
 
+.payment-recovery-feedback {
+  border-radius: 8px;
+  margin: 1rem 0;
+  padding: 12px;
+}
+
+.payment-recovery-feedback--success {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  color: #6ee7b7;
+}
+
+.payment-recovery-feedback--error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  color: #fca5a5;
+}
+
+.payment-recovery-feedback:focus {
+  outline: 3px solid #fbbf24;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 5px rgba(251, 191, 36, 0.28);
+}
+
+.payment-recovery-list {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.payment-recovery-card {
+  align-items: end;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 16px;
+}
+
+.payment-recovery-card button {
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+.payment-recovery-details {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  min-width: 0;
+}
+
+.payment-recovery-details > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.payment-recovery-details code,
+.payment-recovery-details span,
+.payment-recovery-details strong {
+  overflow-wrap: anywhere;
+}
+
+.payment-recovery-label {
+  color: #a78bfa;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 700px) {
+  .payment-recovery-card {
+    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .payment-recovery-card button {
+    width: 100%;
+  }
+}
+
 .payment-history-list {
   display: grid;
   gap: 12px;

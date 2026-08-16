@@ -16,6 +16,7 @@ import {
 } from '@/lib/checkoutPaymentService';
 import { createStripePaymentProvider, getStripePublishableKey } from '@/lib/stripePaymentProvider';
 import { PaymentRefundService } from '@/lib/paymentRefundService';
+import { PaymentAttemptReconciliationService } from '@/lib/paymentWebhookService';
 import CityGuide from '@/lib/types/CityGuide';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -462,6 +463,38 @@ export async function startCheckoutPaymentAction(paymentData: {
             ? `passengers.${passengerIndex}.seatNumbers.${legIndex}`
             : '_root';
         return actionValidationFailure(error.message, field);
+    }
+}
+
+export async function reconcilePaymentAttemptAction(paymentAttemptId: string) {
+    const session = await getServerSession(authOptions);
+    if (!hasVerifiedStaffAccess(session)) throw new Error('Unauthorized');
+
+    const parsed = parseActionInput(stringIdSchema, paymentAttemptId);
+    if (!parsed.ok) return parsed;
+
+    try {
+        const result = await new PaymentAttemptReconciliationService(
+            createStripePaymentProvider(),
+        ).reconcileAttempt(parsed.data);
+        revalidatePath('/admin/payments');
+        return {
+            ok: true as const,
+            ...result,
+            updatedAt: result.updatedAt.toISOString(),
+        };
+    } catch {
+        // Provider messages can include Stripe request details. Staff need a
+        // retryable outcome, while logs keep only the local identifier needed
+        // to investigate it.
+        console.error({
+            message: 'Staff payment reconciliation failed.',
+            paymentAttemptId: parsed.data,
+        });
+        return actionValidationFailure(
+            'Payment status could not be refreshed. Try again later.',
+            'paymentAttemptId',
+        );
     }
 }
 
