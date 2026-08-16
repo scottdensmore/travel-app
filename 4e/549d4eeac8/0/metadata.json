@@ -1,0 +1,51 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "4e549d4eeac8",
+  "session_id": "019ffe5b-1054-7c22-8afc-e97cb84c7b73",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-16T21:34:29.717162799Z",
+  "branch": "feat/234-rebooking-service",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "__tests__/lib/itineraryRebookingService.database.test.ts",
+    "lib/flightLock.ts",
+    "lib/itineraryRebookingService.ts"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.6-sol",
+  "turn_id": "29926902acd8",
+  "checkpoint_transcript_start": 26010,
+  "transcript_lines_at_start": 26010,
+  "compact_transcript_start": 4166,
+  "token_usage": {
+    "input_tokens": 662687,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 59940864,
+    "output_tokens": 98833,
+    "api_call_count": 421
+  },
+  "session_metrics": {
+    "turn_count": 17
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-16T21:34:14.344637731Z",
+    "agent_lines": 1343,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1343,
+    "total_lines_changed": 1343,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}

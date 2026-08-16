@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "4e549d4eeac8",
+  "strategy": "manual-commit",
+  "branch": "feat/234-rebooking-service",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "__tests__/lib/itineraryRebookingService.database.test.ts",
+    "lib/flightLock.ts",
+    "lib/itineraryRebookingService.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/4e/549d4eeac8/0/metadata.json",
+      "transcript": "/4e/549d4eeac8/0/full.jsonl",
+      "compact_transcript": "/4e/549d4eeac8/0/transcript.jsonl",
+      "content_hash": "/4e/549d4eeac8/0/content_hash.txt",
+      "prompt": "/4e/549d4eeac8/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 662687,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 59940864,
+    "output_tokens": 98833,
+    "api_call_count": 421
+  }
+}
