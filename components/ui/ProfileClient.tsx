@@ -11,6 +11,7 @@ import { cancelBookingAction, deleteReviewAction, toggleFavoriteCityGuideAction,
 import { isActionValidationFailure } from '@/lib/actionResult';
 import { PointsActivityDisplayData } from '@/lib/types/PointsActivity';
 import { flightDeparture } from '@/lib/flightTime';
+import type { ReplacementFlightGroup } from '@/lib/itineraryReplacementSearch';
 
 interface Flight {
     id: number;
@@ -114,12 +115,65 @@ interface ProfileClientProps {
     reviews: Review[];
     activityData: PointsActivityDisplayData[];
     monthlyHistory: PointsActivityDisplayData[];
+    replacementOptions?: Record<number, ReplacementFlightGroup[]>;
     /// The server's clock at render time. Deciding "has this departed" from
     /// `Date.now()` in the component would make the first client render
     /// disagree with the markup it hydrates. Required rather than defaulted:
     /// a default of zero makes every flight look upcoming, which is the
     /// departed guard quietly switched off with nothing to notice it.
     renderedAt: number;
+}
+
+function ReplacementFlightsPreview({
+    bookingId,
+    groups,
+}: {
+    bookingId: number;
+    groups: ReplacementFlightGroup[];
+}) {
+    const headingId = `replacement-flights-${bookingId}`;
+    const allLegsHaveOptions = groups.length > 0
+        && groups.every(group => group.flights.length > 0);
+
+    return (
+        <section
+            className="replacement-flight-preview"
+            aria-labelledby={headingId}
+        >
+            <h3 id={headingId}>
+                Replacement flights within 3 days
+                <span className="sr-only"> for booking {bookingId}</span>
+            </h3>
+            {groups.map(group => (
+                <div className="replacement-flight-group" key={group.fromLegId}>
+                    <h4>
+                        {group.originalFlightNumber}: {group.from} → {group.to}
+                    </h4>
+                    {group.flights.length > 0 && (
+                        <ul>
+                            {group.flights.map(flight => {
+                                const departure = flightDeparture(flight);
+                                return (
+                                    <li key={flight.id}>
+                                        <strong>{flight.airline} {flight.flightNumber}</strong>
+                                        <span>{flight.from} → {flight.to}</span>
+                                        <span>
+                                            {departure.readableDate} at {departure.time} {departure.zoneLabel}
+                                        </span>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    )}
+                </div>
+            ))}
+            <p className="replacement-flight-guidance">
+                {allLegsHaveOptions
+                    ? 'Your original fare is protected. Contact support to move to one of these flights, or cancel for a full refund.'
+                    : 'No complete replacement itinerary is available within three days. Contact support, or cancel for a full refund.'}
+            </p>
+        </section>
+    );
 }
 
 /**
@@ -214,6 +268,7 @@ export default function ProfileClient({
     reviews,
     activityData,
     monthlyHistory,
+    replacementOptions = {},
     renderedAt,
 }: ProfileClientProps) {
     const router = useRouter();
@@ -688,6 +743,16 @@ export default function ProfileClient({
                                                     )}
                                                 </tr>
                                             ))}
+                                            {isDisrupted && replacementOptions[booking.id]?.length > 0 && (
+                                                <tr className="replacement-flight-row">
+                                                    <td colSpan={6} data-label="Replacement flights">
+                                                        <ReplacementFlightsPreview
+                                                            bookingId={booking.id}
+                                                            groups={replacementOptions[booking.id]}
+                                                        />
+                                                    </td>
+                                                </tr>
+                                            )}
                                         </tbody>
                                     );
                                 })}

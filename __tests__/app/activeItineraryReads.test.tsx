@@ -15,6 +15,13 @@ jest.mock('@/lib/prisma', () => ({
 jest.mock('next-auth', () => ({ getServerSession: jest.fn() }));
 jest.mock('@/lib/auth', () => ({ authOptions: {} }));
 jest.mock('@/lib/serverClock', () => ({ serverRenderTime: jest.fn() }));
+jest.mock('@/lib/itineraryReplacementSearch', () => ({
+    ItineraryReplacementSearch: jest.fn().mockImplementation(() => ({
+        forBooking: mockReplacementForBooking,
+    })),
+}));
+
+const mockReplacementForBooking = jest.fn();
 
 import { getServerSession } from 'next-auth';
 import AdminFlightsPage from '@/app/admin/flights/page';
@@ -46,6 +53,7 @@ beforeEach(() => {
     userFavoriteFindMany.mockResolvedValue([]);
     mockedGetServerSession.mockResolvedValue({ user: { id: 'traveller-1' } });
     mockedServerRenderTime.mockResolvedValue(Date.now());
+    mockReplacementForBooking.mockResolvedValue([]);
 });
 
 describe('active itinerary page reads', () => {
@@ -54,6 +62,42 @@ describe('active itinerary page reads', () => {
 
         expect(bookingFindMany.mock.calls[0][0].include.legs.where)
             .toEqual({ supersededAt: null });
+    });
+
+    it('loads replacement options only for the customer\'s disrupted bookings', async () => {
+        const disruptedBooking = {
+            id: 42,
+            userId: 'traveller-1',
+            status: 'DISRUPTED',
+            createdAt: new Date('2099-01-01T00:00:00Z'),
+            totalPriceCents: 42000,
+            currency: 'USD',
+            paymentIntentId: null,
+            idempotencyKey: null,
+            passengers: [],
+            legs: [],
+            statusChanges: [],
+        };
+        const confirmedBooking = { ...disruptedBooking, id: 43, status: 'CONFIRMED' };
+        const groups = [{
+            fromLegId: 7,
+            originalFlightNumber: 'MA100',
+            originalDepartureDate: new Date('2099-01-02T12:00:00Z'),
+            from: 'Seattle, USA',
+            to: 'Detroit, USA',
+            flights: [],
+        }];
+        bookingFindMany.mockResolvedValue([disruptedBooking, confirmedBooking]);
+        mockReplacementForBooking.mockResolvedValue(groups);
+
+        const page = await ProfilePage();
+
+        expect(mockReplacementForBooking).toHaveBeenCalledTimes(1);
+        expect(mockReplacementForBooking).toHaveBeenCalledWith({
+            bookingId: 42,
+            userId: 'traveller-1',
+        });
+        expect(page.props.replacementOptions).toEqual({ 42: groups });
     });
 
     it('loads only active legs for recent bookings on the admin dashboard', async () => {

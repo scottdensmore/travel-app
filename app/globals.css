@@ -1200,6 +1200,58 @@ footer a:hover {
   font-size: 12px;
 }
 
+.replacement-flight-row td {
+  padding: 16px 0;
+}
+
+.replacement-flight-preview {
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  border-radius: 10px;
+  background: rgba(120, 53, 15, 0.16);
+  padding: 16px;
+}
+
+.replacement-flight-preview h3 {
+  margin: 0 0 12px;
+  color: #fcd34d;
+  font-size: 1rem;
+}
+
+.replacement-flight-group h4 {
+  margin: 12px 0 8px;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.875rem;
+}
+
+.replacement-flight-group ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.replacement-flight-group li {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 10px;
+}
+
+.replacement-flight-group li span {
+  display: block;
+  margin-top: 2px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.8rem;
+}
+
+.replacement-flight-guidance {
+  margin: 12px 0 0;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 0.82rem;
+}
+
 /* Cancellation and refund retry replace their originating control. Keep the
    completion target visible when focus is moved there programmatically. */
 .refund-action-feedback {
@@ -1375,7 +1427,8 @@ footer a:hover {
      what can be done about it. Unset cells keep source order at 0. */
   .bookings-table td[data-label='Price'] { order: 1; }
   .bookings-table td[data-label='Status'] { order: 2; }
-  .bookings-table .booking-actions-cell { order: 3; }
+  .bookings-table .replacement-flight-row td { order: 3; }
+  .bookings-table .booking-actions-cell { order: 4; }
 
   /* Off-screen rather than `display: none`: the headings still name the
      columns for anything reading the table linearly. */
