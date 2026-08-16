@@ -93,6 +93,29 @@ describe('reconciling Stripe PaymentIntent webhooks', () => {
         expect(await prisma.paymentWebhookEvent.count({ where: { id: webhook.eventId } })).toBe(1);
     });
 
+    it('records the first captured state time and preserves it across later events', async () => {
+        const providerIntentId = `pi_${randomUUID().replaceAll('-', '')}`;
+        const saved = await attempt(providerIntentId);
+        const fake = provider({
+            providerIntentId,
+            paymentAttemptId: saved.id,
+            status: 'CAPTURED',
+        });
+        const service = new PaymentWebhookService(fake.value);
+
+        await service.reconcile(event(`evt_${randomUUID()}`, providerIntentId));
+        const [first] = await prisma.$queryRaw<Array<{ capturedAt: Date | null }>>`
+            SELECT "capturedAt" FROM "PaymentAttempt" WHERE "id" = ${saved.id}
+        `;
+        await service.reconcile(event(`evt_${randomUUID()}`, providerIntentId));
+        const [second] = await prisma.$queryRaw<Array<{ capturedAt: Date | null }>>`
+            SELECT "capturedAt" FROM "PaymentAttempt" WHERE "id" = ${saved.id}
+        `;
+
+        expect(first.capturedAt).toBeInstanceOf(Date);
+        expect(second.capturedAt).toEqual(first.capturedAt);
+    });
+
     it('rejects provider state that points at no local payment attempt and records no event', async () => {
         const providerIntentId = `pi_${randomUUID().replaceAll('-', '')}`;
         const fake = provider({

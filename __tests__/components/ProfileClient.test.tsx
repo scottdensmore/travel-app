@@ -647,6 +647,62 @@ describe('ProfileClient interactive dashboard', () => {
                 .not.toBeInTheDocument();
         });
 
+        it('renders a customer-safe receipt for a captured booking and its refund', () => {
+            renderBookings([{
+                ...roundTripBooking,
+                status: 'CANCELLED',
+                paymentReceipt: {
+                    // Deliberately differs from the booking total so the card
+                    // cannot silently re-price a receipt from the itinerary.
+                    amountCents: 65_500,
+                    currency: 'USD',
+                    paidAt: '2026-06-03T14:30:00Z',
+                },
+                statusChanges: [{
+                    refundCents: 24_000,
+                    paymentRefund: { status: 'SUCCEEDED', amountCents: 24_000 },
+                }],
+            }]);
+
+            const receipt = screen.getByRole('article', { name: 'Receipt for booking 202' });
+            expect(receipt).toHaveTextContent('Booking 202');
+            expect(receipt).toHaveTextContent('Paid $655 USD');
+            expect(receipt).toHaveTextContent('June 3, 2026');
+            expect(receipt).toHaveTextContent('GA101, GA900');
+            expect(receipt).toHaveTextContent('$240 USD refunded');
+            expect(receipt).not.toHaveTextContent(/pi_|checkout|fingerprint/i);
+        });
+
+        it('does not turn an unlinked booking fare into a payment receipt', () => {
+            renderBookings([roundTripBooking]);
+
+            expect(screen.getByRole('heading', { name: 'Payment history' })).toBeInTheDocument();
+            expect(screen.getByText('No payment receipts yet.')).toBeInTheDocument();
+            expect(screen.queryByRole('article', { name: /receipt for booking/i }))
+                .not.toBeInTheDocument();
+        });
+
+        it.each([
+            ['PENDING', '$240 USD refund pending'],
+            ['FAILED', '$240 USD refund needs attention'],
+        ] as const)('renders a customer-safe %s refund outcome in the receipt', (status, copy) => {
+            renderBookings([{
+                ...roundTripBooking,
+                paymentReceipt: {
+                    amountCents: 66_000,
+                    currency: 'USD',
+                    paidAt: '2026-06-01T10:00:00Z',
+                },
+                statusChanges: [{
+                    refundCents: 24_000,
+                    paymentRefund: { status, amountCents: 24_000 },
+                }],
+            }]);
+
+            expect(screen.getByRole('article', { name: 'Receipt for booking 202' }))
+                .toHaveTextContent(copy);
+        });
+
         it('announces progress and completion when retrying a failed durable refund', async () => {
             let resolveRetry!: (value: { status: 'SUCCEEDED'; wasSubmitted: true }) => void;
             mockRetryBookingRefund.mockImplementation(() => new Promise(resolve => {

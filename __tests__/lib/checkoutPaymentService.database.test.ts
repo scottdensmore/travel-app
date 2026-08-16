@@ -635,6 +635,10 @@ describe('settling a checkout payment', () => {
         });
         await expect(prisma.paymentAttempt.findUniqueOrThrow({ where: { id: attempt.id } }))
             .resolves.toMatchObject({ status: 'CAPTURED' });
+        const [stored] = await prisma.$queryRaw<Array<{ capturedAt: Date | null }>>`
+            SELECT "capturedAt" FROM "PaymentAttempt" WHERE "id" = ${attempt.id}
+        `;
+        expect(stored.capturedAt).toBeInstanceOf(Date);
     });
 
     it('reconciles a capture whose Stripe response was lost', async () => {
@@ -659,6 +663,10 @@ describe('settling a checkout payment', () => {
     it('does not ask Stripe to capture an attempt already recorded as captured', async () => {
         const { user, checkoutId, fake, service, booking } = await authorizedFixture();
         await service.capturePayment({ userId: user.id, checkoutId, bookingId: booking.id });
+        const [first] = await prisma.$queryRaw<Array<{ capturedAt: Date | null }>>`
+            SELECT "capturedAt" FROM "PaymentAttempt"
+            WHERE "userId" = ${user.id} AND "checkoutId" = ${checkoutId}
+        `;
         fake.captureAuthorization.mockClear();
 
         await expect(service.capturePayment({
@@ -667,6 +675,11 @@ describe('settling a checkout payment', () => {
             bookingId: booking.id,
         })).resolves.toEqual({ status: 'CAPTURED', wasCaptured: false });
         expect(fake.captureAuthorization).not.toHaveBeenCalled();
+        const [second] = await prisma.$queryRaw<Array<{ capturedAt: Date | null }>>`
+            SELECT "capturedAt" FROM "PaymentAttempt"
+            WHERE "userId" = ${user.id} AND "checkoutId" = ${checkoutId}
+        `;
+        expect(second.capturedAt).toEqual(first.capturedAt);
     });
 
     it('refuses to capture when the booking is not linked to the checkout intent', async () => {
