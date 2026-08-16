@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "e56696f26dce",
+  "strategy": "manual-commit",
+  "branch": "feat/75-payment-receipts",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "__tests__/app/profilePaymentHistory.database.test.ts",
+    "__tests__/components/ProfileClient.test.tsx",
+    "__tests__/lib/checkoutPaymentService.database.test.ts",
+    "__tests__/lib/paymentAttemptIntegrity.database.test.ts",
+    "__tests__/lib/paymentWebhookService.database.test.ts",
+    "app/globals.css",
+    "app/profile/page.tsx",
+    "components/ui/ProfileClient.tsx",
+    "e2e/booking.spec.ts",
+    "prisma/migrations/20260816030000_add_payment_capture_time/migration.sql",
+    "prisma/schema.prisma"
+  ],
+  "sessions": [
+    {
+      "metadata": "/e5/6696f26dce/0/metadata.json",
+      "transcript": "/e5/6696f26dce/0/full.jsonl",
+      "compact_transcript": "/e5/6696f26dce/0/transcript.jsonl",
+      "content_hash": "/e5/6696f26dce/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 488089,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 37485056,
+    "output_tokens": 73205,
+    "api_call_count": 292
+  }
+}
