@@ -126,6 +126,118 @@ describe('StripePaymentProvider', () => {
         );
     });
 
+    it('creates an exact PaymentIntent refund with durable metadata and idempotency', async () => {
+        const create = jest.fn().mockResolvedValue({
+            id: 're_cancellation',
+            payment_intent: 'pi_captured',
+            status: 'succeeded',
+            metadata: { paymentRefundId: 'refund-123', refundAttemptId: 'attempt-456' },
+        });
+        const provider = new StripePaymentProvider({
+            refunds: { create },
+        } as never);
+
+        await expect(provider.createRefund({
+            refundId: 'refund-123',
+            refundAttemptId: 'attempt-456',
+            providerIntentId: 'pi_captured',
+            amountCents: 24_000,
+        })).resolves.toEqual({
+            providerRefundId: 're_cancellation',
+            paymentRefundId: 'refund-123',
+            refundAttemptId: 'attempt-456',
+            status: 'SUCCEEDED',
+        });
+        expect(create).toHaveBeenCalledWith({
+            payment_intent: 'pi_captured',
+            amount: 24_000,
+            reason: 'requested_by_customer',
+            metadata: { paymentRefundId: 'refund-123', refundAttemptId: 'attempt-456' },
+        }, { idempotencyKey: 'payment-refund:attempt-456' });
+    });
+
+    it('recovers the exact durable refund attempt from PaymentIntent history', async () => {
+        async function* listedRefunds() {
+            yield {
+                id: 're_other_attempt',
+                status: 'succeeded',
+                metadata: { paymentRefundId: 'refund-123', refundAttemptId: 'other-attempt' },
+            };
+            yield {
+                id: 're_recovered',
+                status: 'pending',
+                metadata: { paymentRefundId: 'refund-123', refundAttemptId: 'attempt-456' },
+            };
+        }
+        const list = jest.fn().mockReturnValue(listedRefunds());
+        const provider = new StripePaymentProvider({ refunds: { list } } as never);
+
+        await expect(provider.findRefund({
+            refundId: 'refund-123',
+            refundAttemptId: 'attempt-456',
+            providerIntentId: 'pi_captured',
+        })).resolves.toEqual({
+            providerRefundId: 're_recovered',
+            paymentRefundId: 'refund-123',
+            refundAttemptId: 'attempt-456',
+            status: 'PENDING',
+        });
+        expect(list).toHaveBeenCalledWith({ payment_intent: 'pi_captured' });
+    });
+
+    it('retrieves a known refund without returning provider payload fields', async () => {
+        const retrieve = jest.fn().mockResolvedValue({
+            id: 're_known',
+            status: 'failed',
+            metadata: { paymentRefundId: 'refund-123', refundAttemptId: 'attempt-456' },
+            failure_reason: 'provider detail that must not escape',
+        });
+        const provider = new StripePaymentProvider({ refunds: { retrieve } } as never);
+
+        const state = await provider.retrieveRefund('re_known');
+        expect(state).toEqual({
+            providerRefundId: 're_known',
+            paymentRefundId: 'refund-123',
+            refundAttemptId: 'attempt-456',
+            status: 'FAILED',
+        });
+        expect(JSON.stringify(state)).not.toContain('provider detail that must not escape');
+    });
+
+    it.each([
+        ['requires_action', 'REQUIRES_ACTION'],
+        ['canceled', 'CANCELLED'],
+    ] as const)('maps Stripe refund %s to %s', async (stripeStatus, expectedStatus) => {
+        const retrieve = jest.fn().mockResolvedValue({
+            id: 're_status',
+            status: stripeStatus,
+            metadata: { paymentRefundId: 'refund-123', refundAttemptId: 'attempt-456' },
+        });
+        const provider = new StripePaymentProvider({ refunds: { retrieve } } as never);
+
+        await expect(provider.retrieveRefund('re_status')).resolves.toEqual({
+            providerRefundId: 're_status',
+            paymentRefundId: 'refund-123',
+            refundAttemptId: 'attempt-456',
+            status: expectedStatus,
+        });
+    });
+
+    it('rejects a Stripe refund response without a status', async () => {
+        const provider = new StripePaymentProvider({
+            refunds: {
+                retrieve: jest.fn().mockResolvedValue({
+                    id: 're_missing_status',
+                    status: null,
+                    metadata: {},
+                }),
+            },
+        } as never);
+
+        await expect(provider.retrieveRefund('re_missing_status'))
+            .rejects.toThrow('Stripe did not return a refund status.');
+    });
+
     it('refuses to construct a provider without the server secret', () => {
         expect(() => createStripePaymentProvider({ STRIPE_SECRET_KEY: '   ' })).toThrow(
             'Missing required environment variable: STRIPE_SECRET_KEY',

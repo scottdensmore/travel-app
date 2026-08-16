@@ -1200,6 +1200,22 @@ footer a:hover {
   font-size: 12px;
 }
 
+/* Cancellation and refund retry replace their originating control. Keep the
+   completion target visible when focus is moved there programmatically. */
+.refund-action-feedback {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.9);
+  max-width: 14rem;
+  text-align: left;
+}
+
+.refund-action-feedback:focus {
+  outline: 3px solid #fbbf24;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 5px rgba(251, 191, 36, 0.28);
+}
+
 /* Eyes only, and only when stacked: the header row is still read out. */
 .cell-label {
   display: none;

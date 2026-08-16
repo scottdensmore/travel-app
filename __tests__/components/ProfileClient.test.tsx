@@ -12,7 +12,7 @@ global.ResizeObserver = class {
     disconnect() {}
 } as unknown as typeof ResizeObserver;
 import ProfileClient from '@/components/ui/ProfileClient';
-import { cancelBookingAction, deleteReviewAction, toggleFavoriteCityGuideAction, changeBookingSeatsAction, getOccupiedSeatsAction } from '@/app/actions';
+import { cancelBookingAction, deleteReviewAction, toggleFavoriteCityGuideAction, changeBookingSeatsAction, getOccupiedSeatsAction, retryBookingRefundAction } from '@/app/actions';
 import { useRouter } from 'next/navigation';
 
 jest.mock('next/navigation', () => ({
@@ -27,6 +27,7 @@ jest.mock('@/app/actions', () => ({
     toggleFavoriteCityGuideAction: jest.fn(),
     changeBookingSeatsAction: jest.fn(),
     getOccupiedSeatsAction: jest.fn(),
+    retryBookingRefundAction: jest.fn(),
 }));
 
 jest.mock('@/components/ui/charts/nextStatusChart', () => () => <div data-testid="status-chart" />);
@@ -37,6 +38,7 @@ const mockDeleteReview = deleteReviewAction as jest.Mock;
 const mockToggleFavorite = toggleFavoriteCityGuideAction as jest.Mock;
 const mockChangeBookingSeats = changeBookingSeatsAction as jest.Mock;
 const mockGetOccupiedSeats = getOccupiedSeatsAction as jest.Mock;
+const mockRetryBookingRefund = retryBookingRefundAction as jest.Mock;
 
 const sampleBookings = [
     {
@@ -173,6 +175,12 @@ describe('ProfileClient interactive dashboard', () => {
             expect(mockCancelBooking).toHaveBeenCalledWith(101);
             expect(mockRefresh).toHaveBeenCalled();
         });
+        const completion = screen.getByRole('status');
+        expect(completion).toHaveTextContent(
+            'Booking cancelled. Any refund due will appear in the status column.',
+        );
+        expect(completion).toHaveAttribute('aria-live', 'polite');
+        expect(completion).toHaveFocus();
     });
 
     it('handles removing a favorite', async () => {
@@ -621,6 +629,58 @@ describe('ProfileClient interactive dashboard', () => {
 
             const row = screen.getByTestId('booking-row-202');
             expect(within(row).getAllByText('Cancelled')).toHaveLength(1);
+        });
+
+        it('shows the exact completed refund on a cancelled paid booking', () => {
+            renderBookings([{
+                ...roundTripBooking,
+                status: 'CANCELLED',
+                statusChanges: [{
+                    refundCents: 24_000,
+                    paymentRefund: { status: 'SUCCEEDED', amountCents: 24_000 },
+                }],
+            }]);
+
+            expect(screen.getByTestId('booking-refund-202'))
+                .toHaveTextContent('$240 refund sent');
+            expect(screen.queryByRole('button', { name: /retry refund/i }))
+                .not.toBeInTheDocument();
+        });
+
+        it('announces progress and completion when retrying a failed durable refund', async () => {
+            let resolveRetry!: (value: { status: 'SUCCEEDED'; wasSubmitted: true }) => void;
+            mockRetryBookingRefund.mockImplementation(() => new Promise(resolve => {
+                resolveRetry = resolve;
+            }));
+            renderBookings([{
+                ...roundTripBooking,
+                status: 'CANCELLED',
+                statusChanges: [{
+                    refundCents: 24_000,
+                    paymentRefund: { status: 'FAILED', amountCents: 24_000 },
+                }],
+            }]);
+
+            expect(screen.getByTestId('booking-refund-202'))
+                .toHaveTextContent('$240 refund needs attention');
+            fireEvent.click(screen.getByRole('button', { name: /retry refund/i }));
+
+            const busyButton = await screen.findByRole('button', { name: 'Retrying refund…' });
+            expect(busyButton).toBeDisabled();
+            expect(busyButton).toHaveAttribute('aria-busy', 'true');
+            expect(screen.getByRole('status')).toHaveTextContent('Retrying your $240 refund.');
+
+            await act(async () => {
+                resolveRetry({ status: 'SUCCEEDED', wasSubmitted: true });
+            });
+            await waitFor(() => {
+                expect(mockRetryBookingRefund).toHaveBeenCalledWith(202);
+                expect(mockRefresh).toHaveBeenCalled();
+            });
+            const completion = screen.getByRole('status');
+            expect(completion).toHaveTextContent('$240 refund sent.');
+            expect(completion).toHaveAttribute('aria-live', 'polite');
+            expect(completion).toHaveFocus();
         });
 
         it('keeps the raised contrast on the status and the seat line', () => {

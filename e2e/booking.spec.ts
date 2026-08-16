@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { prisma } from '../lib/prisma';
 import { flightRouteInclude, withRouteLabels } from '@/lib/flightRoute';
-import { calculateItineraryTotal } from '../lib/bookingPricing';
+import { calculateItineraryTotal, formatPrice } from '../lib/bookingPricing';
 import { registerAndSignIn } from './helpers/auth';
 import { completeCheckoutPayment, openCheckoutPayment } from './helpers/checkoutPayment';
 import { fillOneWayFlightSearch } from './helpers/flightSearch';
@@ -64,7 +64,9 @@ test.describe('Flight Booking Journey', () => {
     const targetFlight = await prisma.flight.findFirst({
       where: {
         departureDate: {
-          gt: new Date()
+          // This journey proves a provider refund, so choose a departure that
+          // is unambiguously outside the 24-hour no-refund window.
+          gt: new Date(Date.now() + 48 * 60 * 60 * 1000)
         }
       },
       // The route is on the airports now, not on the flight (#73).
@@ -214,6 +216,15 @@ test.describe('Flight Booking Journey', () => {
     });
     await page.click('button:has-text("Cancel")');
 
+    const cancellationStatus = page.getByRole('status').filter({
+      hasText: 'Booking cancelled. Any refund due will appear in the status column.',
+    });
+    await expect(cancellationStatus).toBeVisible();
+    await expect(cancellationStatus).toBeFocused();
+    await expect(cancellationStatus).toHaveCSS('outline-style', 'solid');
+    await expect(cancellationStatus).toHaveCSS('outline-width', '3px');
+    await expect(cancellationStatus).toHaveCSS('outline-color', 'rgb(251, 191, 36)');
+
     // Confirm cancel status badge and action buttons are gone
     // The Status column. The copy shown beside the flight number when the
     // column is out of reach carries a `compact-` prefix precisely so this
@@ -229,6 +240,27 @@ test.describe('Flight Booking Journey', () => {
     // 11B, a seat the customer no longer holds and somebody else may (#76).
     await expect(page.locator('text=Bob (Seat released)')).toBeVisible();
     await expect(page.locator('text=Bob (Seat 11B)')).not.toBeVisible();
+
+    // The paid booking crosses the real cancellation action and the guarded
+    // provider boundary. One Economy fare keeps 20%; the rest is delivered by
+    // one durable refund request and one successful provider attempt.
+    const expectedRefundCents = expectedTotal.cents - Math.floor(expectedTotal.cents * 20 / 100);
+    await expect(page.getByTestId(`booking-refund-${persistedBooking.id}`))
+      .toHaveText(`${formatPrice(expectedRefundCents)} refund sent.`);
+    await expect(page.getByRole('button', { name: 'Retry Refund' })).toHaveCount(0);
+    const refund = await prisma.paymentRefund.findFirstOrThrow({
+      where: { bookingStatusChange: { bookingId: persistedBooking.id } },
+      include: { attempts: true },
+    });
+    expect(refund).toMatchObject({
+      providerIntentId: persistedBooking.paymentIntentId,
+      amountCents: expectedRefundCents,
+      currency: 'USD',
+      status: 'SUCCEEDED',
+    });
+    expect(refund.attempts).toHaveLength(1);
+    expect(refund.attempts[0]).toMatchObject({ status: 'SUCCEEDED' });
+    expect(refund.attempts[0].providerRefundId).toMatch(/^re_playwright_/);
     
     // Confirm points are deducted back to starting points (1300)
     const pointsTextAfterCancel = await page.locator('p:has-text("Status Points")').textContent();

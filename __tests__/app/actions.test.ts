@@ -19,6 +19,7 @@ import {
     getOccupiedSeatsAction,
     holdChosenSeatsAction,
     startCheckoutPaymentAction,
+    retryBookingRefundAction,
 } from '@/app/actions';
 import { getServerSession } from 'next-auth';
 import TravelGuideService from '@/lib/TravelGuideService';
@@ -30,6 +31,7 @@ import {
     CheckoutPaymentService,
 } from '@/lib/checkoutPaymentService';
 import { createStripePaymentProvider, getStripePublishableKey } from '@/lib/stripePaymentProvider';
+import { PaymentRefundService } from '@/lib/paymentRefundService';
 
 // Keep these heavy/server-only modules out of the unit test.
 jest.mock('next-auth', () => ({ getServerSession: jest.fn() }));
@@ -66,6 +68,13 @@ jest.mock('@/lib/checkoutPaymentService', () => {
     };
 });
 
+jest.mock('@/lib/paymentRefundService', () => {
+    const settleRefund = jest.fn();
+    return {
+        PaymentRefundService: jest.fn().mockImplementation(() => ({ settleRefund })),
+    };
+});
+
 jest.mock('@/lib/stripePaymentProvider', () => ({
     createStripePaymentProvider: jest.fn().mockReturnValue({}),
     getStripePublishableKey: jest.fn().mockReturnValue('pk_test_public'),
@@ -85,6 +94,8 @@ const mockTx = {
         update: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
+    bookingStatusChange: { findFirstOrThrow: jest.fn() },
+    paymentRefund: { create: jest.fn() },
     flight: {
         findUnique: jest.fn(),
         findMany: jest.fn(),
@@ -129,6 +140,7 @@ const mockGenerateFlightsForDate = new (FlightScheduleService as any)().generate
 const mockStartPayment = new (CheckoutPaymentService as any)().startPayment as jest.Mock;
 const mockCapturePayment = new (CheckoutPaymentService as any)().capturePayment as jest.Mock;
 const mockCancelPayment = new (CheckoutPaymentService as any)().cancelPayment as jest.Mock;
+const mockSettleRefund = new (PaymentRefundService as any)({}).settleRefund as jest.Mock;
 const mockedCreateStripePaymentProvider = createStripePaymentProvider as jest.Mock;
 const mockedGetStripePublishableKey = getStripePublishableKey as jest.Mock;
 const mockedFlightFindMany = (prisma as any).flight.findMany as jest.Mock;
@@ -1188,6 +1200,9 @@ describe('cancelBookingAction', () => {
             }],
         });
         mockTx.booking.update.mockReset();
+        mockTx.bookingStatusChange.findFirstOrThrow.mockResolvedValue({ id: 'change-1' });
+        mockTx.paymentRefund.create.mockResolvedValue({ id: 'refund-1' });
+        mockSettleRefund.mockResolvedValue({ status: 'SUCCEEDED', wasSubmitted: true });
     });
 
     it('rejects an unauthenticated user', async () => {
@@ -1375,6 +1390,99 @@ describe('cancelBookingAction', () => {
         for (const setting of settings) expect(setting.sql).toContain('true');
     });
 
+    it('durably submits the recorded refund for a captured booking', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        const paidBooking = {
+            id: 1,
+            userId: 'user-123',
+            paymentIntentId: 'pi_captured',
+            currency: 'USD',
+            totalPriceCents: 10_000,
+            status: 'CONFIRMED',
+            legs: [{
+                sequence: 1,
+                flight: {
+                    flightNumber: 'GA101', airline: 'Gemini Airways', priceCents: 10_000,
+                    departureDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                },
+                seatAssignments: [{ cabinClass: 'ECONOMY' }],
+            }],
+        };
+        mockedBookingFindUnique.mockResolvedValue(paidBooking);
+        mockTx.booking.findUnique.mockResolvedValue(paidBooking);
+        mockTx.booking.update.mockResolvedValue({ id: 1, status: 'CANCELLED' });
+
+        await expect(cancelBookingAction(1)).resolves.toEqual({ id: 1, status: 'CANCELLED' });
+
+        expect(mockTx.bookingStatusChange.findFirstOrThrow).toHaveBeenCalledWith({
+            where: { bookingId: 1, from: 'CONFIRMED', to: 'CANCELLED' },
+            orderBy: { sequence: 'desc' },
+        });
+        expect(mockTx.paymentRefund.create).toHaveBeenCalledWith({
+            data: {
+                bookingStatusChangeId: 'change-1',
+                providerIntentId: 'pi_captured',
+                amountCents: 8_000,
+                currency: 'USD',
+            },
+        });
+        expect(mockSettleRefund).toHaveBeenCalledWith('refund-1');
+    });
+
+    it('keeps a committed cancellation truthful when refund submission is unavailable', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        const paidBooking = {
+            id: 1, userId: 'user-123', paymentIntentId: 'pi_captured', currency: 'USD',
+            totalPriceCents: 10_000, status: 'CONFIRMED',
+            legs: [{
+                sequence: 1,
+                flight: {
+                    flightNumber: 'GA101', airline: 'Gemini Airways', priceCents: 10_000,
+                    departureDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                },
+                seatAssignments: [{ cabinClass: 'ECONOMY' }],
+            }],
+        };
+        mockedBookingFindUnique.mockResolvedValue(paidBooking);
+        mockTx.booking.findUnique.mockResolvedValue(paidBooking);
+        mockTx.booking.update.mockResolvedValue({ id: 1, status: 'CANCELLED' });
+        mockSettleRefund.mockRejectedValueOnce(new Error('secret provider payload'));
+        const error = jest.spyOn(console, 'error').mockImplementation();
+
+        await expect(cancelBookingAction(1)).resolves.toEqual({ id: 1, status: 'CANCELLED' });
+
+        expect(JSON.stringify(error.mock.calls)).not.toContain('secret provider payload');
+        expect(error).toHaveBeenCalledWith({
+            message: 'Booking refund submission is still pending.',
+            refundId: 'refund-1',
+        });
+        error.mockRestore();
+    });
+
+    it('does not create a provider refund when the cancellation refunds zero', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        const paidBooking = {
+            id: 1, userId: 'user-123', paymentIntentId: 'pi_captured', currency: 'USD',
+            totalPriceCents: 10_000, status: 'CONFIRMED',
+            legs: [{
+                sequence: 1,
+                flight: {
+                    flightNumber: 'GA101', airline: 'Gemini Airways', priceCents: 10_000,
+                    departureDate: new Date(Date.now() + 60 * 60 * 1000),
+                },
+                seatAssignments: [{ cabinClass: 'ECONOMY' }],
+            }],
+        };
+        mockedBookingFindUnique.mockResolvedValue(paidBooking);
+        mockTx.booking.findUnique.mockResolvedValue(paidBooking);
+        mockTx.booking.update.mockResolvedValue({ id: 1, status: 'CANCELLED' });
+
+        await cancelBookingAction(1);
+
+        expect(mockTx.paymentRefund.create).not.toHaveBeenCalled();
+        expect(mockSettleRefund).not.toHaveBeenCalled();
+    });
+
     it('prices the cancellation from the read taken under the lock', async () => {
         // Staff can cancel the flight between the first read and the lock,
         // which moves the booking to DISRUPTED and makes it fully refundable.
@@ -1481,6 +1589,79 @@ describe('cancelBookingAction', () => {
                 type: 'POINTS'
             }
         });
+    });
+});
+
+describe('retryBookingRefundAction', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockSettleRefund.mockResolvedValue({ status: 'SUCCEEDED', wasSubmitted: true });
+    });
+
+    it('lets the booking owner retry its durable refund', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        mockedBookingFindUnique.mockResolvedValue({
+            userId: 'user-123',
+            statusChanges: [{ paymentRefund: { id: 'refund-1' } }],
+        });
+
+        await expect(retryBookingRefundAction(1)).resolves.toEqual({
+            status: 'SUCCEEDED',
+            wasSubmitted: true,
+        });
+        expect(mockSettleRefund).toHaveBeenCalledWith('refund-1');
+    });
+
+    it('does not reveal another customer\'s refund', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        mockedBookingFindUnique.mockResolvedValue({
+            userId: 'other-user',
+            statusChanges: [{ paymentRefund: { id: 'refund-1' } }],
+        });
+
+        await expect(retryBookingRefundAction(1)).rejects.toThrow('Unauthorized');
+        expect(mockSettleRefund).not.toHaveBeenCalled();
+    });
+
+    it('returns a stable validation result when the booking has no refund', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        mockedBookingFindUnique.mockResolvedValue({
+            userId: 'user-123',
+            statusChanges: [],
+        });
+
+        await expect(retryBookingRefundAction(1)).resolves.toEqual({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'This booking has no refund to retry.',
+                fields: { _root: ['This booking has no refund to retry.'] },
+            },
+        });
+        expect(mockSettleRefund).not.toHaveBeenCalled();
+    });
+
+    it('maps provider failures to stable refund-safe copy', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        mockedBookingFindUnique.mockResolvedValue({
+            userId: 'user-123',
+            statusChanges: [{ paymentRefund: { id: 'refund-1' } }],
+        });
+        mockSettleRefund.mockRejectedValue(new Error('forbidden provider detail sentinel'));
+
+        const result = await retryBookingRefundAction(1);
+
+        expect(result).toEqual({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'Your refund is still pending. Please try again later.',
+                fields: {
+                    'payment.refund': ['Your refund is still pending. Please try again later.'],
+                },
+            },
+        });
+        expect(JSON.stringify(result)).not.toContain('forbidden provider detail sentinel');
     });
 });
 

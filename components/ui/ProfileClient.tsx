@@ -7,7 +7,7 @@ import NextStatusChart from "@/components/ui/charts/nextStatusChart";
 import PointsHistoryChart from "@/components/ui/charts/pointsHistoryChart";
 import { flightFareCents, formatPrice } from '@/lib/bookingPricing';
 import { cabinLabel, legDirectionLabel, orderedLegs, outboundFlight, seatLabel } from '@/lib/bookingItinerary';
-import { cancelBookingAction, deleteReviewAction, toggleFavoriteCityGuideAction, changeBookingSeatsAction, getOccupiedSeatsAction } from '@/app/actions';
+import { cancelBookingAction, deleteReviewAction, toggleFavoriteCityGuideAction, changeBookingSeatsAction, getOccupiedSeatsAction, retryBookingRefundAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
 import { PointsActivityDisplayData } from '@/lib/types/PointsActivity';
 import { flightDeparture } from '@/lib/flightTime';
@@ -59,6 +59,13 @@ interface Booking {
     // The itinerary. One leg today; a round trip adds the inbound (#69).
     legs: BookingLeg[];
     passengers: Passenger[];
+    statusChanges?: Array<{
+        refundCents: number | null;
+        paymentRefund: {
+            amountCents: number;
+            status: 'PENDING' | 'REQUIRES_ACTION' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
+        } | null;
+    }>;
 }
 
 interface CityGuide {
@@ -143,6 +150,14 @@ function bookingPresentation(booking: Booking, renderedAt: number) {
     const departed = legs[0]?.flight
         ? new Date(legs[0].flight.departureDate).getTime() <= renderedAt
         : false;
+    const refund = booking.statusChanges?.[0]?.paymentRefund ?? null;
+    const refundText = refund
+        ? refund.status === 'SUCCEEDED'
+            ? `${formatPrice(refund.amountCents)} refund sent.`
+            : refund.status === 'PENDING'
+                ? `${formatPrice(refund.amountCents)} refund is pending.`
+                : `${formatPrice(refund.amountCents)} refund needs attention.`
+        : null;
 
     return {
         legs,
@@ -165,6 +180,8 @@ function bookingPresentation(booking: Booking, renderedAt: number) {
         disruptionNote: departed
             ? 'This flight did not operate. Contact support about a refund.'
             : 'Your seat is held. Cancel for a full refund, with no cancellation fee.',
+        refundText,
+        refundRetryable: Boolean(refund && refund.status !== 'SUCCEEDED'),
         priceLabel: booking.totalPriceCents !== null && booking.totalPriceCents !== undefined
             ? formatPrice(booking.totalPriceCents)
             : legs[0]?.flight ? formatPrice(flightFareCents(legs[0].flight)) : '\u2014',
@@ -187,7 +204,18 @@ export default function ProfileClient({
 }: ProfileClientProps) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
+    const [activeRefundBookingId, setActiveRefundBookingId] = useState<number | null>(null);
+    const [refundFeedback, setRefundFeedback] = useState<{
+        bookingId: number;
+        message: string;
+        focus: boolean;
+    } | null>(null);
+    const refundFeedbackRef = useRef<HTMLParagraphElement | null>(null);
     const bookingsRegionRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        if (refundFeedback?.focus) refundFeedbackRef.current?.focus();
+    }, [refundFeedback]);
     /**
      * Whether the region still scrolls sideways.
      *
@@ -299,11 +327,47 @@ export default function ProfileClient({
                     refusal = result.error.message;
                     return;
                 }
+                setRefundFeedback({
+                    bookingId,
+                    message: 'Booking cancelled. Any refund due will appear in the status column.',
+                    focus: true,
+                });
                 router.refresh();
             } catch {
                 refusal = 'Failed to cancel booking. Please try again.';
             } finally {
                 if (refusal) alert(refusal);
+            }
+        });
+    };
+
+    const handleRetryRefund = (bookingId: number, amountCents: number) => {
+        setActiveRefundBookingId(bookingId);
+        setRefundFeedback({
+            bookingId,
+            message: `Retrying your ${formatPrice(amountCents)} refund.`,
+            focus: false,
+        });
+        startTransition(async () => {
+            try {
+                const result = await retryBookingRefundAction(bookingId);
+                if (isActionValidationFailure(result)) {
+                    alert(result.error.message);
+                    setRefundFeedback(null);
+                    return;
+                }
+                const message = result.status === 'SUCCEEDED'
+                    ? `${formatPrice(amountCents)} refund sent.`
+                    : result.status === 'PENDING'
+                        ? `${formatPrice(amountCents)} refund is pending.`
+                        : `${formatPrice(amountCents)} refund needs attention.`;
+                setRefundFeedback({ bookingId, message, focus: true });
+                router.refresh();
+            } catch {
+                setRefundFeedback(null);
+                alert('Your refund is still pending. Please try again later.');
+            } finally {
+                setActiveRefundBookingId(null);
             }
         });
     };
@@ -479,8 +543,11 @@ export default function ProfileClient({
                                     // them. One tbody per booking groups the legs.
                                     const {
                                         legs, legRows, isDisrupted, cancelledLeg, cancellable,
-                                        statusText, statusColour, disruptionNote, priceLabel, seatFor,
+                                        statusText, statusColour, disruptionNote, refundText,
+                                        refundRetryable, priceLabel, seatFor,
                                     } = bookingPresentation(booking, renderedAt);
+                                    const refundAmountCents = booking.statusChanges?.[0]?.paymentRefund?.amountCents;
+                                    const isRetryingRefund = activeRefundBookingId === booking.id;
                                     return (
                                         <tbody key={booking.id} data-testid={`booking-row-${booking.id}`} className="border-b">
                                             {legRows.map((leg, index) => (
@@ -534,40 +601,72 @@ export default function ProfileClient({
                                                                         {disruptionNote}
                                                                     </p>
                                                                 )}
+                                                                {refundText && (
+                                                                    <p
+                                                                        data-testid={`booking-refund-${booking.id}`}
+                                                                        style={{
+                                                                            margin: '4px 0 0',
+                                                                            fontSize: '0.75rem',
+                                                                            color: 'rgba(255,255,255,0.82)',
+                                                                            maxWidth: '14rem',
+                                                                        }}
+                                                                    >
+                                                                        {refundText}
+                                                                    </p>
+                                                                )}
                                                             </td>
                                                             <td className="py-2 text-right align-top booking-actions-cell" rowSpan={legRows.length}>
-                                                                {cancellable && (
+                                                                {(cancellable || refundRetryable) && (
                                                                     <div className="booking-actions">
-                                                                        <button
-                                                                            onClick={() => setSelectedBooking(booking)}
-                                                                            disabled={isPending}
-                                                                            style={{
-                                                                                backgroundColor: '#8b5cf6',
-                                                                                color: 'white',
-                                                                                borderRadius: '4px',
-                                                                                height: 'auto',
-                                                                                width: 'auto',
-                                                                                cursor: 'pointer',
-                                                                                whiteSpace: 'nowrap'
-                                                                            }}
-                                                                        >
-                                                                            Change Seats
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={() => handleCancelBooking(booking.id, cancelledLeg?.flight?.flightNumber || '', isDisrupted)}
-                                                                            disabled={isPending}
-                                                                            style={{
-                                                                                backgroundColor: '#ef4444',
-                                                                                color: 'white',
-                                                                                borderRadius: '4px',
-                                                                                height: 'auto',
-                                                                                width: 'auto',
-                                                                                cursor: 'pointer'
-                                                                            }}
-                                                                        >
-                                                                            Cancel
-                                                                        </button>
+                                                                        {cancellable && (
+                                                                            <>
+                                                                                <button
+                                                                                    onClick={() => setSelectedBooking(booking)}
+                                                                                    disabled={isPending}
+                                                                                    style={{
+                                                                                        backgroundColor: '#8b5cf6', color: 'white', borderRadius: '4px',
+                                                                                        height: 'auto', width: 'auto', cursor: 'pointer', whiteSpace: 'nowrap'
+                                                                                    }}
+                                                                                >
+                                                                                    Change Seats
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => handleCancelBooking(booking.id, cancelledLeg?.flight?.flightNumber || '', isDisrupted)}
+                                                                                    disabled={isPending}
+                                                                                    style={{
+                                                                                        backgroundColor: '#ef4444', color: 'white', borderRadius: '4px',
+                                                                                        height: 'auto', width: 'auto', cursor: 'pointer'
+                                                                                    }}
+                                                                                >
+                                                                                    Cancel
+                                                                                </button>
+                                                                            </>
+                                                                        )}
+                                                                        {refundRetryable && (
+                                                                            <button
+                                                                                onClick={() => handleRetryRefund(booking.id, refundAmountCents!)}
+                                                                                disabled={isPending || isRetryingRefund}
+                                                                                aria-busy={isRetryingRefund}
+                                                                                style={{
+                                                                                    backgroundColor: '#d97706', color: 'white', borderRadius: '4px',
+                                                                                    height: 'auto', width: 'auto', cursor: 'pointer', whiteSpace: 'nowrap'
+                                                                                }}
+                                                                            >
+                                                                                {isRetryingRefund ? 'Retrying refund…' : 'Retry Refund'}
+                                                                            </button>
+                                                                        )}
                                                                     </div>
+                                                                )}
+                                                                {refundFeedback?.bookingId === booking.id && (
+                                                                    <p
+                                                                        ref={refundFeedbackRef}
+                                                                        className="refund-action-feedback"
+                                                                        role="status"
+                                                                        aria-live="polite"
+                                                                        tabIndex={-1}
+                                                                    >
+                                                                        {refundFeedback.message}
+                                                                    </p>
                                                                 )}
                                                             </td>
                                                         </>
