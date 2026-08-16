@@ -1,0 +1,42 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "eb8c395e611c",
+  "strategy": "manual-commit",
+  "branch": "feat/234-itinerary-versioning",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "__tests__/app/actions.test.ts",
+    "__tests__/app/activeItineraryReads.test.tsx",
+    "__tests__/lib/FlightBookingService.test.ts",
+    "__tests__/lib/bookingItinerary.test.ts",
+    "__tests__/lib/cabinClass.database.test.ts",
+    "__tests__/lib/itineraryLegs.database.test.ts",
+    "__tests__/lib/itineraryRebooking.database.test.ts",
+    "__tests__/lib/seatOccupancy.database.test.ts",
+    "app/actions.ts",
+    "app/admin/flights/page.tsx",
+    "app/admin/page.tsx",
+    "app/profile/page.tsx",
+    "lib/FlightBookingService.ts",
+    "lib/bookingItinerary.ts",
+    "lib/flightLock.ts",
+    "prisma/migrations/20260816181000_version_itinerary_legs/migration.sql",
+    "prisma/schema.prisma"
+  ],
+  "sessions": [
+    {
+      "metadata": "/eb/8c395e611c/0/metadata.json",
+      "transcript": "/eb/8c395e611c/0/full.jsonl",
+      "compact_transcript": "/eb/8c395e611c/0/transcript.jsonl",
+      "content_hash": "/eb/8c395e611c/0/content_hash.txt",
+      "prompt": "/eb/8c395e611c/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 424249,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 19219456,
+    "output_tokens": 67125,
+    "api_call_count": 448
+  }
+}
