@@ -296,6 +296,37 @@ test.describe('A booking whose flight has gone', () => {
 });
 
 test.describe('A disrupted booking on a phone', () => {
+    test('shows a comparable replacement without hiding the refund choice', async ({ page }) => {
+        const flight = await aFlight(`RPO-${suffix.slice(-6)}`);
+        const replacement = await aFlight(`RPN-${suffix.slice(-6)}`);
+        await prisma.flight.update({
+            where: { id: replacement.id },
+            data: { departureDate: new Date(flight.departureDate.getTime() + 2 * 24 * 60 * 60 * 1000) },
+        });
+        const email = `disrupt-replacement-${suffix}@example.com`;
+        await createVerifiedAccount(page, { name: 'Replacement Flyer', email, password });
+        const booking = await bookFor(email, flight.id, '5C');
+        await prisma.flight.update({ where: { id: flight.id }, data: { status: 'CANCELLED' } });
+        await prisma.booking.update({ where: { id: booking.id }, data: { status: 'DISRUPTED' } });
+
+        await page.setViewportSize({ width: 390, height: 844 });
+        await signInWithCredentials(page, { email, password });
+        await page.goto('/profile');
+
+        const preview = page.getByRole('region', {
+            name: `Replacement flights within 3 days for booking ${booking.id}`,
+        });
+        await expect(preview).toBeVisible();
+        await expect(preview.getByRole('listitem').filter({ hasText: replacement.flightNumber }))
+            .toContainText('Seattle, USA → Detroit, USA');
+        await expect(preview).toContainText('Your original fare is protected.');
+        await expect(preview).toContainText('cancel for a full refund');
+        await expect(page.getByTestId(`booking-row-${booking.id}`)
+            .getByRole('button', { name: 'Cancel', exact: true })).toBeVisible();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth))
+            .toBe(await page.evaluate(() => document.documentElement.clientWidth));
+    });
+
     test('says so where the screen can actually show it', async ({ page }) => {
         // The visible premise of #229, and the only place it is proven against
         // real geometry: at 390px the Status column sits past the right edge of
@@ -465,11 +496,12 @@ test.describe('A disrupted booking on a phone', () => {
                 .map(cell => cell.getAttribute('data-label') ?? 'Actions');
         }, booking.id);
 
-        // Both legs, then the price, then what happened, then what to do.
+        // Both legs, then the price, what happened, replacement choices, and
+        // what can be done about it.
         expect(order).toEqual([
             'Flight', 'Route', 'Departure',
             'Flight', 'Route', 'Departure',
-            'Price', 'Status', 'Actions',
+            'Price', 'Status', 'Replacement flights', 'Actions',
         ]);
 
         // The cancelled leg is named above the action, not below it. Measured

@@ -13,6 +13,7 @@ global.ResizeObserver = class {
 } as unknown as typeof ResizeObserver;
 import ProfileClient from '@/components/ui/ProfileClient';
 import { cancelBookingAction, deleteReviewAction, toggleFavoriteCityGuideAction, changeBookingSeatsAction, getOccupiedSeatsAction, retryBookingRefundAction } from '@/app/actions';
+import type { ReplacementFlightGroup } from '@/lib/itineraryReplacementSearch';
 import { useRouter } from 'next/navigation';
 
 jest.mock('next/navigation', () => ({
@@ -358,7 +359,10 @@ describe('ProfileClient interactive dashboard', () => {
             ],
         };
 
-        const renderBookings = (bookings: unknown[]) =>
+        const renderBookings = (
+            bookings: unknown[],
+            replacementOptions: Record<number, ReplacementFlightGroup[]> = {},
+        ) =>
             render(
                 <ProfileClient
                     userName="Jane Doe"
@@ -371,6 +375,7 @@ describe('ProfileClient interactive dashboard', () => {
                     activityData={[]}
                     monthlyHistory={[]}
                     renderedAt={new Date('2026-06-01T00:00:00Z').getTime()}
+                    replacementOptions={replacementOptions}
                 />
             );
 
@@ -526,6 +531,114 @@ describe('ProfileClient interactive dashboard', () => {
             expect(within(row).getAllByText(/cancelled by airline/)).toHaveLength(1);
             expect(screen.queryByTestId('compact-booking-status-202')).not.toBeInTheDocument();
             expect(screen.getByTestId('booking-status-202')).toHaveTextContent('cancelled by airline');
+        });
+
+        it('shows comparable replacement flights on the disrupted booking', () => {
+            renderBookings([disruptedRoundTrip], {
+                202: [{
+                    fromLegId: 502,
+                    originalFlightNumber: 'GA900',
+                    originalDepartureDate: new Date('2026-06-22T17:00:00Z'),
+                    from: 'Detroit, USA',
+                    to: 'Seattle, USA',
+                    flights: [{
+                        id: 303,
+                        flightNumber: 'MA901',
+                        airline: 'Mona Airways',
+                        from: 'Detroit, USA',
+                        to: 'Seattle, USA',
+                        departureDate: new Date('2026-06-24T17:00:00Z'),
+                        durationMinutes: 290,
+                        status: 'ON_TIME',
+                        firstClassRows: 2,
+                        businessRows: 5,
+                        premiumEconomyRows: 4,
+                        economyRows: 20,
+                        seatPattern: 'ABC_DEF',
+                    }],
+                }],
+            });
+
+            const options = within(screen.getByTestId('booking-row-202'))
+                .getByRole('region', {
+                    name: 'Replacement flights within 3 days for booking 202',
+                });
+            expect(options.closest('td')).toHaveAttribute('data-label', 'Replacement flights');
+            expect(within(options).getByRole('heading', {
+                name: 'Replacement flights within 3 days for booking 202',
+            }))
+                .toBeInTheDocument();
+            expect(within(options).getByRole('listitem')).toHaveTextContent('Mona Airways MA901');
+            expect(within(options).getByRole('listitem')).toHaveTextContent('Detroit, USA → Seattle, USA');
+            expect(within(options).getByRole('listitem')).toHaveTextContent('Jun 24, 2026');
+            expect(options).toHaveTextContent('Your original fare is protected.');
+            expect(options).toHaveTextContent('Contact support to move to one of these flights');
+        });
+
+        it('gives a truthful fallback when the comparable window has no flight', () => {
+            renderBookings([disruptedRoundTrip], {
+                202: [{
+                    fromLegId: 502,
+                    originalFlightNumber: 'GA900',
+                    originalDepartureDate: new Date('2026-06-22T17:00:00Z'),
+                    from: 'Detroit, USA',
+                    to: 'Seattle, USA',
+                    flights: [],
+                }],
+            });
+
+            const options = within(screen.getByTestId('booking-row-202'))
+                .getByRole('region', {
+                    name: 'Replacement flights within 3 days for booking 202',
+                });
+            expect(options).toHaveTextContent(
+                'No complete replacement itinerary is available within three days. Contact support, or cancel for a full refund.',
+            );
+            expect(within(options).queryByRole('list')).not.toBeInTheDocument();
+        });
+
+        it('does not promise a complete itinerary when only one disrupted leg has options', () => {
+            renderBookings([disruptedRoundTrip], {
+                202: [
+                    {
+                        fromLegId: 501,
+                        originalFlightNumber: 'GA101',
+                        originalDepartureDate: new Date('2026-06-15T20:00:00Z'),
+                        from: 'Seattle, USA',
+                        to: 'Detroit, USA',
+                        flights: [{
+                            id: 304,
+                            flightNumber: 'MA102',
+                            airline: 'Mona Airways',
+                            from: 'Seattle, USA',
+                            to: 'Detroit, USA',
+                            departureDate: new Date('2026-06-16T20:00:00Z'),
+                            durationMinutes: 250,
+                            status: 'ON_TIME',
+                            firstClassRows: 2,
+                            businessRows: 5,
+                            premiumEconomyRows: 4,
+                            economyRows: 20,
+                            seatPattern: 'ABC_DEF',
+                        }],
+                    },
+                    {
+                        fromLegId: 502,
+                        originalFlightNumber: 'GA900',
+                        originalDepartureDate: new Date('2026-06-22T17:00:00Z'),
+                        from: 'Detroit, USA',
+                        to: 'Seattle, USA',
+                        flights: [],
+                    },
+                ],
+            });
+
+            const options = within(screen.getByTestId('booking-row-202'))
+                .getByRole('region', {
+                    name: 'Replacement flights within 3 days for booking 202',
+                });
+            expect(options).toHaveTextContent('No complete replacement itinerary is available');
+            expect(options).not.toHaveTextContent('Your original fare is protected.');
         });
 
         it('says a plain confirmed status once too', () => {

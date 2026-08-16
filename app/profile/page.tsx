@@ -9,6 +9,7 @@ import ProfileClient from "@/components/ui/ProfileClient";
 import { serverRenderTime } from "@/lib/serverClock";
 import { safePassengerSelect } from "@/lib/passengerDataAccess";
 import { activeItineraryLegWhere, orderedLegs } from '@/lib/bookingItinerary';
+import { ItineraryReplacementSearch } from '@/lib/itineraryReplacementSearch';
 
 export const metadata: Metadata = {
     title: 'Your profile',
@@ -70,6 +71,16 @@ export default async function ProfilePage() {
       },
     },
   });
+
+  const replacementSearch = new ItineraryReplacementSearch();
+  const replacementOptions = Object.fromEntries(await Promise.all(
+    userBookings
+      .filter(booking => booking.status === 'DISRUPTED')
+      .map(async booking => [
+        booking.id,
+        await replacementSearch.forBooking({ bookingId: booking.id, userId }),
+      ] as const),
+  ));
 
   // A booking exists only after capture, but the durable attempt remains the
   // authoritative payment record. Select only captured rows, then project a
@@ -166,6 +177,7 @@ export default async function ProfilePage() {
       activityData={activityData}
       monthlyHistory={monthlyHistory}
       renderedAt={renderedAt}
+      replacementOptions={replacementOptions}
     />
   );
 }
