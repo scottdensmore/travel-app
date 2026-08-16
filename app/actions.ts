@@ -15,6 +15,7 @@ import {
     PaymentCaptureIncompleteError,
 } from '@/lib/checkoutPaymentService';
 import { createStripePaymentProvider, getStripePublishableKey } from '@/lib/stripePaymentProvider';
+import { PaymentRefundService } from '@/lib/paymentRefundService';
 import CityGuide from '@/lib/types/CityGuide';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -649,8 +650,9 @@ export async function cancelBookingAction(bookingId: number) {
     }
 
     let updated;
+    let refundId: string | null = null;
     try {
-        updated = await prisma.$transaction(async (tx) => {
+        const cancellation = await prisma.$transaction(async (tx) => {
         // Lock in ascending flight order, matching FlightBookingService. Leg
         // order would deadlock two itineraries that cover the same flights in
         // opposite directions.
@@ -690,8 +692,8 @@ export async function cancelBookingAction(bookingId: number) {
         // status change writes. Transaction-local, so it cannot leak onto the
         // next booking to use this connection, and set inside the same
         // transaction as the update or it would expire before the trigger read
-        // it (#76). No money moves here: #75 owns that, and will have this
-        // figure rather than re-deriving one from rules that may have moved.
+        // it (#76). The durable provider request below uses this same figure
+        // rather than re-deriving one from rules that may have moved (#75).
         await tx.$executeRaw`SELECT set_config('app.booking_refund_cents', ${String(settled.refundCents)}, true)`;
         await tx.$executeRaw`SELECT set_config('app.booking_status_reason', ${cancellationNote(settled)}, true)`;
 
@@ -700,16 +702,57 @@ export async function cancelBookingAction(bookingId: number) {
         // than every caller that knows both facts. Releasing now sets
         // `releasedAt` and keeps the seat number, where the old code overwrote
         // the number with a placeholder and lost where the traveller sat (#76).
-        return await tx.booking.update({
+        const updatedBooking = await tx.booking.update({
             where: { id: bookingId },
             data: { status: "CANCELLED" }
         });
+        if (settled.refundCents <= 0 || !lockedBooking.paymentIntentId) {
+            return { updatedBooking, refundId: null };
+        }
+
+        // The status trigger wrote this row in the update above. Linking the
+        // refund request inside the same transaction means a committed
+        // cancellation can always be retried, even if Stripe is unavailable
+        // immediately afterwards.
+        const change = await tx.bookingStatusChange.findFirstOrThrow({
+            where: {
+                bookingId,
+                from: lockedBooking.status,
+                to: 'CANCELLED',
+            },
+            orderBy: { sequence: 'desc' },
         });
+        const refund = await tx.paymentRefund.create({
+            data: {
+                bookingStatusChangeId: change.id,
+                providerIntentId: lockedBooking.paymentIntentId,
+                amountCents: settled.refundCents,
+                currency: lockedBooking.currency,
+            },
+        });
+        return { updatedBooking, refundId: refund.id };
+        });
+        updated = cancellation.updatedBooking;
+        refundId = cancellation.refundId;
     } catch (error) {
         // The transaction rolls back, so nothing was cancelled and nothing
         // refunded; the customer gets the same answer as the early refusal.
         if (error instanceof BookingDepartedError) return actionValidationFailure(DEPARTED_MESSAGE);
         throw error;
+    }
+
+    if (refundId) {
+        try {
+            await new PaymentRefundService(createStripePaymentProvider()).settleRefund(refundId);
+        } catch {
+            // The booking and durable request are already committed. Reporting
+            // this as a failed cancellation would invite another cancellation
+            // and hide the state the customer actually needs to recover.
+            console.error({
+                message: 'Booking refund submission is still pending.',
+                refundId,
+            });
+        }
     }
 
     try {
@@ -732,6 +775,46 @@ export async function cancelBookingAction(bookingId: number) {
     revalidatePath('/profile');
     revalidatePath('/admin');
     return updated;
+}
+
+export async function retryBookingRefundAction(bookingId: number) {
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.id;
+    if (!userId) throw new Error('Unauthorized');
+
+    const parsed = parseActionInput(numericIdSchema, bookingId);
+    if (!parsed.ok) return parsed;
+    const booking = await prisma.booking.findUnique({
+        where: { id: parsed.data },
+        select: {
+            userId: true,
+            statusChanges: {
+                where: { to: 'CANCELLED' },
+                orderBy: { sequence: 'desc' },
+                take: 1,
+                select: { paymentRefund: { select: { id: true } } },
+            },
+        },
+    });
+    if (!booking) throw new Error('Booking not found');
+    if (!hasVerifiedStaffAccess(session) && booking.userId !== userId) {
+        throw new Error('Unauthorized');
+    }
+
+    const refundId = booking.statusChanges[0]?.paymentRefund?.id;
+    if (!refundId) return actionValidationFailure('This booking has no refund to retry.');
+    try {
+        const result = await new PaymentRefundService(createStripePaymentProvider())
+            .settleRefund(refundId);
+        revalidatePath('/profile');
+        revalidatePath('/admin');
+        return result;
+    } catch {
+        return actionValidationFailure(
+            'Your refund is still pending. Please try again later.',
+            'payment.refund',
+        );
+    }
 }
 
 export async function changeBookingSeatsAction(

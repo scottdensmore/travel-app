@@ -123,6 +123,14 @@ enum PaymentAttemptStatus {
   CANCELLED
 }
 
+enum PaymentRefundStatus {
+  PENDING
+  REQUIRES_ACTION
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
 /// Safe server-side payment metadata for one checkout.
 ///
 /// Card details stay in Stripe Elements, and even the PaymentIntent client
@@ -213,10 +221,47 @@ model BookingStatusChange {
   /// change nothing attributes.
   actorUserId String?
   actor       User?          @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  paymentRefund PaymentRefund?
   createdAt   DateTime       @default(now())
 
   @@index([bookingId, createdAt])
   @@index([bookingId, sequence])
+}
+
+/// One provider refund for the exact amount recorded by a cancellation.
+///
+/// The immutable status-change row remains the policy decision; this row is
+/// the durable delivery state used to make Stripe retries idempotent without
+/// retaining provider payloads or customer payment data.
+model PaymentRefund {
+  id                    String              @id @default(cuid())
+  bookingStatusChangeId String              @unique
+  bookingStatusChange   BookingStatusChange @relation(fields: [bookingStatusChangeId], references: [id], onDelete: Cascade)
+  providerIntentId      String
+  amountCents           Int
+  currency              String              @default("USD")
+  status                PaymentRefundStatus @default(PENDING)
+  attempts              PaymentRefundAttempt[]
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@index([providerIntentId])
+  @@index([status, updatedAt])
+}
+
+/// One durable provider submission. A terminally failed attempt is retained;
+/// a retry creates another row and therefore another stable idempotency key.
+model PaymentRefundAttempt {
+  id               String              @id
+  paymentRefundId  String
+  paymentRefund    PaymentRefund       @relation(fields: [paymentRefundId], references: [id], onDelete: Cascade)
+  providerRefundId String?             @unique
+  status           PaymentRefundStatus @default(PENDING)
+  sequence         BigInt              @default(autoincrement())
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([paymentRefundId, sequence])
 }
 
 model Passenger {

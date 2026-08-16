@@ -26,6 +26,7 @@ const created = {
     flightIds: [] as number[],
     scheduleIds: [] as number[],
     paymentAttemptIds: [] as string[],
+    bookingIds: [] as number[],
 };
 
 async function leaveARowInEveryTrackedTable(): Promise<string> {
@@ -50,6 +51,29 @@ async function leaveARowInEveryTrackedTable(): Promise<string> {
             providerIntentId: `pi_${randomUUID().replaceAll('-', '')}`,
             paymentAttemptId: paymentAttempt.id,
         },
+    });
+
+    const booking = await prisma.booking.create({
+        data: {
+            userId: user.id,
+            status: 'CANCELLED',
+            paymentIntentId: `pi_${randomUUID().replaceAll('-', '')}`,
+            totalPriceCents: 35_000,
+        },
+    });
+    created.bookingIds.push(booking.id);
+    const change = await prisma.bookingStatusChange.findFirstOrThrow({
+        where: { bookingId: booking.id },
+    });
+    const refund = await prisma.paymentRefund.create({
+        data: {
+            bookingStatusChangeId: change.id,
+            providerIntentId: booking.paymentIntentId!,
+            amountCents: 28_000,
+        },
+    });
+    await prisma.paymentRefundAttempt.create({
+        data: { id: randomUUID(), paymentRefundId: refund.id },
     });
 
     const guide = await prisma.cityGuide.findFirst({ select: { id: true } });
@@ -113,6 +137,7 @@ async function leaveARowInEveryTrackedTable(): Promise<string> {
 
 afterAll(async () => {
     await prisma.paymentAttempt.deleteMany({ where: { id: { in: created.paymentAttemptIds } } });
+    await prisma.booking.deleteMany({ where: { id: { in: created.bookingIds } } });
     await prisma.user.deleteMany({ where: { id: { in: created.userIds } } });
     await prisma.verificationToken.deleteMany({ where: { identifier: { in: created.identifiers } } });
     await prisma.flight.deleteMany({ where: { id: { in: created.flightIds } } });
@@ -125,6 +150,8 @@ const TRACKED_TABLES = [
     'FlightSchedule',
     'Notification',
     'PaymentAttempt',
+    'PaymentRefund',
+    'PaymentRefundAttempt',
     'PaymentWebhookEvent',
     'Review',
     'SeatHold',
@@ -161,6 +188,8 @@ describe('the snapshot a Playwright run is judged by', () => {
             'User',
             'PaymentAttempt',
             'PaymentWebhookEvent',
+            'PaymentRefund',
+            'PaymentRefundAttempt',
             'Review',
             'UserFavorite',
             'Notification',

@@ -55,6 +55,17 @@ export default async function ProfilePage() {
         orderBy: { sequence: 'asc' },
       },
       passengers: { select: safePassengerSelect },
+      statusChanges: {
+        where: { to: 'CANCELLED' },
+        orderBy: { sequence: 'desc' },
+        take: 1,
+        select: {
+          refundCents: true,
+          paymentRefund: {
+            select: { amountCents: true, status: true },
+          },
+        },
+      },
     },
   });
 

@@ -90,6 +90,38 @@ const TRACKED: Array<{ table: string; ids: () => Promise<string[]> }> = [
       )),
   },
   {
+    table: 'PaymentRefund',
+    ids: async () =>
+      (await prisma.paymentRefund.findMany({
+        select: {
+          id: true,
+          bookingStatusChange: { select: { booking: { select: { user: { select: { email: true } } } } } },
+        },
+      })).map(row => owned(
+        row.id,
+        row.bookingStatusChange.booking.user?.email ?? 'deleted booking owner',
+      )),
+  },
+  {
+    table: 'PaymentRefundAttempt',
+    ids: async () =>
+      (await prisma.paymentRefundAttempt.findMany({
+        select: {
+          id: true,
+          paymentRefund: {
+            select: {
+              bookingStatusChange: {
+                select: { booking: { select: { user: { select: { email: true } } } } },
+              },
+            },
+          },
+        },
+      })).map(row => owned(
+        row.id,
+        row.paymentRefund.bookingStatusChange.booking.user?.email ?? 'deleted booking owner',
+      )),
+  },
+  {
     table: 'VerificationToken',
     ids: async () =>
       (await prisma.verificationToken.findMany({ select: { identifier: true } }))
