@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "46ba11000afc",
+  "strategy": "manual-commit",
+  "branch": "agent/83-deactivate-schedules",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "lib/flightScheduleGenerationLock.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/46/ba11000afc/0/metadata.json",
+      "transcript": "/46/ba11000afc/0/full.jsonl",
+      "compact_transcript": "/46/ba11000afc/0/transcript.jsonl",
+      "content_hash": "/46/ba11000afc/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 36900,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 4394496,
+    "output_tokens": 4525,
+    "api_call_count": 26
+  }
+}
