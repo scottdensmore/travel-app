@@ -432,6 +432,25 @@ describe('ProfileClient interactive dashboard', () => {
             expect(legs[1]).toHaveTextContent('GA900');
         });
 
+        it('labels the booking instant in the saved timezone once for every itinerary', () => {
+            const booking = {
+                ...roundTripBooking,
+                createdAt: '2026-07-01T00:30:00.000Z',
+            };
+            renderBookings([booking], {}, 'America/Los_Angeles');
+
+            expect(screen.getByRole('columnheader', {
+                name: 'Booked (America/Los_Angeles)',
+            })).toBeInTheDocument();
+            expect(screen.getAllByText('Booked (America/Los_Angeles)')).toHaveLength(2);
+            const row = screen.getByTestId('booking-row-202');
+            const bookedAt = within(row).getByText('June 30, 2026 at 5:30 PM PDT');
+            expect(bookedAt).toHaveAttribute('datetime', '2026-07-01T00:30:00.000Z');
+            expect(bookedAt.closest('td')).toHaveAttribute('data-label', 'Booked');
+            expect(bookedAt.closest('td')).toHaveAttribute('rowspan', '2');
+            expect(within(row).getAllByText('June 30, 2026 at 5:30 PM PDT')).toHaveLength(1);
+        });
+
         it('shows the seat held on each leg rather than one seat for the trip', () => {
             renderBookings([roundTripBooking]);
 
@@ -601,6 +620,7 @@ describe('ProfileClient interactive dashboard', () => {
                     name: 'Replacement flights within 3 days for booking 202',
                 });
             expect(options.closest('td')).toHaveAttribute('data-label', 'Replacement flights');
+            expect(options.closest('td')).toHaveAttribute('colspan', '7');
             expect(within(options).getByRole('heading', {
                 name: 'Replacement flights within 3 days for booking 202',
             }))

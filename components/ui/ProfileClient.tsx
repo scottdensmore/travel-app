@@ -636,6 +636,7 @@ export default function ProfileClient({
                                         <th className="pb-2">Flight</th>
                                         <th className="pb-2">Route</th>
                                         <th className="pb-2">Departure</th>
+                                        <th className="pb-2">Booked ({accountTimeZone})</th>
                                         <th className="pb-2">Price</th>
                                         <th className="pb-2">Status</th>
                                         <th className="pb-2 text-right">Actions</th>
@@ -681,6 +682,12 @@ export default function ProfileClient({
                                                     <td className="py-2 whitespace-nowrap" data-label="Departure"><CellLabel>Departure</CellLabel>{leg?.flight ? flightDeparture(leg.flight).readableDate : '\u2014'}</td>
                                                     {index === 0 && (
                                                         <>
+                                                            <td className="py-2 whitespace-nowrap align-top" data-label="Booked" rowSpan={legRows.length}>
+                                                                <CellLabel>{`Booked (${accountTimeZone})`}</CellLabel>
+                                                                <time dateTime={new Date(booking.createdAt).toISOString()}>
+                                                                    {formatAccountDateTime(booking.createdAt, accountTimeZone)}
+                                                                </time>
+                                                            </td>
                                                             <td className="py-2 whitespace-nowrap align-top" data-label="Price" rowSpan={legRows.length}><CellLabel>Price</CellLabel>{priceLabel}</td>
                                                             <td
                                                                 className="py-2 align-top"
@@ -780,7 +787,7 @@ export default function ProfileClient({
                                             ))}
                                             {isDisrupted && replacementOptions[booking.id]?.length > 0 && (
                                                 <tr className="replacement-flight-row">
-                                                    <td colSpan={6} data-label="Replacement flights">
+                                                    <td colSpan={7} data-label="Replacement flights">
                                                         <ReplacementFlightsPreview
                                                             booking={booking}
                                                             groups={replacementOptions[booking.id]}

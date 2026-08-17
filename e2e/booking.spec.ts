@@ -226,6 +226,18 @@ test.describe('Flight Booking Journey', () => {
     
     const bookingRows = page.locator('table tbody tr');
     await expect(bookingRows.first()).toBeVisible();
+    const profileBooking = page.getByTestId(`booking-row-${persistedBooking.id}`);
+    const bookingsRegion = page.getByRole('region', { name: 'Your bookings' });
+    await expect(bookingsRegion.getByRole('columnheader', {
+      name: 'Booked (UTC)',
+    })).toBeVisible();
+    const bookingTime = profileBooking.getByText(
+      formatAccountDateTime(persistedBooking.createdAt, 'UTC'),
+    );
+    await expect(bookingTime).toHaveAttribute(
+      'datetime',
+      persistedBooking.createdAt.toISOString(),
+    );
 
     const receipt = page.getByRole('article', {
       name: `Receipt for booking ${persistedBooking.id}`,
@@ -273,7 +285,7 @@ test.describe('Flight Booking Journey', () => {
     await expect(saveTimeZone).toHaveCSS('min-height', '44px');
     await saveTimeZone.click();
     const timeZoneStatus = page.getByRole('status').filter({
-      hasText: 'Payment receipts and points activity now use America/Los_Angeles.',
+      hasText: 'Booking history, payment receipts, and points activity now use America/Los_Angeles.',
     });
     await expect(timeZoneStatus).toBeVisible();
     await expect(timeZoneStatus).toBeFocused();
@@ -292,6 +304,12 @@ test.describe('Flight Booking Journey', () => {
     await expect(activityTable.getByRole('columnheader', {
       name: 'Activity time (America/Los_Angeles)',
     })).toBeVisible();
+    await expect(bookingsRegion.getByRole('columnheader', {
+      name: 'Booked (America/Los_Angeles)',
+    })).toBeVisible();
+    await expect(profileBooking).toContainText(
+      formatAccountDateTime(persistedBooking.createdAt, 'America/Los_Angeles'),
+    );
     await expect(bookingActivity).toContainText(
       formatAccountDateTime(persistedBooking.createdAt, 'America/Los_Angeles'),
     );

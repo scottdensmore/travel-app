@@ -395,7 +395,7 @@ test.describe('A disrupted booking on a phone', () => {
         // notices, because jsdom has no CSS.
         await expect(
             page.getByRole('region', { name: 'Your bookings' }).getByRole('columnheader'),
-        ).toHaveCount(6);
+        ).toHaveCount(7);
 
         // Said once now. #229 answered this with a second copy beside the
         // flight number, because the Status column sat past the right edge of a
@@ -543,7 +543,7 @@ test.describe('A disrupted booking on a phone', () => {
         expect(order).toEqual([
             'Flight', 'Route', 'Departure',
             'Flight', 'Route', 'Departure',
-            'Price', 'Status', 'Replacement flights', 'Actions',
+            'Booked', 'Price', 'Status', 'Replacement flights', 'Actions',
         ]);
 
         // The cancelled leg is named above the action, not below it. Measured

@@ -10,7 +10,11 @@ import { serverRenderTime } from "@/lib/serverClock";
 import { safePassengerSelect } from "@/lib/passengerDataAccess";
 import { activeItineraryLegWhere, orderedLegs } from '@/lib/bookingItinerary';
 import { ItineraryReplacementSearch } from '@/lib/itineraryReplacementSearch';
-import { accountTimeZoneChoices } from '@/lib/accountTimeZone';
+import {
+  accountTimeZoneChoices,
+  DEFAULT_ACCOUNT_TIME_ZONE,
+  normalizeAccountTimeZone,
+} from '@/lib/accountTimeZone';
 
 export const metadata: Metadata = {
     title: 'Your profile',
@@ -36,6 +40,8 @@ export default async function ProfilePage() {
     where: { id: userId },
     select: { timeZone: true },
   });
+  const accountTimeZone = normalizeAccountTimeZone(account.timeZone)
+    ?? DEFAULT_ACCOUNT_TIME_ZONE;
 
   const userBookings = await prisma.booking.findMany({
     where: { userId },
@@ -172,7 +178,7 @@ export default async function ProfilePage() {
   const pointsActivityService = new PointsActivityService(
     bookings,
     undefined,
-    account.timeZone,
+    accountTimeZone,
   );
   const activityData = pointsActivityService.getPointsActivity();
   const currentPoints = pointsActivityService.getCurrentPoints();
@@ -183,7 +189,7 @@ export default async function ProfilePage() {
     <ProfileClient 
       userName={userName}
       userAvatar={userAvatar}
-      accountTimeZone={account.timeZone}
+      accountTimeZone={accountTimeZone}
       accountTimeZoneChoices={accountTimeZoneChoices()}
       currentStatus={currentStatus}
       currentPoints={currentPoints}
