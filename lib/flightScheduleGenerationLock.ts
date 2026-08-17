@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { prisma } from '@/lib/prisma';
+import { prisma } from './prisma';
 
 // A fixed namespace keeps this lock independent from other application
 // advisory locks while the schedule id identifies the one template whose
