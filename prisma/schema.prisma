@@ -55,6 +55,9 @@ model User {
   staffMfaSecretEncrypted String?               @db.Text
   staffMfaEnrolledAt      DateTime?
   staffMfaLastUsedStep    Int?
+  /// The customer's chosen IANA timezone for account activity. Existing
+  /// accounts start at an explicit, visibly labelled UTC fallback.
+  timeZone                String                @default("UTC")
   accounts                Account[]
   sessions                Session[]
   bookings                Booking[]

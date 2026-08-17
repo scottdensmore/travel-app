@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { flightRouteInclude, withRouteLabels } from '@/lib/flightRoute';
 import { calculateItineraryTotal, formatPrice } from '../lib/bookingPricing';
 import { durationLabel, flightArrival, flightDeparture } from '../lib/flightTime';
+import { formatAccountDateTime } from '../lib/accountTimeZone';
 import { registerAndSignIn } from './helpers/auth';
 import { completeCheckoutPayment, openCheckoutPayment } from './helpers/checkoutPayment';
 import { fillOneWayFlightSearch } from './helpers/flightSearch';
@@ -198,13 +199,15 @@ test.describe('Flight Booking Journey', () => {
     expect(persistedBooking.totalPriceCents).toBe(expectedTotal.cents);
     expect(persistedBooking.paymentIntentId).toMatch(/^pi_playwright_/);
     expect(persistedBooking.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/i);
-    await expect(prisma.paymentAttempt.findUniqueOrThrow({
+    const capturedPayment = await prisma.paymentAttempt.findUniqueOrThrow({
       where: { providerIntentId: persistedBooking.paymentIntentId! }
-    })).resolves.toMatchObject({
+    });
+    expect(capturedPayment).toMatchObject({
       checkoutId: persistedBooking.idempotencyKey,
       amountCents: expectedTotal.cents,
       status: 'CAPTURED'
     });
+    expect(capturedPayment.capturedAt).not.toBeNull();
     
     // Navigate to profile bookings
     await page.click('a:has-text("View Profile Bookings")');
@@ -222,8 +225,46 @@ test.describe('Flight Booking Journey', () => {
     await expect(receipt).toBeVisible();
     await expect(receipt).toContainText(`Paid ${expectedTotal.formatted} USD`);
     await expect(receipt).toContainText(targetFlight.flightNumber);
+    await expect(receipt).toContainText(formatAccountDateTime(capturedPayment.capturedAt!, 'UTC'));
     await expect(page.getByText(persistedBooking.paymentIntentId!)).toHaveCount(0);
     await expect(page.getByText(persistedBooking.idempotencyKey!)).toHaveCount(0);
+
+    const timeZone = page.getByRole('combobox', { name: 'Account timezone' });
+    await expect(timeZone).toHaveValue('UTC');
+    await expect(timeZone).toHaveCSS('min-height', '44px');
+    await expect(timeZone).toHaveCSS(
+      'transition-property',
+      'background-color, border-color, color',
+    );
+    await timeZone.focus();
+    expect(await timeZone.evaluate(element => {
+      const style = getComputedStyle(element);
+      return [style.outlineColor, style.outlineStyle, style.outlineWidth, style.outlineOffset];
+    })).toEqual(['rgb(251, 191, 36)', 'solid', '3px', '3px']);
+    await expect(timeZone).toHaveCSS('outline-style', 'solid');
+    await expect(timeZone).toHaveCSS('outline-width', '3px');
+    await expect(timeZone).toHaveCSS('outline-color', 'rgb(251, 191, 36)');
+    await timeZone.selectOption('America/Los_Angeles');
+    const saveTimeZone = page.getByRole('button', { name: 'Save timezone' });
+    await expect(saveTimeZone).toHaveCSS('min-height', '44px');
+    await saveTimeZone.click();
+    const timeZoneStatus = page.getByRole('status').filter({
+      hasText: 'Payment receipt times now use America/Los_Angeles.',
+    });
+    await expect(timeZoneStatus).toBeVisible();
+    await expect(timeZoneStatus).toBeFocused();
+    await expect(timeZoneStatus).toHaveCSS(
+      'transition-property',
+      'background-color, color',
+    );
+    expect(await timeZoneStatus.evaluate(element => {
+      const style = getComputedStyle(element);
+      return [style.outlineColor, style.outlineStyle, style.outlineWidth, style.outlineOffset];
+    })).toEqual(['rgb(251, 191, 36)', 'solid', '3px', '3px']);
+    await expect(timeZoneStatus).toHaveCSS('outline-color', 'rgb(251, 191, 36)');
+    await expect(receipt).toContainText(
+      formatAccountDateTime(capturedPayment.capturedAt!, 'America/Los_Angeles'),
+    );
     await page.setViewportSize({ width: 390, height: 844 });
     const phoneReceiptBox = await receipt.boundingBox();
     expect(phoneReceiptBox).not.toBeNull();

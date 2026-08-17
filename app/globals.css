@@ -744,6 +744,82 @@ button:active, button[type="submit"]:active {
   object-fit: cover;
 }
 
+.account-timezone-settings {
+  margin-bottom: 2rem;
+}
+
+.account-timezone-settings h2 {
+  font-size: 1rem;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+}
+
+.account-timezone-settings > p {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  margin: 0 0 10px;
+}
+
+.account-timezone-settings form {
+  display: grid;
+  gap: 8px;
+}
+
+.account-timezone-settings label {
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.account-timezone-settings select,
+.account-timezone-settings button {
+  box-sizing: border-box;
+  min-height: 44px;
+  transition-property: background-color, border-color, color;
+  width: 100%;
+}
+
+.account-timezone-settings select {
+  background: #171422;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: #fff;
+  padding: 8px 10px;
+}
+
+.account-timezone-settings button {
+  background: #7c3aed;
+  border-radius: 6px;
+  color: #fff;
+  font-weight: 700;
+  padding: 8px 12px;
+}
+
+.account-timezone-settings select:focus-visible,
+.account-timezone-settings button:focus-visible,
+.account-timezone-feedback:focus {
+  outline: 3px solid #fbbf24;
+  outline-offset: 3px;
+}
+
+.account-timezone-feedback {
+  border-radius: 6px;
+  margin-top: 10px !important;
+  padding: 8px;
+  transition-property: background-color, color;
+}
+
+.account-timezone-feedback.success {
+  background: rgba(5, 150, 105, 0.18);
+  color: #a7f3d0;
+}
+
+.account-timezone-feedback.error {
+  background: rgba(220, 38, 38, 0.18);
+  color: #fecaca;
+}
+
 .profile .content, .admin .content {
   min-width: 0;
   flex: 1;

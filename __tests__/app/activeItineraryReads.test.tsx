@@ -8,7 +8,7 @@ jest.mock('@/lib/prisma', () => ({
         flightSchedule: { findMany: jest.fn() },
         paymentAttempt: { findMany: jest.fn() },
         review: { findMany: jest.fn() },
-        user: { count: jest.fn() },
+        user: { count: jest.fn(), findUniqueOrThrow: jest.fn() },
         userFavorite: { findMany: jest.fn() },
     },
 }));
@@ -37,6 +37,7 @@ const flightFindMany = prisma.flight.findMany as unknown as jest.Mock;
 const scheduleFindMany = prisma.flightSchedule.findMany as unknown as jest.Mock;
 const reviewFindMany = prisma.review.findMany as unknown as jest.Mock;
 const userCount = prisma.user.count as unknown as jest.Mock;
+const userFindUniqueOrThrow = prisma.user.findUniqueOrThrow as unknown as jest.Mock;
 const userFavoriteFindMany = prisma.userFavorite.findMany as unknown as jest.Mock;
 const mockedGetServerSession = getServerSession as unknown as jest.Mock;
 const mockedServerRenderTime = serverRenderTime as unknown as jest.Mock;
@@ -50,6 +51,7 @@ beforeEach(() => {
     scheduleFindMany.mockResolvedValue([]);
     reviewFindMany.mockResolvedValue([]);
     userCount.mockResolvedValue(0);
+    userFindUniqueOrThrow.mockResolvedValue({ timeZone: 'UTC' });
     userFavoriteFindMany.mockResolvedValue([]);
     mockedGetServerSession.mockResolvedValue({ user: { id: 'traveller-1' } });
     mockedServerRenderTime.mockResolvedValue(Date.now());
@@ -58,10 +60,15 @@ beforeEach(() => {
 
 describe('active itinerary page reads', () => {
     it('loads only active legs for the customer profile', async () => {
-        await ProfilePage();
+        const page = await ProfilePage();
 
         expect(bookingFindMany.mock.calls[0][0].include.legs.where)
             .toEqual({ supersededAt: null });
+        expect(userFindUniqueOrThrow).toHaveBeenCalledWith({
+            where: { id: 'traveller-1' },
+            select: { timeZone: true },
+        });
+        expect(page.props.accountTimeZone).toBe('UTC');
     });
 
     it('loads replacement options only for the customer\'s disrupted bookings', async () => {

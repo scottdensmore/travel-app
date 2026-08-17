@@ -10,6 +10,7 @@ import { serverRenderTime } from "@/lib/serverClock";
 import { safePassengerSelect } from "@/lib/passengerDataAccess";
 import { activeItineraryLegWhere, orderedLegs } from '@/lib/bookingItinerary';
 import { ItineraryReplacementSearch } from '@/lib/itineraryReplacementSearch';
+import { accountTimeZoneChoices } from '@/lib/accountTimeZone';
 
 export const metadata: Metadata = {
     title: 'Your profile',
@@ -31,6 +32,10 @@ export default async function ProfilePage() {
   const userId = user.id;
   const userName = user.name || "Traveler";
   const userAvatar = user.image || "https://i.pravatar.cc/150?u=" + userId;
+  const account = await prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: { timeZone: true },
+  });
 
   const userBookings = await prisma.booking.findMany({
     where: { userId },
@@ -169,6 +174,8 @@ export default async function ProfilePage() {
     <ProfileClient 
       userName={userName}
       userAvatar={userAvatar}
+      accountTimeZone={account.timeZone}
+      accountTimeZoneChoices={accountTimeZoneChoices()}
       currentStatus={currentStatus}
       currentPoints={currentPoints}
       bookings={customerBookings}

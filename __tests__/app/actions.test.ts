@@ -24,6 +24,7 @@ import {
     rebookItineraryAction,
     updateFlightScheduleTermsAction,
     setFlightScheduleActiveAction,
+    updateAccountTimeZoneAction,
 } from '@/app/actions';
 import { getServerSession } from 'next-auth';
 import TravelGuideService from '@/lib/TravelGuideService';
@@ -203,6 +204,7 @@ jest.mock('@/lib/prisma', () => ({
         flightSchedule: { findMany: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn(), findUnique: jest.fn() },
         userFavorite: { findUnique: jest.fn(), delete: jest.fn(), create: jest.fn() },
         review: { create: jest.fn(), findUnique: jest.fn(), delete: jest.fn() },
+        user: { update: jest.fn() },
         booking: { findUnique: jest.fn(), delete: jest.fn(), update: jest.fn(), findMany: jest.fn() },
         seatAssignment: { findMany: jest.fn() },
         $executeRaw: jest.fn(),
@@ -256,6 +258,7 @@ const mockedUserFavoriteCreate = (prisma as any).userFavorite.create as jest.Moc
 const mockedReviewCreate = (prisma as any).review.create as jest.Mock;
 const mockedReviewFindUnique = (prisma as any).review.findUnique as jest.Mock;
 const mockedReviewDelete = (prisma as any).review.delete as jest.Mock;
+const mockedUserUpdate = (prisma as any).user.update as jest.Mock;
 const mockedBookingFindUnique = (prisma as any).booking.findUnique as jest.Mock;
 const mockedBookingUpdate = (prisma as any).booking.update as jest.Mock;
 const mockedBookingFindMany = (prisma as any).booking.findMany as jest.Mock;
@@ -274,6 +277,42 @@ const sampleGuide: any = {
     highlights: ['Eiffel Tower'],
     coverImage: null,
 };
+
+describe('updateAccountTimeZoneAction', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it('rejects a request without an authenticated account', async () => {
+        mockedGetServerSession.mockResolvedValue(null);
+
+        await expect(updateAccountTimeZoneAction('UTC')).rejects.toThrow('Unauthorized');
+        expect(mockedUserUpdate).not.toHaveBeenCalled();
+    });
+
+    it('refuses an unknown timezone without writing', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+
+        await expect(updateAccountTimeZoneAction('Not/AZone')).resolves.toMatchObject({
+            ok: false,
+            error: { code: 'VALIDATION_ERROR' },
+        });
+        expect(mockedUserUpdate).not.toHaveBeenCalled();
+    });
+
+    it('canonicalizes and saves the timezone only on the signed-in account', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        mockedUserUpdate.mockResolvedValue({ timeZone: 'America/Los_Angeles' });
+
+        await expect(updateAccountTimeZoneAction(' US/Pacific ')).resolves.toEqual({
+            timeZone: 'America/Los_Angeles',
+        });
+        expect(mockedUserUpdate).toHaveBeenCalledWith({
+            where: { id: 'user-123' },
+            data: { timeZone: 'America/Los_Angeles' },
+            select: { timeZone: true },
+        });
+        expect(mockedRevalidatePath).toHaveBeenCalledWith('/profile');
+    });
+});
 
 describe('saveCityGuideAction authorization', () => {
     beforeEach(() => jest.clearAllMocks());

@@ -13,6 +13,8 @@ import { PointsActivityDisplayData } from '@/lib/types/PointsActivity';
 import { flightDeparture } from '@/lib/flightTime';
 import type { ReplacementFlightGroup } from '@/lib/itineraryReplacementSearch';
 import ItineraryRebookingDialog from '@/components/ui/ItineraryRebookingDialog';
+import AccountTimeZoneForm from '@/components/ui/AccountTimeZoneForm';
+import { formatAccountDateTime } from '@/lib/accountTimeZone';
 
 interface Flight {
     id: number;
@@ -75,15 +77,6 @@ interface Booking {
     }>;
 }
 
-function formatReceiptDate(value: Date | string): string {
-    return new Intl.DateTimeFormat('en-US', {
-        day: 'numeric',
-        month: 'long',
-        timeZone: 'UTC',
-        year: 'numeric',
-    }).format(new Date(value));
-}
-
 interface CityGuide {
     id: number;
     city: string;
@@ -109,6 +102,8 @@ interface Review {
 interface ProfileClientProps {
     userName: string;
     userAvatar: string;
+    accountTimeZone: string;
+    accountTimeZoneChoices: string[];
     currentStatus: string;
     currentPoints: number;
     bookings: Booking[];
@@ -274,6 +269,8 @@ function bookingPresentation(booking: Booking, renderedAt: number) {
 export default function ProfileClient({
     userName,
     userAvatar,
+    accountTimeZone,
+    accountTimeZoneChoices,
     currentStatus,
     currentPoints,
     bookings,
@@ -590,6 +587,11 @@ export default function ProfileClient({
                     <p style={{ margin: '0.25rem 0' }}><strong>Status Points:</strong> {currentPoints.toLocaleString()}</p>
                 </div>
 
+                <AccountTimeZoneForm
+                    timeZone={accountTimeZone}
+                    choices={accountTimeZoneChoices}
+                />
+
                 <div style={{ marginBottom: '2rem' }}>
                     <NextStatusChart points={currentPoints} />
                 </div>
@@ -825,9 +827,9 @@ export default function ProfileClient({
                                         <div className="payment-receipt-details">
                                             <p>Paid <strong>{formatPrice(receipt.amountCents)} {receipt.currency}</strong></p>
                                             <p>
-                                                <span>Payment date </span>
+                                                <span>Payment time </span>
                                                 <time dateTime={new Date(receipt.paidAt).toISOString()}>
-                                                    {formatReceiptDate(receipt.paidAt)}
+                                                    {formatAccountDateTime(receipt.paidAt, accountTimeZone)}
                                                 </time>
                                             </p>
                                             <p>Flights {flightNumbers.join(', ') || 'unavailable'}</p>
