@@ -15,6 +15,7 @@ import {
     reviewSchema,
     rebookItineraryRequestSchema,
     scheduleSchema,
+    flightScheduleTermsSchema,
     searchFlightsSchema,
     seatChangesSchema
 } from '@/lib/validation';
@@ -547,6 +548,23 @@ describe('shared server validation schemas', () => {
         expect(scheduleSchema.safeParse({ ...base, price: '$1,234.56' }).success).toBe(true);
         expect(scheduleSchema.safeParse({ ...base, price: '$1234' }).success).toBe(true);
         expect(scheduleSchema.safeParse({ ...base, price: '$1,23' }).success).toBe(false);
+    });
+
+    it('binds schedule term updates to an explicit confirmed UUID request', () => {
+        const update = {
+            requestId: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+            flightScheduleId: 17,
+            durationMinutes: 4320,
+            price: '$1,234.56',
+            confirmed: true,
+        };
+
+        expect(flightScheduleTermsSchema.safeParse(update).success).toBe(true);
+        expect(flightScheduleTermsSchema.safeParse({ ...update, requestId: 'not-a-uuid' }).success).toBe(false);
+        expect(flightScheduleTermsSchema.safeParse({ ...update, confirmed: false }).success).toBe(false);
+        expect(flightScheduleTermsSchema.safeParse({ ...update, durationMinutes: 4321 }).success).toBe(false);
+        expect(flightScheduleTermsSchema.safeParse({ ...update, flightScheduleId: 0 }).success).toBe(false);
+        expect(flightScheduleTermsSchema.safeParse({ ...update, extra: true }).success).toBe(false);
     });
 
     it('covers exact city-guide and schedule boundaries', () => {

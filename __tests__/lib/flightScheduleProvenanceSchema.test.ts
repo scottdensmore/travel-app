@@ -14,6 +14,6 @@ describe('flight schedule provenance Prisma contract', () => {
             'FlightSchedule? @relation(fields: [flightScheduleId], references: [id], onDelete: SetNull)',
         );
         expect(flight).toContain('@@index([flightScheduleId])');
-        expect(schedule).toContain('flights Flight[]');
+        expect(schedule).toMatch(/flights\s+Flight\[\]/);
     });
 });

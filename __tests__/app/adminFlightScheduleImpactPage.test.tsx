@@ -13,6 +13,16 @@ jest.mock('next/navigation', () => ({
         throw new Error('NEXT_NOT_FOUND');
     }),
 }));
+jest.mock('@/components/ui/FlightScheduleTermsForm', () => ({
+    __esModule: true,
+    default: (props: Record<string, number>) => React.createElement('div', {
+        'data-schedule-id': props.flightScheduleId,
+        'data-duration-minutes': props.durationMinutes,
+        'data-price-cents': props.priceCents,
+        'data-safe-future-count': props.safeFutureCount,
+        'data-protected-count': props.protectedCount,
+    }),
+}));
 
 import ScheduleImpactPage from '@/app/admin/flights/schedules/[scheduleId]/page';
 
@@ -72,8 +82,8 @@ describe('/admin/flights/schedules/[scheduleId] impact preview', () => {
         expect(forSchedule).toHaveBeenCalledWith(17);
         expect(text).toContain('Schedule impact preview');
         expect(text).toContain('Mona Airways MA237');
-        expect(text).toContain('Read-only preview');
-        expect(text).toContain('No schedule or flight has been changed.');
+        expect(text).toContain('Impact preview');
+        expect(text).toContain('Nothing changes until you confirm the duration and fare update below.');
         expect(text).toContain('1 safe future');
         expect(text).toContain('4 protected');
         expect(text).toContain('1 historical');
@@ -88,6 +98,19 @@ describe('/admin/flights/schedules/[scheduleId] impact preview', () => {
         expect(text).toContain('Duration unavailable');
         expect(text).not.toContain('0h 00m');
         expect(text).toContain('Only occurrences with durable provenance for this template are included.');
+
+        const termsForms = findElements(
+            page,
+            element => element.props.flightScheduleId === 17
+                && element.props.safeFutureCount === 1,
+        );
+        expect(termsForms).toHaveLength(1);
+        expect(termsForms[0].props).toMatchObject({
+            durationMinutes: 245,
+            priceCents: 35_000,
+            safeFutureCount: 1,
+            protectedCount: 4,
+        });
 
         const bookingRow = findElements(
             page,

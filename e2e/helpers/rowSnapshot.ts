@@ -160,6 +160,23 @@ const TRACKED: Array<{ table: string; ids: () => Promise<string[]> }> = [
         .map(row => `${row.id} (${row.flightNumber})`),
   },
   {
+    // Audit rows cascade from their schedule, but a failed admin journey can
+    // stop before deleting that schedule. Track them independently so bulk
+    // changes cannot accumulate invisibly between Playwright runs (#83).
+    table: 'FlightScheduleTermsChange',
+    ids: async () =>
+      (await prisma.flightScheduleTermsChange.findMany({
+        select: {
+          id: true,
+          flightScheduleId: true,
+          actorUser: { select: { email: true } },
+        },
+      })).map(row => owned(
+        row.id,
+        row.actorUser?.email ?? `schedule ${row.flightScheduleId}`,
+      )),
+  },
+  {
     // A hold outlives the account that took it -- `holderKey` is not a foreign
     // key -- so deleting a run's users leaves its holds behind, greying out
     // seats for whatever runs next. That is how #74 broke two specs before
