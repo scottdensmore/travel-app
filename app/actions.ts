@@ -1199,6 +1199,7 @@ export async function saveFlightScheduleAction(data: {
                 try {
                     await prisma.flight.create({
                         data: {
+                            flightScheduleId: savedSchedule.id,
                             flightNumber: savedSchedule.flightNumber,
                             airline: savedSchedule.airline,
                             ...airportCodesForRoute(savedSchedule.from, savedSchedule.to),
@@ -1329,6 +1330,7 @@ export async function generateFlightOccurrencesAction(
                 try {
                     await prisma.flight.create({
                         data: {
+                            flightScheduleId: schedule.id,
                             flightNumber: schedule.flightNumber,
                             airline: schedule.airline,
                             ...airportCodesForRoute(schedule.from, schedule.to),
