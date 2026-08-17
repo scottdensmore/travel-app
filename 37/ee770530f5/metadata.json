@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "37ee770530f5",
+  "strategy": "manual-commit",
+  "branch": "fix/235-admin-flight-window",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "__tests__/app/activeItineraryReads.test.tsx",
+    "app/admin/flights/page.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/37/ee770530f5/0/metadata.json",
+      "transcript": "/37/ee770530f5/0/full.jsonl",
+      "compact_transcript": "/37/ee770530f5/0/transcript.jsonl",
+      "content_hash": "/37/ee770530f5/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 153556,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 16923904,
+    "output_tokens": 16205,
+    "api_call_count": 108
+  }
+}
