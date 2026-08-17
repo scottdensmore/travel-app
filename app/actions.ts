@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import {
     holdCheckoutSeats,
     SeatHoldCheckoutLimitError,
@@ -29,6 +30,10 @@ import {
     FlightScheduleActivationError,
     FlightScheduleActivationService,
 } from '@/lib/flightScheduleActivationService';
+import {
+    FlightScheduleDeletionError,
+    FlightScheduleDeletionService,
+} from '@/lib/flightScheduleDeletionService';
 import CityGuide from '@/lib/types/CityGuide';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -64,6 +69,7 @@ import {
     cityGuideSchema,
     favoriteSchema,
     flightScheduleActivationSchema,
+    flightScheduleDeletionSchema,
     flightScheduleTermsSchema,
     flightStatusSchema,
     numericIdSchema,
@@ -1489,20 +1495,32 @@ export async function generateFlightOccurrencesAction(
     });
 }
 
-export async function deleteFlightScheduleAction(scheduleId: number) {
+export async function deleteFlightScheduleAction(data: {
+    requestId: string;
+    flightScheduleId: number;
+    confirmed: boolean;
+}) {
     const session = await getServerSession(authOptions);
     if (!hasVerifiedStaffAccess(session)) throw new Error("Unauthorized");
 
-    const parsed = parseActionInput(numericIdSchema, scheduleId);
+    const parsed = parseActionInput(flightScheduleDeletionSchema, data);
     if (!parsed.ok) return parsed;
-    scheduleId = parsed.data;
-    await prisma.flightSchedule.delete({
-        where: { id: scheduleId }
-    });
-
+    const actorUserId = session?.user?.id;
+    if (!actorUserId) throw new Error('Unauthorized');
+    try {
+        await new FlightScheduleDeletionService().delete({
+            requestId: parsed.data.requestId,
+            flightScheduleId: parsed.data.flightScheduleId,
+            actorUserId,
+        });
+    } catch (error) {
+        if (!(error instanceof FlightScheduleDeletionError)) throw error;
+        return actionValidationFailure(error.message, '_root');
+    }
     revalidatePath('/');
     revalidatePath('/flights');
     revalidatePath('/admin/flights');
+    redirect('/admin/flights');
 }
 
 export async function updateFlightStatusAction(flightId: number, status: 'ON_TIME' | 'DELAYED' | 'CANCELLED') {

@@ -12,17 +12,20 @@ describe('audited flight schedule duration and fare updates', () => {
         bookingIds: [] as number[],
         flightIds: [] as number[],
         scheduleIds: [] as number[],
+        termsRequestIds: [] as string[],
     };
 
     afterEach(async () => {
         await prisma.booking.deleteMany({ where: { id: { in: created.bookingIds } } });
         await prisma.flight.deleteMany({ where: { id: { in: created.flightIds } } });
         await prisma.flightSchedule.deleteMany({ where: { id: { in: created.scheduleIds } } });
+        await removeTermsChangeAudits(created.termsRequestIds);
         await prisma.user.deleteMany({ where: { id: { in: created.userIds } } });
         created.userIds.length = 0;
         created.bookingIds.length = 0;
         created.flightIds.length = 0;
         created.scheduleIds.length = 0;
+        created.termsRequestIds.length = 0;
     });
 
     it('updates only safe linked occurrences, preserves protected rows, and retries from immutable audit', async () => {
@@ -53,6 +56,7 @@ describe('audited flight schedule duration and fare updates', () => {
             durationMinutes: 255,
             priceCents: 37_500,
         };
+        created.termsRequestIds.push(request.requestId);
         const first = await new FlightScheduleTermsService().update(request);
 
         expect(first).toMatchObject({
@@ -147,8 +151,8 @@ describe('audited flight schedule duration and fare updates', () => {
             toPriceCents: 37_500,
         });
 
-        // The audit follows its subject on cleanup, while direct deletion above
-        // remains forbidden. This is also the ordinary schedule-delete path.
+        // Permanent schedule deletion preserves both the audit and the
+        // historical identifier of its removed subject.
         await prisma.booking.delete({ where: { id: booking.id } });
         created.bookingIds = created.bookingIds.filter(id => id !== booking.id);
         await prisma.flight.deleteMany({
@@ -157,8 +161,10 @@ describe('audited flight schedule duration and fare updates', () => {
         created.flightIds = created.flightIds.filter(id => ![historical.id, booked.id, held.id, delayed.id, safe.id].includes(id));
         await prisma.flightSchedule.delete({ where: { id: schedule.id } });
         created.scheduleIds = created.scheduleIds.filter(id => id !== schedule.id);
-        await expect(prisma.flightScheduleTermsChange.findUnique({ where: { id: stored.id } }))
-            .resolves.toBeNull();
+        await expect(prisma.flightScheduleTermsChange.findUniqueOrThrow({ where: { id: stored.id } }))
+            .resolves.toMatchObject({ flightScheduleId: schedule.id, createdAt: stored.createdAt });
+        await expect(prisma.flightScheduleTermsChange.delete({ where: { id: stored.id } }))
+            .rejects.toThrow(/cannot be deleted/);
 
         expect(historical.departureDate.getTime()).toBeLessThan(now.getTime());
     });
@@ -191,8 +197,10 @@ describe('audited flight schedule duration and fare updates', () => {
         });
 
         await lockReady;
+        const requestId = randomUUID();
+        created.termsRequestIds.push(requestId);
         const update = new FlightScheduleTermsService().update({
-            requestId: randomUUID(),
+            requestId,
             flightScheduleId: schedule.id,
             actorUserId: actor.id,
             durationMinutes: 260,
@@ -215,6 +223,7 @@ describe('audited flight schedule duration and fare updates', () => {
         const actor = await createActor();
         const schedule = await createSchedule();
         const requestId = randomUUID();
+        created.termsRequestIds.push(requestId);
         const valid = {
             requestId,
             flightScheduleId: schedule.id,
@@ -230,6 +239,11 @@ describe('audited flight schedule duration and fare updates', () => {
 
         await expect(prisma.flightScheduleTermsChange.create({ data: valid }))
             .rejects.toThrow(/requestId/);
+        const missingSubjectRequestId = randomUUID();
+        created.termsRequestIds.push(missingSubjectRequestId);
+        await expect(prisma.flightScheduleTermsChange.create({
+            data: { ...valid, requestId: missingSubjectRequestId, flightScheduleId: 987_654_321 },
+        })).rejects.toThrow(/must name an existing schedule/);
         await expect(prisma.flightScheduleTermsChange.create({
             data: { ...valid, requestId: '' },
         })).rejects.toThrow(/request_nonempty/);
@@ -323,3 +337,16 @@ describe('audited flight schedule duration and fare updates', () => {
         throw new Error('Schedule update did not wait for the competing flight lock.');
     }
 });
+
+async function removeTermsChangeAudits(requestIds: string[]): Promise<void> {
+    if (requestIds.length === 0) return;
+    if (process.env.DATABASE_IS_DISPOSABLE !== 'true') {
+        throw new Error('Refusing to clean immutable schedule-terms audits outside a disposable database.');
+    }
+    await prisma.$transaction(async tx => {
+        await tx.$executeRawUnsafe("SET LOCAL session_replication_role = 'replica'");
+        await tx.flightScheduleTermsChange.deleteMany({
+            where: { requestId: { in: requestIds } },
+        });
+    });
+}

@@ -64,6 +64,7 @@ model User {
   reviews                 Review[]
   notifications           Notification[]
   flightScheduleTermsChanges FlightScheduleTermsChange[]
+  flightScheduleDeletions    FlightScheduleDeletion[]
 }
 
 model VerificationToken {
@@ -434,8 +435,7 @@ model FlightSchedule {
   economyRows        Int?
   seatPattern        String?
 
-  flights      Flight[]
-  termsChanges FlightScheduleTermsChange[]
+  flights Flight[]
 }
 
 /// An immutable record of one staff change to a schedule's duration and fare.
@@ -454,10 +454,38 @@ model FlightScheduleTermsChange {
   protectedOccurrenceCount Int
   createdAt                DateTime @default(now())
 
-  flightSchedule FlightSchedule @relation(fields: [flightScheduleId], references: [id], onDelete: Cascade)
-  actorUser      User?          @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorUser User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([flightScheduleId, createdAt])
+}
+
+/// Immutable receipt for one permanently deleted schedule. It deliberately has
+/// no schedule foreign key: the before-state must outlive its deleted target.
+model FlightScheduleDeletion {
+  id                       String   @id @default(cuid())
+  requestId                String   @unique
+  flightScheduleId         Int      @unique
+  actorUserId              String?
+  flightNumber             String
+  airline                  String
+  from                     String
+  to                       String
+  departureTime            String
+  durationMinutes          Int
+  daysOfWeek               Int[]
+  priceCents               Int
+  firstClassRows           Int?
+  businessRows             Int?
+  premiumEconomyRows       Int?
+  economyRows              Int?
+  seatPattern              String?
+  occurrenceCount          Int
+  protectedOccurrenceCount Int
+  deletedAt                DateTime @default(now())
+
+  actorUser User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([deletedAt])
 }
 
 model Notification {
