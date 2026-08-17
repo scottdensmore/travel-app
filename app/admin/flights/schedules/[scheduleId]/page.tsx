@@ -6,6 +6,7 @@ import {
     type ScheduleOccurrenceEligibility,
 } from '@/lib/flightScheduleImpact';
 import { durationLabel, flightDeparture } from '@/lib/flightTime';
+import FlightScheduleTermsForm from '@/components/ui/FlightScheduleTermsForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -84,10 +85,10 @@ export default async function ScheduleImpactPage({
                 style={{ borderColor: 'rgba(125, 211, 252, 0.45)', marginBottom: 0 }}
             >
                 <h2 id="preview-safety-heading" style={{ color: '#7dd3fc', margin: '0 0 8px', fontSize: '1.15rem' }}>
-                    Read-only preview
+                    Impact preview
                 </h2>
                 <p style={{ color: '#e5e7eb', margin: 0 }}>
-                    No schedule or flight has been changed. This page defines which linked occurrences a later edit must protect.
+                    Nothing changes until you confirm the duration and fare update below. The preview defines which linked occurrences must remain protected.
                 </p>
                 <p style={{ color: 'rgba(255, 255, 255, 0.65)', margin: '8px 0 0', fontSize: '0.9rem' }}>
                     Only occurrences with durable provenance for this template are included. Unlinked or ambiguous history is never guessed into this preview.
@@ -113,6 +114,14 @@ export default async function ScheduleImpactPage({
                     Preview time: {impact.asOf.toISOString()}
                 </p>
             </section>
+
+            <FlightScheduleTermsForm
+                flightScheduleId={impact.schedule.id}
+                durationMinutes={impact.schedule.durationMinutes}
+                priceCents={impact.schedule.priceCents}
+                safeFutureCount={impact.summary.safeFuture}
+                protectedCount={impact.summary.protected}
+            />
 
             <section aria-labelledby="linked-occurrences-heading" className="admin-card" style={{ marginBottom: 0 }}>
                 <h2 id="linked-occurrences-heading" style={{ color: '#c084fc', margin: '0 0 1rem', fontSize: '1.35rem' }}>

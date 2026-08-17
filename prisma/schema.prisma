@@ -63,6 +63,7 @@ model User {
   favorites               UserFavorite[]
   reviews                 Review[]
   notifications           Notification[]
+  flightScheduleTermsChanges FlightScheduleTermsChange[]
 }
 
 model VerificationToken {
@@ -433,7 +434,30 @@ model FlightSchedule {
   economyRows        Int?
   seatPattern        String?
 
-  flights Flight[]
+  flights      Flight[]
+  termsChanges FlightScheduleTermsChange[]
+}
+
+/// An immutable record of one staff change to a schedule's duration and fare.
+/// `requestId` is the browser-generated retry key: a lost response can replay
+/// the same request without applying the bulk occurrence update twice.
+model FlightScheduleTermsChange {
+  id                       String   @id @default(cuid())
+  requestId                String   @unique
+  flightScheduleId         Int
+  actorUserId              String?
+  fromDurationMinutes      Int
+  toDurationMinutes        Int
+  fromPriceCents           Int
+  toPriceCents             Int
+  updatedOccurrenceCount   Int
+  protectedOccurrenceCount Int
+  createdAt                DateTime @default(now())
+
+  flightSchedule FlightSchedule @relation(fields: [flightScheduleId], references: [id], onDelete: Cascade)
+  actorUser      User?          @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([flightScheduleId, createdAt])
 }
 
 model Notification {

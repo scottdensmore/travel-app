@@ -26,4 +26,14 @@ describe('dashboard responsive layout rules', () => {
         expect(css).toContain('header nav ul {\n    width: max-content;\n    gap: 1rem !important;');
         expect(css).toContain('header nav ul li {\n    margin-left: 0;');
     });
+
+    it('keeps the programmatically focused schedule result visibly located', () => {
+        expect(css).toContain(
+            '.schedule-terms-success:focus {\n'
+            + '  outline: 3px solid #fbbf24;\n'
+            + '  outline-offset: 3px;\n'
+            + '  box-shadow: 0 0 0 5px rgba(251, 191, 36, 0.28);\n'
+            + '}',
+        );
+    });
 });

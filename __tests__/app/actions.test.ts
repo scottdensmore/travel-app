@@ -22,6 +22,7 @@ import {
     retryBookingRefundAction,
     reconcilePaymentAttemptAction,
     rebookItineraryAction,
+    updateFlightScheduleTermsAction,
 } from '@/app/actions';
 import { getServerSession } from 'next-auth';
 import TravelGuideService from '@/lib/TravelGuideService';
@@ -39,6 +40,10 @@ import {
     ItineraryRebookingError,
     ItineraryRebookingService,
 } from '@/lib/itineraryRebookingService';
+import {
+    FlightScheduleTermsError,
+    FlightScheduleTermsService,
+} from '@/lib/flightScheduleTermsService';
 import { revalidatePath } from 'next/cache';
 
 // Keep these heavy/server-only modules out of the unit test.
@@ -103,6 +108,20 @@ jest.mock('@/lib/itineraryRebookingService', () => {
     return {
         ItineraryRebookingService: jest.fn().mockImplementation(() => ({ rebook })),
         ItineraryRebookingError,
+    };
+});
+
+jest.mock('@/lib/flightScheduleTermsService', () => {
+    const update = jest.fn();
+    class FlightScheduleTermsError extends Error {
+        constructor(readonly code: string, message: string) {
+            super(message);
+            this.name = 'FlightScheduleTermsError';
+        }
+    }
+    return {
+        FlightScheduleTermsService: jest.fn().mockImplementation(() => ({ update })),
+        FlightScheduleTermsError,
     };
 });
 
@@ -175,6 +194,7 @@ const mockSettleRefund = new (PaymentRefundService as any)({}).settleRefund as j
 const mockReconcilePaymentAttempt = new (PaymentAttemptReconciliationService as any)({})
     .reconcileAttempt as jest.Mock;
 const mockRebookItinerary = new (ItineraryRebookingService as any)().rebook as jest.Mock;
+const mockUpdateFlightScheduleTerms = new (FlightScheduleTermsService as any)().update as jest.Mock;
 const mockedCreateStripePaymentProvider = createStripePaymentProvider as jest.Mock;
 const mockedRevalidatePath = revalidatePath as jest.Mock;
 const mockedGetStripePublishableKey = getStripePublishableKey as jest.Mock;
@@ -2280,6 +2300,114 @@ describe('admin flight schedule actions', () => {
             expect(mockedFlightScheduleDelete).toHaveBeenCalledWith({
                 where: { id: 12 }
             });
+        });
+    });
+
+    describe('updateFlightScheduleTermsAction', () => {
+        const request = {
+            requestId: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+            flightScheduleId: 17,
+            durationMinutes: 255,
+            price: '$375.00',
+            confirmed: true,
+        };
+
+        it('requires verified staff access', async () => {
+            mockedGetServerSession.mockResolvedValue({
+                user: { id: 'admin-1', role: 'ADMIN', staffMfaVerified: false },
+            });
+
+            await expect(updateFlightScheduleTermsAction(request)).rejects.toThrow('Unauthorized');
+            expect(mockUpdateFlightScheduleTerms).not.toHaveBeenCalled();
+        });
+
+        it('rejects an invalid retry key before reaching the service', async () => {
+            mockedGetServerSession.mockResolvedValue({
+                user: { id: 'admin-1', role: 'ADMIN', staffMfaVerified: true },
+            });
+
+            await expect(updateFlightScheduleTermsAction({
+                ...request,
+                requestId: 'not-a-uuid',
+            })).resolves.toMatchObject({
+                ok: false,
+                error: { fields: { requestId: expect.any(Array) } },
+            });
+            expect(mockUpdateFlightScheduleTerms).not.toHaveBeenCalled();
+        });
+
+        it('binds the normalized terms and current actor to one service request', async () => {
+            mockedGetServerSession.mockResolvedValue({
+                user: { id: 'admin-1', role: 'ADMIN', staffMfaVerified: true },
+            });
+            mockUpdateFlightScheduleTerms.mockResolvedValue({
+                changeId: 'change-17',
+                flightScheduleId: 17,
+                durationMinutes: 255,
+                priceCents: 37_500,
+                updatedOccurrenceCount: 3,
+                protectedOccurrenceCount: 2,
+                createdAt: new Date('2026-08-17T15:00:00.000Z'),
+                wasApplied: true,
+            });
+
+            await expect(updateFlightScheduleTermsAction(request)).resolves.toMatchObject({
+                changeId: 'change-17',
+                updatedOccurrenceCount: 3,
+                protectedOccurrenceCount: 2,
+            });
+            expect(mockUpdateFlightScheduleTerms).toHaveBeenCalledWith({
+                requestId: request.requestId,
+                flightScheduleId: 17,
+                actorUserId: 'admin-1',
+                durationMinutes: 255,
+                priceCents: 37_500,
+            });
+            expect(mockedRevalidatePath).toHaveBeenCalledWith('/admin/flights');
+            expect(mockedRevalidatePath).toHaveBeenCalledWith('/admin/flights/schedules/17');
+        });
+
+        it('returns safe service refusals as validation feedback', async () => {
+            mockedGetServerSession.mockResolvedValue({
+                user: { id: 'admin-1', role: 'ADMIN', staffMfaVerified: true },
+            });
+            mockUpdateFlightScheduleTerms.mockRejectedValue(new FlightScheduleTermsError(
+                'NO_CHANGES',
+                'Change the duration or fare before updating this schedule.',
+            ));
+
+            await expect(updateFlightScheduleTermsAction(request)).resolves.toMatchObject({
+                ok: false,
+                error: {
+                    message: 'Change the duration or fare before updating this schedule.',
+                    fields: { _root: ['Change the duration or fare before updating this schedule.'] },
+                },
+            });
+        });
+
+        it('marks a reused request key so the form can mint a new retry', async () => {
+            mockedGetServerSession.mockResolvedValue({
+                user: { id: 'admin-1', role: 'ADMIN', staffMfaVerified: true },
+            });
+            mockUpdateFlightScheduleTerms.mockRejectedValue(new FlightScheduleTermsError(
+                'REQUEST_REUSED',
+                'This retry key belongs to a different schedule update. Start a new update.',
+            ));
+
+            await expect(updateFlightScheduleTermsAction(request)).resolves.toMatchObject({
+                ok: false,
+                error: { fields: { requestId: expect.any(Array) } },
+            });
+        });
+
+        it('rethrows unexpected service errors instead of exposing them as validation feedback', async () => {
+            mockedGetServerSession.mockResolvedValue({
+                user: { id: 'admin-1', role: 'ADMIN', staffMfaVerified: true },
+            });
+            const internal = new Error('postgresql://private-host/schedule_terms');
+            mockUpdateFlightScheduleTerms.mockRejectedValue(internal);
+
+            await expect(updateFlightScheduleTermsAction(request)).rejects.toBe(internal);
         });
     });
 

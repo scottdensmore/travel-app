@@ -21,6 +21,10 @@ import {
     ItineraryRebookingError,
     ItineraryRebookingService,
 } from '@/lib/itineraryRebookingService';
+import {
+    FlightScheduleTermsError,
+    FlightScheduleTermsService,
+} from '@/lib/flightScheduleTermsService';
 import CityGuide from '@/lib/types/CityGuide';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -54,6 +58,7 @@ import {
     bookingRequestSchema,
     cityGuideSchema,
     favoriteSchema,
+    flightScheduleTermsSchema,
     flightStatusSchema,
     numericIdSchema,
     occurrenceRequestSchema,
@@ -1228,6 +1233,40 @@ export async function saveFlightScheduleAction(data: {
     revalidatePath('/admin/flights');
 
     return savedSchedule;
+}
+
+export async function updateFlightScheduleTermsAction(data: {
+    requestId: string;
+    flightScheduleId: number;
+    durationMinutes: number;
+    price: string;
+    confirmed: boolean;
+}) {
+    const session = await getServerSession(authOptions);
+    const actorUserId = session?.user?.id;
+    if (!hasVerifiedStaffAccess(session) || !actorUserId) throw new Error('Unauthorized');
+
+    const parsed = parseActionInput(flightScheduleTermsSchema, data);
+    if (!parsed.ok) return parsed;
+
+    try {
+        const result = await new FlightScheduleTermsService().update({
+            requestId: parsed.data.requestId,
+            flightScheduleId: parsed.data.flightScheduleId,
+            actorUserId,
+            durationMinutes: parsed.data.durationMinutes,
+            priceCents: parsePriceToCents(parsed.data.price),
+        });
+        revalidatePath('/admin/flights');
+        revalidatePath(`/admin/flights/schedules/${parsed.data.flightScheduleId}`);
+        return result;
+    } catch (error) {
+        if (!(error instanceof FlightScheduleTermsError)) throw error;
+        return actionValidationFailure(
+            error.message,
+            error.code === 'REQUEST_REUSED' ? 'requestId' : '_root',
+        );
+    }
 }
 
 export async function generateFlightOccurrencesAction(

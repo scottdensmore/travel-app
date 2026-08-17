@@ -131,6 +131,19 @@ async function leaveARowInEveryTrackedTable(): Promise<string> {
         },
     });
     created.scheduleIds.push(schedule.id);
+    await prisma.flightScheduleTermsChange.create({
+        data: {
+            requestId: randomUUID(),
+            flightScheduleId: schedule.id,
+            actorUserId: user.id,
+            fromDurationMinutes: 245,
+            toDurationMinutes: 255,
+            fromPriceCents: 35_000,
+            toPriceCents: 37_500,
+            updatedOccurrenceCount: 1,
+            protectedOccurrenceCount: 0,
+        },
+    });
 
     return email;
 }
@@ -148,6 +161,7 @@ afterAll(async () => {
 const TRACKED_TABLES = [
     'Flight',
     'FlightSchedule',
+    'FlightScheduleTermsChange',
     'Notification',
     'PaymentAttempt',
     'PaymentRefund',
@@ -193,6 +207,7 @@ describe('the snapshot a Playwright run is judged by', () => {
             'Review',
             'UserFavorite',
             'Notification',
+            'FlightScheduleTermsChange',
         ]) {
             expect(added[table][0]).toContain(`(${email})`);
         }

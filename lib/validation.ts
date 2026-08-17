@@ -242,6 +242,21 @@ export const scheduleSchema = z.object({
     }
 });
 
+export const flightScheduleTermsSchema = z.object({
+    requestId: z.uuid('Schedule update request ID must be a UUID.'),
+    flightScheduleId: positiveId('Schedule ID'),
+    durationMinutes: z.coerce.number({ message: 'Flight duration is required.' })
+        .int('Flight duration must be a whole number of minutes.')
+        .min(1, 'Flight duration must be at least one minute.')
+        .max(3 * 24 * 60, 'Flight duration must be shorter than three days.'),
+    price: requiredText('Price', 32)
+        .regex(/^\$?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?$/, 'Price format is invalid.'),
+    confirmed: z.boolean().refine(
+        confirmed => confirmed,
+        'Review the schedule impact before updating.',
+    ),
+}).strict();
+
 const seatNumberSchema = requiredText('Seat number', 6)
     .transform(value => value.toUpperCase())
     .pipe(z.string().regex(/^[1-9]\d{0,2}[A-Z]$/, 'Seat number is invalid.'));

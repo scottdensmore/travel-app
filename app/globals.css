@@ -1441,6 +1441,15 @@ footer a:hover {
   box-shadow: 0 0 0 5px rgba(251, 191, 36, 0.28);
 }
 
+/* A schedule edit keeps its originating submit button focused while the server
+   transaction is pending, then moves focus here when the durable result
+   replaces that temporary state. */
+.schedule-terms-success:focus {
+  outline: 3px solid #fbbf24;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 5px rgba(251, 191, 36, 0.28);
+}
+
 .payment-recovery-list {
   display: grid;
   gap: 1rem;
