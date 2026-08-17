@@ -1,0 +1,40 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "3e0baf559f6c",
+  "strategy": "manual-commit",
+  "branch": "agent/84-account-activity-timezone",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "__tests__/app/activeItineraryReads.test.tsx",
+    "__tests__/app/profilePaymentHistory.database.test.ts",
+    "__tests__/components/AccountTimeZoneForm.test.tsx",
+    "__tests__/components/ProfileClient.test.tsx",
+    "__tests__/components/pointsActivityTable.test.tsx",
+    "__tests__/components/pointsHistoryChart.test.tsx",
+    "__tests__/lib/PointsActivityService.test.ts",
+    "app/globals.css",
+    "app/profile/page.tsx",
+    "components/ui/AccountTimeZoneForm.tsx",
+    "components/ui/ProfileClient.tsx",
+    "components/ui/charts/pointsHistoryChart.tsx",
+    "components/ui/pointsActivityTable.tsx",
+    "e2e/booking.spec.ts",
+    "lib/PointsActivityService.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/3e/0baf559f6c/0/metadata.json",
+      "transcript": "/3e/0baf559f6c/0/full.jsonl",
+      "compact_transcript": "/3e/0baf559f6c/0/transcript.jsonl",
+      "content_hash": "/3e/0baf559f6c/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2636554,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 211454080,
+    "output_tokens": 300602,
+    "api_call_count": 1492
+  }
+}
