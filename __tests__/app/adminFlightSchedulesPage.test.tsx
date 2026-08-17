@@ -68,11 +68,16 @@ describe('/admin/flights schedule list', () => {
     });
 
     it('shows the elapsed duration staff saved on each repeating template', async () => {
-        const text = textContent(await AdminFlightsPage());
+        const page = await AdminFlightsPage();
+        const text = textContent(page);
 
         expect(text).toContain('Duration');
         expect(text).toContain('4h 05m');
         expect(text).toContain('11h 20m');
+        expect(findElement(
+            page,
+            element => element.props.href === '/admin/flights/schedules/17',
+        )).toHaveProperty('props.children', 'Preview impact');
     });
 
     it('spans every schedule column when there are no templates', async () => {

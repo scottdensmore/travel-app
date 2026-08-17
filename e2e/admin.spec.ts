@@ -236,6 +236,23 @@ test.describe('Admin Control Journey', () => {
     await page.locator('button:has-text("Close")').click();
     await expect(page.locator('h2:has-text("Passenger Manifest")')).not.toBeVisible();
 
+    // The schedule edit boundary is read-only in this slice. Staff can inspect
+    // every linked occurrence and see why a customer-touched row is protected,
+    // but there is no mutation control to apply an edit yet (#237).
+    const scheduleRow = page.locator('table').first().locator('tr:has-text("E2E606")');
+    await scheduleRow.getByRole('link', { name: 'Preview impact' }).click();
+    await expect(page).toHaveURL(/\/admin\/flights\/schedules\/\d+$/);
+    await expect(page.getByRole('heading', { name: 'Schedule impact preview' })).toBeVisible();
+    await expect(page.getByText('Read-only preview')).toBeVisible();
+    await expect(page.getByText('No schedule or flight has been changed.')).toBeVisible();
+    const protectedOccurrence = page.locator('tr', {
+      has: page.getByText(`Booking #${protectedPassenger.bookingId}`)
+    });
+    await expect(protectedOccurrence.getByText('Booking history', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /update schedule/i })).toHaveCount(0);
+    await page.getByRole('link', { name: 'Back to flight schedules' }).click();
+    await expect(page).toHaveURL('/admin/flights');
+
 
     // Select the newly generated flight's live status selector and change to "Delayed"
     const statusSelect = populatedFlightRow.locator('select').first();
