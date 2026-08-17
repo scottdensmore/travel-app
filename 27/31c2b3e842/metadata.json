@@ -1,0 +1,34 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "2731c2b3e842",
+  "strategy": "manual-commit",
+  "branch": "agent/84-booking-timezone",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "__tests__/app/profilePaymentHistory.database.test.ts",
+    "__tests__/components/AccountTimeZoneForm.test.tsx",
+    "__tests__/components/ProfileClient.test.tsx",
+    "app/globals.css",
+    "app/profile/page.tsx",
+    "components/ui/AccountTimeZoneForm.tsx",
+    "components/ui/ProfileClient.tsx",
+    "e2e/booking.spec.ts",
+    "e2e/disruption.spec.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/27/31c2b3e842/0/metadata.json",
+      "transcript": "/27/31c2b3e842/0/full.jsonl",
+      "compact_transcript": "/27/31c2b3e842/0/transcript.jsonl",
+      "content_hash": "/27/31c2b3e842/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 6398302,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 442098560,
+    "output_tokens": 668038,
+    "api_call_count": 8612
+  }
+}
