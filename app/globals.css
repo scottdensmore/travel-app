@@ -853,6 +853,59 @@ button:active, button[type="submit"]:active {
   color: #e5e7eb;
 }
 
+.points-activity-table-region {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  transition-property: background-color, color;
+}
+
+.points-activity-table-region:focus-visible {
+  outline: 3px solid #fbbf24;
+  outline-offset: 3px;
+}
+
+.points-activity-table {
+  min-width: 27rem;
+}
+
+.points-history-chart {
+  display: grid;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.points-history-label {
+  align-items: baseline;
+  display: flex;
+  font-size: 0.8rem;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.points-history-label strong {
+  color: #e5e7eb;
+  white-space: nowrap;
+}
+
+.points-history-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  display: block;
+  height: 8px;
+  margin-top: 0.3rem;
+  overflow: hidden;
+}
+
+.points-history-bar {
+  background: #a855f7;
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+
 .profile th {
   color: #a78bfa;
   font-weight: 600;

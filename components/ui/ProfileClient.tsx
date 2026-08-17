@@ -596,7 +596,10 @@ export default function ProfileClient({
                     <NextStatusChart points={currentPoints} />
                 </div>
                 <div>
-                    <PointsHistoryChart chartData={monthlyHistory} />
+                    <PointsHistoryChart
+                        accountTimeZone={accountTimeZone}
+                        chartData={monthlyHistory}
+                    />
                 </div>
             </div>
 
@@ -927,7 +930,10 @@ export default function ProfileClient({
                 </div>
 
                 <div className="profile-card mt-8">
-                    <PointsActivityTable activityData={activityData} />
+                    <PointsActivityTable
+                        accountTimeZone={accountTimeZone}
+                        activityData={activityData}
+                    />
                 </div>
             </div>
 

@@ -44,7 +44,7 @@ export default function AccountTimeZoneForm({
             setSelected(result.timeZone);
             setFeedback({
                 kind: 'success',
-                message: `Payment receipt times now use ${result.timeZone}.`,
+                message: `Payment receipts and points activity now use ${result.timeZone}.`,
             });
             router.refresh();
         } catch {
@@ -61,7 +61,10 @@ export default function AccountTimeZoneForm({
     return (
         <section aria-labelledby="account-timezone-heading" className="account-timezone-settings">
             <h2 id="account-timezone-heading">Account timezone</h2>
-            <p>Payment receipt times use this saved timezone, not this browser&apos;s location.</p>
+            <p>
+                Payment receipts and points activity use this saved timezone,
+                not this browser&apos;s location.
+            </p>
             <form onSubmit={save} aria-label="Account timezone settings">
                 <label htmlFor="account-timezone">Account timezone</label>
                 <select

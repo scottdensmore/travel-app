@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 import {
     Card,
     CardContent,
@@ -9,69 +8,45 @@ import {
     CardTitle,
     CardDescription,
 } from "@/components/ui/card"
-import {
-    ChartConfig,
-    ChartContainer,
-    ChartTooltip,
-    ChartTooltipContent,
-} from "@/components/ui/chart"
 import { PointsActivityDisplayData } from "@/lib/types/PointsActivity"
 
-const chartConfig = {
-    points: {
-        label: "Points",
-        color: "hsl(var(--chart-1))",
-    },
-} satisfies ChartConfig
+export default function PointsHistoryChart({
+    accountTimeZone,
+    chartData = [],
+}: {
+    accountTimeZone: string;
+    chartData?: PointsActivityDisplayData[];
+}) {
+    const maxPoints = Math.max(1, ...chartData.map(row => row.points));
 
-export default function PointsHistoryChart({ chartData = [] }: { chartData?: PointsActivityDisplayData[] }) {
     return (
         <Card>
             <CardHeader>
                 <CardTitle>Points History</CardTitle>
-                <CardDescription>Monthly points accumulation over the last year</CardDescription>
+                <CardDescription>
+                    Monthly points accumulation in {accountTimeZone}
+                </CardDescription>
             </CardHeader>
             <CardContent>
-                <ChartContainer config={chartConfig} className="min-h-[200px] w-full">
-                    <LineChart
-                        accessibilityLayer
-                        data={chartData}
-                        margin={{
-                            left: 12,
-                            right: 12,
-                        }}
-                    >
-                        <CartesianGrid vertical={false} />
-                        <XAxis
-                            dataKey="date"
-                            tickLine={false}
-                            axisLine={false}
-                            tickMargin={8}
-                        />
-                        <YAxis
-                            tickLine={false}
-                            axisLine={false}
-                            tickMargin={8}
-                            width={40}
-                        />
-                        <ChartTooltip
-                            cursor={false}
-                            content={<ChartTooltipContent hideLabel />}
-                        />
-                        <Line
-                            dataKey="points"
-                            type="natural"
-                            stroke="var(--color-points)"
-                            strokeWidth={2}
-                            dot={{
-                                fill: "var(--color-points)",
-                            }}
-                            activeDot={{
-                                r: 6,
-                            }}
-                        />
-                    </LineChart>
-                </ChartContainer>
+                <ol
+                    className="points-history-chart"
+                    aria-label={`Monthly points history in ${accountTimeZone}`}
+                >
+                    {chartData.map(row => (
+                        <li key={row.date}>
+                            <div className="points-history-label">
+                                <span>{row.date}</span>
+                                <strong>{row.points.toLocaleString()} points</strong>
+                            </div>
+                            <span className="points-history-track" aria-hidden="true">
+                                <span
+                                    className="points-history-bar"
+                                    style={{ width: `${Math.max(4, (row.points / maxPoints) * 100)}%` }}
+                                />
+                            </span>
+                        </li>
+                    ))}
+                </ol>
             </CardContent>
         </Card>
     )

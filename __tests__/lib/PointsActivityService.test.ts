@@ -39,12 +39,12 @@ describe('PointsActivityService dynamic calculations', () => {
         expect(activities).toHaveLength(3); // 2 bookings + 1 starting points
         expect(activities[0]).toEqual({
             description: '✈️ Gemini Airways GA101 (Seattle, USA → Detroit, USA)',
-            date: new Date('2026-01-15').toLocaleDateString(),
+            date: 'January 15, 2026 at 12:00 AM UTC',
             points: 350,
         });
         expect(activities[1]).toEqual({
             description: '✈️ Delta DL202 (Detroit, USA → New York, USA)',
-            date: new Date('2026-02-20').toLocaleDateString(),
+            date: 'February 20, 2026 at 12:00 AM UTC',
             points: 250,
         });
         expect(activities[2]).toEqual({
@@ -73,6 +73,36 @@ describe('PointsActivityService dynamic calculations', () => {
         expect(monthly.length).toBeGreaterThanOrEqual(2);
         // Last element should show final total points cumulative
         expect(monthly[monthly.length - 1].points).toBe(1600);
+    });
+
+    it('formats activity instants and month boundaries in the saved account timezone', () => {
+        const service = new PointsActivityService([{
+            id: 5,
+            createdAt: new Date('2026-01-01T00:30:00.000Z'),
+            status: 'CONFIRMED',
+            totalPriceCents: 10_000,
+            legs: [],
+        } as any], 0, 'America/Los_Angeles');
+
+        expect(service.getPointsActivity()[0].date)
+            .toBe('December 31, 2025 at 4:30 PM PST');
+        expect(service.getMonthlyPointsActivity().map(row => row.date))
+            .toEqual(['Nov 2025', 'Dec 2025']);
+    });
+
+    it('falls back to UTC when a legacy account timezone is not recognized', () => {
+        const service = new PointsActivityService([{
+            id: 7,
+            createdAt: new Date('2026-01-01T00:30:00.000Z'),
+            status: 'CONFIRMED',
+            totalPriceCents: 10_000,
+            legs: [],
+        } as any], 0, 'Not/AZone');
+
+        expect(service.getPointsActivity()[0].date)
+            .toBe('January 1, 2026 at 12:30 AM UTC');
+        expect(service.getMonthlyPointsActivity().map(row => row.date))
+            .toEqual(['Dec 2025', 'Jan 2026']);
     });
 
     it('uses the booking total in preference to the flight price', () => {
@@ -138,12 +168,12 @@ describe('PointsActivityService dynamic calculations', () => {
         expect(activities).toHaveLength(3); // 1 booking positive + 1 booking negative + 1 starting points
         expect(activities[0]).toEqual({
             description: '✈️ Gemini Airways GA101 (Seattle, USA → Detroit, USA)',
-            date: new Date('2026-01-15').toLocaleDateString(),
+            date: 'January 15, 2026 at 12:00 AM UTC',
             points: 350,
         });
         expect(activities[1]).toEqual({
             description: '❌ Cancelled: Gemini Airways GA101 (Seattle, USA → Detroit, USA)',
-            date: new Date('2026-01-15').toLocaleDateString(),
+            date: 'January 15, 2026 at 12:00 AM UTC',
             points: -350,
         });
         expect(activities[2].description).toBe('Starting Points');
@@ -151,5 +181,27 @@ describe('PointsActivityService dynamic calculations', () => {
         // Monthly points chart should balance out to 0 net points for the cancelled booking
         const monthly = service.getMonthlyPointsActivity();
         expect(monthly[monthly.length - 1].points).toBe(1000); // 1000 starting + 350 (credit) - 350 (debit)
+    });
+
+    it('dates a cancellation debit at the cancellation event rather than ticket issuance', () => {
+        const service = new PointsActivityService([{
+            id: 6,
+            createdAt: new Date('2026-06-30T18:00:00.000Z'),
+            status: 'CANCELLED',
+            totalPriceCents: 35_000,
+            legs: [],
+            statusChanges: [{ createdAt: new Date('2026-07-01T08:30:00.000Z') }],
+        } as any], 1000, 'America/Los_Angeles');
+
+        expect(service.getPointsActivity().slice(0, 2).map(activity => activity.date))
+            .toEqual([
+                'June 30, 2026 at 11:00 AM PDT',
+                'July 1, 2026 at 1:30 AM PDT',
+            ]);
+        expect(service.getMonthlyPointsActivity()).toEqual([
+            { description: 'May 2026', date: 'May 2026', points: 1000 },
+            { description: 'Jun 2026', date: 'Jun 2026', points: 1350 },
+            { description: 'Jul 2026', date: 'Jul 2026', points: 1000 },
+        ]);
     });
 });

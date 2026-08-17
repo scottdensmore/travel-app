@@ -12,7 +12,7 @@ import {
 
 const columnHelper = createColumnHelper<PointsActivityDisplayData>()
 
-const columns = [
+const columns = (accountTimeZone: string) => [
   columnHelper.accessor('description', {
     header: () => "Description",
     cell: info => info.getValue()
@@ -20,7 +20,7 @@ const columns = [
   columnHelper.accessor(row => row.date, {
     id: 'date',
     cell: info => info.getValue(),
-    header: () => <span>Date</span>
+    header: () => <span>Activity time ({accountTimeZone})</span>
   }),
   columnHelper.accessor('points', {
     header: () => <div style={{ textAlign: 'right' }}>Points</div>,
@@ -28,7 +28,10 @@ const columns = [
   })
 ]
 
-const PointsActivityTable: React.FC<{ activityData: PointsActivityDisplayData[] }> = ({ activityData }) => {
+const PointsActivityTable: React.FC<{
+  accountTimeZone: string;
+  activityData: PointsActivityDisplayData[];
+}> = ({ accountTimeZone, activityData }) => {
   const [data, setData] = React.useState(() => [...activityData])
 
   React.useEffect(() => {
@@ -37,7 +40,7 @@ const PointsActivityTable: React.FC<{ activityData: PointsActivityDisplayData[] 
 
   const table = useReactTable({
     data,
-    columns,
+    columns: columns(accountTimeZone),
     getCoreRowModel: getCoreRowModel(),
   })
 
@@ -45,7 +48,13 @@ const PointsActivityTable: React.FC<{ activityData: PointsActivityDisplayData[] 
     <React.Suspense fallback={<div>Loading...</div>}>
       <div className="p-2">
       <h2>Recent Points Activity</h2>
-        <table>
+      <div
+        className="points-activity-table-region"
+        role="region"
+        aria-label="Recent points activity"
+        tabIndex={0}
+      >
+        <table className="points-activity-table">
           <thead>
             {table.getHeaderGroups().map(headerGroup => (
               <tr key={headerGroup.id}>
@@ -74,6 +83,7 @@ const PointsActivityTable: React.FC<{ activityData: PointsActivityDisplayData[] 
             ))}
           </tbody>
         </table>
+      </div>
         <div className="h-4" />
       </div>
     </React.Suspense>

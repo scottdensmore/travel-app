@@ -64,6 +64,8 @@ describe('active itinerary page reads', () => {
 
         expect(bookingFindMany.mock.calls[0][0].include.legs.where)
             .toEqual({ supersededAt: null });
+        expect(bookingFindMany.mock.calls[0][0].include.statusChanges.select.createdAt)
+            .toBe(true);
         expect(userFindUniqueOrThrow).toHaveBeenCalledWith({
             where: { id: 'traveller-1' },
             select: { timeZone: true },
@@ -105,6 +107,40 @@ describe('active itinerary page reads', () => {
             userId: 'traveller-1',
         });
         expect(page.props.replacementOptions).toEqual({ 42: groups });
+    });
+
+    it('projects points activity in the saved account timezone', async () => {
+        userFindUniqueOrThrow.mockResolvedValue({ timeZone: 'America/Los_Angeles' });
+        bookingFindMany.mockResolvedValue([{
+            id: 44,
+            userId: 'traveller-1',
+            status: 'CONFIRMED',
+            createdAt: new Date('2026-01-01T00:30:00.000Z'),
+            totalPriceCents: 10_000,
+            currency: 'USD',
+            paymentIntentId: null,
+            idempotencyKey: null,
+            passengers: [],
+            legs: [],
+            statusChanges: [{
+                createdAt: new Date('2026-01-02T00:30:00.000Z'),
+                refundCents: 10_000,
+                paymentRefund: null,
+            }],
+        }]);
+
+        const page = await ProfilePage();
+
+        expect(page.props.activityData[0].date)
+            .toBe('December 31, 2025 at 4:30 PM PST');
+        expect(page.props.monthlyHistory.map((row: { date: string }) => row.date))
+            .toEqual(['Nov 2025', 'Dec 2025']);
+        expect(page.props.bookings[0].statusChanges[0]).toEqual({
+            refundCents: 10_000,
+            paymentRefund: null,
+        });
+        expect(Object.keys(page.props.bookings[0].statusChanges[0]).sort())
+            .toEqual(['paymentRefund', 'refundCents']);
     });
 
     it('loads only active legs for recent bookings on the admin dashboard', async () => {

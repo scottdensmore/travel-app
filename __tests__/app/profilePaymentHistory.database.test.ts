@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 import { airportCodesForRoute } from '@/lib/airports';
+import { formatAccountDateTime } from '@/lib/accountTimeZone';
 
 jest.mock('next-auth', () => ({ getServerSession: jest.fn() }));
 jest.mock('next/cache', () => ({ revalidatePath: jest.fn() }));
@@ -21,6 +22,7 @@ const created = {
 };
 
 let bookingId: number;
+let bookingCreatedAt: Date;
 let paymentAttemptId: string;
 let providerIntentId: string;
 let checkoutId: string;
@@ -81,6 +83,7 @@ beforeAll(async () => {
         },
     });
     bookingId = booking.id;
+    bookingCreatedAt = booking.createdAt;
     created.bookingIds.push(booking.id);
 });
 
@@ -102,6 +105,7 @@ async function profileProps() {
     return (page as React.ReactElement<{
         accountTimeZone: string;
         accountTimeZoneChoices: string[];
+        activityData: Array<{ date: string; description: string; points: number }>;
         bookings: Array<Record<string, unknown>>;
     }>).props;
 }
@@ -117,6 +121,8 @@ describe('customer-safe profile payment history', () => {
         expect(props.accountTimeZone).toBe('America/Los_Angeles');
         expect(props.accountTimeZoneChoices[0]).toBe('UTC');
         expect(props.accountTimeZoneChoices).toContain('America/Los_Angeles');
+        expect(props.activityData[0].date)
+            .toBe(formatAccountDateTime(bookingCreatedAt, 'America/Los_Angeles'));
     });
 
     it('projects only receipt fields for a captured booking', async () => {

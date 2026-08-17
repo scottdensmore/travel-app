@@ -33,7 +33,7 @@ describe('AccountTimeZoneForm', () => {
             />,
         );
         expect(screen.getByText(
-            'Payment receipt times use this saved timezone, not this browser\'s location.',
+            'Payment receipts and points activity use this saved timezone, not this browser\'s location.',
         )).toBeInTheDocument();
         expect(screen.queryByText(/Booking and payment times/)).not.toBeInTheDocument();
 
@@ -47,7 +47,9 @@ describe('AccountTimeZoneForm', () => {
             expect(refresh).toHaveBeenCalledTimes(1);
         });
         const status = screen.getByRole('status');
-        expect(status).toHaveTextContent('Payment receipt times now use America/Los_Angeles.');
+        expect(status).toHaveTextContent(
+            'Payment receipts and points activity now use America/Los_Angeles.',
+        );
         expect(status).toHaveFocus();
     });
 
