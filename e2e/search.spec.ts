@@ -348,8 +348,26 @@ test('A round trip lists return flights for the chosen return date', async ({ pa
 
   // Real return inventory exists now that routes operate in both directions
   // (#113), so the list is populated rather than empty.
-  await expect(inbound.locator('.flight-result-card').first()).toBeVisible();
+  const outboundCard = page.locator('.flight-result-card').first();
+  const inboundCard = inbound.locator('.flight-result-card').first();
+  await expect(inboundCard).toBeVisible();
   await expect(inbound).not.toContainText('No return flights available');
+
+  // These assertions cross the server-action boundary. A component test can
+  // be handed a duration directly and stay green when the production search
+  // payload silently drops it; the real result has to carry enough data for
+  // both airport clocks and elapsed time (#84).
+  const departure = /Departs [A-Z][a-z]{2} \d{1,2}, \d{4} at \d{2}:\d{2} (?:[A-Z]{2,5}|GMT[+-]\d{1,2}(?::\d{2})?)/;
+  const arrival = /Arrives [A-Z][a-z]{2} \d{1,2}, \d{4} at \d{2}:\d{2} (?:[A-Z]{2,5}|GMT[+-]\d{1,2}(?::\d{2})?)/;
+  for (const card of [outboundCard, inboundCard]) {
+    await expect(card).toContainText(departure);
+    await expect(card).toContainText(arrival);
+    await expect(card).toContainText(/\d+h \d{2}m/);
+    const arrow = card.locator('.flight-result-arrow');
+    await expect(arrow).toHaveCSS('display', 'flex');
+    await expect(arrow).toHaveCSS('flex-direction', 'column');
+    await expect(arrow).toHaveCSS('align-items', 'center');
+  }
 });
 
 test('Shopping a cabin prices results for it and marks flights without it', async ({ page }) => {
