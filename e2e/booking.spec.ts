@@ -228,6 +228,22 @@ test.describe('Flight Booking Journey', () => {
     await expect(receipt).toContainText(formatAccountDateTime(capturedPayment.capturedAt!, 'UTC'));
     await expect(page.getByText(persistedBooking.paymentIntentId!)).toHaveCount(0);
     await expect(page.getByText(persistedBooking.idempotencyKey!)).toHaveCount(0);
+    const activityTable = page.getByRole('heading', { name: 'Recent Points Activity' })
+      .locator('..')
+      .getByRole('table');
+    const activityRegion = page.getByRole('region', { name: 'Recent points activity' });
+    const pointsHistoryCard = page.getByRole('heading', { name: 'Points History' })
+      .locator('..')
+      .locator('..');
+    await expect(activityTable.getByRole('columnheader', {
+      name: 'Activity time (UTC)',
+    })).toBeVisible();
+    const bookingActivity = activityTable.getByRole('row', {
+      name: new RegExp(targetFlight.flightNumber),
+    });
+    await expect(bookingActivity).toContainText(
+      formatAccountDateTime(persistedBooking.createdAt, 'UTC'),
+    );
 
     const timeZone = page.getByRole('combobox', { name: 'Account timezone' });
     await expect(timeZone).toHaveValue('UTC');
@@ -249,7 +265,7 @@ test.describe('Flight Booking Journey', () => {
     await expect(saveTimeZone).toHaveCSS('min-height', '44px');
     await saveTimeZone.click();
     const timeZoneStatus = page.getByRole('status').filter({
-      hasText: 'Payment receipt times now use America/Los_Angeles.',
+      hasText: 'Payment receipts and points activity now use America/Los_Angeles.',
     });
     await expect(timeZoneStatus).toBeVisible();
     await expect(timeZoneStatus).toBeFocused();
@@ -265,7 +281,48 @@ test.describe('Flight Booking Journey', () => {
     await expect(receipt).toContainText(
       formatAccountDateTime(capturedPayment.capturedAt!, 'America/Los_Angeles'),
     );
+    await expect(activityTable.getByRole('columnheader', {
+      name: 'Activity time (America/Los_Angeles)',
+    })).toBeVisible();
+    await expect(bookingActivity).toContainText(
+      formatAccountDateTime(persistedBooking.createdAt, 'America/Los_Angeles'),
+    );
     await page.setViewportSize({ width: 390, height: 844 });
+    const pointsHistoryChart = pointsHistoryCard.getByRole('list', {
+      name: 'Monthly points history in America/Los_Angeles',
+    });
+    await expect(pointsHistoryChart).toBeVisible();
+    await expect(pointsHistoryChart).toHaveCSS('display', 'grid');
+    const firstPointsTrack = pointsHistoryChart.locator('.points-history-track').first();
+    const firstPointsBar = pointsHistoryChart.locator('.points-history-bar').first();
+    await expect(firstPointsTrack).toHaveCSS('display', 'block');
+    await expect(firstPointsTrack).toHaveCSS('height', '8px');
+    await expect(firstPointsBar).toHaveCSS('display', 'block');
+    await expect(firstPointsBar).toHaveCSS('background-color', 'rgb(168, 85, 247)');
+    const accountMonth = new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      timeZone: 'America/Los_Angeles',
+      year: 'numeric',
+    }).format(persistedBooking.createdAt);
+    await expect(pointsHistoryChart.getByText(accountMonth)).toBeVisible();
+    const pointsHistoryBox = await pointsHistoryChart.boundingBox();
+    expect(pointsHistoryBox).not.toBeNull();
+    expect(pointsHistoryBox!.width).toBeGreaterThan(0);
+    expect(pointsHistoryBox!.height).toBeGreaterThan(0);
+    await expect(activityRegion).toHaveCSS('overflow-x', 'auto');
+    await expect(activityRegion).toHaveCSS(
+      'transition-property',
+      'background-color, color',
+    );
+    // Switch Chromium to keyboard modality before moving focus directly to
+    // this later tab stop, so :focus-visible is evaluated as a keyboard user.
+    await page.keyboard.press('Tab');
+    await activityRegion.focus();
+    await expect(activityRegion).toBeFocused();
+    expect(await activityRegion.evaluate(element => {
+      const style = getComputedStyle(element);
+      return [style.outlineColor, style.outlineStyle, style.outlineWidth, style.outlineOffset];
+    })).toEqual(['rgb(251, 191, 36)', 'solid', '3px', '3px']);
     const phoneReceiptBox = await receipt.boundingBox();
     expect(phoneReceiptBox).not.toBeNull();
     expect(phoneReceiptBox!.x).toBeGreaterThanOrEqual(0);

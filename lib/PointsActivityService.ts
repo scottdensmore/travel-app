@@ -3,6 +3,11 @@ import { PointsActivityDisplayData } from "./types/PointsActivity";
 import { Booking, Flight } from "@prisma/client";
 import { bookingTotalCents } from "./bookingPricing";
 import { outboundFlight } from "./bookingItinerary";
+import {
+  DEFAULT_ACCOUNT_TIME_ZONE,
+  formatAccountDateTime,
+  normalizeAccountTimeZone,
+} from './accountTimeZone';
 
 /**
  * Only what this service reads. Tying it to the Prisma model meant a flight
@@ -15,15 +20,53 @@ type ActivityFlight = Pick<Flight, 'id' | 'airline' | 'flightNumber' | 'priceCen
 };
 
 type BookingLeg = { sequence: number; flight: ActivityFlight | null };
-type BookingWithFlight = Booking & { flight?: ActivityFlight | null; legs: BookingLeg[] };
+type BookingWithFlight = Booking & {
+  flight?: ActivityFlight | null;
+  legs: BookingLeg[];
+  statusChanges?: Array<{ createdAt: Date }>;
+};
+
+function accountMonthKey(value: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    month: '2-digit',
+    timeZone,
+    year: 'numeric',
+  }).formatToParts(value);
+  const year = parts.find(part => part.type === 'year')?.value;
+  const month = parts.find(part => part.type === 'month')?.value;
+  if (!year || !month) throw new Error('Could not format account month');
+  return `${year}-${month}`;
+}
+
+function offsetMonth(monthKey: string, offset: number): string {
+  const [year, month] = monthKey.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1 + offset, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+function accountMonthLabel(monthKey: string): string {
+  const [year, month] = monthKey.split('-').map(Number);
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    timeZone: 'UTC',
+    year: 'numeric',
+  }).format(new Date(Date.UTC(year, month - 1, 1)));
+}
 
 class PointsActivityService {
   private bookings: BookingWithFlight[] | null;
   private startingPoints: number;
+  private accountTimeZone: string;
 
-  constructor(bookings?: BookingWithFlight[], startingPoints?: number) {
+  constructor(
+    bookings?: BookingWithFlight[],
+    startingPoints?: number,
+    accountTimeZone = DEFAULT_ACCOUNT_TIME_ZONE,
+  ) {
     this.bookings = bookings !== undefined ? bookings : null;
     this.startingPoints = startingPoints !== undefined ? startingPoints : StartingPoints;
+    this.accountTimeZone = normalizeAccountTimeZone(accountTimeZone)
+      ?? DEFAULT_ACCOUNT_TIME_ZONE;
   }
 
   /** Whole status points earned by a booking, from its stored total. */
@@ -53,7 +96,7 @@ class PointsActivityService {
     if (this.bookings === null) {
       const displayData: PointsActivityDisplayData[] = PointsActivityData.map((activity) => ({
         description: activity.description,
-        date: activity.date.toLocaleDateString(),
+        date: formatAccountDateTime(activity.date, this.accountTimeZone),
         points: activity.points
       }));
       displayData.push({
@@ -76,19 +119,22 @@ class PointsActivityService {
         // 1. Show original positive booking credit
         displayData.push({
           description: baseDesc,
-          date: new Date(booking.createdAt).toLocaleDateString(),
+          date: formatAccountDateTime(booking.createdAt, this.accountTimeZone),
           points: points
         });
         // 2. Show cancellation debit
         displayData.push({
           description: `❌ Cancelled: ${baseDesc.replace('✈️ ', '')}`,
-          date: new Date(booking.createdAt).toLocaleDateString(),
+          date: formatAccountDateTime(
+            booking.statusChanges?.[0]?.createdAt ?? booking.createdAt,
+            this.accountTimeZone,
+          ),
           points: -points
         });
       } else {
         displayData.push({
           description: baseDesc,
-          date: new Date(booking.createdAt).toLocaleDateString(),
+          date: formatAccountDateTime(booking.createdAt, this.accountTimeZone),
           points: points
         });
       }
@@ -104,74 +150,54 @@ class PointsActivityService {
   }
 
   getMonthlyPointsActivity(): PointsActivityDisplayData[] {
+    const monthlyPointsMap: Record<string, number> = {};
     if (this.bookings === null) {
-      const monthlyPointsMap: { [key: string]: number } = {};
-      PointsActivityData.forEach((activity) => {
-        const monthYear = activity.date.toLocaleString('default', { month: 'short', year: 'numeric' });
-        monthlyPointsMap[monthYear] = (monthlyPointsMap[monthYear] || 0) + activity.points;
+      PointsActivityData.forEach(activity => {
+        const monthKey = accountMonthKey(activity.date, this.accountTimeZone);
+        monthlyPointsMap[monthKey] = (monthlyPointsMap[monthKey] || 0) + activity.points;
       });
-
-      const sortedMonths = Object.keys(monthlyPointsMap).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
-      const startDate = new Date(sortedMonths[0]);
-      startDate.setMonth(startDate.getMonth() - 1);
-      const endDate = new Date(sortedMonths[sortedMonths.length - 1]);
-      const allMonths: string[] = [];
-      for (let date = new Date(startDate); date <= endDate; date.setMonth(date.getMonth() + 1)) {
-        allMonths.push(date.toLocaleString('default', { month: 'short', year: 'numeric' }));
-      }
-
-      let cumulativePoints = this.startingPoints;
-      return allMonths.map(monthYear => {
-        if (monthlyPointsMap[monthYear]) {
-          cumulativePoints += monthlyPointsMap[monthYear];
+    } else {
+      this.bookings.forEach((booking) => {
+        const monthKey = accountMonthKey(booking.createdAt, this.accountTimeZone);
+        const points = this.bookingPoints(booking);
+        monthlyPointsMap[monthKey] = (monthlyPointsMap[monthKey] || 0) + points;
+        if (booking.status === 'CANCELLED') {
+          const cancellationMonthKey = accountMonthKey(
+            booking.statusChanges?.[0]?.createdAt ?? booking.createdAt,
+            this.accountTimeZone,
+          );
+          monthlyPointsMap[cancellationMonthKey]
+            = (monthlyPointsMap[cancellationMonthKey] || 0) - points;
         }
-        return {
-          description: monthYear,
-          date: monthYear,
-          points: cumulativePoints
-        };
       });
     }
 
-    const monthlyPointsMap: { [key: string]: number } = {};
-    this.bookings.forEach((booking) => {
-      const date = new Date(booking.createdAt);
-      const monthYear = date.toLocaleString('default', { month: 'short', year: 'numeric' });
-      const points = this.bookingPoints(booking);
-      if (booking.status === 'CANCELLED') {
-        // Cancellation balances out to 0 net points for this month
-        monthlyPointsMap[monthYear] = (monthlyPointsMap[monthYear] || 0) + points - points;
-      } else {
-        monthlyPointsMap[monthYear] = (monthlyPointsMap[monthYear] || 0) + points;
-      }
-    });
-
-    const sortedMonths = Object.keys(monthlyPointsMap).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+    const sortedMonths = Object.keys(monthlyPointsMap).sort();
     let allMonths: string[] = [];
 
     if (sortedMonths.length > 0) {
-      const startDate = new Date(sortedMonths[0]);
-      startDate.setMonth(startDate.getMonth() - 1);
-      const endDate = new Date(sortedMonths[sortedMonths.length - 1]);
-      for (let date = new Date(startDate); date <= endDate; date.setMonth(date.getMonth() + 1)) {
-        allMonths.push(date.toLocaleString('default', { month: 'short', year: 'numeric' }));
+      const firstMonth = offsetMonth(sortedMonths[0], -1);
+      const lastMonth = sortedMonths[sortedMonths.length - 1];
+      for (let monthKey = firstMonth; monthKey <= lastMonth; monthKey = offsetMonth(monthKey, 1)) {
+        allMonths.push(monthKey);
       }
     } else {
-      const now = new Date();
+      const currentMonth = accountMonthKey(new Date(), this.accountTimeZone);
       allMonths = [
-        new Date(now.getFullYear(), now.getMonth() - 1).toLocaleString('default', { month: 'short', year: 'numeric' }),
-        now.toLocaleString('default', { month: 'short', year: 'numeric' })
+        offsetMonth(currentMonth, -1),
+        currentMonth,
       ];
     }
 
     let cumulativePoints = this.startingPoints;
-    return allMonths.map(monthYear => {
-      if (monthlyPointsMap[monthYear]) {
-        cumulativePoints += monthlyPointsMap[monthYear];
+    return allMonths.map(monthKey => {
+      if (monthlyPointsMap[monthKey]) {
+        cumulativePoints += monthlyPointsMap[monthKey];
       }
+      const monthLabel = accountMonthLabel(monthKey);
       return {
-        description: monthYear,
-        date: monthYear,
+        description: monthLabel,
+        date: monthLabel,
         points: cumulativePoints
       };
     });

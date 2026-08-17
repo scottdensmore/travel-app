@@ -33,7 +33,11 @@ jest.mock('@/app/actions', () => ({
 }));
 
 jest.mock('@/components/ui/charts/nextStatusChart', () => () => <div data-testid="status-chart" />);
-jest.mock('@/components/ui/charts/pointsHistoryChart', () => () => <div data-testid="history-chart" />);
+jest.mock('@/components/ui/charts/pointsHistoryChart', () => ({
+    accountTimeZone,
+}: {
+    accountTimeZone: string;
+}) => <div data-testid="history-chart" data-time-zone={accountTimeZone} />);
 
 const mockCancelBooking = cancelBookingAction as jest.Mock;
 const mockDeleteReview = deleteReviewAction as jest.Mock;
@@ -401,6 +405,16 @@ describe('ProfileClient interactive dashboard', () => {
             replacementOptions: Record<number, ReplacementFlightGroup[]> = {},
             accountTimeZone = 'UTC',
         ) => render(profile(bookings, replacementOptions, accountTimeZone));
+
+        it('labels account activity and history with the saved timezone', () => {
+            renderBookings([], {}, 'America/Los_Angeles');
+
+            expect(screen.getByRole('columnheader', {
+                name: 'Activity time (America/Los_Angeles)',
+            })).toBeInTheDocument();
+            expect(screen.getByTestId('history-chart'))
+                .toHaveAttribute('data-time-zone', 'America/Los_Angeles');
+        });
 
         it('lists every leg of the itinerary, in order', () => {
             renderBookings([roundTripBooking]);

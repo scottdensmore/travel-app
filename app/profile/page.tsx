@@ -68,6 +68,7 @@ export default async function ProfilePage() {
         orderBy: { sequence: 'desc' },
         take: 1,
         select: {
+          createdAt: true,
           refundCents: true,
           paymentRefund: {
             select: { amountCents: true, status: true },
@@ -154,6 +155,10 @@ export default async function ProfilePage() {
 
     return {
       ...customerBooking,
+      statusChanges: booking.statusChanges.map(statusChange => ({
+        refundCents: statusChange.refundCents,
+        paymentRefund: statusChange.paymentRefund,
+      })),
       paymentReceipt: capturedPayment
         ? {
             amountCents: capturedPayment.amountCents,
@@ -164,7 +169,11 @@ export default async function ProfilePage() {
     };
   });
 
-  const pointsActivityService = new PointsActivityService(bookings);
+  const pointsActivityService = new PointsActivityService(
+    bookings,
+    undefined,
+    account.timeZone,
+  );
   const activityData = pointsActivityService.getPointsActivity();
   const currentPoints = pointsActivityService.getCurrentPoints();
   const currentStatus = pointsActivityService.getCurrentStatus();
