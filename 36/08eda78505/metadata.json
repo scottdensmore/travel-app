@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "3608eda78505",
+  "strategy": "manual-commit",
+  "branch": "agent/237-show-schedule-duration",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "__tests__/app/adminFlightSchedulesPage.test.tsx",
+    "app/admin/flights/page.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/36/08eda78505/0/metadata.json",
+      "transcript": "/36/08eda78505/0/full.jsonl",
+      "compact_transcript": "/36/08eda78505/0/transcript.jsonl",
+      "content_hash": "/36/08eda78505/0/content_hash.txt",
+      "prompt": "/36/08eda78505/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": -194236416,
+    "output_tokens": -368377,
+    "api_call_count": 116
+  }
+}
