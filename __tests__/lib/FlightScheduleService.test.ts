@@ -87,6 +87,7 @@ describe('FlightScheduleService dynamic generator', () => {
         // Verifies correct instance creation
         expect(mockedFlightCreate).toHaveBeenCalledWith({
             data: {
+                flightScheduleId: 2,
                 flightNumber: 'CA202',
                 airline: 'Gemini Airways',
                 fromAirportCode: 'JFK',

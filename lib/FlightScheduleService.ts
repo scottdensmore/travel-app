@@ -106,6 +106,7 @@ export default class FlightScheduleService {
                 try {
                     flight = await prisma.flight.create({
                         data: {
+                            flightScheduleId: schedule.id,
                             flightNumber: schedule.flightNumber,
                             airline: schedule.airline,
                             ...airportCodesForRoute(schedule.from, schedule.to),

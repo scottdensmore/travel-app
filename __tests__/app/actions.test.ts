@@ -2204,6 +2204,7 @@ describe('admin flight schedule actions', () => {
             expect(mockedFlightCreate).toHaveBeenCalledTimes(4);
             expect(mockedFlightCreate).toHaveBeenNthCalledWith(1, {
                 data: {
+                    flightScheduleId: 1,
                     flightNumber: 'AA101',
                     airline: 'American Airlines',
                     fromAirportCode: 'JFK',
@@ -2486,6 +2487,7 @@ describe('admin flight schedule actions', () => {
                 expect(mockedFlightCreate).toHaveBeenCalledTimes(1);
                 expect(mockedFlightCreate).toHaveBeenCalledWith({
                     data: {
+                        flightScheduleId: 1,
                         flightNumber: 'AA101',
                         airline: 'American Airlines',
                         fromAirportCode: 'JFK',

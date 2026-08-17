@@ -363,6 +363,12 @@ model Flight {
   priceCents      Int
   status          FlightStatus @default(ON_TIME)
 
+  /// The repeating template that generated this occurrence. Null is honest for
+  /// manually authored flights and historical rows whose provenance cannot be
+  /// established unambiguously (#237).
+  flightScheduleId Int?
+  flightSchedule   FlightSchedule? @relation(fields: [flightScheduleId], references: [id], onDelete: SetNull)
+
   firstClassRows     Int?
   businessRows       Int?
   premiumEconomyRows Int?
@@ -376,6 +382,7 @@ model Flight {
   @@unique([flightNumber, departureDate])
   /// Every search and the status board range-scan this (#167).
   @@index([departureDate])
+  @@index([flightScheduleId])
   @@index([fromAirportCode])
   @@index([toAirportCode])
 }
@@ -425,6 +432,8 @@ model FlightSchedule {
   premiumEconomyRows Int?
   economyRows        Int?
   seatPattern        String?
+
+  flights Flight[]
 }
 
 model Notification {
