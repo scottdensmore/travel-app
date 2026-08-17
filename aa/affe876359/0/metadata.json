@@ -1,0 +1,43 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "aaaffe876359",
+  "session_id": "019ffe5b-1054-7c22-8afc-e97cb84c7b73",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-17T21:56:49.18328663Z",
+  "branch": "agent/84-ticket-issued-timezone",
+  "checkpoints_count": 1,
+  "save_step_count": 1,
+  "files_touched": [
+    "__tests__/app/routeRenderSources.database.test.ts",
+    "__tests__/components/BookingCheckoutWizard.test.tsx",
+    "app/checkout/page.tsx",
+    "components/ui/BookingCheckoutWizard.tsx",
+    "e2e/booking.spec.ts"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.6-sol",
+  "turn_id": "f403cce72274",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 5917444,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 408050816,
+    "output_tokens": 633852,
+    "api_call_count": 8361
+  },
+  "session_metrics": {
+    "turn_count": 18
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-17T21:56:27.429869539Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 106,
+    "human_modified": 9,
+    "human_removed": 0,
+    "total_committed": 106,
+    "total_lines_changed": 115,
+    "agent_percentage": 0,
+    "metric_version": 2
+  }
+}

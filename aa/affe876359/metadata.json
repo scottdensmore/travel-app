@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "aaaffe876359",
+  "strategy": "manual-commit",
+  "branch": "agent/84-ticket-issued-timezone",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "__tests__/app/routeRenderSources.database.test.ts",
+    "__tests__/components/BookingCheckoutWizard.test.tsx",
+    "app/checkout/page.tsx",
+    "components/ui/BookingCheckoutWizard.tsx",
+    "e2e/booking.spec.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/aa/affe876359/0/metadata.json",
+      "transcript": "/aa/affe876359/0/full.jsonl",
+      "compact_transcript": "/aa/affe876359/0/transcript.jsonl",
+      "content_hash": "/aa/affe876359/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 5917444,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 408050816,
+    "output_tokens": 633852,
+    "api_call_count": 8361
+  }
+}
