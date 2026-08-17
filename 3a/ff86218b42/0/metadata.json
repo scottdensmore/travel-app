@@ -1,0 +1,60 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "3aff86218b42",
+  "session_id": "019ffe5b-1054-7c22-8afc-e97cb84c7b73",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-17T12:38:29.489688798Z",
+  "branch": "agent/83-deactivate-schedules",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "__tests__/app/actions.test.ts",
+    "__tests__/app/adminFlightScheduleImpactPage.test.tsx",
+    "__tests__/app/adminFlightSchedulesPage.test.tsx",
+    "__tests__/components/FlightScheduleActivationForm.test.tsx",
+    "__tests__/components/ManualOccurrenceBuilder.test.tsx",
+    "__tests__/lib/FlightScheduleService.test.ts",
+    "__tests__/lib/flightScheduleActivationService.database.test.ts",
+    "__tests__/lib/flightScheduleActivationService.test.ts",
+    "__tests__/lib/flightScheduleImpact.test.ts",
+    "app/actions.ts",
+    "app/admin/flights/page.tsx",
+    "app/admin/flights/schedules/[scheduleId]/page.tsx",
+    "app/globals.css",
+    "components/ui/FlightScheduleActivationForm.tsx",
+    "components/ui/ManualOccurrenceBuilder.tsx",
+    "e2e/admin.spec.ts",
+    "lib/FlightScheduleService.ts",
+    "lib/flightScheduleActivationService.ts",
+    "lib/flightScheduleGenerationLock.ts",
+    "lib/flightScheduleImpact.ts",
+    "lib/validation.ts"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.6-sol",
+  "turn_id": "f403cce72274",
+  "checkpoint_transcript_start": 37054,
+  "transcript_lines_at_start": 37054,
+  "compact_transcript_start": 5941,
+  "token_usage": {
+    "input_tokens": 614999,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 53401344,
+    "output_tokens": 88897,
+    "api_call_count": 374
+  },
+  "session_metrics": {
+    "turn_count": 18
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-17T12:38:10.096113017Z",
+    "agent_lines": 1416,
+    "agent_removed": 202,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1416,
+    "total_lines_changed": 1618,
+    "agent_percentage": 100,
+    "metric_version": 2
+  }
+}

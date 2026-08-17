@@ -1,0 +1,46 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "3aff86218b42",
+  "strategy": "manual-commit",
+  "branch": "agent/83-deactivate-schedules",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "__tests__/app/actions.test.ts",
+    "__tests__/app/adminFlightScheduleImpactPage.test.tsx",
+    "__tests__/app/adminFlightSchedulesPage.test.tsx",
+    "__tests__/components/FlightScheduleActivationForm.test.tsx",
+    "__tests__/components/ManualOccurrenceBuilder.test.tsx",
+    "__tests__/lib/FlightScheduleService.test.ts",
+    "__tests__/lib/flightScheduleActivationService.database.test.ts",
+    "__tests__/lib/flightScheduleActivationService.test.ts",
+    "__tests__/lib/flightScheduleImpact.test.ts",
+    "app/actions.ts",
+    "app/admin/flights/page.tsx",
+    "app/admin/flights/schedules/[scheduleId]/page.tsx",
+    "app/globals.css",
+    "components/ui/FlightScheduleActivationForm.tsx",
+    "components/ui/ManualOccurrenceBuilder.tsx",
+    "e2e/admin.spec.ts",
+    "lib/FlightScheduleService.ts",
+    "lib/flightScheduleActivationService.ts",
+    "lib/flightScheduleGenerationLock.ts",
+    "lib/flightScheduleImpact.ts",
+    "lib/validation.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/3a/ff86218b42/0/metadata.json",
+      "transcript": "/3a/ff86218b42/0/full.jsonl",
+      "compact_transcript": "/3a/ff86218b42/0/transcript.jsonl",
+      "content_hash": "/3a/ff86218b42/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 614999,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 53401344,
+    "output_tokens": 88897,
+    "api_call_count": 374
+  }
+}
