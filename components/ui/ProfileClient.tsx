@@ -12,6 +12,7 @@ import { isActionValidationFailure } from '@/lib/actionResult';
 import { PointsActivityDisplayData } from '@/lib/types/PointsActivity';
 import { flightDeparture } from '@/lib/flightTime';
 import type { ReplacementFlightGroup } from '@/lib/itineraryReplacementSearch';
+import ItineraryRebookingDialog from '@/components/ui/ItineraryRebookingDialog';
 
 interface Flight {
     id: number;
@@ -125,12 +126,15 @@ interface ProfileClientProps {
 }
 
 function ReplacementFlightsPreview({
-    bookingId,
+    booking,
     groups,
+    onSuccess,
 }: {
-    bookingId: number;
+    booking: Booking;
     groups: ReplacementFlightGroup[];
+    onSuccess: () => void;
 }) {
+    const bookingId = booking.id;
     const headingId = `replacement-flights-${bookingId}`;
     const allLegsHaveOptions = groups.length > 0
         && groups.every(group => group.flights.length > 0);
@@ -169,9 +173,18 @@ function ReplacementFlightsPreview({
             ))}
             <p className="replacement-flight-guidance">
                 {allLegsHaveOptions
-                    ? 'Your original fare is protected. Contact support to move to one of these flights, or cancel for a full refund.'
+                    ? 'Your original fare is protected. Choose replacement flights and seats below, or cancel for a full refund.'
                     : 'No complete replacement itinerary is available within three days. Contact support, or cancel for a full refund.'}
             </p>
+            {allLegsHaveOptions && (
+                <ItineraryRebookingDialog
+                    bookingId={booking.id}
+                    passengers={booking.passengers}
+                    cancelledLegs={booking.legs.filter(leg => leg.flight?.status === 'CANCELLED')}
+                    groups={groups}
+                    onSuccess={onSuccess}
+                />
+            )}
         </section>
     );
 }
@@ -280,12 +293,18 @@ export default function ProfileClient({
         focus: boolean;
     } | null>(null);
     const refundFeedbackRef = useRef<HTMLParagraphElement | null>(null);
+    const rebookingFeedbackRef = useRef<HTMLParagraphElement | null>(null);
+    const [rebookingFeedback, setRebookingFeedback] = useState<string | null>(null);
     const bookingsRegionRef = useRef<HTMLDivElement | null>(null);
     const receiptBookings = bookings.filter(booking => booking.paymentReceipt);
 
     useEffect(() => {
         if (refundFeedback?.focus) refundFeedbackRef.current?.focus();
     }, [refundFeedback]);
+
+    useEffect(() => {
+        if (rebookingFeedback) rebookingFeedbackRef.current?.focus();
+    }, [rebookingFeedback]);
     /**
      * Whether the region still scrolls sideways.
      *
@@ -583,6 +602,17 @@ export default function ProfileClient({
                 {/* Bookings Section */}
                 <div className="profile-card">
                     <h2 className="text-2xl font-bold mb-4">My Bookings</h2>
+                    {rebookingFeedback && (
+                        <p
+                            ref={rebookingFeedbackRef}
+                            className="rebooking-completion"
+                            role="status"
+                            aria-live="polite"
+                            tabIndex={-1}
+                        >
+                            {rebookingFeedback}
+                        </p>
+                    )}
                     {bookings.length > 0 ? (
                         <div
                             ref={bookingsRegionRef}
@@ -747,8 +777,11 @@ export default function ProfileClient({
                                                 <tr className="replacement-flight-row">
                                                     <td colSpan={6} data-label="Replacement flights">
                                                         <ReplacementFlightsPreview
-                                                            bookingId={booking.id}
+                                                            booking={booking}
                                                             groups={replacementOptions[booking.id]}
+                                                            onSuccess={() => setRebookingFeedback(
+                                                                `Booking ${booking.id} is confirmed on your replacement flights.`,
+                                                            )}
                                                         />
                                                     </td>
                                                 </tr>

@@ -296,7 +296,7 @@ test.describe('A booking whose flight has gone', () => {
 });
 
 test.describe('A disrupted booking on a phone', () => {
-    test('shows a comparable replacement without hiding the refund choice', async ({ page }) => {
+    test('chooses a comparable replacement and keeps the booking identity', async ({ page }) => {
         const flight = await aFlight(`RPO-${suffix.slice(-6)}`);
         const replacement = await aFlight(`RPN-${suffix.slice(-6)}`);
         await prisma.flight.update({
@@ -325,6 +325,48 @@ test.describe('A disrupted booking on a phone', () => {
             .getByRole('button', { name: 'Cancel', exact: true })).toBeVisible();
         expect(await page.evaluate(() => document.documentElement.scrollWidth))
             .toBe(await page.evaluate(() => document.documentElement.clientWidth));
+
+        await preview.getByRole('button', { name: 'Select replacement seats' }).click();
+        const dialog = page.getByRole('dialog', { name: `Rebook booking ${booking.id}` });
+        await expect(dialog).toBeVisible();
+        const flightChoice = dialog.getByLabel(`Replacement flight for ${flight.flightNumber}`);
+        await expect(flightChoice).toBeFocused();
+        await flightChoice.selectOption(String(replacement.id));
+        await dialog.getByLabel(`Replacement seat for Ada Lovelace on ${replacement.flightNumber}`)
+            .selectOption('2A');
+        await dialog.getByRole('button', { name: 'Confirm replacement flights' }).click();
+
+        const completion = page.getByRole('status');
+        await expect(completion).toContainText(
+            `Booking ${booking.id} is confirmed on your replacement flights.`,
+        );
+        await expect(completion).toBeFocused();
+        const confirmedRow = page.getByTestId(`booking-row-${booking.id}`);
+        await expect(confirmedRow).toContainText(replacement.flightNumber);
+        await expect(confirmedRow).toContainText('Ada (Seat 2A)');
+        await expect(confirmedRow).not.toContainText(flight.flightNumber);
+
+        const saved = await prisma.booking.findUniqueOrThrow({
+            where: { id: booking.id },
+            include: {
+                legs: { include: { seatAssignments: true } },
+                rebookings: { include: { legs: true } },
+            },
+        });
+        expect(saved.status).toBe('CONFIRMED');
+        expect(saved.legs.filter(leg => leg.supersededAt === null)).toEqual([
+            expect.objectContaining({
+                flightId: replacement.id,
+                seatAssignments: [expect.objectContaining({ seatNumber: '2A', releasedAt: null })],
+            }),
+        ]);
+        expect(saved.rebookings).toEqual([
+            expect.objectContaining({
+                bookingId: booking.id,
+                farePolicy: 'DISRUPTION_WAIVER',
+                legs: [expect.objectContaining({ fromLegId: booking.legs[0].id })],
+            }),
+        ]);
     });
 
     test('says so where the screen can actually show it', async ({ page }) => {

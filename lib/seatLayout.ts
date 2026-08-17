@@ -104,3 +104,19 @@ export function assertSeatAvailableForCabin(
         throw new Error(`Seat ${seatNumber} is not available for ${cabinClass} on this flight.`);
     }
 }
+
+export function seatsForCabin(
+    cabinClass: CabinClass,
+    layout: SeatingLayout,
+): string[] {
+    const totalRows = rowCount(layout.firstClassRows, DEFAULT_SEATING_LAYOUT.firstClassRows)
+        + rowCount(layout.businessRows, DEFAULT_SEATING_LAYOUT.businessRows)
+        + rowCount(layout.premiumEconomyRows, DEFAULT_SEATING_LAYOUT.premiumEconomyRows)
+        + rowCount(layout.economyRows, DEFAULT_SEATING_LAYOUT.economyRows);
+    const seatLetters = (layout.seatPattern ?? DEFAULT_SEATING_LAYOUT.seatPattern)
+        .replace(/[^A-Z]/g, '');
+
+    return Array.from({ length: totalRows }, (_, index) => index + 1)
+        .flatMap(row => [...seatLetters].map(letter => `${row}${letter}`))
+        .filter(seatNumber => isSeatAvailableForCabin(seatNumber, cabinClass, layout));
+}
