@@ -119,6 +119,7 @@ describe('FlightScheduleImpactService', () => {
             to: 'Detroit, USA',
             durationMinutes: 245,
             priceCents: 35_000,
+            isActive: true,
             flights: [{
                 id: 71,
                 flightNumber: 'MA237',
@@ -146,6 +147,7 @@ describe('FlightScheduleImpactService', () => {
                 to: true,
                 durationMinutes: true,
                 priceCents: true,
+                isActive: true,
                 flights: {
                     orderBy: { departureDate: 'asc' },
                     select: {
@@ -178,6 +180,7 @@ describe('FlightScheduleImpactService', () => {
                 to: 'Detroit, USA',
                 durationMinutes: 245,
                 priceCents: 35_000,
+                isActive: true,
             },
             summary: {
                 total: 1,

@@ -7,6 +7,7 @@ import {
 } from '@/lib/flightScheduleImpact';
 import { durationLabel, flightDeparture } from '@/lib/flightTime';
 import FlightScheduleTermsForm from '@/components/ui/FlightScheduleTermsForm';
+import FlightScheduleActivationForm from '@/components/ui/FlightScheduleActivationForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -73,6 +74,9 @@ export default async function ScheduleImpactPage({
                     <p style={{ color: 'rgba(255, 255, 255, 0.72)', margin: '4px 0 0' }}>
                         {impact.schedule.from} → {impact.schedule.to} · {durationLabel(impact.schedule.durationMinutes)} · {formatPrice(impact.schedule.priceCents)}
                     </p>
+                    <p style={{ color: impact.schedule.isActive ? '#86efac' : '#fbbf24', margin: '4px 0 0', fontWeight: 700 }}>
+                        {impact.schedule.isActive ? 'Active template' : 'Inactive template'}
+                    </p>
                 </div>
                 <Link href="/admin/flights" style={{ color: '#7dd3fc', fontWeight: 700 }}>
                     ← Back to flight schedules
@@ -88,7 +92,7 @@ export default async function ScheduleImpactPage({
                     Impact preview
                 </h2>
                 <p style={{ color: '#e5e7eb', margin: 0 }}>
-                    Nothing changes until you confirm the duration and fare update below. The preview defines which linked occurrences must remain protected.
+                    Nothing changes until you confirm an action below. The preview defines which linked occurrences must remain protected.
                 </p>
                 <p style={{ color: 'rgba(255, 255, 255, 0.65)', margin: '8px 0 0', fontSize: '0.9rem' }}>
                     Only occurrences with durable provenance for this template are included. Unlinked or ambiguous history is never guessed into this preview.
@@ -121,6 +125,12 @@ export default async function ScheduleImpactPage({
                 priceCents={impact.schedule.priceCents}
                 safeFutureCount={impact.summary.safeFuture}
                 protectedCount={impact.summary.protected}
+            />
+
+            <FlightScheduleActivationForm
+                flightScheduleId={impact.schedule.id}
+                isActive={impact.schedule.isActive}
+                occurrenceCount={impact.summary.total}
             />
 
             <section aria-labelledby="linked-occurrences-heading" className="admin-card" style={{ marginBottom: 0 }}>

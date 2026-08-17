@@ -23,6 +23,14 @@ jest.mock('@/components/ui/FlightScheduleTermsForm', () => ({
         'data-protected-count': props.protectedCount,
     }),
 }));
+jest.mock('@/components/ui/FlightScheduleActivationForm', () => ({
+    __esModule: true,
+    default: (props: Record<string, number | boolean>) => React.createElement('div', {
+        'data-activation-schedule-id': props.flightScheduleId,
+        'data-is-active': props.isActive,
+        'data-occurrence-count': props.occurrenceCount,
+    }),
+}));
 
 import ScheduleImpactPage from '@/app/admin/flights/schedules/[scheduleId]/page';
 
@@ -51,6 +59,7 @@ describe('/admin/flights/schedules/[scheduleId] impact preview', () => {
                 to: 'Detroit, USA',
                 durationMinutes: 245,
                 priceCents: 35_000,
+                isActive: true,
             },
             summary: {
                 total: 5,
@@ -83,7 +92,8 @@ describe('/admin/flights/schedules/[scheduleId] impact preview', () => {
         expect(text).toContain('Schedule impact preview');
         expect(text).toContain('Mona Airways MA237');
         expect(text).toContain('Impact preview');
-        expect(text).toContain('Nothing changes until you confirm the duration and fare update below.');
+        expect(text).toContain('Nothing changes until you confirm an action below.');
+        expect(text).toContain('Active template');
         expect(text).toContain('1 safe future');
         expect(text).toContain('4 protected');
         expect(text).toContain('1 historical');
@@ -111,6 +121,12 @@ describe('/admin/flights/schedules/[scheduleId] impact preview', () => {
             safeFutureCount: 1,
             protectedCount: 4,
         });
+        expect(findElements(
+            page,
+            element => element.props.flightScheduleId === 17
+                && element.props.isActive === true
+                && element.props.occurrenceCount === 5,
+        )).toHaveLength(1);
 
         const bookingRow = findElements(
             page,
@@ -155,6 +171,7 @@ describe('/admin/flights/schedules/[scheduleId] impact preview', () => {
                 to: 'Detroit, USA',
                 durationMinutes: 245,
                 priceCents: 35_000,
+                isActive: false,
             },
             summary: {
                 total: 0,
@@ -179,6 +196,7 @@ describe('/admin/flights/schedules/[scheduleId] impact preview', () => {
 
         expect(emptyCells).toHaveLength(1);
         expect(emptyCells[0].props.colSpan).toBe(5);
+        expect(renderToStaticMarkup(page)).toContain('Inactive template');
     });
 
     it('returns not found when no schedule owns the requested preview', async () => {

@@ -47,6 +47,7 @@ export interface FlightScheduleImpact {
         to: string;
         durationMinutes: number;
         priceCents: number;
+        isActive: boolean;
     };
     summary: ScheduleImpactSummary;
     occurrences: ScheduleImpactOccurrence[];
@@ -122,6 +123,7 @@ export class FlightScheduleImpactService {
                 to: true,
                 durationMinutes: true,
                 priceCents: true,
+                isActive: true,
                 flights: {
                     orderBy: { departureDate: 'asc' },
                     select: {

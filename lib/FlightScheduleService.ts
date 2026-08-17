@@ -2,6 +2,7 @@ import type { Flight } from '@prisma/client';
 import { airportCodesForRoute, airportTimeZoneFor } from './airports';
 import { addDaysToIsoDate, todayIsoDate } from './dates';
 import { airportLocalInstant } from './flightTime';
+import { withFlightScheduleGenerationLock } from './flightScheduleGenerationLock';
 import { prisma } from './prisma';
 
 /** A flight instance for one schedule on one date, and whether this call created it. */
@@ -93,53 +94,71 @@ export default class FlightScheduleService {
                 ? airportLocalInstant(dateStr, schedule.departureTime, originZone)
                 : new Date(`${dateStr}T${schedule.departureTime}:00Z`);
 
-            // Check if flight instance already exists
-            let flight = await prisma.flight.findFirst({
-                where: {
-                    flightNumber: schedule.flightNumber,
-                    departureDate: departureDate
-                }
-            });
-            let created = false;
+            let result: EnsuredFlight | null;
+            try {
+                result = await withFlightScheduleGenerationLock(schedule.id, async tx => {
+                    // The active-list query is only an efficient candidate scan.
+                    // Re-read after the shared generation-state lock so a
+                    // deactivation that won the lock cannot be followed by a
+                    // stale generator create.
+                    const currentState = await tx.flightSchedule.findUnique({
+                        where: { id: schedule.id },
+                        select: { isActive: true, daysOfWeek: true },
+                    });
+                    if (!currentState?.isActive || !currentState.daysOfWeek.includes(dayOfWeek)) {
+                        return null;
+                    }
 
-            if (!flight) {
-                try {
-                    flight = await prisma.flight.create({
-                        data: {
-                            flightScheduleId: schedule.id,
+                    // Check if flight instance already exists
+                    let flight = await tx.flight.findFirst({
+                        where: {
                             flightNumber: schedule.flightNumber,
-                            airline: schedule.airline,
-                            ...airportCodesForRoute(schedule.from, schedule.to),
-                            departureDate,
-                            priceCents: schedule.priceCents,
-                            durationMinutes: schedule.durationMinutes,
-                            status: 'ON_TIME',
-                            firstClassRows: schedule.firstClassRows ?? 3,
-                            businessRows: schedule.businessRows ?? 3,
-                            premiumEconomyRows: schedule.premiumEconomyRows ?? 4,
-                            economyRows: schedule.economyRows ?? 20,
-                            seatPattern: schedule.seatPattern ?? 'ABC-DEF'
+                            departureDate: departureDate
                         }
                     });
-                    created = true;
-                } catch (error) {
-                    // Gracefully handle concurrent insertion race condition (Prisma unique constraint error P2002)
-                    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
-                        flight = await prisma.flight.findFirst({
-                            where: {
+                    let created = false;
+
+                    if (!flight) {
+                        flight = await tx.flight.create({
+                            data: {
+                                flightScheduleId: schedule.id,
                                 flightNumber: schedule.flightNumber,
-                                departureDate: departureDate
+                                airline: schedule.airline,
+                                ...airportCodesForRoute(schedule.from, schedule.to),
+                                departureDate,
+                                priceCents: schedule.priceCents,
+                                durationMinutes: schedule.durationMinutes,
+                                status: 'ON_TIME',
+                                firstClassRows: schedule.firstClassRows ?? 3,
+                                businessRows: schedule.businessRows ?? 3,
+                                premiumEconomyRows: schedule.premiumEconomyRows ?? 4,
+                                economyRows: schedule.economyRows ?? 20,
+                                seatPattern: schedule.seatPattern ?? 'ABC-DEF'
                             }
                         });
-                    } else {
-                        throw error;
+                        created = true;
                     }
+
+                    return flight ? { flight, created } : null;
+                });
+            } catch (error) {
+                // PostgreSQL aborts a transaction after a unique violation, so
+                // the row inserted by the winner must be read after the failed
+                // generation transaction has rolled back.
+                if (!(error && typeof error === 'object' && 'code' in error && error.code === 'P2002')) {
+                    throw error;
                 }
+                const flight = await prisma.flight.findFirst({
+                    where: {
+                        flightNumber: schedule.flightNumber,
+                        departureDate,
+                    },
+                });
+                if (!flight) throw error;
+                result = { flight, created: false };
             }
 
-            if (flight) {
-                ensured.push({ flight, created });
-            }
+            if (result) ensured.push(result);
         }
 
         return ensured;

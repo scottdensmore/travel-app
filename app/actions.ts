@@ -25,6 +25,10 @@ import {
     FlightScheduleTermsError,
     FlightScheduleTermsService,
 } from '@/lib/flightScheduleTermsService';
+import {
+    FlightScheduleActivationError,
+    FlightScheduleActivationService,
+} from '@/lib/flightScheduleActivationService';
 import CityGuide from '@/lib/types/CityGuide';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -33,6 +37,7 @@ import type { Flight } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { assertSeatAvailableForCabin, validateSeatingLayout } from '@/lib/seatLayout';
 import { lockBookingsOnFlightForUpdate, lockFlightForUpdate } from '@/lib/flightLock';
+import { withFlightScheduleGenerationLock } from '@/lib/flightScheduleGenerationLock';
 import { updateFlightSeatingLayout } from '@/lib/FlightSeatLayoutService';
 import { actionValidationFailure, actionValidationFailures } from '@/lib/actionResult';
 import {
@@ -58,6 +63,7 @@ import {
     bookingRequestSchema,
     cityGuideSchema,
     favoriteSchema,
+    flightScheduleActivationSchema,
     flightScheduleTermsSchema,
     flightStatusSchema,
     numericIdSchema,
@@ -1180,52 +1186,65 @@ export async function saveFlightScheduleAction(data: {
         });
     }
 
-    // Pre-generate flights for the next 30 days from this schedule
-    const today = new Date();
-    const utcToday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-    for (let i = 0; i < 30; i++) {
-        const date = new Date(utcToday);
-        date.setUTCDate(utcToday.getUTCDate() + i);
-        const dayOfWeek = date.getUTCDay();
-
-        if (savedSchedule.daysOfWeek.includes(dayOfWeek)) {
-            const dateStr = date.toISOString().split('T')[0];
-            const departureDate = departureInstantFor(dateStr, savedSchedule);
-            
-            // Check if flight instance already exists
-            const existingInstance = await prisma.flight.findFirst({
-                where: {
-                    flightNumber: savedSchedule.flightNumber,
-                    departureDate: departureDate
-                }
+    // Creation and the legacy edit path pre-generate inventory. Serialize that
+    // work with activation changes, then re-read the state after winning the
+    // lock so a stale save cannot resume generation after deactivation.
+    if (savedSchedule.isActive !== false) {
+        await withFlightScheduleGenerationLock(savedSchedule.id, async () => {
+            const currentState = await prisma.flightSchedule.findUnique({
+                where: { id: savedSchedule.id },
+                select: { isActive: true },
             });
+            if (!currentState?.isActive) return;
 
-            if (!existingInstance) {
-                try {
-                    await prisma.flight.create({
-                        data: {
-                            flightScheduleId: savedSchedule.id,
+            // Pre-generate flights for the next 30 days from this schedule
+            const today = new Date();
+            const utcToday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+            for (let i = 0; i < 30; i++) {
+                const date = new Date(utcToday);
+                date.setUTCDate(utcToday.getUTCDate() + i);
+                const dayOfWeek = date.getUTCDay();
+
+                if (savedSchedule.daysOfWeek.includes(dayOfWeek)) {
+                    const dateStr = date.toISOString().split('T')[0];
+                    const departureDate = departureInstantFor(dateStr, savedSchedule);
+
+                    // Check if flight instance already exists
+                    const existingInstance = await prisma.flight.findFirst({
+                        where: {
                             flightNumber: savedSchedule.flightNumber,
-                            airline: savedSchedule.airline,
-                            ...airportCodesForRoute(savedSchedule.from, savedSchedule.to),
-                            departureDate,
-                            priceCents: savedSchedule.priceCents,
-                            durationMinutes: savedSchedule.durationMinutes,
-                            status: 'ON_TIME',
-                            firstClassRows,
-                            businessRows,
-                            premiumEconomyRows,
-                            economyRows,
-                            seatPattern: normalizedSeatPattern
+                            departureDate: departureDate
                         }
                     });
-                } catch (error) {
-                    if (!(error && typeof error === 'object' && 'code' in error && error.code === 'P2002')) {
-                        throw error;
+
+                    if (!existingInstance) {
+                        try {
+                            await prisma.flight.create({
+                                data: {
+                                    flightScheduleId: savedSchedule.id,
+                                    flightNumber: savedSchedule.flightNumber,
+                                    airline: savedSchedule.airline,
+                                    ...airportCodesForRoute(savedSchedule.from, savedSchedule.to),
+                                    departureDate,
+                                    priceCents: savedSchedule.priceCents,
+                                    durationMinutes: savedSchedule.durationMinutes,
+                                    status: 'ON_TIME',
+                                    firstClassRows,
+                                    businessRows,
+                                    premiumEconomyRows,
+                                    economyRows,
+                                    seatPattern: normalizedSeatPattern
+                                }
+                            });
+                        } catch (error) {
+                            if (!(error && typeof error === 'object' && 'code' in error && error.code === 'P2002')) {
+                                throw error;
+                            }
+                        }
                     }
                 }
             }
-        }
+        });
     }
 
     revalidatePath('/');
@@ -1269,6 +1288,35 @@ export async function updateFlightScheduleTermsAction(data: {
     }
 }
 
+export async function setFlightScheduleActiveAction(
+    flightScheduleId: number,
+    isActive: boolean,
+) {
+    const session = await getServerSession(authOptions);
+    if (!hasVerifiedStaffAccess(session)) throw new Error('Unauthorized');
+
+    const parsed = parseActionInput(flightScheduleActivationSchema, {
+        flightScheduleId,
+        isActive,
+    });
+    if (!parsed.ok) return parsed;
+
+    try {
+        const result = await new FlightScheduleActivationService().setActive(
+            parsed.data.flightScheduleId,
+            parsed.data.isActive,
+        );
+        revalidatePath('/');
+        revalidatePath('/flights');
+        revalidatePath('/admin/flights');
+        revalidatePath(`/admin/flights/schedules/${parsed.data.flightScheduleId}`);
+        return result;
+    } catch (error) {
+        if (!(error instanceof FlightScheduleActivationError)) throw error;
+        return actionValidationFailure(error.message, '_root');
+    }
+}
+
 export async function generateFlightOccurrencesAction(
     scheduleId: number,
     startDateStr: string,
@@ -1295,110 +1343,127 @@ export async function generateFlightOccurrencesAction(
     endDateStr = parsed.data.endDate;
     seatingConfig = parsed.data.seatingConfig;
 
-    const schedule = await prisma.flightSchedule.findUnique({
-        where: { id: scheduleId }
-    });
-    if (!schedule) throw new Error("Flight schedule not found.");
+    return withFlightScheduleGenerationLock(scheduleId, async () => {
+        const schedule = await prisma.flightSchedule.findUnique({
+            where: { id: scheduleId }
+        });
+        if (!schedule) throw new Error("Flight schedule not found.");
+        if (schedule.isActive === false) {
+            return actionValidationFailure(
+                'Reactivate this template before generating occurrences.',
+                'scheduleId',
+            );
+        }
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDateStr) || !/^\d{4}-\d{2}-\d{2}$/.test(endDateStr)) {
-        throw new Error("Dates must use YYYY-MM-DD format.");
-    }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(startDateStr) || !/^\d{4}-\d{2}-\d{2}$/.test(endDateStr)) {
+            throw new Error("Dates must use YYYY-MM-DD format.");
+        }
 
-    const start = new Date(`${startDateStr}T00:00:00Z`);
-    const end = new Date(`${endDateStr}T00:00:00Z`);
-    if (
-        isNaN(start.getTime()) ||
-        isNaN(end.getTime()) ||
-        start.toISOString().slice(0, 10) !== startDateStr ||
-        end.toISOString().slice(0, 10) !== endDateStr
-    ) {
-        throw new Error("Invalid start or end date.");
-    }
-    if (end < start) {
-        throw new Error("End date must be on or after start date.");
-    }
-    const rangeDays = Math.floor((end.getTime() - start.getTime()) / 86_400_000);
-    if (rangeDays > MAX_OCCURRENCE_RANGE_DAYS) {
-        throw new Error(`Date range cannot exceed ${MAX_OCCURRENCE_RANGE_DAYS} days.`);
-    }
+        const start = new Date(`${startDateStr}T00:00:00Z`);
+        const end = new Date(`${endDateStr}T00:00:00Z`);
+        if (
+            isNaN(start.getTime()) ||
+            isNaN(end.getTime()) ||
+            start.toISOString().slice(0, 10) !== startDateStr ||
+            end.toISOString().slice(0, 10) !== endDateStr
+        ) {
+            throw new Error("Invalid start or end date.");
+        }
+        if (end < start) {
+            throw new Error("End date must be on or after start date.");
+        }
+        const rangeDays = Math.floor((end.getTime() - start.getTime()) / 86_400_000);
+        if (rangeDays > MAX_OCCURRENCE_RANGE_DAYS) {
+            throw new Error(`Date range cannot exceed ${MAX_OCCURRENCE_RANGE_DAYS} days.`);
+        }
 
-    const firstClassRows = seatingConfig?.firstClassRows !== undefined && seatingConfig?.firstClassRows !== null ? Number(seatingConfig.firstClassRows) : (schedule.firstClassRows ?? 3);
-    const businessRows = seatingConfig?.businessRows !== undefined && seatingConfig?.businessRows !== null ? Number(seatingConfig.businessRows) : (schedule.businessRows ?? 3);
-    const premiumEconomyRows = seatingConfig?.premiumEconomyRows !== undefined && seatingConfig?.premiumEconomyRows !== null ? Number(seatingConfig.premiumEconomyRows) : (schedule.premiumEconomyRows ?? 4);
-    const economyRows = seatingConfig?.economyRows !== undefined && seatingConfig?.economyRows !== null ? Number(seatingConfig.economyRows) : (schedule.economyRows ?? 20);
-    const seatPattern = seatingConfig?.seatPattern !== undefined && seatingConfig.seatPattern !== null
-        ? seatingConfig.seatPattern
-        : (schedule.seatPattern ?? "ABC-DEF");
+        const firstClassRows = seatingConfig?.firstClassRows !== undefined && seatingConfig?.firstClassRows !== null ? Number(seatingConfig.firstClassRows) : (schedule.firstClassRows ?? 3);
+        const businessRows = seatingConfig?.businessRows !== undefined && seatingConfig?.businessRows !== null ? Number(seatingConfig.businessRows) : (schedule.businessRows ?? 3);
+        const premiumEconomyRows = seatingConfig?.premiumEconomyRows !== undefined && seatingConfig?.premiumEconomyRows !== null ? Number(seatingConfig.premiumEconomyRows) : (schedule.premiumEconomyRows ?? 4);
+        const economyRows = seatingConfig?.economyRows !== undefined && seatingConfig?.economyRows !== null ? Number(seatingConfig.economyRows) : (schedule.economyRows ?? 20);
+        const seatPattern = seatingConfig?.seatPattern !== undefined && seatingConfig.seatPattern !== null
+            ? seatingConfig.seatPattern
+            : (schedule.seatPattern ?? "ABC-DEF");
 
-    let normalizedSeatPattern: string;
-    try {
-        normalizedSeatPattern = validateSeatingLayout(
-            firstClassRows,
-            businessRows,
-            premiumEconomyRows,
-            economyRows,
-            seatPattern
-        );
-    } catch (error) {
-        return actionValidationFailure(
-            error instanceof Error ? error.message : 'Seating layout is invalid.',
-            'seatingConfig'
-        );
-    }
+        let normalizedSeatPattern: string;
+        try {
+            normalizedSeatPattern = validateSeatingLayout(
+                firstClassRows,
+                businessRows,
+                premiumEconomyRows,
+                economyRows,
+                seatPattern
+            );
+        } catch (error) {
+            return actionValidationFailure(
+                error instanceof Error ? error.message : 'Seating layout is invalid.',
+                'seatingConfig'
+            );
+        }
 
-    const current = new Date(start);
-    let occurrencesCreated = 0;
-    let occurrencesUpdated = 0;
+        const current = new Date(start);
+        let occurrencesCreated = 0;
+        let occurrencesUpdated = 0;
 
-    while (current <= end) {
-        const dayOfWeek = current.getUTCDay();
-        if (schedule.daysOfWeek.includes(dayOfWeek)) {
-            const dateStr = current.toISOString().split('T')[0];
-            const departureDate = departureInstantFor(dateStr, schedule);
+        while (current <= end) {
+            const dayOfWeek = current.getUTCDay();
+            if (schedule.daysOfWeek.includes(dayOfWeek)) {
+                const dateStr = current.toISOString().split('T')[0];
+                const departureDate = departureInstantFor(dateStr, schedule);
 
-            const existingInstance = await prisma.flight.findFirst({
-                where: {
-                    flightNumber: schedule.flightNumber,
-                    departureDate: departureDate
-                }
-                // Only the id is used: updateFlightSeatingLayout does its own
-                // check of the seats already held on the flight.
-            });
+                const existingInstance = await prisma.flight.findFirst({
+                    where: {
+                        flightNumber: schedule.flightNumber,
+                        departureDate: departureDate
+                    }
+                    // Only the id is used: updateFlightSeatingLayout does its own
+                    // check of the seats already held on the flight.
+                });
 
-            if (!existingInstance) {
-                try {
-                    await prisma.flight.create({
-                        data: {
-                            flightScheduleId: schedule.id,
-                            flightNumber: schedule.flightNumber,
-                            airline: schedule.airline,
-                            ...airportCodesForRoute(schedule.from, schedule.to),
-                            departureDate,
-                            priceCents: schedule.priceCents,
-                            durationMinutes: schedule.durationMinutes,
-                            status: 'ON_TIME',
+                if (!existingInstance) {
+                    try {
+                        await prisma.flight.create({
+                            data: {
+                                flightScheduleId: schedule.id,
+                                flightNumber: schedule.flightNumber,
+                                airline: schedule.airline,
+                                ...airportCodesForRoute(schedule.from, schedule.to),
+                                departureDate,
+                                priceCents: schedule.priceCents,
+                                durationMinutes: schedule.durationMinutes,
+                                status: 'ON_TIME',
+                                firstClassRows,
+                                businessRows,
+                                premiumEconomyRows,
+                                economyRows,
+                                seatPattern: normalizedSeatPattern
+                            }
+                        });
+                        occurrencesCreated++;
+                    } catch (error) {
+                        if (!(error && typeof error === 'object' && 'code' in error && error.code === 'P2002')) {
+                            throw error;
+                        }
+                        const concurrentInstance = await prisma.flight.findFirst({
+                            where: {
+                                flightNumber: schedule.flightNumber,
+                                departureDate
+                            }
+                        });
+                        if (!concurrentInstance) {
+                            throw new Error('Concurrent occurrence creation could not be resolved.');
+                        }
+                        await updateFlightSeatingLayout(concurrentInstance.id, {
                             firstClassRows,
                             businessRows,
                             premiumEconomyRows,
                             economyRows,
                             seatPattern: normalizedSeatPattern
-                        }
-                    });
-                    occurrencesCreated++;
-                } catch (error) {
-                    if (!(error && typeof error === 'object' && 'code' in error && error.code === 'P2002')) {
-                        throw error;
+                        });
+                        occurrencesUpdated++;
                     }
-                    const concurrentInstance = await prisma.flight.findFirst({
-                        where: {
-                            flightNumber: schedule.flightNumber,
-                            departureDate
-                        }
-                    });
-                    if (!concurrentInstance) {
-                        throw new Error('Concurrent occurrence creation could not be resolved.');
-                    }
-                    await updateFlightSeatingLayout(concurrentInstance.id, {
+                } else {
+                    await updateFlightSeatingLayout(existingInstance.id, {
                         firstClassRows,
                         businessRows,
                         premiumEconomyRows,
@@ -1407,30 +1472,21 @@ export async function generateFlightOccurrencesAction(
                     });
                     occurrencesUpdated++;
                 }
-            } else {
-                await updateFlightSeatingLayout(existingInstance.id, {
-                    firstClassRows,
-                    businessRows,
-                    premiumEconomyRows,
-                    economyRows,
-                    seatPattern: normalizedSeatPattern
-                });
-                occurrencesUpdated++;
             }
+            current.setUTCDate(current.getUTCDate() + 1);
         }
-        current.setUTCDate(current.getUTCDate() + 1);
-    }
 
-    revalidatePath('/');
-    revalidatePath('/flights');
-    revalidatePath('/admin/flights');
+        revalidatePath('/');
+        revalidatePath('/flights');
+        revalidatePath('/admin/flights');
 
-    return {
-        success: true,
-        count: occurrencesCreated + occurrencesUpdated,
-        created: occurrencesCreated,
-        updated: occurrencesUpdated
-    };
+        return {
+            success: true,
+            count: occurrencesCreated + occurrencesUpdated,
+            created: occurrencesCreated,
+            updated: occurrencesUpdated
+        };
+    });
 }
 
 export async function deleteFlightScheduleAction(scheduleId: number) {

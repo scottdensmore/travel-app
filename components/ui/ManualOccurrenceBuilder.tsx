@@ -177,7 +177,7 @@ export default function ManualOccurrenceBuilder({ schedules }: { schedules: Sche
                 </select>
                 {!hasSchedules && (
                     <p role="status" style={{ margin: '4px 0 0', color: '#fbbf24', fontSize: '0.85rem' }}>
-                        Create a repeating flight template above before generating occurrences.
+                        Activate or create a repeating flight template before generating occurrences.
                     </p>
                 )}
             </div>

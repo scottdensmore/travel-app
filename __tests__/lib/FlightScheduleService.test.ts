@@ -7,23 +7,59 @@ import FlightScheduleService from '@/lib/FlightScheduleService';
 import { prisma } from '@/lib/prisma';
 
 jest.mock('@/lib/prisma', () => ({
-    prisma: {
-        flightSchedule: { findMany: jest.fn() },
-        flight: { findFirst: jest.fn(), create: jest.fn(), groupBy: jest.fn() }
-    }
+    prisma: (() => {
+        const flightSchedule = { findMany: jest.fn(), findUnique: jest.fn() };
+        const flight = { findFirst: jest.fn(), create: jest.fn(), groupBy: jest.fn() };
+        const client = {
+            $queryRaw: jest.fn().mockResolvedValue([{ pg_advisory_xact_lock: null }]),
+            $executeRaw: jest.fn().mockResolvedValue(1),
+            flightSchedule,
+            flight,
+        };
+        return {
+            ...client,
+            $transaction: jest.fn(callback => callback(client)),
+        };
+    })(),
 }));
 
 const mockedFlightScheduleFindMany = prisma.flightSchedule.findMany as jest.Mock;
+const mockedFlightScheduleFindUnique = prisma.flightSchedule.findUnique as jest.Mock;
 const mockedFlightFindFirst = prisma.flight.findFirst as jest.Mock;
 const mockedFlightCreate = prisma.flight.create as jest.Mock;
 const mockedFlightGroupBy = prisma.flight.groupBy as unknown as jest.Mock;
+const mockedExecuteRaw = prisma.$executeRaw as unknown as jest.Mock;
+const mockedTransaction = prisma.$transaction as jest.Mock;
 
 describe('FlightScheduleService dynamic generator', () => {
     let service: FlightScheduleService;
 
+    function mockAbortedUniqueViolationTransaction(prismaError: Error) {
+        const aborted = new Error('current transaction is aborted');
+        const transactionFindFirst = jest.fn()
+            .mockResolvedValueOnce(null)
+            .mockRejectedValueOnce(aborted);
+        const transactionCreate = jest.fn().mockRejectedValueOnce(prismaError);
+        mockedTransaction.mockImplementationOnce(async callback => callback({
+            $executeRaw: jest.fn().mockResolvedValue(1),
+            flightSchedule: {
+                findUnique: jest.fn().mockResolvedValue({ isActive: true, daysOfWeek: [4] }),
+            },
+            flight: {
+                findFirst: transactionFindFirst,
+                create: transactionCreate,
+            },
+        }));
+        return { transactionCreate, transactionFindFirst };
+    }
+
     beforeEach(() => {
         jest.clearAllMocks();
         service = new FlightScheduleService();
+        mockedFlightScheduleFindUnique.mockResolvedValue({
+            isActive: true,
+            daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+        });
     });
 
     it('finds active schedules for the day of week and generates flight instances if missing', async () => {
@@ -149,6 +185,32 @@ describe('FlightScheduleService dynamic generator', () => {
         expect(result[0]).toEqual(existingFlight);
     });
 
+    it('rechecks activation after the shared generation-state lock', async () => {
+        const date = new Date('2026-06-25T12:00:00Z');
+        mockedFlightScheduleFindMany.mockResolvedValue([{
+            id: 2,
+            flightNumber: 'CA202',
+            airline: 'Gemini Airways',
+            from: 'New York, USA',
+            to: 'London, UK',
+            departureTime: '19:30',
+            durationMinutes: 420,
+            daysOfWeek: [4],
+            priceCents: 85_000,
+        }]);
+        mockedFlightScheduleFindUnique.mockResolvedValue({
+            isActive: false,
+            daysOfWeek: [4],
+        });
+
+        await expect(service.ensureFlightsForDate(date)).resolves.toEqual([]);
+
+        expect(mockedExecuteRaw.mock.invocationCallOrder[0])
+            .toBeLessThan(mockedFlightScheduleFindUnique.mock.invocationCallOrder[0]);
+        expect(mockedFlightFindFirst).not.toHaveBeenCalled();
+        expect(mockedFlightCreate).not.toHaveBeenCalled();
+    });
+
     it('handles database race condition (P2002 error) gracefully during creation and returns the existing record', async () => {
         const date = new Date('2026-06-25T12:00:00Z');
         const mockSchedule = {
@@ -164,12 +226,14 @@ describe('FlightScheduleService dynamic generator', () => {
         };
 
         mockedFlightScheduleFindMany.mockResolvedValue([mockSchedule]);
-        mockedFlightFindFirst.mockResolvedValueOnce(null); // Initially not found in check
 
-        // Mock error object for duplicate key violation in Prisma (P2002)
+        // PostgreSQL aborts the transaction after a unique violation. A
+        // recovery read through that same transaction is therefore not a real
+        // recovery path, even though a permissive unit mock accepts it.
         const prismaError = new Error('Prisma unique constraint failed');
         (prismaError as any).code = 'P2002';
-        mockedFlightCreate.mockRejectedValueOnce(prismaError);
+        const { transactionCreate, transactionFindFirst } =
+            mockAbortedUniqueViolationTransaction(prismaError);
 
         // Subsequent findFirst returns the instance inserted concurrently
         const concurrentFlight = {
@@ -192,10 +256,35 @@ describe('FlightScheduleService dynamic generator', () => {
 
         const result = await service.generateFlightsForDate(date);
 
-        expect(mockedFlightCreate).toHaveBeenCalled();
-        expect(mockedFlightFindFirst).toHaveBeenCalledTimes(2); // Initial check + after catch
+        expect(transactionCreate).toHaveBeenCalled();
+        expect(transactionFindFirst).toHaveBeenCalledTimes(1);
+        expect(mockedFlightFindFirst).toHaveBeenCalledTimes(1);
         expect(result).toHaveLength(1);
         expect(result[0]).toEqual(concurrentFlight);
+    });
+
+    it('does not swallow a uniqueness failure when the winning row cannot be read', async () => {
+        const date = new Date('2026-06-25T12:00:00Z');
+        mockedFlightScheduleFindMany.mockResolvedValue([{
+            id: 2,
+            flightNumber: 'CA202',
+            airline: 'Gemini Airways',
+            from: 'New York, USA',
+            to: 'London, UK',
+            departureTime: '19:30',
+            durationMinutes: 420,
+            daysOfWeek: [4],
+            priceCents: 85_000,
+        }]);
+        const prismaError = Object.assign(
+            new Error('Prisma unique constraint failed'),
+            { code: 'P2002' },
+        );
+        mockAbortedUniqueViolationTransaction(prismaError);
+        mockedFlightFindFirst.mockResolvedValueOnce(null);
+
+        await expect(service.generateFlightsForDate(date)).rejects.toBe(prismaError);
+        expect(mockedFlightFindFirst).toHaveBeenCalledTimes(1);
     });
 
     it('reports whether each instance was created or already present', async () => {
@@ -266,6 +355,10 @@ describe('FlightScheduleService inventory horizon', () => {
         jest.clearAllMocks();
         service = new FlightScheduleService();
         mockedFlightScheduleFindMany.mockResolvedValue([dailySchedule]);
+        mockedFlightScheduleFindUnique.mockResolvedValue({
+            isActive: true,
+            daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+        });
     });
 
     it('fills every day of the requested horizon', async () => {
