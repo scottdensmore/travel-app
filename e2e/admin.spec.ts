@@ -453,5 +453,62 @@ test.describe('Admin Control Journey', () => {
       expect(raceState.seatAssignments).toHaveLength(1);
       expect(raceState.seatAssignments[0]).toMatchObject({ seatNumber: '11A', cabinClass: 'ECONOMY' });
     }
+
+    // Deactivation is a reversible template state change. It removes this
+    // schedule from both generation paths without rewriting the inventory or
+    // booking history already linked to it.
+    const linkedBeforeDeactivation = await prisma.flight.count({
+      where: { flightScheduleId: editedSchedule.id }
+    });
+    await page.goto(`/admin/flights/schedules/${editedSchedule.id}`);
+    await expect(page.getByText('Active template', { exact: true })).toBeVisible();
+    await page.getByRole('checkbox', {
+      name: 'I understand existing occurrences and bookings remain unchanged.'
+    }).check();
+    await page.getByRole('button', { name: 'Deactivate template' }).click();
+    const deactivated = page.getByRole('status').filter({ hasText: 'Template deactivated.' });
+    await expect(deactivated).toContainText(`${linkedBeforeDeactivation} linked occurrences were preserved.`);
+    await expect(deactivated).toBeFocused();
+    await expect.poll(() => deactivated.evaluate(element => {
+      const style = getComputedStyle(element);
+      return {
+        outline: style.outline,
+        outlineOffset: style.outlineOffset,
+        boxShadow: style.boxShadow,
+      };
+    })).toEqual({
+      outline: 'rgb(251, 191, 36) solid 3px',
+      outlineOffset: '3px',
+      boxShadow: 'rgba(251, 191, 36, 0.28) 0px 0px 0px 5px',
+    });
+    await expect.poll(() => prisma.flightSchedule.findUnique({
+      where: { id: editedSchedule.id },
+      select: { isActive: true }
+    })).toEqual({ isActive: false });
+    await expect(prisma.flight.count({ where: { flightScheduleId: editedSchedule.id } }))
+      .resolves.toBe(linkedBeforeDeactivation);
+    await expect(prisma.booking.findUnique({ where: { id: protectedPassenger.bookingId } }))
+      .resolves.not.toBeNull();
+
+    await page.goto('/admin/flights');
+    await expect(page.locator('table').first().locator('tr:has-text("E2E606")'))
+      .toContainText('Inactive');
+    await expect(page.locator('#selectSchedule option', { hasText: 'E2E606' })).toHaveCount(0);
+
+    await page.goto(`/admin/flights/schedules/${editedSchedule.id}`);
+    await expect(page.getByText('Inactive template', { exact: true })).toBeVisible();
+    await page.getByRole('checkbox', {
+      name: 'I understand existing occurrences and bookings remain unchanged.'
+    }).check();
+    await page.getByRole('button', { name: 'Reactivate template' }).click();
+    const reactivated = page.getByRole('status').filter({ hasText: 'Template active.' });
+    await expect(reactivated).toContainText(`${linkedBeforeDeactivation} linked occurrences were preserved.`);
+    await expect(reactivated).toBeFocused();
+    await expect.poll(() => prisma.flightSchedule.findUnique({
+      where: { id: editedSchedule.id },
+      select: { isActive: true }
+    })).toEqual({ isActive: true });
+    await page.goto('/admin/flights');
+    await expect(page.locator('#selectSchedule option', { hasText: 'E2E606' })).toHaveCount(1);
   });
 });

@@ -68,6 +68,15 @@ describe('ManualOccurrenceBuilder', () => {
         expect(screen.getByRole('button', { name: 'Generate Occurrences' })).toBeInTheDocument();
     });
 
+    it('explains how to recover when no active template is available', () => {
+        render(<ManualOccurrenceBuilder schedules={[]} />);
+
+        expect(screen.getByRole('combobox')).toBeDisabled();
+        expect(screen.getByRole('status')).toHaveTextContent(
+            'Activate or create a repeating flight template before generating occurrences.',
+        );
+    });
+
     it('auto-fills seating configurations when template is selected', async () => {
         render(<ManualOccurrenceBuilder schedules={sampleSchedules} />);
 

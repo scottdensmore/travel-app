@@ -2,7 +2,6 @@ import React from 'react';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import FlightScheduleForm from '@/components/ui/flightScheduleForm';
-import DeleteScheduleButton from './DeleteScheduleButton';
 import AdminFlightsTable from './AdminFlightsTable';
 import ManualOccurrenceBuilder from '@/components/ui/ManualOccurrenceBuilder';
 import { safePassengerSelect } from '@/lib/passengerDataAccess';
@@ -85,7 +84,7 @@ export default async function AdminFlightsPage() {
             <div className="admin-flights-layout">
                 <div>
                     <FlightScheduleForm />
-                    <ManualOccurrenceBuilder schedules={schedules} />
+                    <ManualOccurrenceBuilder schedules={schedules.filter(schedule => schedule.isActive)} />
                 </div>
 
                 <div className="admin-card" style={{ height: 'fit-content' }}>
@@ -101,6 +100,7 @@ export default async function AdminFlightsPage() {
                                     <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Weekly Schedule</th>
                                     <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Duration</th>
                                     <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Price</th>
+                                    <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Status</th>
                                     <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase', textAlign: 'right' }}>Actions</th>
                                 </tr>
                             </thead>
@@ -124,6 +124,9 @@ export default async function AdminFlightsPage() {
                                         <td style={{ padding: '12px', fontSize: '0.9rem', color: '#34d399', fontWeight: 'bold' }}>
                                             {formatPrice(schedule.priceCents ?? 0)}
                                         </td>
+                                        <td style={{ padding: '12px', fontSize: '0.85rem', color: schedule.isActive ? '#86efac' : '#fbbf24', fontWeight: 700 }}>
+                                            {schedule.isActive ? 'Active' : 'Inactive'}
+                                        </td>
                                         <td style={{ padding: '12px', textAlign: 'right' }}>
                                             <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                                                 <Link
@@ -132,14 +135,13 @@ export default async function AdminFlightsPage() {
                                                 >
                                                     Preview impact
                                                 </Link>
-                                                <DeleteScheduleButton id={schedule.id} />
                                             </div>
                                         </td>
                                     </tr>
                                 ))}
                                 {schedules.length === 0 && (
                                     <tr>
-                                        <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.4)' }}>
+                                        <td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.4)' }}>
                                             No flight templates declared yet. Use the form on the left to add one!
                                         </td>
                                     </tr>

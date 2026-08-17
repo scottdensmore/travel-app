@@ -257,6 +257,11 @@ export const flightScheduleTermsSchema = z.object({
     ),
 }).strict();
 
+export const flightScheduleActivationSchema = z.object({
+    flightScheduleId: positiveId('Schedule ID'),
+    isActive: z.boolean(),
+}).strict();
+
 const seatNumberSchema = requiredText('Seat number', 6)
     .transform(value => value.toUpperCase())
     .pipe(z.string().regex(/^[1-9]\d{0,2}[A-Z]$/, 'Seat number is invalid.'));

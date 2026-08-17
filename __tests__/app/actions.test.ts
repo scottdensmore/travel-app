@@ -23,6 +23,7 @@ import {
     reconcilePaymentAttemptAction,
     rebookItineraryAction,
     updateFlightScheduleTermsAction,
+    setFlightScheduleActiveAction,
 } from '@/app/actions';
 import { getServerSession } from 'next-auth';
 import TravelGuideService from '@/lib/TravelGuideService';
@@ -44,6 +45,10 @@ import {
     FlightScheduleTermsError,
     FlightScheduleTermsService,
 } from '@/lib/flightScheduleTermsService';
+import {
+    FlightScheduleActivationError,
+    FlightScheduleActivationService,
+} from '@/lib/flightScheduleActivationService';
 import { revalidatePath } from 'next/cache';
 
 // Keep these heavy/server-only modules out of the unit test.
@@ -125,6 +130,20 @@ jest.mock('@/lib/flightScheduleTermsService', () => {
     };
 });
 
+jest.mock('@/lib/flightScheduleActivationService', () => {
+    const setActive = jest.fn();
+    class FlightScheduleActivationError extends Error {
+        constructor(readonly code: string, message: string) {
+            super(message);
+            this.name = 'FlightScheduleActivationError';
+        }
+    }
+    return {
+        FlightScheduleActivationService: jest.fn().mockImplementation(() => ({ setActive })),
+        FlightScheduleActivationError,
+    };
+});
+
 jest.mock('@/lib/stripePaymentProvider', () => ({
     createStripePaymentProvider: jest.fn().mockReturnValue({}),
     getStripePublishableKey: jest.fn().mockReturnValue('pk_test_public'),
@@ -195,6 +214,7 @@ const mockReconcilePaymentAttempt = new (PaymentAttemptReconciliationService as 
     .reconcileAttempt as jest.Mock;
 const mockRebookItinerary = new (ItineraryRebookingService as any)().rebook as jest.Mock;
 const mockUpdateFlightScheduleTerms = new (FlightScheduleTermsService as any)().update as jest.Mock;
+const mockSetFlightScheduleActive = new (FlightScheduleActivationService as any)().setActive as jest.Mock;
 const mockedCreateStripePaymentProvider = createStripePaymentProvider as jest.Mock;
 const mockedRevalidatePath = revalidatePath as jest.Mock;
 const mockedGetStripePublishableKey = getStripePublishableKey as jest.Mock;
@@ -2201,6 +2221,7 @@ describe('admin flight schedule actions', () => {
             });
             mockedFlightFindFirst.mockResolvedValue(null); // No existing flight instance
             mockedFlightCreate.mockResolvedValue({});
+            mockedFlightScheduleFindUnique.mockResolvedValue({ isActive: true });
 
             const result = await saveFlightScheduleAction(sampleScheduleInput);
 
@@ -2246,6 +2267,7 @@ describe('admin flight schedule actions', () => {
         it('normalizes schedule identifiers before persistence', async () => {
             mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
             mockedFlightScheduleCreate.mockResolvedValue({ id: 1, daysOfWeek: [] });
+            mockedFlightScheduleFindUnique.mockResolvedValue({ isActive: true });
 
             await saveFlightScheduleAction({
                 ...sampleScheduleInput,
@@ -2262,6 +2284,7 @@ describe('admin flight schedule actions', () => {
             const scheduleWithId = { id: 5, ...sampleScheduleInput };
             mockedFlightScheduleUpdate.mockResolvedValue(scheduleWithId);
             mockedFlightFindFirst.mockResolvedValue({}); // existing instances, skips creating new ones
+            mockedFlightScheduleFindUnique.mockResolvedValue({ isActive: true });
 
             const result = await saveFlightScheduleAction(scheduleWithId);
 
@@ -2283,6 +2306,43 @@ describe('admin flight schedule actions', () => {
             expect(mockedFlightCreate).not.toHaveBeenCalled();
             expect(result).toHaveProperty('id', 5);
         });
+
+        it('does not generate new occurrences while updating an inactive template', async () => {
+            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
+            mockedFlightScheduleUpdate.mockResolvedValue({
+                id: 5,
+                ...sampleScheduleInput,
+                isActive: false,
+                priceCents: 85_000,
+            });
+
+            await saveFlightScheduleAction({ id: 5, ...sampleScheduleInput });
+
+            expect(mockedFlightFindFirst).not.toHaveBeenCalled();
+            expect(mockedFlightCreate).not.toHaveBeenCalled();
+        });
+
+        it('rechecks activation after the generation lock before pre-generating', async () => {
+            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
+            mockedFlightScheduleUpdate.mockResolvedValue({
+                id: 5,
+                ...sampleScheduleInput,
+                isActive: true,
+                priceCents: 85_000,
+            });
+            mockedFlightScheduleFindUnique.mockResolvedValue({ isActive: false });
+
+            await saveFlightScheduleAction({ id: 5, ...sampleScheduleInput });
+
+            const [lockSql, namespace, lockedScheduleId] = mockTx.$executeRaw.mock.calls[0];
+            expect(lockSql.join('?')).toContain('pg_advisory_xact_lock');
+            expect(namespace).toBe(834_206);
+            expect(lockedScheduleId).toBe(5);
+            expect(mockTx.$executeRaw.mock.invocationCallOrder[0])
+                .toBeLessThan(mockedFlightScheduleFindUnique.mock.invocationCallOrder[0]);
+            expect(mockedFlightFindFirst).not.toHaveBeenCalled();
+            expect(mockedFlightCreate).not.toHaveBeenCalled();
+        });
     });
 
     describe('deleteFlightScheduleAction', () => {
@@ -2300,6 +2360,85 @@ describe('admin flight schedule actions', () => {
             expect(mockedFlightScheduleDelete).toHaveBeenCalledWith({
                 where: { id: 12 }
             });
+        });
+    });
+
+    describe('setFlightScheduleActiveAction', () => {
+        it('requires verified staff access', async () => {
+            mockedGetServerSession.mockResolvedValue({
+                user: { id: 'admin-1', role: 'ADMIN', staffMfaVerified: false },
+            });
+
+            await expect(setFlightScheduleActiveAction(17, false)).rejects.toThrow('Unauthorized');
+            expect(mockSetFlightScheduleActive).not.toHaveBeenCalled();
+        });
+
+        it('sets the desired state and refreshes every schedule consumer', async () => {
+            mockedGetServerSession.mockResolvedValue({
+                user: { id: 'admin-1', role: 'ADMIN', staffMfaVerified: true },
+            });
+            mockSetFlightScheduleActive.mockResolvedValue({
+                flightScheduleId: 17,
+                isActive: false,
+                changed: true,
+                preservedOccurrenceCount: 4,
+            });
+
+            await expect(setFlightScheduleActiveAction(17, false)).resolves.toMatchObject({
+                isActive: false,
+                preservedOccurrenceCount: 4,
+            });
+            expect(mockSetFlightScheduleActive).toHaveBeenCalledWith(17, false);
+            expect(mockedRevalidatePath.mock.calls.map(([path]) => path)).toEqual([
+                '/',
+                '/flights',
+                '/admin/flights',
+                '/admin/flights/schedules/17',
+            ]);
+        });
+
+        it('rejects invalid activation input before calling the service', async () => {
+            mockedGetServerSession.mockResolvedValue({
+                user: { id: 'admin-1', role: 'ADMIN', staffMfaVerified: true },
+            });
+
+            await expect(setFlightScheduleActiveAction(0, false)).resolves.toMatchObject({
+                ok: false,
+                error: { fields: { flightScheduleId: ['Schedule ID must be positive.'] } },
+            });
+            await expect((setFlightScheduleActiveAction as unknown as (
+                flightScheduleId: number,
+                isActive: unknown,
+            ) => Promise<unknown>)(17, 'false')).resolves.toMatchObject({
+                ok: false,
+                error: { fields: { isActive: expect.any(Array) } },
+            });
+            expect(mockSetFlightScheduleActive).not.toHaveBeenCalled();
+        });
+
+        it('returns a safe validation failure for a schedule removed concurrently', async () => {
+            mockedGetServerSession.mockResolvedValue({
+                user: { id: 'admin-1', role: 'ADMIN', staffMfaVerified: true },
+            });
+            mockSetFlightScheduleActive.mockRejectedValue(new FlightScheduleActivationError(
+                'NOT_FOUND',
+                'This flight schedule no longer exists.',
+            ));
+
+            await expect(setFlightScheduleActiveAction(17, false)).resolves.toMatchObject({
+                ok: false,
+                error: { message: 'This flight schedule no longer exists.' },
+            });
+        });
+
+        it('does not expose an unexpected service error as validation feedback', async () => {
+            mockedGetServerSession.mockResolvedValue({
+                user: { id: 'admin-1', role: 'ADMIN', staffMfaVerified: true },
+            });
+            const sentinel = new Error('private database sentinel');
+            mockSetFlightScheduleActive.mockRejectedValue(sentinel);
+
+            await expect(setFlightScheduleActiveAction(17, false)).rejects.toBe(sentinel);
         });
     });
 
@@ -2583,6 +2722,33 @@ describe('admin flight schedule actions', () => {
             it('rejects if non-admin', async () => {
                 mockedGetServerSession.mockResolvedValue({ user: { role: 'USER' } });
                 await expect(generateFlightOccurrencesAction(1, '2026-07-10', '2026-07-20')).rejects.toThrow('Unauthorized');
+            });
+
+            it('refuses manual generation from an inactive template', async () => {
+                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
+                mockedFlightScheduleFindUnique.mockResolvedValue({
+                    id: 1,
+                    isActive: false,
+                    daysOfWeek: [1],
+                });
+
+                await expect(
+                    generateFlightOccurrencesAction(1, '2026-07-05', '2026-07-10'),
+                ).resolves.toMatchObject({
+                    ok: false,
+                    error: {
+                        message: 'Reactivate this template before generating occurrences.',
+                        fields: { scheduleId: ['Reactivate this template before generating occurrences.'] },
+                    },
+                });
+                expect(mockedFlightFindFirst).not.toHaveBeenCalled();
+                expect(mockedFlightCreate).not.toHaveBeenCalled();
+                const [lockSql, namespace, lockedScheduleId] = mockTx.$executeRaw.mock.calls[0];
+                expect(lockSql.join('?')).toContain('pg_advisory_xact_lock');
+                expect(namespace).toBe(834_206);
+                expect(lockedScheduleId).toBe(1);
+                expect(mockTx.$executeRaw.mock.invocationCallOrder[0])
+                    .toBeLessThan(mockedFlightScheduleFindUnique.mock.invocationCallOrder[0]);
             });
 
             it('generates flight instances and updates existing ones', async () => {

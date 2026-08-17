@@ -14,7 +14,9 @@ jest.mock('@/components/ui/flightScheduleForm', () => ({
 }));
 jest.mock('@/components/ui/ManualOccurrenceBuilder', () => ({
     __esModule: true,
-    default: () => null,
+    default: (props: { schedules: Array<{ id: number }> }) => React.createElement('div', {
+        'data-manual-schedule-ids': props.schedules.map(schedule => schedule.id).join(','),
+    }),
 }));
 jest.mock('@/app/admin/flights/AdminFlightsTable', () => ({
     __esModule: true,
@@ -54,6 +56,7 @@ describe('/admin/flights schedule list', () => {
             durationMinutes: 245,
             daysOfWeek: [1, 3, 5],
             priceCents: 35_000,
+            isActive: true,
         }, {
             id: 18,
             flightNumber: 'MA680',
@@ -64,6 +67,7 @@ describe('/admin/flights schedule list', () => {
             durationMinutes: 680,
             daysOfWeek: [2, 4],
             priceCents: 120_000,
+            isActive: false,
         }]);
     });
 
@@ -74,10 +78,17 @@ describe('/admin/flights schedule list', () => {
         expect(text).toContain('Duration');
         expect(text).toContain('4h 05m');
         expect(text).toContain('11h 20m');
+        expect(text).toContain('Active');
+        expect(text).toContain('Inactive');
         expect(findElement(
             page,
             element => element.props.href === '/admin/flights/schedules/17',
         )).toHaveProperty('props.children', 'Preview impact');
+        expect(findElement(
+            page,
+            element => Array.isArray(element.props.schedules)
+                && element.props.schedules.map((schedule: { id: number }) => schedule.id).join(',') === '17',
+        )).not.toBeNull();
     });
 
     it('spans every schedule column when there are no templates', async () => {
@@ -89,7 +100,7 @@ describe('/admin/flights schedule list', () => {
             element => element.type === 'td' && textContent(element).includes('No flight templates declared yet.'),
         );
 
-        expect(emptyCell?.props.colSpan).toBe(6);
+        expect(emptyCell?.props.colSpan).toBe(7);
     });
 });
 

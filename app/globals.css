@@ -1450,6 +1450,14 @@ footer a:hover {
   box-shadow: 0 0 0 5px rgba(251, 191, 36, 0.28);
 }
 
+/* Deactivation and reactivation move focus to their result as well. The same
+   amber halo stays visible against both the red error and green success panel. */
+.schedule-activation-feedback:focus {
+  outline: 3px solid #fbbf24;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 5px rgba(251, 191, 36, 0.28);
+}
+
 .payment-recovery-list {
   display: grid;
   gap: 1rem;
