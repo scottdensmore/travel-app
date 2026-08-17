@@ -31,6 +31,14 @@ jest.mock('@/components/ui/FlightScheduleActivationForm', () => ({
         'data-occurrence-count': props.occurrenceCount,
     }),
 }));
+jest.mock('@/components/ui/FlightScheduleDeletionForm', () => ({
+    __esModule: true,
+    default: (props: Record<string, number>) => React.createElement('div', {
+        'data-deletion-schedule-id': props.flightScheduleId,
+        'data-occurrence-count': props.occurrenceCount,
+        'data-protected-count': props.protectedOccurrenceCount,
+    }),
+}));
 
 import ScheduleImpactPage from '@/app/admin/flights/schedules/[scheduleId]/page';
 
@@ -127,6 +135,7 @@ describe('/admin/flights/schedules/[scheduleId] impact preview', () => {
                 && element.props.isActive === true
                 && element.props.occurrenceCount === 5,
         )).toHaveLength(1);
+        expect(renderToStaticMarkup(page)).not.toContain('data-deletion-schedule-id');
 
         const bookingRow = findElements(
             page,
@@ -197,6 +206,7 @@ describe('/admin/flights/schedules/[scheduleId] impact preview', () => {
         expect(emptyCells).toHaveLength(1);
         expect(emptyCells[0].props.colSpan).toBe(5);
         expect(renderToStaticMarkup(page)).toContain('Inactive template');
+        expect(renderToStaticMarkup(page)).toContain('data-deletion-schedule-id="17"');
     });
 
     it('returns not found when no schedule owns the requested preview', async () => {

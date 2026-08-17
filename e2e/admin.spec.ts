@@ -34,6 +34,7 @@ test.describe('Admin Control Journey', () => {
   const adminEmail = `admin-${Date.now()}@example.com`;
   const userEmail = `user-${Date.now()}@example.com`;
   const password = 'Password123!';
+  let createdScheduleId: number | null = null;
 
   test.afterAll(async () => {
     // Clean up test users
@@ -53,6 +54,9 @@ test.describe('Admin Control Journey', () => {
       await prisma.flightSchedule.deleteMany({
         where: { flightNumber: 'E2E606' }
       });
+      if (createdScheduleId !== null) {
+        await removeScheduleAudits(createdScheduleId);
+      }
     } catch (e) {
       console.error('Cleanup failed:', e);
     }
@@ -242,6 +246,7 @@ test.describe('Admin Control Journey', () => {
     const editedSchedule = await prisma.flightSchedule.findFirstOrThrow({
       where: { flightNumber: 'E2E606' }
     });
+    createdScheduleId = editedSchedule.id;
     const safeBeforeEdit = await prisma.flight.findMany({
       where: {
         flightScheduleId: editedSchedule.id,
@@ -510,5 +515,65 @@ test.describe('Admin Control Journey', () => {
     })).toEqual({ isActive: true });
     await page.goto('/admin/flights');
     await expect(page.locator('#selectSchedule option', { hasText: 'E2E606' })).toHaveCount(1);
+
+    // Permanent deletion is deliberately a second, irreversible step after
+    // deactivation. It removes only the template: generated inventory,
+    // bookings, and both audit records remain attributable to its old id.
+    await page.goto(`/admin/flights/schedules/${editedSchedule.id}`);
+    await page.getByRole('checkbox', {
+      name: 'I understand existing occurrences and bookings remain unchanged.'
+    }).check();
+    await page.getByRole('button', { name: 'Deactivate template' }).click();
+    await expect.poll(() => prisma.flightSchedule.findUnique({
+      where: { id: editedSchedule.id },
+      select: { isActive: true }
+    })).toEqual({ isActive: false });
+    const linkedAtDeletion = await prisma.flight.findMany({
+      where: { flightScheduleId: editedSchedule.id },
+      orderBy: { id: 'asc' },
+      select: { id: true }
+    });
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Delete inactive template permanently' }))
+      .toBeVisible();
+    await expect(page.getByText(/linked occurrences and their bookings remain unchanged/))
+      .toBeVisible();
+    await page.getByRole('checkbox', {
+      name: 'I understand this inactive template will be deleted permanently.'
+    }).check();
+    await page.getByRole('button', { name: 'Delete template permanently' }).click();
+
+    await expect(page).toHaveURL('/admin/flights');
+    await expect(page.locator('table').first().locator('tr:has-text("E2E606")')).toHaveCount(0);
+    await expect(prisma.flightSchedule.findUnique({ where: { id: editedSchedule.id } }))
+      .resolves.toBeNull();
+    await expect(prisma.flight.findMany({
+      where: { id: { in: linkedAtDeletion.map(flight => flight.id) } },
+      orderBy: { id: 'asc' },
+      select: { id: true, flightScheduleId: true }
+    })).resolves.toEqual(linkedAtDeletion.map(flight => ({ ...flight, flightScheduleId: null })));
+    await expect(prisma.booking.findUnique({ where: { id: protectedPassenger.bookingId } }))
+      .resolves.not.toBeNull();
+    await expect(prisma.flightScheduleTermsChange.count({
+      where: { flightScheduleId: editedSchedule.id }
+    })).resolves.toBe(1);
+    await expect(prisma.flightScheduleDeletion.findUniqueOrThrow({
+      where: { flightScheduleId: editedSchedule.id }
+    })).resolves.toMatchObject({
+      flightNumber: 'E2E606',
+      occurrenceCount: linkedAtDeletion.length,
+      protectedOccurrenceCount: expect.any(Number),
+    });
   });
 });
+
+async function removeScheduleAudits(flightScheduleId: number): Promise<void> {
+  if (process.env.DATABASE_IS_DISPOSABLE !== 'true') {
+    throw new Error('Refusing to clean immutable schedule audits outside a disposable database.');
+  }
+  await prisma.$transaction(async tx => {
+    await tx.$executeRawUnsafe("SET LOCAL session_replication_role = 'replica'");
+    await tx.flightScheduleTermsChange.deleteMany({ where: { flightScheduleId } });
+    await tx.flightScheduleDeletion.deleteMany({ where: { flightScheduleId } });
+  });
+}

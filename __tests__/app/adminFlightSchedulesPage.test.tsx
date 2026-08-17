@@ -22,11 +22,6 @@ jest.mock('@/app/admin/flights/AdminFlightsTable', () => ({
     __esModule: true,
     default: () => null,
 }));
-jest.mock('@/app/admin/flights/DeleteScheduleButton', () => ({
-    __esModule: true,
-    default: () => null,
-}));
-
 import AdminFlightsPage from '@/app/admin/flights/page';
 import { prisma } from '@/lib/prisma';
 

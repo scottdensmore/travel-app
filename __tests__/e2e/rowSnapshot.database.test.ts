@@ -25,6 +25,8 @@ const created = {
     identifiers: [] as string[],
     flightIds: [] as number[],
     scheduleIds: [] as number[],
+    scheduleDeletionIds: [] as string[],
+    termsRequestIds: [] as string[],
     paymentAttemptIds: [] as string[],
     bookingIds: [] as number[],
 };
@@ -128,12 +130,15 @@ async function leaveARowInEveryTrackedTable(): Promise<string> {
             durationMinutes: 245,
             daysOfWeek: [1],
             priceCents: 35_000,
+            isActive: false,
         },
     });
     created.scheduleIds.push(schedule.id);
+    const termsRequestId = randomUUID();
+    created.termsRequestIds.push(termsRequestId);
     await prisma.flightScheduleTermsChange.create({
         data: {
-            requestId: randomUUID(),
+            requestId: termsRequestId,
             flightScheduleId: schedule.id,
             actorUserId: user.id,
             fromDurationMinutes: 245,
@@ -144,6 +149,29 @@ async function leaveARowInEveryTrackedTable(): Promise<string> {
             protectedOccurrenceCount: 0,
         },
     });
+    const deletion = await prisma.flightScheduleDeletion.create({
+        data: {
+            requestId: randomUUID(),
+            flightScheduleId: schedule.id,
+            actorUserId: user.id,
+            flightNumber: schedule.flightNumber,
+            airline: schedule.airline,
+            from: schedule.from,
+            to: schedule.to,
+            departureTime: schedule.departureTime,
+            durationMinutes: schedule.durationMinutes,
+            daysOfWeek: schedule.daysOfWeek,
+            priceCents: schedule.priceCents,
+            firstClassRows: schedule.firstClassRows,
+            businessRows: schedule.businessRows,
+            premiumEconomyRows: schedule.premiumEconomyRows,
+            economyRows: schedule.economyRows,
+            seatPattern: schedule.seatPattern,
+            occurrenceCount: 0,
+            protectedOccurrenceCount: 0,
+        },
+    });
+    created.scheduleDeletionIds.push(deletion.id);
 
     return email;
 }
@@ -155,12 +183,14 @@ afterAll(async () => {
     await prisma.verificationToken.deleteMany({ where: { identifier: { in: created.identifiers } } });
     await prisma.flight.deleteMany({ where: { id: { in: created.flightIds } } });
     await prisma.flightSchedule.deleteMany({ where: { id: { in: created.scheduleIds } } });
+    await removeScheduleAudits();
     await prisma.$disconnect();
 });
 
 const TRACKED_TABLES = [
     'Flight',
     'FlightSchedule',
+    'FlightScheduleDeletion',
     'FlightScheduleTermsChange',
     'Notification',
     'PaymentAttempt',
@@ -208,6 +238,7 @@ describe('the snapshot a Playwright run is judged by', () => {
             'UserFavorite',
             'Notification',
             'FlightScheduleTermsChange',
+            'FlightScheduleDeletion',
         ]) {
             expect(added[table][0]).toContain(`(${email})`);
         }
@@ -241,6 +272,22 @@ describe('the snapshot a Playwright run is judged by', () => {
         expect(added.User).toEqual([`${untidy.id} (${untidyEmail})`]);
     });
 });
+
+async function removeScheduleAudits(): Promise<void> {
+    if (created.scheduleDeletionIds.length === 0 && created.termsRequestIds.length === 0) return;
+    if (process.env.DATABASE_IS_DISPOSABLE !== 'true') {
+        throw new Error('Refusing to clean immutable schedule audits outside a disposable database.');
+    }
+    await prisma.$transaction(async tx => {
+        await tx.$executeRawUnsafe("SET LOCAL session_replication_role = 'replica'");
+        await tx.flightScheduleTermsChange.deleteMany({
+            where: { requestId: { in: created.termsRequestIds } },
+        });
+        await tx.flightScheduleDeletion.deleteMany({
+            where: { id: { in: created.scheduleDeletionIds } },
+        });
+    });
+}
 
 describe('what the teardown does with it', () => {
     it('refuses a run it was never given a baseline for', async () => {

@@ -8,6 +8,7 @@ import {
 import { durationLabel, flightDeparture } from '@/lib/flightTime';
 import FlightScheduleTermsForm from '@/components/ui/FlightScheduleTermsForm';
 import FlightScheduleActivationForm from '@/components/ui/FlightScheduleActivationForm';
+import FlightScheduleDeletionForm from '@/components/ui/FlightScheduleDeletionForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -132,6 +133,14 @@ export default async function ScheduleImpactPage({
                 isActive={impact.schedule.isActive}
                 occurrenceCount={impact.summary.total}
             />
+
+            {!impact.schedule.isActive && (
+                <FlightScheduleDeletionForm
+                    flightScheduleId={impact.schedule.id}
+                    occurrenceCount={impact.summary.total}
+                    protectedOccurrenceCount={impact.summary.protected}
+                />
+            )}
 
             <section aria-labelledby="linked-occurrences-heading" className="admin-card" style={{ marginBottom: 0 }}>
                 <h2 id="linked-occurrences-heading" style={{ color: '#c084fc', margin: '0 0 1rem', fontSize: '1.35rem' }}>

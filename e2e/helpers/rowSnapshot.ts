@@ -160,9 +160,9 @@ const TRACKED: Array<{ table: string; ids: () => Promise<string[]> }> = [
         .map(row => `${row.id} (${row.flightNumber})`),
   },
   {
-    // Audit rows cascade from their schedule, but a failed admin journey can
-    // stop before deleting that schedule. Track them independently so bulk
-    // changes cannot accumulate invisibly between Playwright runs (#83).
+    // Terms-change audits outlive a permanently deleted schedule. Track them
+    // independently so bulk changes cannot accumulate invisibly between
+    // Playwright runs (#83).
     table: 'FlightScheduleTermsChange',
     ids: async () =>
       (await prisma.flightScheduleTermsChange.findMany({
@@ -174,6 +174,23 @@ const TRACKED: Array<{ table: string; ids: () => Promise<string[]> }> = [
       })).map(row => owned(
         row.id,
         row.actorUser?.email ?? `schedule ${row.flightScheduleId}`,
+      )),
+  },
+  {
+    // Permanent-deletion receipts deliberately outlive both the schedule and
+    // the staff account. A failed cleanup cannot rely on either cascade, so a
+    // new receipt must be visible independently.
+    table: 'FlightScheduleDeletion',
+    ids: async () =>
+      (await prisma.flightScheduleDeletion.findMany({
+        select: {
+          id: true,
+          flightScheduleId: true,
+          actorUser: { select: { email: true } },
+        },
+      })).map(row => owned(
+        row.id,
+        row.actorUser?.email ?? `deleted schedule ${row.flightScheduleId}`,
       )),
   },
   {

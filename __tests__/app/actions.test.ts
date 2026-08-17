@@ -49,11 +49,17 @@ import {
     FlightScheduleActivationError,
     FlightScheduleActivationService,
 } from '@/lib/flightScheduleActivationService';
+import {
+    FlightScheduleDeletionError,
+    FlightScheduleDeletionService,
+} from '@/lib/flightScheduleDeletionService';
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 
 // Keep these heavy/server-only modules out of the unit test.
 jest.mock('next-auth', () => ({ getServerSession: jest.fn() }));
 jest.mock('next/cache', () => ({ revalidatePath: jest.fn() }));
+jest.mock('next/navigation', () => ({ redirect: jest.fn() }));
 jest.mock('@/lib/auth', () => ({ authOptions: {} }));
 
 jest.mock('@/lib/FlightBookingService', () => {
@@ -144,6 +150,20 @@ jest.mock('@/lib/flightScheduleActivationService', () => {
     };
 });
 
+jest.mock('@/lib/flightScheduleDeletionService', () => {
+    const deleteSchedule = jest.fn();
+    class FlightScheduleDeletionError extends Error {
+        constructor(readonly code: string, message: string) {
+            super(message);
+            this.name = 'FlightScheduleDeletionError';
+        }
+    }
+    return {
+        FlightScheduleDeletionService: jest.fn().mockImplementation(() => ({ delete: deleteSchedule })),
+        FlightScheduleDeletionError,
+    };
+});
+
 jest.mock('@/lib/stripePaymentProvider', () => ({
     createStripePaymentProvider: jest.fn().mockReturnValue({}),
     getStripePublishableKey: jest.fn().mockReturnValue('pk_test_public'),
@@ -215,8 +235,10 @@ const mockReconcilePaymentAttempt = new (PaymentAttemptReconciliationService as 
 const mockRebookItinerary = new (ItineraryRebookingService as any)().rebook as jest.Mock;
 const mockUpdateFlightScheduleTerms = new (FlightScheduleTermsService as any)().update as jest.Mock;
 const mockSetFlightScheduleActive = new (FlightScheduleActivationService as any)().setActive as jest.Mock;
+const mockDeleteFlightSchedule = new (FlightScheduleDeletionService as any)().delete as jest.Mock;
 const mockedCreateStripePaymentProvider = createStripePaymentProvider as jest.Mock;
 const mockedRevalidatePath = revalidatePath as jest.Mock;
+const mockedRedirect = redirect as unknown as jest.Mock;
 const mockedGetStripePublishableKey = getStripePublishableKey as jest.Mock;
 const mockedFlightFindMany = (prisma as any).flight.findMany as jest.Mock;
 const mockedFlightFindFirst = (prisma as any).flight.findFirst as jest.Mock;
@@ -226,7 +248,6 @@ const mockedFlightFindUnique = (prisma as any).flight.findUnique as jest.Mock;
 const mockedFlightScheduleFindMany = (prisma as any).flightSchedule.findMany as jest.Mock;
 const mockedFlightScheduleCreate = (prisma as any).flightSchedule.create as jest.Mock;
 const mockedFlightScheduleUpdate = (prisma as any).flightSchedule.update as jest.Mock;
-const mockedFlightScheduleDelete = (prisma as any).flightSchedule.delete as jest.Mock;
 const mockedFlightScheduleFindUnique = (prisma as any).flightSchedule.findUnique as jest.Mock;
 const mockedCityGuideDelete = (prisma as any).cityGuide.delete as jest.Mock;
 const mockedUserFavoriteFindUnique = (prisma as any).userFavorite.findUnique as jest.Mock;
@@ -2346,20 +2367,87 @@ describe('admin flight schedule actions', () => {
     });
 
     describe('deleteFlightScheduleAction', () => {
+        const request = {
+            requestId: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+            flightScheduleId: 12,
+            confirmed: true,
+        };
+
         it('rejects unauthenticated user', async () => {
             mockedGetServerSession.mockResolvedValue(null);
-            await expect(deleteFlightScheduleAction(12)).rejects.toThrow('Unauthorized');
+            await expect(deleteFlightScheduleAction(request)).rejects.toThrow('Unauthorized');
         });
 
-        it('allows admin to delete schedule', async () => {
-            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
-            mockedFlightScheduleDelete.mockResolvedValue({});
-
-            await deleteFlightScheduleAction(12);
-
-            expect(mockedFlightScheduleDelete).toHaveBeenCalledWith({
-                where: { id: 12 }
+        it('requires verified staff access', async () => {
+            mockedGetServerSession.mockResolvedValue({
+                user: { id: 'staff-1', role: 'ADMIN', staffMfaVerified: false },
             });
+
+            await expect(deleteFlightScheduleAction(request)).rejects.toThrow('Unauthorized');
+            expect(mockDeleteFlightSchedule).not.toHaveBeenCalled();
+        });
+
+        it('deletes through the retryable service and refreshes every consumer', async () => {
+            mockedGetServerSession.mockResolvedValue({ user: { id: 'staff-1', role: 'ADMIN', staffMfaVerified: true } });
+            mockDeleteFlightSchedule.mockResolvedValue({ deletionId: 'delete-1', wasDeleted: true });
+
+            await deleteFlightScheduleAction(request);
+
+            expect(mockDeleteFlightSchedule).toHaveBeenCalledWith({
+                requestId: request.requestId,
+                flightScheduleId: 12,
+                actorUserId: 'staff-1',
+            });
+            expect(mockedRevalidatePath.mock.calls.map(([path]) => path)).toEqual([
+                '/',
+                '/flights',
+                '/admin/flights',
+            ]);
+            expect(mockedRedirect).toHaveBeenCalledWith('/admin/flights');
+        });
+
+        it.each([
+            [{ ...request, confirmed: false }, 'Confirm permanent deletion.'],
+            [{ ...request, requestId: 'not-a-uuid' }, 'Schedule deletion request ID must be a UUID.'],
+            [{ ...request, flightScheduleId: 0 }, 'Schedule ID must be positive.'],
+        ])('rejects invalid deletion input before calling the service', async (invalid, message) => {
+            mockedGetServerSession.mockResolvedValue({
+                user: { id: 'staff-1', role: 'ADMIN', staffMfaVerified: true },
+            });
+
+            await expect(deleteFlightScheduleAction(invalid)).resolves.toMatchObject({
+                ok: false,
+                error: { message },
+            });
+            expect(mockDeleteFlightSchedule).not.toHaveBeenCalled();
+        });
+
+        it('returns a safe typed service refusal as validation feedback', async () => {
+            mockedGetServerSession.mockResolvedValue({
+                user: { id: 'staff-1', role: 'ADMIN', staffMfaVerified: true },
+            });
+            mockDeleteFlightSchedule.mockRejectedValue(new FlightScheduleDeletionError(
+                'ACTIVE',
+                'Deactivate this template before deleting it permanently.',
+            ));
+
+            await expect(deleteFlightScheduleAction(request)).resolves.toMatchObject({
+                ok: false,
+                error: {
+                    message: 'Deactivate this template before deleting it permanently.',
+                    fields: { _root: ['Deactivate this template before deleting it permanently.'] },
+                },
+            });
+        });
+
+        it('rethrows unexpected errors instead of exposing private details as feedback', async () => {
+            mockedGetServerSession.mockResolvedValue({
+                user: { id: 'staff-1', role: 'ADMIN', staffMfaVerified: true },
+            });
+            const internal = new Error('postgresql://private-host/schedule_delete');
+            mockDeleteFlightSchedule.mockRejectedValue(internal);
+
+            await expect(deleteFlightScheduleAction(request)).rejects.toBe(internal);
         });
     });
 

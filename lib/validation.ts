@@ -262,6 +262,12 @@ export const flightScheduleActivationSchema = z.object({
     isActive: z.boolean(),
 }).strict();
 
+export const flightScheduleDeletionSchema = z.object({
+    requestId: z.uuid('Schedule deletion request ID must be a UUID.'),
+    flightScheduleId: positiveId('Schedule ID'),
+    confirmed: z.boolean().refine(confirmed => confirmed, 'Confirm permanent deletion.'),
+}).strict();
+
 const seatNumberSchema = requiredText('Seat number', 6)
     .transform(value => value.toUpperCase())
     .pipe(z.string().regex(/^[1-9]\d{0,2}[A-Z]$/, 'Seat number is invalid.'));
