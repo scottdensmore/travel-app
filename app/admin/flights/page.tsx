@@ -125,7 +125,15 @@ export default async function AdminFlightsPage() {
                                             {formatPrice(schedule.priceCents ?? 0)}
                                         </td>
                                         <td style={{ padding: '12px', textAlign: 'right' }}>
-                                            <DeleteScheduleButton id={schedule.id} />
+                                            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                                <Link
+                                                    href={`/admin/flights/schedules/${schedule.id}`}
+                                                    style={{ color: '#7dd3fc', fontWeight: 700, whiteSpace: 'nowrap' }}
+                                                >
+                                                    Preview impact
+                                                </Link>
+                                                <DeleteScheduleButton id={schedule.id} />
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
