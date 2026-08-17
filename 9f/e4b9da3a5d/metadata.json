@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "9fe4b9da3a5d",
+  "strategy": "manual-commit",
+  "branch": "agent/237-link-schedule-occurrences",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "__tests__/app/actions.test.ts",
+    "__tests__/lib/FlightScheduleService.test.ts",
+    "__tests__/lib/flightScheduleProvenance.database.test.ts",
+    "__tests__/lib/flightScheduleProvenanceSchema.test.ts",
+    "app/actions.ts",
+    "lib/FlightScheduleService.ts",
+    "prisma/migrations/20260817070000_link_flights_to_schedules/migration.sql",
+    "prisma/schema.prisma"
+  ],
+  "sessions": [
+    {
+      "metadata": "/9f/e4b9da3a5d/0/metadata.json",
+      "transcript": "/9f/e4b9da3a5d/0/full.jsonl",
+      "compact_transcript": "/9f/e4b9da3a5d/0/transcript.jsonl",
+      "content_hash": "/9f/e4b9da3a5d/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 429242,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 20083456,
+    "output_tokens": 45913,
+    "api_call_count": 155
+  }
+}
