@@ -3,6 +3,7 @@ import { validateSeatingLayout } from '@/lib/seatLayout';
 import { ActionValidationFailure } from '@/lib/actionResult';
 import { isValidAuthToken } from '@/lib/authTokenFormat';
 import { airportTimeZoneFor } from '@/lib/airports';
+import { normalizeAccountTimeZone } from '@/lib/accountTimeZone';
 import {
     DEPARTURE_AFTER_BOOKING_WINDOW_MESSAGE,
     RETURN_AFTER_BOOKING_WINDOW_MESSAGE,
@@ -77,6 +78,17 @@ export const emailAddressSchema = z.string()
 export const passwordSchema = z.string()
     .min(8, 'Password must be at least 8 characters.')
     .max(128, 'Password is too long.');
+
+export const accountTimeZoneSchema = z.string()
+    .trim()
+    .min(1, 'Timezone is required.')
+    .max(100, 'Timezone is too long.')
+    .transform((value, context) => {
+        const normalized = normalizeAccountTimeZone(value);
+        if (normalized) return normalized;
+        context.addIssue({ code: 'custom', message: 'Choose a recognized IANA timezone.' });
+        return z.NEVER;
+    });
 
 const oneTimeTokenSchema = z.string().refine(
     isValidAuthToken,

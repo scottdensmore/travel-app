@@ -66,6 +66,7 @@ import type { RoutedFlight } from '@/lib/flightRoute';
 import { bookingWindowIsoDates } from '@/lib/dates';
 import {
     bookingRequestSchema,
+    accountTimeZoneSchema,
     cityGuideSchema,
     favoriteSchema,
     flightScheduleActivationSchema,
@@ -643,6 +644,23 @@ export async function toggleFavoriteCityGuideAction(cityGuideId: number) {
         });
         return { isFavorite: true };
     }
+}
+
+export async function updateAccountTimeZoneAction(timeZone: string) {
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.id;
+    if (!userId) throw new Error('Unauthorized');
+
+    const parsed = parseActionInput(accountTimeZoneSchema, timeZone);
+    if (!parsed.ok) return parsed;
+
+    const updated = await prisma.user.update({
+        where: { id: userId },
+        data: { timeZone: parsed.data },
+        select: { timeZone: true },
+    });
+    revalidatePath('/profile');
+    return updated;
 }
 
 export async function submitCityGuideReviewAction(cityGuideId: number, rating: number, content: string) {

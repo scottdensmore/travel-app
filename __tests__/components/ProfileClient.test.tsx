@@ -127,6 +127,8 @@ describe('ProfileClient interactive dashboard', () => {
             <ProfileClient
                 userName="Jane Doe"
                 userAvatar="avatar.png"
+                accountTimeZone="UTC"
+                accountTimeZoneChoices={['UTC', 'America/Los_Angeles']}
                 currentStatus="Gold"
                 currentPoints={4200}
                 bookings={sampleBookings}
@@ -143,6 +145,8 @@ describe('ProfileClient interactive dashboard', () => {
         expect(screen.getByText('4,200')).toBeInTheDocument();
         expect(screen.getByTestId('status-chart')).toBeInTheDocument();
         expect(screen.getByTestId('history-chart')).toBeInTheDocument();
+        expect(screen.getByRole('combobox', { name: 'Account timezone' }))
+            .toHaveValue('UTC');
 
         // Bookings
         expect(screen.getByText('Gemini Airways GA101')).toBeInTheDocument();
@@ -159,6 +163,8 @@ describe('ProfileClient interactive dashboard', () => {
             <ProfileClient
                 userName="Jane Doe"
                 userAvatar="avatar.png"
+                accountTimeZone="UTC"
+                accountTimeZoneChoices={['UTC', 'America/Los_Angeles']}
                 currentStatus="Gold"
                 currentPoints={4200}
                 bookings={sampleBookings}
@@ -192,6 +198,8 @@ describe('ProfileClient interactive dashboard', () => {
             <ProfileClient
                 userName="Jane Doe"
                 userAvatar="avatar.png"
+                accountTimeZone="UTC"
+                accountTimeZoneChoices={['UTC', 'America/Los_Angeles']}
                 currentStatus="Gold"
                 currentPoints={4200}
                 bookings={[]}
@@ -218,6 +226,8 @@ describe('ProfileClient interactive dashboard', () => {
             <ProfileClient
                 userName="Jane Doe"
                 userAvatar="avatar.png"
+                accountTimeZone="UTC"
+                accountTimeZoneChoices={['UTC', 'America/Los_Angeles']}
                 currentStatus="Gold"
                 currentPoints={4200}
                 bookings={[]}
@@ -247,6 +257,8 @@ describe('ProfileClient interactive dashboard', () => {
             <ProfileClient
                 userName="Jane Doe"
                 userAvatar="avatar.png"
+                accountTimeZone="UTC"
+                accountTimeZoneChoices={['UTC', 'America/Los_Angeles']}
                 currentStatus="Gold"
                 currentPoints={4200}
                 bookings={sampleBookings}
@@ -303,6 +315,8 @@ describe('ProfileClient interactive dashboard', () => {
             <ProfileClient
                 userName="Jane Doe"
                 userAvatar="avatar.png"
+                accountTimeZone="UTC"
+                accountTimeZoneChoices={['UTC', 'America/Los_Angeles']}
                 currentStatus="Gold"
                 currentPoints={4200}
                 bookings={sampleBookings}
@@ -364,10 +378,13 @@ describe('ProfileClient interactive dashboard', () => {
         const profile = (
             bookings: unknown[],
             replacementOptions: Record<number, ReplacementFlightGroup[]> = {},
+            accountTimeZone = 'UTC',
         ) => (
             <ProfileClient
                 userName="Jane Doe"
                 userAvatar="avatar.png"
+                accountTimeZone={accountTimeZone}
+                accountTimeZoneChoices={['UTC', 'America/Los_Angeles']}
                 currentStatus="Gold"
                 currentPoints={4200}
                 bookings={bookings as never}
@@ -382,7 +399,8 @@ describe('ProfileClient interactive dashboard', () => {
         const renderBookings = (
             bookings: unknown[],
             replacementOptions: Record<number, ReplacementFlightGroup[]> = {},
-        ) => render(profile(bookings, replacementOptions));
+            accountTimeZone = 'UTC',
+        ) => render(profile(bookings, replacementOptions, accountTimeZone));
 
         it('lists every leg of the itinerary, in order', () => {
             renderBookings([roundTripBooking]);
@@ -834,12 +852,12 @@ describe('ProfileClient interactive dashboard', () => {
                     refundCents: 24_000,
                     paymentRefund: { status: 'SUCCEEDED', amountCents: 24_000 },
                 }],
-            }]);
+            }], {}, 'America/Los_Angeles');
 
             const receipt = screen.getByRole('article', { name: 'Receipt for booking 202' });
             expect(receipt).toHaveTextContent('Booking 202');
             expect(receipt).toHaveTextContent('Paid $655 USD');
-            expect(receipt).toHaveTextContent('June 3, 2026');
+            expect(receipt).toHaveTextContent('June 3, 2026 at 7:30 AM PDT');
             expect(receipt).toHaveTextContent('GA101, GA900');
             expect(receipt).toHaveTextContent('$240 USD refunded');
             expect(receipt).not.toHaveTextContent(/pi_|checkout|fingerprint/i);
@@ -985,6 +1003,8 @@ describe('ProfileClient interactive dashboard', () => {
                 <ProfileClient
                     userName="Jane Doe"
                     userAvatar="avatar.png"
+                    accountTimeZone="UTC"
+                    accountTimeZoneChoices={['UTC', 'America/Los_Angeles']}
                     currentStatus="Gold"
                     currentPoints={4200}
                     bookings={[disruptedRoundTrip] as never}

@@ -1,5 +1,6 @@
 /** @jest-environment node */
 import {
+    accountTimeZoneSchema,
     bookingRequestSchema,
     cityGuideSchema,
     checkoutPaymentRequestSchema,
@@ -19,6 +20,26 @@ import {
     searchFlightsSchema,
     seatChangesSchema
 } from '@/lib/validation';
+
+describe('account timezone validation', () => {
+    it('stores a recognized IANA timezone canonically', () => {
+        expect(accountTimeZoneSchema.parse(' US/Pacific ')).toBe('America/Los_Angeles');
+    });
+
+    it.each(['', 'Not/AZone'])('rejects %j', value => {
+        expect(accountTimeZoneSchema.safeParse(value).success).toBe(false);
+    });
+
+    it('rejects one character past the persisted timezone limit for that reason', () => {
+        const result = accountTimeZoneSchema.safeParse('x'.repeat(101));
+
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            expect(result.error.issues.map(issue => issue.message))
+                .toEqual(['Timezone is too long.']);
+        }
+    });
+});
 
 describe('customer rebooking request integrity', () => {
     const valid = {

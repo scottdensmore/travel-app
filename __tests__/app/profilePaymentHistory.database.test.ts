@@ -31,7 +31,11 @@ let userId: string;
 beforeAll(async () => {
     userId = `receipt-user-${randomUUID()}`;
     const user = await prisma.user.create({
-        data: { id: userId, email: `receipt-${randomUUID()}@example.com` },
+        data: {
+            id: userId,
+            email: `receipt-${randomUUID()}@example.com`,
+            timeZone: 'America/Los_Angeles',
+        },
     });
     created.userIds.push(user.id);
 
@@ -92,14 +96,29 @@ beforeEach(() => {
     mockedGetServerSession.mockResolvedValue({ user: { id: userId, name: 'Receipt Traveller' } });
 });
 
-async function profileBookings() {
+async function profileProps() {
     const page = await ProfilePage();
     expect(React.isValidElement(page)).toBe(true);
-    return (page as React.ReactElement<{ bookings: Array<Record<string, unknown>> }>)
-        .props.bookings;
+    return (page as React.ReactElement<{
+        accountTimeZone: string;
+        accountTimeZoneChoices: string[];
+        bookings: Array<Record<string, unknown>>;
+    }>).props;
+}
+
+async function profileBookings() {
+    return (await profileProps()).bookings;
 }
 
 describe('customer-safe profile payment history', () => {
+    it('hands the saved account timezone and the complete choice boundary to the client', async () => {
+        const props = await profileProps();
+
+        expect(props.accountTimeZone).toBe('America/Los_Angeles');
+        expect(props.accountTimeZoneChoices[0]).toBe('UTC');
+        expect(props.accountTimeZoneChoices).toContain('America/Los_Angeles');
+    });
+
     it('projects only receipt fields for a captured booking', async () => {
         const booking = (await profileBookings()).find(row => row.id === bookingId);
 
