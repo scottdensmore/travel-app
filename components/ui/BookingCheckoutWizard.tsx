@@ -12,7 +12,7 @@ import { isActionValidationFailure, type ActionValidationFailure } from '@/lib/a
 import { CABIN_FARE_PERCENT, calculatePassengerFareCents, flightFareCents, formatPrice } from '@/lib/bookingPricing';
 import { BRAND } from '@/lib/brand';
 import { cabinLabel, legDirectionLabel } from '@/lib/bookingItinerary';
-import { flightDeparture } from '@/lib/flightTime';
+import { durationLabel, flightArrival, flightDeparture } from '@/lib/flightTime';
 import CheckoutPaymentForm from '@/components/ui/CheckoutPaymentForm';
 
 interface Flight {
@@ -22,6 +22,7 @@ interface Flight {
     from: string;
     to: string;
     departureDate: Date | string;
+    durationMinutes: number | null;
     priceCents: number;
     firstClassRows?: number | null;
     businessRows?: number | null;
@@ -58,6 +59,42 @@ interface ConfirmedPassenger {
     seatNumbers: string[];
     cabinClass: string;
 }
+
+function arrivalDayLabel(dayOffset: number): string {
+    if (dayOffset === 1) return ' (next day)';
+    if (dayOffset < 0) return ' (previous day)';
+    if (dayOffset > 1) return ` (${dayOffset} days later)`;
+    return '';
+}
+
+/** The same airport clocks before purchase and on the issued boarding pass. */
+const FlightTimingDetails: React.FC<{
+    flight: Flight;
+    style?: React.CSSProperties;
+}> = ({ flight, style }) => {
+    const departure = flightDeparture(flight);
+    const timing = flight.durationMinutes === null
+        ? null
+        : {
+            arrival: flightArrival({ ...flight, durationMinutes: flight.durationMinutes }),
+            duration: durationLabel(flight.durationMinutes),
+        };
+
+    return (
+        <div data-testid="flight-timing" style={style}>
+            <div>Departs {departure.readableDate} at {departure.time} {departure.zoneLabel}</div>
+            {timing !== null && (
+                <>
+                    <div>
+                        Arrives {timing.arrival.readableDate} at {timing.arrival.time} {timing.arrival.zoneLabel}
+                        {arrivalDayLabel(timing.arrival.dayOffset)}
+                    </div>
+                    <div>{timing.duration}</div>
+                </>
+            )}
+        </div>
+    );
+};
 
 /**
  * The cabin picker's option text: the cabin's name, plus what it adds to the
@@ -1565,9 +1602,10 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                                             <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginTop: '4px' }}>
                                                 {leg.from} → {leg.to}
                                             </div>
-                                            <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginTop: '4px' }}>
-                                                Departure: {flightDeparture(leg).readableDate}
-                                            </div>
+                                            <FlightTimingDetails
+                                                flight={leg}
+                                                style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginTop: '4px' }}
+                                            />
                                             {/* Named, so a screen reader reaching these rows out
                                                 of order still knows whose flight they belong to. */}
                                             <ul
@@ -1726,7 +1764,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                               */}
                             {bookingResult.passengers.flatMap((p, idx) => flights.map((legFlight, legIndex) => (
                                 /* Boarding Pass Card View Overlay */
-                                <div key={`${idx}:${legIndex}`} style={{
+                                <div key={`${idx}:${legIndex}`} data-testid="boarding-pass" style={{
                                     width: '100%',
                                     maxWidth: '600px',
                                     borderRadius: '16px',
@@ -1802,10 +1840,10 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                                                 {p.seatNumbers[legIndex]}
                                             </div>
                                         </div>
-                                        <div>
-                                            <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Date</div>
-                                            <div style={{ fontSize: '0.95rem', fontWeight: 'bold', marginTop: '3px' }}>{flightDeparture(legFlight).readableDate}</div>
-                                        </div>
+                                        <FlightTimingDetails
+                                            flight={legFlight}
+                                            style={{ fontSize: '0.8rem', fontWeight: 'bold' }}
+                                        />
                                     </div>
 
                                     {/* Ticket bottom strip */}
