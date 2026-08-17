@@ -1,0 +1,39 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "1cfaef6e1dd2",
+  "strategy": "manual-commit",
+  "branch": "feat/234-rebooking-ui",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "__tests__/app/actions.test.ts",
+    "__tests__/components/ItineraryRebookingDialog.test.tsx",
+    "__tests__/components/ProfileClient.test.tsx",
+    "__tests__/lib/itineraryRebookingService.database.test.ts",
+    "__tests__/lib/seatLayout.test.ts",
+    "__tests__/lib/validation.test.ts",
+    "app/actions.ts",
+    "app/globals.css",
+    "components/ui/ItineraryRebookingDialog.tsx",
+    "components/ui/ProfileClient.tsx",
+    "e2e/disruption.spec.ts",
+    "lib/itineraryRebookingService.ts",
+    "lib/seatLayout.ts",
+    "lib/validation.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/1c/faef6e1dd2/0/metadata.json",
+      "transcript": "/1c/faef6e1dd2/0/full.jsonl",
+      "compact_transcript": "/1c/faef6e1dd2/0/transcript.jsonl",
+      "content_hash": "/1c/faef6e1dd2/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 513079,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 38259712,
+    "output_tokens": 69566,
+    "api_call_count": 263
+  }
+}
