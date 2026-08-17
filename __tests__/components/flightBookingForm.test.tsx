@@ -1026,6 +1026,89 @@ describe('FlightBookingForm', () => {
         expect(card).not.toHaveTextContent(new Date('2026-05-22T12:00:00Z').toLocaleDateString());
     });
 
+    it('shows each leg in its departure and arrival airport timezones', async () => {
+        mockSearch.mockResolvedValue({
+            flights: [{
+                ...mockFlights[0],
+                id: 81,
+                flightNumber: 'GA801',
+                from: 'New York, USA',
+                to: 'London, UK',
+                departureDate: '2026-08-17T23:30:00.000Z',
+                durationMinutes: 420,
+            }],
+            nearbyDates: [],
+            inbound: inboundOk([{
+                ...mockFlights[0],
+                id: 82,
+                flightNumber: 'GA802',
+                from: 'London, UK',
+                to: 'New York, USA',
+                departureDate: '2026-08-25T13:00:00.000Z',
+                durationMinutes: 480,
+            }]),
+        });
+        renderForm();
+
+        fireEvent.click(screen.getByText('Find your trip'));
+
+        const outbound = (await screen.findByText('GA801')).closest('.flight-result-card')!;
+        expect(outbound).toHaveTextContent('Departs Aug 17, 2026 at 19:30 EDT');
+        expect(outbound).toHaveTextContent('Arrives Aug 18, 2026 at 07:30 GMT+1 (next day)');
+        expect(outbound).toHaveTextContent('7h 00m');
+
+        const inbound = screen.getByText('GA802').closest('.flight-result-card')!;
+        expect(inbound).toHaveTextContent('Departs Aug 25, 2026 at 14:00 GMT+1');
+        expect(inbound).toHaveTextContent('Arrives Aug 25, 2026 at 17:00 EDT');
+        expect(inbound).toHaveTextContent('8h 00m');
+        expect(inbound).not.toHaveTextContent(/next day|previous day/);
+    });
+
+    it('does not invent an arrival when a flight has no trusted duration', async () => {
+        mockSearch.mockResolvedValue(searchSuccess([{ ...mockFlights[0], durationMinutes: null }]));
+        renderForm();
+
+        fireEvent.click(screen.getByText('Find your trip'));
+
+        const card = (await screen.findByText('CA101')).closest('.flight-result-card')!;
+        expect(card).toHaveTextContent('Departs May 15, 2026 at 05:00 PDT');
+        expect(card).not.toHaveTextContent('Arrives');
+        expect(card).not.toHaveTextContent(/\d+h \d{2}m/);
+    });
+
+    it('states earlier and later destination calendar dates without ambiguous signs', async () => {
+        mockSearch.mockResolvedValue(searchSuccess([
+            {
+                ...mockFlights[0],
+                id: 83,
+                flightNumber: 'GA803',
+                from: 'Tokyo, Japan',
+                to: 'San Francisco, USA',
+                departureDate: '2026-08-16T15:30:00.000Z',
+                durationMinutes: 575,
+            },
+            {
+                ...mockFlights[0],
+                id: 84,
+                flightNumber: 'GA804',
+                from: 'New York, USA',
+                to: 'London, UK',
+                departureDate: '2026-08-17T12:00:00.000Z',
+                durationMinutes: 2160,
+            },
+        ]));
+        renderForm();
+
+        fireEvent.click(screen.getByText('Find your trip'));
+
+        const previous = (await screen.findByText('GA803')).closest('.flight-result-card')!;
+        expect(previous).toHaveTextContent('Arrives Aug 16, 2026 at 18:05 PDT (previous day)');
+
+        const later = screen.getByText('GA804').closest('.flight-result-card')!;
+        expect(later).toHaveTextContent('Arrives Aug 19, 2026 at 01:00 GMT+1 (2 days later)');
+        expect(later).not.toHaveTextContent('+2');
+    });
+
     it('shows no return section for a one-way search', async () => {
         mockSearch.mockResolvedValue({ flights: mockFlights, nearbyDates: [], inbound: null });
         renderForm();

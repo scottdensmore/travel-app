@@ -26,7 +26,7 @@ import {
     latestBookableDateIso,
     millisecondsUntilNextLocalDay,
 } from '@/lib/dates'
-import { flightDeparture } from '@/lib/flightTime'
+import { durationLabel, flightArrival, flightDeparture } from '@/lib/flightTime'
 
 interface FlightBookingFormProps {
     routes?: FlightRoute[];
@@ -80,6 +80,46 @@ const CabinUnavailableNote: React.FC<{ cabin: SearchCabin }> = ({ cabin }) => (
         No {cabinLabel(cabin)} cabin · Economy fare shown
     </span>
 );
+
+function arrivalDayLabel(dayOffset: number): string {
+    if (dayOffset === 1) return ' (next day)';
+    if (dayOffset < 0) return ' (previous day)';
+    if (dayOffset > 1) return ` (${dayOffset} days later)`;
+    return '';
+}
+
+/** One route clock, shared by outbound and return result cards. */
+const FlightResultTiming: React.FC<{ flight: SearchResultFlight }> = ({ flight }) => {
+    const departure = flightDeparture(flight);
+    const durationMinutes = flight.durationMinutes;
+    const arrival = durationMinutes === null || durationMinutes === undefined
+        ? null
+        : flightArrival({ ...flight, durationMinutes });
+
+    return (
+        <div className="flight-result-route">
+            <div className="flight-result-stop">
+                <span style={{ fontSize: '1rem', fontWeight: 'bold', color: '#fff' }}>
+                    Departs {departure.readableDate} at {departure.time} {departure.zoneLabel}
+                </span>
+                <span style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.from}</span>
+            </div>
+            <span className="flight-result-arrow">
+                <span aria-hidden="true">------&gt;</span>
+                {arrival !== null && <span>{durationLabel(durationMinutes!)}</span>}
+            </span>
+            <div className="flight-result-stop">
+                {arrival !== null && (
+                    <span style={{ fontSize: '1rem', fontWeight: 'bold', color: '#fff' }}>
+                        Arrives {arrival.readableDate} at {arrival.time} {arrival.zoneLabel}
+                        {arrivalDayLabel(arrival.dayOffset)}
+                    </span>
+                )}
+                <span style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.to}</span>
+            </div>
+        </div>
+    );
+};
 
 /**
  * Picks one flight for a leg of a round trip. A toggle rather than a link:
@@ -1018,24 +1058,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                                 <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#c084fc' }}>{flight.airline}</span>
                                                 <span style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.flightNumber}</span>
                                             </div>
-                                            <div className="flight-result-route">
-                                                <div className="flight-result-stop">
-                                                    <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#fff' }}>
-                                                        {flightDeparture(flight).readableDate}
-                                                    </span>
-                                                    <span style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.from}</span>
-                                                </div>
-                                                <span className="flight-result-arrow" aria-hidden="true">------&gt;</span>
-                                                {/*
-                                                  * No date on the arrival side: a flight is one leg, and
-                                                  * the return is now a flight of its own with its own
-                                                  * card (#112). Flight.returnDate was a fixed seven days
-                                                  * after departure and never described a real return.
-                                                  */}
-                                                <div className="flight-result-stop">
-                                                    <span style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.to}</span>
-                                                </div>
-                                            </div>
+                                            <FlightResultTiming flight={flight} />
                                             <div className="flight-result-fare">
                                                 <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>{fareLabel(flight)}</span>
                                                 {!flight.cabinAvailable && <CabinUnavailableNote cabin={cabinClass} />}
@@ -1116,18 +1139,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                                             <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#c084fc' }}>{flight.airline}</span>
                                                             <span style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.flightNumber}</span>
                                                         </div>
-                                                        <div className="flight-result-route">
-                                                            <div className="flight-result-stop">
-                                                                <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#fff' }}>
-                                                                    {flightDeparture(flight).readableDate}
-                                                                </span>
-                                                                <span style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.from}</span>
-                                                            </div>
-                                                            <span className="flight-result-arrow" aria-hidden="true">------&gt;</span>
-                                                            <div className="flight-result-stop">
-                                                                <span style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.to}</span>
-                                                            </div>
-                                                        </div>
+                                                        <FlightResultTiming flight={flight} />
                                                         <div className="flight-result-fare">
                                                             <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>{fareLabel(flight)}</span>
                                                             {!flight.cabinAvailable && <CabinUnavailableNote cabin={cabinClass} />}
