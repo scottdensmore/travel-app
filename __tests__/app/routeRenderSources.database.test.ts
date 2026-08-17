@@ -56,6 +56,7 @@ beforeAll(async () => {
             // the page never shows this flight and every assertion about it is
             // vacuous, which is what `routeHandedOver` refuses (#155).
             departureDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+            durationMinutes: 245,
             priceCents: 41_900,
         },
     });
@@ -180,7 +181,11 @@ describe('the route a page renders', () => {
             searchParams: Promise.resolve({ outbound: String(flightId) }),
         });
 
-        expect(await routeHandedOver(checkout)).toMatchObject({ from: ORIGIN, to: DESTINATION });
+        expect(await routeHandedOver(checkout)).toMatchObject({
+            from: ORIGIN,
+            to: DESTINATION,
+            durationMinutes: 245,
+        });
     });
 
     it('comes from the airports on the profile', async () => {

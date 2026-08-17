@@ -54,6 +54,7 @@ const sampleFlight = {
     from: 'Seattle, USA',
     to: 'Detroit, USA',
     departureDate: '2026-06-30T10:00:00Z',
+    durationMinutes: null,
     priceCents: 10000
 };
 
@@ -532,6 +533,9 @@ describe('BookingCheckoutWizard', () => {
         expect(screen.getByText('GA404')).toBeInTheDocument();
         expect(screen.getByText('11C')).toBeInTheDocument();
         expect(screen.getByText('Economy')).toBeInTheDocument();
+        expect(screen.getByTestId('boarding-pass')).toHaveTextContent('Departs Jun 30, 2026 at 03:00 PDT');
+        expect(screen.getByTestId('boarding-pass')).not.toHaveTextContent('Arrives');
+        expect(screen.getByTestId('boarding-pass')).not.toHaveTextContent(/\d+h \d{2}m/);
     });
 
     it('does not create a booking when the server has not observed authorization', async () => {
@@ -1051,18 +1055,25 @@ describe('BookingCheckoutWizard', () => {
     });
 
     describe('Round-trip itineraries', () => {
+        const outboundFlight = {
+            ...sampleFlight,
+            durationMinutes: 420,
+        };
         const inboundFlight = {
             ...sampleFlight,
             id: 43,
             flightNumber: 'GA405',
             from: 'Detroit, USA',
             to: 'Seattle, USA',
-            departureDate: '2026-07-07T10:00:00Z',
+            departureDate: '2026-07-07T23:30:00Z',
+            durationMinutes: 480,
             priceCents: 15000
         };
 
-        const renderRoundTrip = (occupied: string[][] = [[], []]) =>
-            render(<BookingCheckoutWizard flights={[sampleFlight, inboundFlight]} occupiedSeats={occupied} />);
+        const renderRoundTrip = (
+            occupied: string[][] = [[], []],
+            flights = [outboundFlight, inboundFlight],
+        ) => render(<BookingCheckoutWizard flights={flights} occupiedSeats={occupied} />);
 
         const fillTraveler = (container: HTMLElement) => {
             fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Ada' } });
@@ -1311,10 +1322,46 @@ describe('BookingCheckoutWizard', () => {
             expect(legs[0]).toHaveTextContent('Departing');
             expect(legs[0]).toHaveTextContent('GA404');
             expect(legs[0]).toHaveTextContent('Seattle, USA → Detroit, USA');
+            expect(legs[0]).toHaveTextContent('Departs Jun 30, 2026 at 03:00 PDT');
+            expect(legs[0]).toHaveTextContent('Arrives Jun 30, 2026 at 13:00 EDT');
+            expect(legs[0]).toHaveTextContent('7h 00m');
 
             expect(legs[1]).toHaveTextContent('Returning');
             expect(legs[1]).toHaveTextContent('GA405');
             expect(legs[1]).toHaveTextContent('Detroit, USA → Seattle, USA');
+            expect(legs[1]).toHaveTextContent('Departs Jul 7, 2026 at 19:30 EDT');
+            expect(legs[1]).toHaveTextContent('Arrives Jul 8, 2026 at 00:30 PDT (next day)');
+            expect(legs[1]).toHaveTextContent('8h 00m');
+        });
+
+        it('states earlier and multi-day arrival dates without ambiguous signs', async () => {
+            const previousDayFlight = {
+                ...outboundFlight,
+                from: 'Tokyo, Japan',
+                to: 'San Francisco, USA',
+                departureDate: '2026-08-16T15:30:00.000Z',
+                durationMinutes: 575,
+            };
+            const multiDayFlight = {
+                ...inboundFlight,
+                from: 'New York, USA',
+                to: 'London, UK',
+                departureDate: '2026-08-17T12:00:00.000Z',
+                durationMinutes: 2160,
+            };
+            const { container } = renderRoundTrip([[], []], [previousDayFlight, multiDayFlight]);
+            fillTraveler(container);
+            fireEvent.click(screen.getByText('Select Seats →'));
+            fireEvent.click(screen.getByTitle('Select Seat 11A'));
+            fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
+            fireEvent.click(screen.getByTitle('Select Seat 12C'));
+            fireEvent.click(screen.getByText('Review Booking →'));
+            await screen.findByText('Review Booking');
+
+            const [previous, later] = screen.getAllByTestId('review-leg');
+            expect(previous).toHaveTextContent('Arrives Aug 16, 2026 at 18:05 PDT (previous day)');
+            expect(later).toHaveTextContent('Arrives Aug 19, 2026 at 01:00 GMT+1 (2 days later)');
+            expect(later).not.toHaveTextContent('+2');
         });
 
         it('shows each seat against the leg it is held on', async () => {
@@ -1358,6 +1405,9 @@ describe('BookingCheckoutWizard', () => {
             expect(legs).toHaveLength(1);
             expect(legs[0]).toHaveTextContent('GA404');
             expect(legs[0]).toHaveTextContent('11A');
+            expect(legs[0]).toHaveTextContent('Departs Jun 30, 2026 at 03:00 PDT');
+            expect(legs[0]).not.toHaveTextContent('Arrives');
+            expect(legs[0]).not.toHaveTextContent(/\d+h \d{2}m/);
             // A single leg is not a direction; the eyebrow belongs to a trip
             // that has more than one.
             expect(legs[0]).not.toHaveTextContent('Departing');
@@ -1546,6 +1596,14 @@ describe('BookingCheckoutWizard', () => {
             expect(screen.getByText('12C')).toBeInTheDocument();
             // The seats must not be pooled onto a single card.
             expect(screen.queryByText('11A, 12C')).not.toBeInTheDocument();
+
+            const [outboundPass, inboundPass] = screen.getAllByTestId('boarding-pass');
+            expect(outboundPass).toHaveTextContent('Departs Jun 30, 2026 at 03:00 PDT');
+            expect(outboundPass).toHaveTextContent('Arrives Jun 30, 2026 at 13:00 EDT');
+            expect(outboundPass).toHaveTextContent('7h 00m');
+            expect(inboundPass).toHaveTextContent('Departs Jul 7, 2026 at 19:30 EDT');
+            expect(inboundPass).toHaveTextContent('Arrives Jul 8, 2026 at 00:30 PDT (next day)');
+            expect(inboundPass).toHaveTextContent('8h 00m');
         });
 
         it('prints the cabin in words on the boarding pass', async () => {

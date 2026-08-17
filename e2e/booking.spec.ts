@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { prisma } from '../lib/prisma';
 import { flightRouteInclude, withRouteLabels } from '@/lib/flightRoute';
 import { calculateItineraryTotal, formatPrice } from '../lib/bookingPricing';
+import { durationLabel, flightArrival, flightDeparture } from '../lib/flightTime';
 import { registerAndSignIn } from './helpers/auth';
 import { completeCheckoutPayment, openCheckoutPayment } from './helpers/checkoutPayment';
 import { fillOneWayFlightSearch } from './helpers/flightSearch';
@@ -61,8 +62,9 @@ test.describe('Flight Booking Journey', () => {
 
   test('User can search, select cabin and seat, confirm booking, and view it on profile', async ({ page }) => {
     // Find an upcoming flight instance from the seeded database to make search reliable
-    const targetFlight = await prisma.flight.findFirst({
+    const targetFlightRow = await prisma.flight.findFirst({
       where: {
+        durationMinutes: { not: null },
         departureDate: {
           // This journey proves a provider refund, so choose a departure that
           // is unambiguously outside the 24-hour no-refund window.
@@ -76,14 +78,31 @@ test.describe('Flight Booking Journey', () => {
       }
     });
 
-    if (!targetFlight) {
+    if (!targetFlightRow) {
       throw new Error('No upcoming flights found in the seeded database');
     }
+    const targetFlight = withRouteLabels(targetFlightRow);
+
+    const departure = flightDeparture(targetFlight);
+    const arrival = flightArrival({
+      ...targetFlight,
+      durationMinutes: targetFlight.durationMinutes!,
+    });
+    const arrivalDay = arrival.dayOffset === 1
+      ? ' (next day)'
+      : arrival.dayOffset < 0
+        ? ' (previous day)'
+        : arrival.dayOffset > 1
+          ? ` (${arrival.dayOffset} days later)`
+          : '';
+    const expectedDeparture = `Departs ${departure.readableDate} at ${departure.time} ${departure.zoneLabel}`;
+    const expectedArrival = `Arrives ${arrival.readableDate} at ${arrival.time} ${arrival.zoneLabel}${arrivalDay}`;
+    const expectedDuration = durationLabel(targetFlight.durationMinutes!);
 
     // Search the date at the origin airport. A UTC date can be the following
     // day for an evening departure and would make this seeded journey miss the
     // flight it just selected (#275).
-    await fillOneWayFlightSearch(page, targetFlight);
+    await fillOneWayFlightSearch(page, targetFlightRow);
 
     // Submit search
     await page.click('button:has-text("Find your trip")');
@@ -100,12 +119,12 @@ test.describe('Flight Booking Journey', () => {
     await sortSelect.selectOption('price-desc');
 
     // Verify at least one flight instance is found and click 'Book Now' link
-    const bookNowLink = page.locator('a:has-text("Book Now")').first();
+    const bookNowLink = page.locator(`a[href="/checkout?outbound=${targetFlight.id}"]`);
     await expect(bookNowLink).toBeVisible();
     await bookNowLink.click();
 
     // Expect to be redirected to the booking checkout page
-    await expect(page).toHaveURL(new RegExp(`/checkout\\?outbound=${targetFlight.id}`));
+    await expect(page).toHaveURL(new RegExp(`/checkout\\?outbound=${targetFlight.id}$`));
     await page.setViewportSize({ width: 320, height: 800 });
 
     // --- STEP 1: Traveler Information ---
@@ -139,7 +158,11 @@ test.describe('Flight Booking Journey', () => {
     // Verify booking summary details
     await expect(page.locator('text=Bob Jones').first()).toBeVisible();
     // The seat is printed inside the leg that holds it (#152).
-    await expect(page.getByTestId('review-leg')).toContainText('Seat 11A');
+    const reviewLeg = page.getByTestId('review-leg');
+    await expect(reviewLeg).toContainText('Seat 11A');
+    await expect(reviewLeg).toContainText(expectedDeparture);
+    await expect(reviewLeg).toContainText(expectedArrival);
+    await expect(reviewLeg).toContainText(expectedDuration);
     await expect(page.locator('text=Class: Economy').first()).toBeVisible();
 
     await expect(page.getByText(/server confirms the current fare and seat hold/i)).toBeVisible();
@@ -163,6 +186,10 @@ test.describe('Flight Booking Journey', () => {
     await expect(page.locator('.booking-success-actions')).toHaveCSS('flex-direction', 'column');
     await expect(page.locator('text=Bob Jones').first()).toBeVisible();
     await expect(page.locator('text=11A').first()).toBeVisible();
+    const boardingPass = page.getByTestId('boarding-pass');
+    await expect(boardingPass).toContainText(expectedDeparture);
+    await expect(boardingPass).toContainText(expectedArrival);
+    await expect(boardingPass).toContainText(expectedDuration);
     const persistedBooking = await prisma.booking.findFirstOrThrow({
       where: { user: { email: uniqueEmail } },
       orderBy: { createdAt: 'desc' }
