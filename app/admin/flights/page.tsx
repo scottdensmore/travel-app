@@ -9,6 +9,7 @@ import { safePassengerSelect } from '@/lib/passengerDataAccess';
 import { activeItineraryLegWhere, passengersSeatedOnLeg } from '@/lib/bookingItinerary';
 import { flightRouteInclude, withRouteLabels } from '@/lib/flightRoute';
 import { formatPrice } from '@/lib/bookingPricing';
+import { durationLabel } from '@/lib/flightTime';
 
 export const dynamic = 'force-dynamic';
 
@@ -98,6 +99,7 @@ export default async function AdminFlightsPage() {
                                     <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Flight</th>
                                     <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Route</th>
                                     <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Weekly Schedule</th>
+                                    <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Duration</th>
                                     <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Price</th>
                                     <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase', textAlign: 'right' }}>Actions</th>
                                 </tr>
@@ -116,6 +118,9 @@ export default async function AdminFlightsPage() {
                                         <td style={{ padding: '12px', fontSize: '0.85rem', color: '#e5e7eb' }}>
                                             {getDaysLabel(schedule.daysOfWeek)}
                                         </td>
+                                        <td style={{ padding: '12px', fontSize: '0.9rem', color: '#e5e7eb', whiteSpace: 'nowrap' }}>
+                                            {durationLabel(schedule.durationMinutes)}
+                                        </td>
                                         <td style={{ padding: '12px', fontSize: '0.9rem', color: '#34d399', fontWeight: 'bold' }}>
                                             {formatPrice(schedule.priceCents ?? 0)}
                                         </td>
@@ -126,7 +131,7 @@ export default async function AdminFlightsPage() {
                                 ))}
                                 {schedules.length === 0 && (
                                     <tr>
-                                        <td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.4)' }}>
+                                        <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.4)' }}>
                                             No flight templates declared yet. Use the form on the left to add one!
                                         </td>
                                     </tr>
