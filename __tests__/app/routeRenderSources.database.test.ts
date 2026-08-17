@@ -65,7 +65,11 @@ beforeAll(async () => {
     created.flightIds.push(flight.id);
 
     const user = await prisma.user.create({
-        data: { id: `route-render-${randomUUID()}`, email: `route-render-${randomUUID()}@example.com` },
+        data: {
+            id: `route-render-${randomUUID()}`,
+            email: `route-render-${randomUUID()}@example.com`,
+            timeZone: 'America/Los_Angeles',
+        },
     });
     userId = user.id;
     created.userIds.push(user.id);
@@ -186,6 +190,28 @@ describe('the route a page renders', () => {
             to: DESTINATION,
             durationMinutes: 245,
         });
+        expect((await checkout() as React.ReactElement<{ accountTimeZone: string }>).props.accountTimeZone)
+            .toBe('America/Los_Angeles');
+    });
+
+    it('falls back to UTC rather than labeling an unknown saved zone', async () => {
+        await prisma.user.update({
+            where: { id: userId },
+            data: { timeZone: 'Not/AZone' },
+        });
+
+        try {
+            const checkout = await CheckoutPage({
+                searchParams: Promise.resolve({ outbound: String(flightId) }),
+            }) as React.ReactElement<{ accountTimeZone: string }>;
+
+            expect(checkout.props.accountTimeZone).toBe('UTC');
+        } finally {
+            await prisma.user.update({
+                where: { id: userId },
+                data: { timeZone: 'America/Los_Angeles' },
+            });
+        }
     });
 
     it('comes from the airports on the profile', async () => {
