@@ -113,4 +113,18 @@ describe('active itinerary page reads', () => {
         expect(flightFindMany.mock.calls[0][0].include.itineraryLegs.where)
             .toEqual({ supersededAt: null });
     });
+
+    it('loads the next seven days as one rolling instant window', async () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-08-16T23:30:00.000Z'));
+        try {
+            await AdminFlightsPage();
+
+            expect(flightFindMany.mock.calls[0][0].where.departureDate).toEqual({
+                gte: new Date('2026-08-16T23:30:00.000Z'),
+                lt: new Date('2026-08-23T23:30:00.000Z'),
+            });
+        } finally {
+            jest.useRealTimers();
+        }
+    });
 });

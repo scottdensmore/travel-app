@@ -17,16 +17,19 @@ export default async function AdminFlightsPage() {
         orderBy: { flightNumber: 'asc' }
     });
 
-    const today = new Date();
-    const utcToday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-    const next7Days = new Date(utcToday);
-    next7Days.setUTCDate(utcToday.getUTCDate() + 7);
+    // This board spans every origin, so it has no single local calendar day.
+    // "Next 7 Days" is a rolling operational horizon from this request's
+    // instant, not seven UTC dates (which clipped Miami and admitted Tokyo at
+    // opposite edges). Keep the upper bound half-open so adjacent windows do
+    // not both claim an occurrence exactly seven days away (#235).
+    const windowStart = new Date();
+    const windowEnd = new Date(windowStart.getTime() + 7 * 24 * 60 * 60 * 1000);
 
     const flights = await prisma.flight.findMany({
         where: {
             departureDate: {
-                gte: utcToday,
-                lte: next7Days
+                gte: windowStart,
+                lt: windowEnd
             }
         },
         include: {
