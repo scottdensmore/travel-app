@@ -453,6 +453,7 @@ describe('BookingCheckoutWizard', () => {
             });
         mockBookFlightAction.mockResolvedValue({
             id: 12345,
+            createdAt: new Date('2026-07-01T00:30:00.000Z'),
             totalPriceCents: 10000,
             // The booking reports one seat per leg, in leg order; the cabin
             // comes from the request rather than the traveller row (#137).
@@ -754,6 +755,7 @@ describe('BookingCheckoutWizard', () => {
     it('announces and visibly disables the confirmation action while booking', async () => {
         let resolveBooking!: (value: {
             id: number;
+            createdAt: Date;
             totalPriceCents: number | null;
             passengers: Array<{ firstName: string; lastName: string; seatNumbers: string[]; cabinClass: string }>;
         }) => void;
@@ -785,6 +787,7 @@ describe('BookingCheckoutWizard', () => {
         await act(async () => {
             resolveBooking({
                 id: 12345,
+                createdAt: new Date('2026-07-01T00:30:00.000Z'),
                 totalPriceCents: 10000,
                 passengers: [{ firstName: 'Bob', lastName: 'Jones', seatNumbers: ['11C'], cabinClass: 'ECONOMY' }]
             });
@@ -1073,7 +1076,14 @@ describe('BookingCheckoutWizard', () => {
         const renderRoundTrip = (
             occupied: string[][] = [[], []],
             flights = [outboundFlight, inboundFlight],
-        ) => render(<BookingCheckoutWizard flights={flights} occupiedSeats={occupied} />);
+            accountTimeZone = 'UTC',
+        ) => render(
+            <BookingCheckoutWizard
+                flights={flights}
+                occupiedSeats={occupied}
+                accountTimeZone={accountTimeZone}
+            />,
+        );
 
         const fillTraveler = (container: HTMLElement) => {
             fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Ada' } });
@@ -1505,7 +1515,17 @@ describe('BookingCheckoutWizard', () => {
         });
 
         it('books both legs with the seat chosen for each', async () => {
-            mockBookFlightAction.mockResolvedValue({ id: 900, bookingReference: 'RT12345' });
+            mockBookFlightAction.mockResolvedValue({
+                id: 900,
+                createdAt: new Date('2026-07-01T00:30:00.000Z'),
+                totalPriceCents: 25000,
+                passengers: [{
+                    firstName: 'Ada',
+                    lastName: 'Lovelace',
+                    seatNumbers: ['11A', '12C'],
+                    cabinClass: 'ECONOMY',
+                }],
+            });
 
             const { container } = renderRoundTrip();
             fillTraveler(container);
@@ -1553,6 +1573,7 @@ describe('BookingCheckoutWizard', () => {
             // e-ticket (#137).
             mockBookFlightAction.mockResolvedValue({
                 id: 900,
+                createdAt: new Date('2026-07-01T00:30:00.000Z'),
                 totalPriceCents: 25000,
                 passengers: [{
                     firstName: 'Ada',
@@ -1562,7 +1583,11 @@ describe('BookingCheckoutWizard', () => {
                 }],
             });
 
-            const { container } = renderRoundTrip();
+            const { container } = renderRoundTrip(
+                [[], []],
+                [outboundFlight, inboundFlight],
+                'America/Los_Angeles',
+            );
             fillTraveler(container);
             fireEvent.click(screen.getByText('Select Seats →'));
 
@@ -1598,6 +1623,13 @@ describe('BookingCheckoutWizard', () => {
             expect(screen.queryByText('11A, 12C')).not.toBeInTheDocument();
 
             const [outboundPass, inboundPass] = screen.getAllByTestId('boarding-pass');
+            for (const boardingPass of [outboundPass, inboundPass]) {
+                const issuedCaption = within(boardingPass).getByText('Issued (America/Los_Angeles)');
+                expect(issuedCaption).toHaveStyle({ color: '#f3f0ff' });
+                expect(boardingPass).toHaveTextContent('June 30, 2026 at 5:30 PM PDT');
+                expect(within(boardingPass).getByText('June 30, 2026 at 5:30 PM PDT'))
+                    .toHaveAttribute('datetime', '2026-07-01T00:30:00.000Z');
+            }
             expect(outboundPass).toHaveTextContent('Departs Jun 30, 2026 at 03:00 PDT');
             expect(outboundPass).toHaveTextContent('Arrives Jun 30, 2026 at 13:00 EDT');
             expect(outboundPass).toHaveTextContent('7h 00m');
@@ -1611,6 +1643,7 @@ describe('BookingCheckoutWizard', () => {
             // underscore and capitals — on the artefact people keep (#169).
             mockBookFlightAction.mockResolvedValue({
                 id: 901,
+                createdAt: new Date('2026-07-01T00:30:00.000Z'),
                 totalPriceCents: 25000,
                 passengers: [{
                     firstName: 'Ada',

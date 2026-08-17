@@ -8,6 +8,10 @@ import { flightRouteInclude } from '@/lib/flightRoute';
 import { getOccupiedSeatsAction } from '@/app/actions';
 import BookingCheckoutWizard from '@/components/ui/BookingCheckoutWizard';
 import { MAX_ITINERARY_LEGS } from '@/lib/validation';
+import {
+    DEFAULT_ACCOUNT_TIME_ZONE,
+    normalizeAccountTimeZone,
+} from '@/lib/accountTimeZone';
 
 export const metadata: Metadata = {
     title: 'Checkout',
@@ -70,10 +74,16 @@ export default async function CheckoutPage({ searchParams }: PageProps) {
         notFound();
     }
 
-    const found = await prisma.flight.findMany({
-        where: { id: { in: flightIds } },
-        include: flightRouteInclude,
-    });
+    const [found, account] = await Promise.all([
+        prisma.flight.findMany({
+            where: { id: { in: flightIds } },
+            include: flightRouteInclude,
+        }),
+        prisma.user.findUniqueOrThrow({
+            where: { id: session.user.id },
+            select: { timeZone: true },
+        }),
+    ]);
     const flightsById = new Map(found.map(flight => [flight.id, flight]));
     if (flightsById.size !== flightIds.length) {
         notFound();
@@ -106,6 +116,8 @@ export default async function CheckoutPage({ searchParams }: PageProps) {
             flights={flights}
             occupiedSeats={occupiedSeats}
             cabinClass={searchedCabin}
+            accountTimeZone={normalizeAccountTimeZone(account.timeZone)
+                ?? DEFAULT_ACCOUNT_TIME_ZONE}
         />
     );
 }

@@ -195,6 +195,14 @@ test.describe('Flight Booking Journey', () => {
       where: { user: { email: uniqueEmail } },
       orderBy: { createdAt: 'desc' }
     });
+    await expect(boardingPass).toContainText('Issued (UTC)');
+    await expect(boardingPass).toContainText(
+      formatAccountDateTime(persistedBooking.createdAt, 'UTC'),
+    );
+    await expect(boardingPass.locator('time')).toHaveAttribute(
+      'datetime',
+      persistedBooking.createdAt.toISOString(),
+    );
     const expectedTotal = calculateItineraryTotal([targetFlight.priceCents], [{ cabinClass: 'ECONOMY' }]);
     expect(persistedBooking.totalPriceCents).toBe(expectedTotal.cents);
     expect(persistedBooking.paymentIntentId).toMatch(/^pi_playwright_/);

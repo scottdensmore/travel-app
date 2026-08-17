@@ -14,6 +14,11 @@ import { BRAND } from '@/lib/brand';
 import { cabinLabel, legDirectionLabel } from '@/lib/bookingItinerary';
 import { durationLabel, flightArrival, flightDeparture } from '@/lib/flightTime';
 import CheckoutPaymentForm from '@/components/ui/CheckoutPaymentForm';
+import {
+    DEFAULT_ACCOUNT_TIME_ZONE,
+    formatAccountDateTime,
+    normalizeAccountTimeZone,
+} from '@/lib/accountTimeZone';
 
 interface Flight {
     id: number;
@@ -39,6 +44,8 @@ interface BookingCheckoutWizardProps {
     /// The cabin the customer shopped, so the fare they were quoted is the one
     /// offered here. Ignored when a leg does not operate it.
     cabinClass?: PassengerFormState['cabinClass'];
+    /// Saved customer zone for account events such as ticket issuance.
+    accountTimeZone?: string;
 }
 
 interface PassengerFormState {
@@ -137,7 +144,14 @@ function formatHoldTime(seconds: number): string {
     return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
 }
 
-export default function BookingCheckoutWizard({ flights, occupiedSeats: initialOccupiedSeats, cabinClass: searchedCabin }: BookingCheckoutWizardProps) {
+export default function BookingCheckoutWizard({
+    flights,
+    occupiedSeats: initialOccupiedSeats,
+    cabinClass: searchedCabin,
+    accountTimeZone = DEFAULT_ACCOUNT_TIME_ZONE,
+}: BookingCheckoutWizardProps) {
+    const ticketTimeZone = normalizeAccountTimeZone(accountTimeZone)
+        ?? DEFAULT_ACCOUNT_TIME_ZONE;
     // Seats are chosen one leg at a time: each flight has its own cabin layout,
     // its own seat pattern, and its own occupancy.
     const [activeLegIndex, setActiveLegIndex] = useState<number>(0);
@@ -226,6 +240,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
     const [bookingSecured, setBookingSecured] = useState(false);
     const [bookingResult, setBookingResult] = useState<{
         id: number;
+        createdAt: Date | string;
         totalPriceCents: number | null;
         passengers: ConfirmedPassenger[];
     } | null>(null);
@@ -958,6 +973,7 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
 
             setBookingResult({
                 id: result.id,
+                createdAt: result.createdAt,
                 totalPriceCents: result.totalPriceCents,
                 // The confirmation prints the seat held on each leg, in leg
                 // order, rather than one seat for the whole trip (#137).
@@ -1839,6 +1855,17 @@ export default function BookingCheckoutWizard({ flights, occupiedSeats: initialO
                                             <div style={{ fontSize: '1.1rem', fontWeight: 'bold', marginTop: '3px', color: '#34d399' }}>
                                                 {p.seatNumbers[legIndex]}
                                             </div>
+                                        </div>
+                                        <div>
+                                            <div style={{ fontSize: '0.7rem', color: '#f3f0ff', textTransform: 'uppercase' }}>
+                                                Issued ({ticketTimeZone})
+                                            </div>
+                                            <time
+                                                dateTime={new Date(bookingResult.createdAt).toISOString()}
+                                                style={{ fontSize: '0.8rem', fontWeight: 'bold' }}
+                                            >
+                                                {formatAccountDateTime(bookingResult.createdAt, ticketTimeZone)}
+                                            </time>
                                         </div>
                                         <FlightTimingDetails
                                             flight={legFlight}
