@@ -12,7 +12,7 @@ global.ResizeObserver = class {
     disconnect() {}
 } as unknown as typeof ResizeObserver;
 import ProfileClient from '@/components/ui/ProfileClient';
-import { cancelBookingAction, deleteReviewAction, toggleFavoriteCityGuideAction, changeBookingSeatsAction, getOccupiedSeatsAction, retryBookingRefundAction } from '@/app/actions';
+import { cancelBookingAction, deleteReviewAction, toggleFavoriteCityGuideAction, changeBookingSeatsAction, getOccupiedSeatsAction, retryBookingRefundAction, rebookItineraryAction } from '@/app/actions';
 import type { ReplacementFlightGroup } from '@/lib/itineraryReplacementSearch';
 import { useRouter } from 'next/navigation';
 
@@ -29,6 +29,7 @@ jest.mock('@/app/actions', () => ({
     changeBookingSeatsAction: jest.fn(),
     getOccupiedSeatsAction: jest.fn(),
     retryBookingRefundAction: jest.fn(),
+    rebookItineraryAction: jest.fn(),
 }));
 
 jest.mock('@/components/ui/charts/nextStatusChart', () => () => <div data-testid="status-chart" />);
@@ -40,6 +41,7 @@ const mockToggleFavorite = toggleFavoriteCityGuideAction as jest.Mock;
 const mockChangeBookingSeats = changeBookingSeatsAction as jest.Mock;
 const mockGetOccupiedSeats = getOccupiedSeatsAction as jest.Mock;
 const mockRetryBookingRefund = retryBookingRefundAction as jest.Mock;
+const mockRebookItinerary = rebookItineraryAction as jest.Mock;
 
 const sampleBookings = [
     {
@@ -359,25 +361,28 @@ describe('ProfileClient interactive dashboard', () => {
             ],
         };
 
+        const profile = (
+            bookings: unknown[],
+            replacementOptions: Record<number, ReplacementFlightGroup[]> = {},
+        ) => (
+            <ProfileClient
+                userName="Jane Doe"
+                userAvatar="avatar.png"
+                currentStatus="Gold"
+                currentPoints={4200}
+                bookings={bookings as never}
+                favorites={[]}
+                reviews={[]}
+                activityData={[]}
+                monthlyHistory={[]}
+                renderedAt={new Date('2026-06-01T00:00:00Z').getTime()}
+                replacementOptions={replacementOptions}
+            />
+        );
         const renderBookings = (
             bookings: unknown[],
             replacementOptions: Record<number, ReplacementFlightGroup[]> = {},
-        ) =>
-            render(
-                <ProfileClient
-                    userName="Jane Doe"
-                    userAvatar="avatar.png"
-                    currentStatus="Gold"
-                    currentPoints={4200}
-                    bookings={bookings as never}
-                    favorites={[]}
-                    reviews={[]}
-                    activityData={[]}
-                    monthlyHistory={[]}
-                    renderedAt={new Date('2026-06-01T00:00:00Z').getTime()}
-                    replacementOptions={replacementOptions}
-                />
-            );
+        ) => render(profile(bookings, replacementOptions));
 
         it('lists every leg of the itinerary, in order', () => {
             renderBookings([roundTripBooking]);
@@ -572,7 +577,59 @@ describe('ProfileClient interactive dashboard', () => {
             expect(within(options).getByRole('listitem')).toHaveTextContent('Detroit, USA → Seattle, USA');
             expect(within(options).getByRole('listitem')).toHaveTextContent('Jun 24, 2026');
             expect(options).toHaveTextContent('Your original fare is protected.');
-            expect(options).toHaveTextContent('Contact support to move to one of these flights');
+            expect(options).toHaveTextContent('Choose replacement flights and seats below');
+            expect(within(options).getByRole('button', { name: 'Select replacement seats' }))
+                .toBeInTheDocument();
+        });
+
+        it('keeps rebooking confirmation announced after refreshed booking props arrive', async () => {
+            mockGetOccupiedSeats.mockResolvedValue([]);
+            mockRebookItinerary.mockResolvedValue({ bookingId: 202, status: 'CONFIRMED' });
+            const options: Record<number, ReplacementFlightGroup[]> = {
+                202: [{
+                    fromLegId: 502,
+                    originalFlightNumber: 'GA900',
+                    originalDepartureDate: new Date('2026-06-22T17:00:00Z'),
+                    from: 'Detroit, USA',
+                    to: 'Seattle, USA',
+                    flights: [{
+                        id: 303,
+                        flightNumber: 'MA901',
+                        airline: 'Mona Airways',
+                        from: 'Detroit, USA',
+                        to: 'Seattle, USA',
+                        departureDate: new Date('2026-06-24T17:00:00Z'),
+                        durationMinutes: 290,
+                        status: 'ON_TIME',
+                        firstClassRows: 0,
+                        businessRows: 0,
+                        premiumEconomyRows: 0,
+                        economyRows: 3,
+                        seatPattern: 'AB-CD',
+                    }],
+                }],
+            };
+            const view = renderBookings([disruptedRoundTrip], options);
+
+            fireEvent.click(screen.getByRole('button', { name: 'Select replacement seats' }));
+            const dialog = screen.getByRole('dialog');
+            fireEvent.change(within(dialog).getByLabelText('Replacement flight for GA900'), {
+                target: { value: '303' },
+            });
+            fireEvent.change(await within(dialog).findByLabelText(
+                'Replacement seat for Jane Doe on MA901',
+            ), { target: { value: '1A' } });
+            fireEvent.click(within(dialog).getByRole('button', {
+                name: 'Confirm replacement flights',
+            }));
+
+            const completion = await screen.findByRole('status');
+            await waitFor(() => expect(completion).toHaveFocus());
+            view.rerender(profile([roundTripBooking]));
+            expect(screen.getByRole('status')).toHaveTextContent(
+                'Booking 202 is confirmed on your replacement flights.',
+            );
+            expect(screen.getByRole('status')).toHaveFocus();
         });
 
         it('gives a truthful fallback when the comparable window has no flight', () => {
@@ -639,6 +696,8 @@ describe('ProfileClient interactive dashboard', () => {
                 });
             expect(options).toHaveTextContent('No complete replacement itinerary is available');
             expect(options).not.toHaveTextContent('Your original fare is protected.');
+            expect(within(options).queryByRole('button', { name: 'Select replacement seats' }))
+                .not.toBeInTheDocument();
         });
 
         it('says a plain confirmed status once too', () => {

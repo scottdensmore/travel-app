@@ -13,10 +13,126 @@ import {
     passengerSchema,
     registrationSchema,
     reviewSchema,
+    rebookItineraryRequestSchema,
     scheduleSchema,
     searchFlightsSchema,
     seatChangesSchema
 } from '@/lib/validation';
+
+describe('customer rebooking request integrity', () => {
+    const valid = {
+        bookingId: 42,
+        replacements: [{
+            fromLegId: 501,
+            replacementFlightId: 901,
+            seats: [
+                { passengerId: 'passenger-a', seatNumber: ' 14a ' },
+                { passengerId: 'passenger-b', seatNumber: '14B' },
+            ],
+        }],
+    };
+
+    it('normalizes a complete replacement request', () => {
+        expect(rebookItineraryRequestSchema.parse(valid)).toEqual({
+            ...valid,
+            replacements: [{
+                ...valid.replacements[0],
+                seats: [
+                    { passengerId: 'passenger-a', seatNumber: '14A' },
+                    { passengerId: 'passenger-b', seatNumber: '14B' },
+                ],
+            }],
+        });
+    });
+
+    it('accepts the exact itinerary and passenger limits, then rejects one past each', () => {
+        const seats = Array.from({ length: 9 }, (_, index) => ({
+            passengerId: `passenger-${index}`,
+            seatNumber: `${index + 1}A`,
+        }));
+        const atLimit = {
+            bookingId: 42,
+            replacements: [
+                { fromLegId: 501, replacementFlightId: 901, seats },
+                { fromLegId: 502, replacementFlightId: 902, seats },
+            ],
+        };
+        expect(rebookItineraryRequestSchema.safeParse(atLimit).success).toBe(true);
+        expect(rebookItineraryRequestSchema.safeParse({
+            ...atLimit,
+            replacements: [{
+                ...atLimit.replacements[0],
+                seats: [...seats, { passengerId: 'passenger-9', seatNumber: '10A' }],
+            }],
+        }).success).toBe(false);
+        expect(rebookItineraryRequestSchema.safeParse({
+            ...atLimit,
+            replacements: [...atLimit.replacements, {
+                fromLegId: 503,
+                replacementFlightId: 903,
+                seats,
+            }],
+        }).success).toBe(false);
+    });
+
+    it('rejects empty and unknown nested replacement fields', () => {
+        expect(rebookItineraryRequestSchema.safeParse({
+            bookingId: 42,
+            replacements: [],
+        }).success).toBe(false);
+        expect(rebookItineraryRequestSchema.safeParse({
+            ...valid,
+            replacements: [{ ...valid.replacements[0], clientApproved: true }],
+        }).success).toBe(false);
+        expect(rebookItineraryRequestSchema.safeParse({
+            ...valid,
+            replacements: [{
+                ...valid.replacements[0],
+                seats: [{ ...valid.replacements[0].seats[0], cabinClass: 'FIRST' }],
+            }],
+        }).success).toBe(false);
+    });
+
+    it.each([
+        ['an unknown top-level field', { ...valid, actorUserId: 'forged' }],
+        ['a repeated cancelled leg', {
+            ...valid,
+            replacements: [valid.replacements[0], {
+                ...valid.replacements[0],
+                replacementFlightId: 902,
+            }],
+        }],
+        ['a repeated replacement flight', {
+            ...valid,
+            replacements: [valid.replacements[0], {
+                ...valid.replacements[0],
+                fromLegId: 502,
+            }],
+        }],
+        ['a repeated passenger on one leg', {
+            ...valid,
+            replacements: [{
+                ...valid.replacements[0],
+                seats: [valid.replacements[0].seats[0], {
+                    ...valid.replacements[0].seats[0],
+                    seatNumber: '14C',
+                }],
+            }],
+        }],
+        ['a repeated seat on one leg', {
+            ...valid,
+            replacements: [{
+                ...valid.replacements[0],
+                seats: [valid.replacements[0].seats[0], {
+                    passengerId: 'passenger-b',
+                    seatNumber: '14A',
+                }],
+            }],
+        }],
+    ])('rejects %s', (_name, input) => {
+        expect(rebookItineraryRequestSchema.safeParse(input).success).toBe(false);
+    });
+});
 
 describe('checkout payment request integrity', () => {
     const checkoutId = '8ea59a65-9251-45b3-95d0-3920c49f5735';

@@ -198,6 +198,38 @@ describe('ItineraryRebookingService', () => {
         ));
     });
 
+    it('refuses a customer who does not own the booking after taking the lock', async () => {
+        const scenario = await createDisruptedBooking();
+        const replacement = await createFlight({
+            suffix: 'WRONG-OWNER',
+            departureDate: '2099-05-11T16:00:00.000Z',
+        });
+        const owner = await prisma.user.create({
+            data: {
+                name: 'Booking Owner',
+                email: `rebooking-owner-${randomUUID()}@example.com`,
+                password: 'not-used',
+            },
+        });
+        created.userIds.push(owner.id);
+        await prisma.booking.update({
+            where: { id: scenario.booking.id },
+            data: { userId: owner.id },
+        });
+
+        await expect(new ItineraryRebookingService().rebook({
+            ...replacementRequest(scenario, replacement.id),
+            ownerUserId: randomUUID(),
+        })).rejects.toEqual(new ItineraryRebookingError(
+            'BOOKING_NOT_FOUND',
+            'Booking not found.',
+        ));
+        expect(await prisma.booking.findUniqueOrThrow({
+            where: { id: scenario.booking.id },
+            select: { status: true, rebookings: true },
+        })).toEqual({ status: 'DISRUPTED', rebookings: [] });
+    });
+
     it('locks every flight in ascending order before locking and rereading the booking', async () => {
         const replacement = await createFlight({
             suffix: 'LOCK-FIRST',

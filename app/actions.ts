@@ -17,6 +17,10 @@ import {
 import { createStripePaymentProvider, getStripePublishableKey } from '@/lib/stripePaymentProvider';
 import { PaymentRefundService } from '@/lib/paymentRefundService';
 import { PaymentAttemptReconciliationService } from '@/lib/paymentWebhookService';
+import {
+    ItineraryRebookingError,
+    ItineraryRebookingService,
+} from '@/lib/itineraryRebookingService';
 import CityGuide from '@/lib/types/CityGuide';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -61,6 +65,8 @@ import {
     seatChangesSchema,
     checkoutSeatClaimsSchema,
     checkoutPaymentRequestSchema,
+    rebookItineraryRequestSchema,
+    type RebookItineraryRequest,
     stringIdSchema
 } from '@/lib/validation';
 
@@ -853,6 +859,33 @@ export async function retryBookingRefundAction(bookingId: number) {
             'Your refund is still pending. Please try again later.',
             'payment.refund',
         );
+    }
+}
+
+export async function rebookItineraryAction(request: RebookItineraryRequest) {
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.id;
+    if (!userId) throw new Error('Unauthorized');
+
+    const parsed = parseActionInput(rebookItineraryRequestSchema, request);
+    if (!parsed.ok) return parsed;
+
+    try {
+        const result = await new ItineraryRebookingService().rebook({
+            ...parsed.data,
+            // Both values are server-owned. ownerUserId is rechecked after the
+            // booking lock, while actorUserId records who resolved the disruption.
+            ownerUserId: userId,
+            actorUserId: userId,
+        });
+        revalidatePath('/profile');
+        revalidatePath('/admin');
+        return result;
+    } catch (error) {
+        if (error instanceof ItineraryRebookingError) {
+            return actionValidationFailure(error.message);
+        }
+        throw error;
     }
 }
 

@@ -23,21 +23,23 @@ export class ItineraryRebookingError extends Error {
     }
 }
 
-interface RebookingSeatSelection {
+export interface RebookingSeatSelection {
     passengerId: string;
     seatNumber: string;
 }
 
-interface RebookingLegSelection {
+export interface RebookingLegSelection {
     fromLegId: number;
     replacementFlightId: number;
     seats: RebookingSeatSelection[];
 }
 
-interface RebookItineraryInput {
+export interface RebookItineraryInput {
     bookingId: number;
     replacements: RebookingLegSelection[];
     actorUserId?: string | null;
+    /** When present, the locked booking must still belong to this customer. */
+    ownerUserId?: string;
 }
 
 export interface RebookItineraryResult {
@@ -111,6 +113,10 @@ export class ItineraryRebookingService {
                 },
             });
             if (!booking) {
+                throw refusal('BOOKING_NOT_FOUND', 'Booking not found.');
+            }
+            if (input.ownerUserId && booking.userId !== input.ownerUserId) {
+                // Do not reveal whether another customer's booking ID exists.
                 throw refusal('BOOKING_NOT_FOUND', 'Booking not found.');
             }
             if (booking.status !== 'DISRUPTED') {

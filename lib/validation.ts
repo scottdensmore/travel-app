@@ -383,6 +383,62 @@ export const seatChangesSchema = z.object({
     }
 });
 
+const rebookingSeatSchema = z.object({
+    passengerId: requiredText('Passenger ID', 128),
+    seatNumber: seatNumberSchema,
+}).strict();
+
+const rebookingLegSchema = z.object({
+    fromLegId: positiveId('Leg ID'),
+    replacementFlightId: positiveId('Replacement flight ID'),
+    seats: z.array(rebookingSeatSchema)
+        .min(1, 'Select one replacement seat for every passenger.')
+        .max(MAX_PASSENGERS_PER_BOOKING),
+}).strict().superRefine(({ seats }, context) => {
+    const passengerIds = seats.map(seat => seat.passengerId);
+    const seatNumbers = seats.map(seat => seat.seatNumber);
+    if (new Set(passengerIds).size !== passengerIds.length) {
+        context.addIssue({
+            code: 'custom',
+            path: ['seats'],
+            message: 'Passengers must be unique on each replacement flight.',
+        });
+    }
+    if (new Set(seatNumbers).size !== seatNumbers.length) {
+        context.addIssue({
+            code: 'custom',
+            path: ['seats'],
+            message: 'Seats must be unique on each replacement flight.',
+        });
+    }
+});
+
+export const rebookItineraryRequestSchema = z.object({
+    bookingId: positiveId('Booking ID'),
+    replacements: z.array(rebookingLegSchema)
+        .min(1, 'Choose at least one replacement flight.')
+        .max(MAX_ITINERARY_LEGS),
+}).strict().superRefine(({ replacements }, context) => {
+    const legIds = replacements.map(replacement => replacement.fromLegId);
+    const flightIds = replacements.map(replacement => replacement.replacementFlightId);
+    if (new Set(legIds).size !== legIds.length) {
+        context.addIssue({
+            code: 'custom',
+            path: ['replacements'],
+            message: 'Cancelled legs must be unique.',
+        });
+    }
+    if (new Set(flightIds).size !== flightIds.length) {
+        context.addIssue({
+            code: 'custom',
+            path: ['replacements'],
+            message: 'Replacement flights must be unique.',
+        });
+    }
+});
+
+export type RebookItineraryRequest = z.infer<typeof rebookItineraryRequestSchema>;
+
 export const numericIdSchema = positiveId('ID');
 export const stringIdSchema = requiredText('ID', 128);
 export const flightStatusSchema = z.enum(['ON_TIME', 'DELAYED', 'CANCELLED']);

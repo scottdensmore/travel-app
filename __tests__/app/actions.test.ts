@@ -21,6 +21,7 @@ import {
     startCheckoutPaymentAction,
     retryBookingRefundAction,
     reconcilePaymentAttemptAction,
+    rebookItineraryAction,
 } from '@/app/actions';
 import { getServerSession } from 'next-auth';
 import TravelGuideService from '@/lib/TravelGuideService';
@@ -34,6 +35,10 @@ import {
 import { createStripePaymentProvider, getStripePublishableKey } from '@/lib/stripePaymentProvider';
 import { PaymentRefundService } from '@/lib/paymentRefundService';
 import { PaymentAttemptReconciliationService } from '@/lib/paymentWebhookService';
+import {
+    ItineraryRebookingError,
+    ItineraryRebookingService,
+} from '@/lib/itineraryRebookingService';
 import { revalidatePath } from 'next/cache';
 
 // Keep these heavy/server-only modules out of the unit test.
@@ -84,6 +89,20 @@ jest.mock('@/lib/paymentWebhookService', () => {
         PaymentAttemptReconciliationService: jest.fn().mockImplementation(() => ({
             reconcileAttempt,
         })),
+    };
+});
+
+jest.mock('@/lib/itineraryRebookingService', () => {
+    const rebook = jest.fn();
+    class ItineraryRebookingError extends Error {
+        constructor(readonly code: string, message: string) {
+            super(message);
+            this.name = 'ItineraryRebookingError';
+        }
+    }
+    return {
+        ItineraryRebookingService: jest.fn().mockImplementation(() => ({ rebook })),
+        ItineraryRebookingError,
     };
 });
 
@@ -155,6 +174,7 @@ const mockCancelPayment = new (CheckoutPaymentService as any)().cancelPayment as
 const mockSettleRefund = new (PaymentRefundService as any)({}).settleRefund as jest.Mock;
 const mockReconcilePaymentAttempt = new (PaymentAttemptReconciliationService as any)({})
     .reconcileAttempt as jest.Mock;
+const mockRebookItinerary = new (ItineraryRebookingService as any)().rebook as jest.Mock;
 const mockedCreateStripePaymentProvider = createStripePaymentProvider as jest.Mock;
 const mockedRevalidatePath = revalidatePath as jest.Mock;
 const mockedGetStripePublishableKey = getStripePublishableKey as jest.Mock;
@@ -1111,6 +1131,93 @@ describe('startCheckoutPaymentAction', () => {
                 },
             },
         });
+    });
+});
+
+describe('rebookItineraryAction', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    const input = {
+        bookingId: 42,
+        replacements: [{
+            fromLegId: 501,
+            replacementFlightId: 901,
+            seats: [{ passengerId: 'passenger-a', seatNumber: ' 14a ' }],
+        }],
+    };
+
+    it('rebooks only as the authenticated owner and refreshes both booking views', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        mockRebookItinerary.mockResolvedValue({
+            bookingId: 42,
+            rebookingId: 'rebooking-1',
+            status: 'CONFIRMED',
+            replacements: [{
+                fromLegId: 501,
+                toLegId: 601,
+                replacementFlightId: 901,
+            }],
+        });
+
+        await expect(rebookItineraryAction(input)).resolves.toMatchObject({
+            bookingId: 42,
+            status: 'CONFIRMED',
+        });
+        expect(mockRebookItinerary).toHaveBeenCalledWith({
+            bookingId: 42,
+            replacements: [{
+                fromLegId: 501,
+                replacementFlightId: 901,
+                seats: [{ passengerId: 'passenger-a', seatNumber: '14A' }],
+            }],
+            actorUserId: 'user-123',
+            ownerUserId: 'user-123',
+        });
+        expect(mockedRevalidatePath.mock.calls).toEqual([
+            ['/profile'],
+            ['/admin'],
+        ]);
+    });
+
+    it('rejects unauthenticated and malformed calls before invoking the service', async () => {
+        mockedGetServerSession.mockResolvedValue(null);
+        await expect(rebookItineraryAction(input)).rejects.toThrow('Unauthorized');
+
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        await expect(rebookItineraryAction({ ...input, actorUserId: 'forged' } as never))
+            .resolves.toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR' } });
+        expect(mockRebookItinerary).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['BOOKING_NOT_FOUND', 'Booking not found.'],
+        ['BOOKING_NOT_DISRUPTED', 'Only a disrupted booking can be rebooked.'],
+        ['REPLACEMENT_SET_INVALID', 'Every cancelled active leg must be replaced exactly once.'],
+        ['REPLACEMENT_FLIGHT_INVALID', 'The replacement flight must be a future operating flight on the same route.'],
+        ['SEAT_SELECTION_INVALID', 'Select one replacement seat for every passenger.'],
+        ['SEAT_UNAVAILABLE', 'A selected replacement seat is no longer available.'],
+    ])('returns safe recoverable feedback for %s', async (code, message) => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        mockRebookItinerary.mockRejectedValue(new ItineraryRebookingError(code as never, message));
+
+        await expect(rebookItineraryAction(input)).resolves.toEqual({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message,
+                fields: { _root: [message] },
+            },
+        });
+        expect(mockedRevalidatePath).not.toHaveBeenCalled();
+    });
+
+    it('rethrows unexpected service failures unchanged', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        const unexpected = new Error('private database failure');
+        mockRebookItinerary.mockRejectedValue(unexpected);
+
+        await expect(rebookItineraryAction(input)).rejects.toBe(unexpected);
+        expect(mockedRevalidatePath).not.toHaveBeenCalled();
     });
 });
 
