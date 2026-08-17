@@ -1,0 +1,58 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "e18d7a5b8e72",
+  "session_id": "019ffe5b-1054-7c22-8afc-e97cb84c7b73",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-17T10:18:45.958653667Z",
+  "branch": "agent/237-edit-safe-occurrences",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "__tests__/app/actions.test.ts",
+    "__tests__/app/adminFlightScheduleImpactPage.test.tsx",
+    "__tests__/components/FlightScheduleTermsForm.test.tsx",
+    "__tests__/e2e/rowSnapshot.database.test.ts",
+    "__tests__/lib/flightScheduleProvenanceSchema.test.ts",
+    "__tests__/lib/flightScheduleTermsService.database.test.ts",
+    "__tests__/lib/flightScheduleTermsService.test.ts",
+    "__tests__/lib/validation.test.ts",
+    "__tests__/styles/responsiveDashboards.test.ts",
+    "app/actions.ts",
+    "app/admin/flights/schedules/[scheduleId]/page.tsx",
+    "app/globals.css",
+    "components/ui/FlightScheduleTermsForm.tsx",
+    "e2e/admin.spec.ts",
+    "e2e/helpers/rowSnapshot.ts",
+    "lib/flightScheduleTermsService.ts",
+    "lib/validation.ts",
+    "prisma/migrations/20260817090000_audit_schedule_term_changes/migration.sql",
+    "prisma/schema.prisma"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.6-sol",
+  "turn_id": "f403cce72274",
+  "checkpoint_transcript_start": 34947,
+  "transcript_lines_at_start": 34947,
+  "compact_transcript_start": 5595,
+  "token_usage": {
+    "input_tokens": 561319,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 51027968,
+    "output_tokens": 88426,
+    "api_call_count": 353
+  },
+  "session_metrics": {
+    "turn_count": 18
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-17T10:18:27.358600963Z",
+    "agent_lines": 1696,
+    "agent_removed": 12,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1696,
+    "total_lines_changed": 1708,
+    "agent_percentage": 100,
+    "metric_version": 2
+  }
+}
