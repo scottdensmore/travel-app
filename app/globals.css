@@ -1721,12 +1721,13 @@ footer a:hover {
     display: contents;
   }
 
-  /* Itinerary first, then what the booking costs, what happened to it, and
-     what can be done about it. Unset cells keep source order at 0. */
-  .bookings-table td[data-label='Price'] { order: 1; }
-  .bookings-table td[data-label='Status'] { order: 2; }
-  .bookings-table .replacement-flight-row td { order: 3; }
-  .bookings-table .booking-actions-cell { order: 4; }
+  /* Itinerary first, then when it was booked, what it costs, what happened to
+     it, and what can be done about it. Unset cells keep source order at 0. */
+  .bookings-table td[data-label='Booked'] { order: 1; }
+  .bookings-table td[data-label='Price'] { order: 2; }
+  .bookings-table td[data-label='Status'] { order: 3; }
+  .bookings-table .replacement-flight-row td { order: 4; }
+  .bookings-table .booking-actions-cell { order: 5; }
 
   /* Off-screen rather than `display: none`: the headings still name the
      columns for anything reading the table linearly. */

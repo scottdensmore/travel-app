@@ -125,6 +125,25 @@ describe('customer-safe profile payment history', () => {
             .toBe(formatAccountDateTime(bookingCreatedAt, 'America/Los_Angeles'));
     });
 
+    it('hands the client a truthful UTC fallback for an unknown saved zone', async () => {
+        await prisma.user.update({
+            where: { id: userId },
+            data: { timeZone: 'Not/AZone' },
+        });
+
+        try {
+            const props = await profileProps();
+            expect(props.accountTimeZone).toBe('UTC');
+            expect(props.activityData[0].date)
+                .toBe(formatAccountDateTime(bookingCreatedAt, 'UTC'));
+        } finally {
+            await prisma.user.update({
+                where: { id: userId },
+                data: { timeZone: 'America/Los_Angeles' },
+            });
+        }
+    });
+
     it('projects only receipt fields for a captured booking', async () => {
         const booking = (await profileBookings()).find(row => row.id === bookingId);
 
