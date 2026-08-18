@@ -25,7 +25,12 @@ jest.mock('@/app/actions', () => ({
 jest.mock('react-simple-maps', () => ({
     ComposableMap: ({ children }: any) => <svg data-testid="map">{children}</svg>,
     Geographies: ({ children }: any) => children({ geographies: [{ rsmKey: '1' }] }),
-    Geography: () => <path data-testid="geography" />,
+    // Forwards the two props the component sets deliberately. The real
+    // `Geography` puts them on the `path` it renders, so this is what the fix
+    // actually consists of.
+    Geography: ({ tabIndex, ...props }: any) => (
+        <path data-testid="geography" tabIndex={tabIndex} aria-hidden={props['aria-hidden']} />
+    ),
     Marker: ({ children, onClick }: any) => <g onClick={onClick} data-testid="marker">{children}</g>,
 }));
 
@@ -262,5 +267,128 @@ describe('TravelGuideClient', () => {
         const submitButton = screen.getByRole('button', { name: 'Submit Review' });
         fireEvent.click(submitButton);
         expect(mockSubmitReview).not.toHaveBeenCalled();
+    });
+});
+
+describe('the travel guide map, as assistive technology and a keyboard meet it', () => {
+    it('keeps the decorative country outlines out of the tab order', () => {
+        render(
+            <TravelGuideClient
+                cities={sampleCities as never}
+                initialFavorites={[]}
+            />
+        );
+
+        // `react-simple-maps` renders every country as a focusable `path` with no
+        // accessible name and no role. There are 202 of them on the real map and
+        // 176 are clipped outside the viewBox, so a keyboard user reached the first
+        // city marker on tab stop 209 having passed 202 stops that announce nothing
+        // and cannot be seen. The interactive things here are the markers.
+        for (const outline of screen.getAllByTestId('geography')) {
+            expect(outline).toHaveAttribute('tabindex', '-1');
+            expect(outline).toHaveAttribute('aria-hidden', 'true');
+        }
+    });
+});
+
+describe('selecting a city', () => {
+    let scrollIntoView: jest.SpyInstance;
+
+    beforeEach(() => {
+        scrollIntoView = jest
+            .spyOn(Element.prototype, 'scrollIntoView')
+            .mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+        scrollIntoView.mockRestore();
+    });
+
+    it('brings its panel into view, because stacked it is a screen away', () => {
+        render(
+            <TravelGuideClient
+                cities={sampleCities as never}
+                initialFavorites={[]}
+            />
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Paris, France' }));
+
+        // Stacked, the detail panel renders below a ten-item list and lands about
+        // 1200px past the fold, so selecting a city changed nothing a customer
+        // could see. `nearest` scrolls the least it can, and nothing at all when
+        // the panel is already visible -- which is the desktop case this must not
+        // yank around.
+        expect(scrollIntoView).toHaveBeenCalledWith(
+            expect.objectContaining({ block: 'nearest' }),
+        );
+    });
+
+    it('reveals the panel even when the city is already selected', () => {
+        render(
+            <TravelGuideClient
+                cities={sampleCities as never}
+                initialFavorites={[]}
+            />
+        );
+
+        // Detroit is selected on mount, so this is the most likely first tap on a
+        // phone -- and it sets identical state, which React bails out of. An effect
+        // keyed on the selection therefore never ran, and the panel 1200px below the
+        // fold stayed there.
+        fireEvent.click(screen.getByRole('button', { name: 'Detroit, USA' }));
+
+        expect(scrollIntoView).toHaveBeenCalledWith(
+            expect.objectContaining({ block: 'nearest' }),
+        );
+    });
+
+    it('moves focus to the panel it scrolled to', () => {
+        render(
+            <TravelGuideClient
+                cities={sampleCities as never}
+                initialFavorites={[]}
+            />
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Paris, France' }));
+
+        // Scrolling alone left focus on the control the customer had just pressed,
+        // now off-screen above, so the next Tab scrolled back up and the panel could
+        // not be operated by keyboard. Moving focus is also the only thing here that
+        // announces the change.
+        expect(screen.getByRole('region', { name: 'Paris guide' })).toHaveFocus();
+    });
+
+    it('does not scroll the page on load', () => {
+        render(
+            <TravelGuideClient
+                cities={sampleCities as never}
+                initialFavorites={[]}
+            />
+        );
+
+        // A city is selected on mount, so an effect keyed only on the selection
+        // fires immediately and scrolled the page under a customer who had just
+        // arrived and asked for nothing.
+        expect(scrollIntoView).not.toHaveBeenCalled();
+    });
+
+    it('does not scroll when the selection is cleared', () => {
+        render(
+            <TravelGuideClient
+                cities={sampleCities as never}
+                initialFavorites={[]}
+            />
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Paris, France' }));
+        scrollIntoView.mockClear();
+
+        fireEvent.click(screen.getByRole('button', { name: /All destinations/ }));
+
+        // Going back to the list is not a selection, and scrolling somewhere on the
+        // way out would move the page under a customer who just asked to leave.
+        expect(scrollIntoView).not.toHaveBeenCalled();
     });
 });

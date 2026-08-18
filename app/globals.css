@@ -8,6 +8,36 @@
   :root {
     --background: 240 15% 9%;
     --foreground: 0 0% 98%;
+    /*
+     * The sticky header's height, measured rather than assumed.
+     *
+     * It was hard-coded as 72px in four places and is actually **89px** at every
+     * width from 860 up. That 17px error meant the travel guide's panels were
+     * taller than the space below the header, putting part of them under the fold,
+     * and aimed `position: sticky` at a line above the header's own bottom edge.
+     *
+     * Valid for the single-row header only. It wraps to ~115px between 700 and 840
+     * and ~103px at or below 600 -- both below the 1100px breakpoint where the
+     * guide stops depending on this, so no rule that uses it is evaluated at a
+     * width where it is wrong. Anything new that needs it below 900 needs a
+     * measurement, not this token (see #311, which is about that header wrapping).
+     */
+    --header-height: 89px;
+    /*
+     * A ceiling for the header's height at ANY width, used for scroll offsets.
+     *
+     * Deliberately not a measurement. The header is 89px in one row, but its logo
+     * and page-title wrap at narrow widths -- about 115px between 700 and 840, and
+     * about 103px at or below 600, where `flex-wrap: wrap` is set explicitly -- and
+     * the amount depends on the page title's text, so no single number is right.
+     *
+     * The error is asymmetric, which is why a ceiling is the correct shape: too
+     * large leaves a little extra space above the target, and too small parks the
+     * target underneath a sticky, translucent, `z-index: 1000` header where its
+     * controls cannot be clicked. The e2e spec asserts this stays at or above the
+     * header it is measured against rather than asserting the number.
+     */
+    --header-scroll-offset: 120px;
     --card: 240 15% 12%;
     --card-foreground: 0 0% 98%;
     --popover: 240 15% 12%;
@@ -103,7 +133,7 @@ header nav ul li.selected a {
 
 /* Page Container and Backgrounds */
 .page-container {
-  min-height: calc(100vh - 72px - 224px);
+  min-height: calc(100vh - var(--header-height) - 224px);
   padding: 40px 20px;
   display: flex;
   flex-direction: column;
@@ -479,35 +509,156 @@ button:active, button[type="submit"]:active {
   color: #fff;
 }
 
-/* Travel Guide Map and Sidebar */
+/*
+ * Travel Guide map and sidebar.
+ *
+ * Two panels side by side above 900px and stacked below it. Both are in normal
+ * flow, which is the whole correction (#78): the sidebar used to be
+ * `position: absolute; right: 0` while the map took `width: calc(100% - 472px)`,
+ * and the two disagreed about which box they were measuring against.
+ *
+ * The arithmetic of that disagreement, because it is worth not repeating. This
+ * element carries `.page-container` as well, so it inherited
+ * `flex-direction: column`, `align-items: center` and `padding: 40px 20px`. The
+ * map was therefore *centred* in the content box at `W - 40 - 472` wide, putting
+ * its left edge at a constant `20 + 472/2 = 256` and its right edge at `W - 256`,
+ * while the absolute sidebar began at `W - 472` against the padding box. The
+ * overlap was `(W - 256) - (W - 472)` = **216px at every width**, measured at 768
+ * and at 1440 alike -- and below 512px the map's width computed negative, clamped
+ * to zero, and the sidebar's left edge went to `W - 472` = -82px at 390, which no
+ * scrolling reaches because an absolute box with a negative offset does not extend
+ * the scroll region.
+ *
+ * So `.guide` overrides all three inherited properties rather than working around
+ * them. This is a full-bleed map, not a card in a padded column.
+ */
 .guide {
   display: flex;
+  flex-direction: row;
+  align-items: stretch;
   position: relative;
+  padding: 0;
+  min-width: 0;
   background-color: #0b0a10;
   color: #fff;
 }
 
 .map {
-  width: calc(100% - 472px);
-  height: calc(100vh - 72px);
-  position: sticky;
-  top: 72px;
+  /* Takes what the sidebar leaves, rather than subtracting a number that has to
+     agree with the sidebar's width and with this container's padding. */
+  flex: 1 1 auto;
+  min-width: 0;
+  height: calc(100vh - var(--header-height));
+  /*
+   * A centring, clipping box.
+   *
+   * The map is an aspect-locked SVG (`viewBox="0 0 800 500"`) with `width: 100%`,
+   * so it keeps its intrinsic height whatever this box says. Given a fixed height
+   * it therefore spilled *out* of the panel -- 157px past the bottom at 900px wide,
+   * painting through the 85%-opaque sidebar so that Cuba and the Caribbean ghosted
+   * behind the DESTINATIONS heading -- or, at narrow widths, left 136px of dead
+   * gradient below itself. Clipping stops the spill; centring turns the leftover
+   * into a symmetric letterbox instead of a hole at the bottom; and both together
+   * put `.guide-map-state` in the middle of the panel rather than alone in its
+   * top-left corner.
+   */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
   background: radial-gradient(circle at center, #1b192e 0%, #0d0c14 100%);
 }
 
+/*
+ * Where a selected city's panel comes to rest when it is scrolled into view.
+ *
+ * Without this it landed at y=0, underneath the header. `scrollIntoView` with
+ * `block: 'nearest'` aligns the element's *start* with the scrollport's start when
+ * the element is taller than the scrollport -- which this panel is, stacked -- so
+ * "nearest" is start-aligned here, not minimally-adjusted. That put the panel's
+ * own actions row, the back button and the favourite toggle, behind the header and
+ * out of reach of a click.
+ */
+.guide-extra {
+  scroll-margin-top: var(--header-scroll-offset);
+}
+
+/* Fit the drawing to the panel. `preserveAspectRatio` defaults to `xMidYMid meet`,
+   so it scales down to fit and centres what is left over. */
+.map > svg {
+  width: 100%;
+  height: 100%;
+}
+
 .sticky-sidebar {
-  width: 472px;
+  flex: 0 0 472px;
+  min-width: 0;
+  max-width: 100%;
   background: rgba(15, 10, 25, 0.85);
   backdrop-filter: blur(30px);
   -webkit-backdrop-filter: blur(30px);
   border-left: 1px solid rgba(255, 255, 255, 0.08);
-  position: absolute;
-  top: 0;
-  right: 0;
+  /* Sticky rather than absolute, which is what the class was always called. In
+     flow it can no longer be positioned over its sibling. */
+  position: sticky;
+  top: var(--header-height);
   overflow-y: auto;
-  height: calc(100vh - 72px);
+  /*
+   * Keeps its scrolling to itself. Without this, reaching the end of the list
+   * chained to the document and dragged the whole guide up under the translucent
+   * header, so the city prose and the nav labels were legible through each other.
+   * `.points-activity-table-region` contains its inline scroll for the same reason.
+   */
+  overscroll-behavior: contain;
+  height: calc(100vh - var(--header-height));
   padding: 24px;
   box-sizing: border-box;
+}
+
+/*
+ * Stacked below 1100px.
+ *
+ * 900 was the first choice, because the stylesheet already breaks there. It was
+ * too low: with a fixed 472px sidebar the map column is only 429px at 901px wide,
+ * which draws the world 429x268 in an 811-tall panel -- 68% of the panel empty, the
+ * eastern United States a smudge, and the markers 5px dots. It reads as broken
+ * rather than deliberate. The row only looks intended from about 1100 up:
+ *
+ *     901px  -> map 429 wide, 68% of the panel empty
+ *     1024px -> 552 wide, 58% empty
+ *     1100px -> 628 wide, 52% empty
+ *     1440px -> 968 wide, 27% empty
+ *
+ * Stacked, the map gets the full width instead of what a 472px sidebar leaves, so
+ * 1024 draws it 648x405 rather than 552x345. Wider is genuinely better here.
+ *
+ * Both panels go back to normal flow: a sticky panel whose height is the whole
+ * viewport cannot stack under anything, and the page has to scroll here because
+ * the sidebar's content no longer has its own scrollport.
+ */
+@media (max-width: 1100px) {
+  .guide {
+    flex-direction: column;
+  }
+
+  .map {
+    flex: none;
+    width: 100%;
+    height: 45vh;
+    min-height: 260px;
+    position: static;
+  }
+
+  .sticky-sidebar {
+    flex: none;
+    width: 100%;
+    height: auto;
+    position: static;
+    overflow-y: visible;
+    /* The rule now divides top from bottom rather than left from right. */
+    border-left: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
 }
 
 .guide-list-heading {
@@ -648,6 +799,22 @@ button:active, button[type="submit"]:active {
   font-size: 0.85rem;
   color: #a78bfa;
   font-weight: bold;
+}
+
+/*
+ * The rating select. It had no rule at all, so it inherited white text onto the
+ * user-agent's light control background -- about 1.2:1, which made "Excellent"
+ * invisible in the one control the review journey cannot be completed without.
+ * The same treatment `.rebooking-dialog select` already uses, since a dark
+ * background is what makes the option list legible too.
+ */
+.guide-review-form select {
+  min-height: 44px;
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: #17142d;
+  color: #fff;
 }
 
 .guide-review-form textarea {
