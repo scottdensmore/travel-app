@@ -38,6 +38,9 @@ const PointsActivityTable: React.FC<{
     setData([...activityData])
   }, [activityData])
 
+  // TanStack Table returns functions that React Compiler cannot memoize safely;
+  // the compiler intentionally leaves this component un-memoized.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns: columns(accountTimeZone),
