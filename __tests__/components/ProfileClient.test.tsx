@@ -50,6 +50,7 @@ const mockRebookItinerary = rebookItineraryAction as jest.Mock;
 const sampleBookings = [
     {
         id: 101,
+        reference: 'MA-11111111111111111111',
         createdAt: '2026-06-01T10:00:00Z',
         status: 'CONFIRMED',
         totalPriceCents: 35000,
@@ -154,6 +155,10 @@ describe('ProfileClient interactive dashboard', () => {
 
         // Bookings
         expect(screen.getByText('Gemini Airways GA101')).toBeInTheDocument();
+        expect(screen.getByTestId('booking-row-101'))
+            .toHaveTextContent('Confirmation MA-11111111111111111111');
+        expect(screen.getByText('MA-11111111111111111111'))
+            .toHaveStyle({ whiteSpace: 'nowrap' });
         // Favorites
         expect(screen.getAllByText('Detroit')[0]).toBeInTheDocument();
 
@@ -344,6 +349,7 @@ describe('ProfileClient interactive dashboard', () => {
         const roundTripBooking = {
             ...sampleBookings[0],
             id: 202,
+            reference: 'MA-22222222222222222222',
             totalPriceCents: 66000,
             legs: [
                 {
@@ -617,12 +623,12 @@ describe('ProfileClient interactive dashboard', () => {
 
             const options = within(screen.getByTestId('booking-row-202'))
                 .getByRole('region', {
-                    name: 'Replacement flights within 3 days for booking 202',
+                    name: 'Replacement flights within 3 days for confirmation MA-22222222222222222222',
                 });
             expect(options.closest('td')).toHaveAttribute('data-label', 'Replacement flights');
             expect(options.closest('td')).toHaveAttribute('colspan', '7');
             expect(within(options).getByRole('heading', {
-                name: 'Replacement flights within 3 days for booking 202',
+                name: 'Replacement flights within 3 days for confirmation MA-22222222222222222222',
             }))
                 .toBeInTheDocument();
             expect(within(options).getByRole('listitem')).toHaveTextContent('Mona Airways MA901');
@@ -679,7 +685,7 @@ describe('ProfileClient interactive dashboard', () => {
             await waitFor(() => expect(completion).toHaveFocus());
             view.rerender(profile([roundTripBooking]));
             expect(screen.getByRole('status')).toHaveTextContent(
-                'Booking 202 is confirmed on your replacement flights.',
+                'Confirmation MA-22222222222222222222 is confirmed on your replacement flights.',
             );
             expect(screen.getByRole('status')).toHaveFocus();
         });
@@ -698,7 +704,7 @@ describe('ProfileClient interactive dashboard', () => {
 
             const options = within(screen.getByTestId('booking-row-202'))
                 .getByRole('region', {
-                    name: 'Replacement flights within 3 days for booking 202',
+                    name: 'Replacement flights within 3 days for confirmation MA-22222222222222222222',
                 });
             expect(options).toHaveTextContent(
                 'No complete replacement itinerary is available within three days. Contact support, or cancel for a full refund.',
@@ -744,7 +750,7 @@ describe('ProfileClient interactive dashboard', () => {
 
             const options = within(screen.getByTestId('booking-row-202'))
                 .getByRole('region', {
-                    name: 'Replacement flights within 3 days for booking 202',
+                    name: 'Replacement flights within 3 days for confirmation MA-22222222222222222222',
                 });
             expect(options).toHaveTextContent('No complete replacement itinerary is available');
             expect(options).not.toHaveTextContent('Your original fare is protected.');
@@ -888,8 +894,10 @@ describe('ProfileClient interactive dashboard', () => {
                 }],
             }], {}, 'America/Los_Angeles');
 
-            const receipt = screen.getByRole('article', { name: 'Receipt for booking 202' });
-            expect(receipt).toHaveTextContent('Booking 202');
+            const receipt = screen.getByRole('article', {
+                name: 'Receipt for confirmation MA-22222222222222222222',
+            });
+            expect(receipt).toHaveTextContent('Confirmation MA-22222222222222222222');
             expect(receipt).toHaveTextContent('Paid $655 USD');
             expect(receipt).toHaveTextContent('June 3, 2026 at 7:30 AM PDT');
             expect(receipt).toHaveTextContent('GA101, GA900');
@@ -923,7 +931,9 @@ describe('ProfileClient interactive dashboard', () => {
                 }],
             }]);
 
-            expect(screen.getByRole('article', { name: 'Receipt for booking 202' }))
+            expect(screen.getByRole('article', {
+                name: 'Receipt for confirmation MA-22222222222222222222',
+            }))
                 .toHaveTextContent(copy);
         });
 

@@ -314,7 +314,7 @@ test.describe('A disrupted booking on a phone', () => {
         await page.goto('/profile');
 
         const preview = page.getByRole('region', {
-            name: `Replacement flights within 3 days for booking ${booking.id}`,
+            name: `Replacement flights within 3 days for confirmation ${booking.reference}`,
         });
         await expect(preview).toBeVisible();
         await expect(preview.getByRole('listitem').filter({ hasText: replacement.flightNumber }))
@@ -327,7 +327,9 @@ test.describe('A disrupted booking on a phone', () => {
             .toBe(await page.evaluate(() => document.documentElement.clientWidth));
 
         await preview.getByRole('button', { name: 'Select replacement seats' }).click();
-        const dialog = page.getByRole('dialog', { name: `Rebook booking ${booking.id}` });
+        const dialog = page.getByRole('dialog', {
+            name: `Rebook confirmation ${booking.reference}`,
+        });
         await expect(dialog).toBeVisible();
         const flightChoice = dialog.getByLabel(`Replacement flight for ${flight.flightNumber}`);
         await expect(flightChoice).toBeFocused();
@@ -338,7 +340,7 @@ test.describe('A disrupted booking on a phone', () => {
 
         const completion = page.getByRole('status');
         await expect(completion).toContainText(
-            `Booking ${booking.id} is confirmed on your replacement flights.`,
+            `Confirmation ${booking.reference} is confirmed on your replacement flights.`,
         );
         await expect(completion).toBeFocused();
         const confirmedRow = page.getByTestId(`booking-row-${booking.id}`);

@@ -78,6 +78,7 @@ function renderDialog(
     return render(
         <ItineraryRebookingDialog
             bookingId={42}
+            bookingReference="MA-42424242424242424242"
             passengers={passengers}
             cancelledLegs={legs}
             groups={replacementGroups}
@@ -101,7 +102,9 @@ describe('ItineraryRebookingDialog', () => {
         renderDialog();
 
         fireEvent.click(screen.getByRole('button', { name: 'Select replacement seats' }));
-        const dialog = screen.getByRole('dialog', { name: 'Rebook booking 42' });
+        const dialog = screen.getByRole('dialog', {
+            name: 'Rebook confirmation MA-42424242424242424242',
+        });
         const flightSelects = within(dialog).getAllByLabelText(/Replacement flight for/);
         expect(flightSelects[0]).toHaveFocus();
         expect(within(dialog).getByRole('button', { name: 'Confirm replacement flights' }))
