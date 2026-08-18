@@ -1,0 +1,5 @@
+Look through the roadmap and pick what we should pick up next. If we can parallelize some of the work we should. Follow AGENTS.md
+
+---
+
+Ok lets do that slice and we should file and issue for the other finding. Also we should fix the lint warnings
