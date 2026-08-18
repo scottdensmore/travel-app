@@ -1,0 +1,169 @@
+Ok lets merge. Then lets look through the project and determine what work is next and if we can pick up anything in parallel then we should do that
+
+---
+
+<task-notification>
+<task-id>a1b31257aadeb2b7c</task-id>
+<tool-use-id>toolu_011pCZgm5Auh3BPcSzmQo5Q9</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/3c1f314f-5bc6-4f63-b253-d784d069272c/tasks/a1b31257aadeb2b7c.output</output-file>
+<status>completed</status>
+<summary>Agent "Issue housekeeping from triage" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Done. Working tree untouched (same 12 modified files + 1 untracked migration dir as at session start), all seven issues still open, no labels changed, nothing closed, no new issues.
+
+## Commented on all six (7 issues total)
+
+| Issue | Comment | Verdict |
+|---|---|---|
+| [#78](https://github.com/scottdensmore/travel-app/issues/78#issuecomment-5333448540) | task-by-task breakdown + residue | verified, one correction |
+| [#256](https://github.com/scottdensmore/travel-app/issues/256#issuecomment-5333451755) | evidence + closure recommendation | verified fixed |
+| [#159](https://github.com/scottdensmore/travel-app/issues/159#issuecomment-5333457299) | fixed/remaining split | verified, two file refs wrong |
+| [#290](https://github.com/scottdensmore/travel-app/issues/290#issuecomment-5333460927) | corrected file + numbers | verified exactly |
+| [#185](https://github.com/scottdensmore/travel-app/issues/185#issuecomment-5333464874) | scope correction | verified, one bound wrong |
+| [#210](https://github.com/scottdensmore/travel-app/issues/210#issuecomment-5333468697) | corrected scope | verified, more is fixed than claimed |
+| [#199](https://github.com/scottdensmore/travel-app/issues/199#issuecomment-5333473004) | corrected scope + numbers | verified exactly |
+
+All verification was against the `8b2d36c` blobs via `git show`, not the working copy — `app/globals.css` and `app/actions.ts` are dirty from the other stream, so the working copy would have given wrong line numbers.
+
+## Claims I concluded were wrong or imprecise
+
+1. **#78 — wrong acceptance criterion.** The responsive residue is the **first** criterion ("works at supported desktop and mobile widths without overlap"), not the second. The second (accessibility and end-to-end coverage of map/list selection, favorites, reviews) is satisfied by `__tests__/components/TravelGuideClient.test.tsx` and `e2e/travelguide.spec.ts:24`.
+2. **#78 — the overlap is not phone-only.** I measured 216px of the map covered by the sidebar at **both** 768x1024 and 1440x900: `.map` subtracts 472px from the content box while `.sticky-sidebar` is positioned against the padding box. At 390px the map collapses to **0px** and the sidebar's left edge is at **-82px** (unreachable — `scrollWidth` stays 390). Also `.guide`'s `display: flex` never makes a row: `.page-container` sets `flex-direction: column` on the same element.
+3. **#159 — two file references wrong.** `routeActionValidationFailure` is at `components/ui/BookingCheckoutWizard.tsx:844`, not `app/actions.ts` (the field path it consumes is produced at `app/actions.ts:423-431`). And the leg-agnostic string a customer actually sees is `lib/seatHolds.ts:49`, not `FlightBookingService.ts:223` — the latter is a plain `Error`, rethrown by `bookFlightAction`, so it surfaces as the generic "We couldn't confirm your booking." Separately, the step 2→3 hold refusal is **already** leg-aware (`BookingCheckoutWizard.tsx:420-431`).
+4. **#185 — the "inert" bound is wrong as stated.** 21 migrations come after `type_cabin_class`; only **16** set `lock_timeout` themselves. Five inherit the leaked 3s silently on a fresh deploy (`version_itinerary_legs`, `link_flights_to_schedules` — which backfills `Flight` — `audit_schedule_term_changes`, `preserve_schedule_deletion_audit`, `add_account_time_zone`), all taking ACCESS EXCLUSIVE. What keeps it harmless is the fresh-database bound (empty tables), not uniform values. The one-bare-`SET` / sixteen-`SET LOCAL` counts are exact.
+5. **#210 — more is stale than claimed.** `aria-expanded`/`aria-haspopup`/`aria-controls`, `role="dialog"` + `aria-label` on the panel, the restored focus outline, and Escape-to-close were all fixed in `fb3a691` (#243). Also, only **two** of the three contrast bullets are stale — the badge one (3.76:1) stands. Remaining: the `aria-label` override, the badge, and rows still `&lt;div onClick&gt;` at `titlebar.tsx:405-407`.
+
+## Confirmed exactly as given
+
+- #290: 2.35 / 2.23 / 1.82:1 for `#fca5a5` across the gradient stops; the filed 1.09–1.19:1 reproduces for the deleted control's `#ef4444`. `DeleteScheduleButton.tsx` deleted in `774f0ba`; replacement at `FlightScheduleDeletionForm.tsx:76` over `globals.css:416-417`. No global `button:disabled` rule, so the colours apply in the resting disabled state too.
+- #199: 1852/1856/1860 at 0.4 (3.67:1), 1885 at 0.3 (2.67:1), `Issued` fixed at 14.3:1 by `8b7b68d`. There is no `DATE` caption any more.
+- #210 badge 3.76:1; timestamp/empty-state now ~10.15:1.
+
+## Method caveats stated in the comments
+
+I could not use the running app (port 3000/DB in use, and Playwright/dev-server barred). Layout numbers for #78 and #256 come from **Chromium against static replicas** of the real stylesheet and inline styles, written outside the repo — stated as such in both comments. Contrast ratios are computed arithmetically from the declared colours, not sampled pixels. For #256 the seat-map measurement used the default `ABC-DEF` pattern; a wider admin-configured `seatPattern` would scroll inside the fuselage rather than the page, which I flagged.</result>
+<usage><subagent_tokens>131388</subagent_tokens><tool_uses>73</tool_uses><duration_ms>759913</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a7c2c26558c34af3c</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/3c1f314f-5bc6-4f63-b253-d784d069272c/tasks/a7c2c26558c34af3c.output</output-file>
+<status>completed</status>
+<summary>Agent "Rendered review of attestation" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Review complete. Fixture and flight data restored to their original state; `git status` is byte-identical to what I started with.
+
+## Tooling note
+
+The `mcp__plugin_playwright_playwright__browser_*` tools are registered but **cannot launch**: `Chromium distribution 'chrome' is not found at /opt/google/chrome/chrome`. Playwright's bundled Chromium is present, so I drove the journey through throwaway scripts outside the repo (`/tmp/.../scratchpad/*.mjs`). Every result below is from the running app at http://localhost:3000, not from reading JSX.
+
+Two artifacts in the full-page screenshots are **not** defects: the `N` circle bottom-left is the Next.js dev indicator, and the nav bar appearing mid-document is how `fullPage: true` renders a sticky header. The `-08-` and `-11-` captures are viewport-level and are the honest evidence.
+
+---
+
+## Blocking defects
+
+**1. The refusal alert does not clear when the customer complies.** `components/ui/CheckInPanel.tsx:84-103` sets the error; the checkbox `onChange` at `components/ui/CheckInPanel.tsx:283-289` does not clear `feedback`. Press → tick → the button flips to `aria-disabled="false"` while the red `role="alert"` still reads *"Confirm the traveller and document details before checking in."* All three viewports. A customer who has just done the thing is told to do it, under a button that is now live; for a screen-reader user nothing announces that the blocker lifted, and the assertive alert stays in the tree. Evidence: `phone-390x844-11-stale-refusal-after-complying.png`, `desktop-1440x900-11-stale-refusal-after-complying.png`.
+
+**2. The recourse is only reachable by making a mistake.** *"if any of them are wrong, contact us rather than checking in"* lives only in `DOCUMENT_ATTESTATION_REQUIRED` (`lib/checkInPolicy.ts:64-67`), which renders only when the button is pressed unticked. The customer who complies straight away — the normal path — is asked to affirm that details are correct and is never told what to do if they are not. This is the one place I would push on the policy tension you flagged, and it needs no values shown: the attestation sentence (or a line beside it) is the natural home for "if anything is wrong, contact us before checking in." Right now the sentence is a dead end for anyone who cannot honestly tick it.
+
+**3. Two legs of one booking both open ⇒ the identical attestation is asked twice.** Reproduced by moving `UIA-101` into the window (restored afterwards): three panels rendered, two of them the same sentence for booking 16163, on the "Departing" and "Returning" cards. This is not a contrived state — any connecting itinerary has two legs within hours of each other. Then checking in one leg makes the other card's panel vanish with no word said, and its button silently flips from blocked to ready. Evidence: `phone-390x844-09-same-booking-two-open-legs-two-boxes.png`, `phone-390x844-10-same-booking-after-one-leg-confirmed.png`. The per-leg keying in `components/ui/CheckInPanel.tsx:69` is defensible; asking the same question twice on one screen is what needs an answer.
+
+---
+
+## The specific thing you asked verified: two independent boxes
+
+**Passes, in the DOM and in the database.** At all three viewports the two bookings rendered `checkin-attest-18932` and `checkin-attest-18934`; ticking one left the other `checked: false` at every step; after checking in the round trip the Tokyo card still carried an unticked box and an `aria-disabled="true"` button, and the return leg was untouched. The database agreed — booking 16163's two passengers stamped, 16164's `documentsConfirmedAt` still `null`. Evidence: `{phone,tablet,desktop}-*-06-after-checkin-other-booking-still-asks.png` and `-07-second-booking-independent.png`.
+
+Coverage note for the verifier: `e2e/checkin.spec.ts:165` asserts `page.getByRole('checkbox')).toHaveCount(0)` against a single-booking fixture, so no test covers the two-booking case — the thing you most wanted verified is verified only by hand.
+
+---
+
+## Suggestions
+
+**4. Blocked and ready are a 1.54:1 colour change and nothing else.** `#4c1d95` vs `#6d28d9`, same label, same size, `opacity: 1`. `cursor: not-allowed` never happens on touch, and `aria-disabled` is assistive-tech only, so a sighted mouse or touch user gets no signal from the button at all. This is the direct answer to your question: **before pressing it reads as neither blocked nor broken — it reads as ready.** After pressing it reads as blocked, clearly, because the alert is genuinely good. The mitigation is real (the unticked box sits right above it and is visible at every viewport), so I would not call this a 1.4.1 failure — but the honest cursor you added is invisible to most of the people in that state. Side-by-side: `detail-phone-attestation-and-blocked-button.png` vs `detail-phone-attestation-and-ready-button.png`.
+
+**5. Nothing ever confirms the attestation was recorded.** The panel just disappears. A customer returning for the return leg cannot tell whether they confirmed. `documentsConfirmedAt` is already selected on the customer projection (`app/checkin/page.tsx:126-135`) and is a timestamp, so "Traveller details confirmed on 18 Aug" is showable under the policy — it names no category value at all.
+
+**6. Checkbox is 18.39px (1.15rem), under WCAG 2.5.8's 24x24 minimum.** It passes via the exception, because the `&lt;label for&gt;` is an equivalent target (253x110 at phone, 839x44 at desktop) and clicking the text works — I verified both the box and the label text toggle it. Nearest other target is ~130px away. Growing the box to 24px or padding the hit area would remove the need to lean on the exception.
+
+**7. Unchecked box renders as a solid white square** — the UA light-scheme control against a dark panel. It is loud and at a glance can read as filled rather than empty. `color-scheme: dark` on the root would make it dark-with-border and unambiguous. Checked state is unambiguous (purple box, white tick).
+
+**8. Marginal, not a failure:** the checked fill `#7c3aed` against the composited panel `rgb(34,33,41)` is **2.78:1**, just under 3:1 for non-text contrast. The state itself is carried by the white tick at 5.7:1, so 1.4.11 is satisfied — worth knowing only because it is close.
+
+---
+
+## Pre-existing, outside this slice (worth issues)
+
+**9. The sticky header is `rgba(15, 10, 25, 0.75)` with no `backdrop-filter`,** so card content reads straight through the nav labels while scrolled, at all three viewports. This diff touches neither the header nor its CSS. Visible in `desktop-1440x900-08-refusal-alert-viewport.png` (top edge) and `phone-390x844-11-...png`.
+
+**10. Cards are ordered chronologically,** so the round trip's "Returning" card is separated from its "Departing" card by a different booking's card. Pre-existing from slice 1.
+
+---
+
+## Checked and clean
+
+- **No horizontal scroll** at any viewport, before or after check-in: `scrollWidth === clientWidth` at 390, 768 and 1440.
+- **The long sentence wraps correctly.** 166 characters; 5 lines at 390px, 2 at 768 and 1440. The panel stays inside the card with 17px (phone), 24px (tablet), 29px (desktop) to spare — it never pushes the card wide.
+- **Checkbox stays on the first line**, not centred against the block: centre-to-centre delta 1.1px at all three viewports.
+- **Label contrast 12.83:1** on the composited panel — the `12.9:1` in the CSS comment is accurate.
+- **Blocked button text: 10.95:1** white on `#4c1d95`, passing AAA. The state you were least sure of is fine for legibility; the problem in finding 4 is a different axis.
+- **The alert is announced and reachable.** `role="alert"`, `aria-live="assertive"`, programmatically focused, `tabIndex={-1}`, text contrast 11.13:1, and **never under the sticky header** — measured overlap 0px at all three viewports, fully within the viewport each time.
+- **Tab order is logical:** 6 header links → checkbox → Check in button, with the checkbox immediately before the button and DOM order matching visual order. Space ticks, Tab moves on, Enter submits, and focus lands on the success message.
+- **Both focus rings are visible** and settle at the authored `3px solid #f5d0fe` with `outline-offset: 2px`. One measurement wrinkle worth recording so nobody chases it: `transition: all 0.25s ease` at `app/globals.css:35` fades the ring in, so sampling immediately after Tab reads `currentColor` at offset 0. The authored rule at `app/globals.css:2027-2030` is correct and applying; I confirmed via `CSS.getMatchedStylesForNode` that it is the only matching rule.
+- **The box disappears after check-in** for the confirmed booking, at all three viewports.
+- **Console is clean** across the whole journey: no errors, no React warnings. Only the React DevTools notice, `[HMR] connected` and `[Fast Refresh]`, all dev-only.
+
+## Not exercised
+
+- Loading state — `aria-busy` / "Checking in…" flashes for well under the round trip, and I could not hold it open without editing the tree.
+- Server-side refusal rendering (`DOCUMENTS_NOT_CONFIRMED` from `app/actions.ts:790`) — unreachable through the browser, since the client refuses first. It returns the same constant, so the styling is the alert I did exercise.
+- The stale-alert capture (finding 1) is phone and desktop only; I confirmed the behaviour at tablet from state (`tablet-768x1024-03-ticked-stale-alert.png`) but did not take a viewport-level shot.
+
+## Screenshots
+
+All under `/home/scottdensmore/Developer/scottdensmore/travel-app/test-results/ui-review/`:
+
+```
+phone-390x844-01-unconfirmed.png
+phone-390x844-02-refusal-alert.png
+phone-390x844-03-ticked-stale-alert.png
+phone-390x844-03b-ready-to-check-in.png
+phone-390x844-04-checkbox-focus-ring.png
+phone-390x844-05-button-focus-enabled.png
+phone-390x844-06-after-checkin-other-booking-still-asks.png
+phone-390x844-07-second-booking-independent.png
+phone-390x844-08-refusal-alert-viewport.png
+phone-390x844-09-same-booking-two-open-legs-two-boxes.png
+phone-390x844-10-same-booking-after-one-leg-confirmed.png
+phone-390x844-11-stale-refusal-after-complying.png
+tablet-768x1024-01-unconfirmed.png
+tablet-768x1024-02-refusal-alert.png
+tablet-768x1024-03-ticked-stale-alert.png
+tablet-768x1024-03b-ready-to-check-in.png
+tablet-768x1024-04-checkbox-focus-ring.png
+tablet-768x1024-05-button-focus-enabled.png
+tablet-768x1024-06-after-checkin-other-booking-still-asks.png
+tablet-768x1024-07-second-booking-independent.png
+tablet-768x1024-08-refusal-alert-viewport.png
+desktop-1440x900-01-unconfirmed.png
+desktop-1440x900-02-refusal-alert.png
+desktop-1440x900-03-ticked-stale-alert.png
+desktop-1440x900-03b-ready-to-check-in.png
+desktop-1440x900-04-checkbox-focus-ring.png
+desktop-1440x900-05-button-focus-enabled.png
+desktop-1440x900-06-after-checkin-other-booking-still-asks.png
+desktop-1440x900-07-second-booking-independent.png
+desktop-1440x900-08-refusal-alert-viewport.png
+desktop-1440x900-11-stale-refusal-after-complying.png
+detail-phone-attestation-and-blocked-button.png
+detail-phone-attestation-and-ready-button.png
+detail-checkbox-focus-ring-zoom.png
+detail-button-focus-ring-zoom.png
+detail-phone-traveller-row-artifact.png
+```</result>
+<usage><subagent_tokens>128266</subagent_tokens><tool_uses>66</tool_uses><duration_ms>1340473</duration_ms></usage>
+</task-notification>

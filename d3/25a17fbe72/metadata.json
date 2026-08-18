@@ -1,0 +1,45 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "d325a17fbe72",
+  "strategy": "manual-commit",
+  "branch": "feat/checkin-document-attestation",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "__tests__/app/checkIn.database.test.ts",
+    "__tests__/app/checkInPage.test.ts",
+    "__tests__/components/CheckInPanel.test.tsx",
+    "app/actions.ts",
+    "app/checkin/page.tsx",
+    "app/globals.css",
+    "components/ui/CheckInPanel.tsx",
+    "docs/PASSENGER_DATA_POLICY.md",
+    "e2e/checkin.spec.ts",
+    "lib/checkInPolicy.ts",
+    "lib/validation.ts",
+    "prisma/migrations/20260818210000_record_document_attestation/migration.sql",
+    "prisma/schema.prisma"
+  ],
+  "sessions": [
+    {
+      "metadata": "/d3/25a17fbe72/0/metadata.json",
+      "transcript": "/d3/25a17fbe72/0/full.jsonl",
+      "compact_transcript": "/d3/25a17fbe72/0/transcript.jsonl",
+      "content_hash": "/d3/25a17fbe72/0/content_hash.txt",
+      "prompt": "/d3/25a17fbe72/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 136,
+    "cache_creation_tokens": 123345,
+    "cache_read_tokens": 30663086,
+    "output_tokens": 86009,
+    "api_call_count": 68,
+    "subagent_tokens": {
+      "input_tokens": 534,
+      "cache_creation_tokens": 651479,
+      "cache_read_tokens": 21149112,
+      "output_tokens": 218259,
+      "api_call_count": 267
+    }
+  }
+}
