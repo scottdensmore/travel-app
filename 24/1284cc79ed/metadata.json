@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "241284cc79ed",
+  "strategy": "manual-commit",
+  "branch": "agent/84-flight-phases",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "__tests__/app/flightsPage.test.ts",
+    "__tests__/components/FlightStatusBoard.test.tsx",
+    "__tests__/lib/flightPhase.test.ts",
+    "app/flights/page.tsx",
+    "components/ui/FlightStatusBoard.tsx",
+    "e2e/flight-status.spec.ts",
+    "lib/flightPhase.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/24/1284cc79ed/0/metadata.json",
+      "transcript": "/24/1284cc79ed/0/full.jsonl",
+      "compact_transcript": "/24/1284cc79ed/0/transcript.jsonl",
+      "content_hash": "/24/1284cc79ed/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 6979070,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 480093312,
+    "output_tokens": 716430,
+    "api_call_count": 8862
+  }
+}
