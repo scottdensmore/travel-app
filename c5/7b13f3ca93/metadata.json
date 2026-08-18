@@ -3,8 +3,19 @@
   "checkpoint_id": "c57b13f3ca93",
   "strategy": "manual-commit",
   "branch": "feat/77-booking-reference",
-  "checkpoints_count": 1,
+  "checkpoints_count": 2,
   "files_touched": [
+    "__tests__/components/BookingCheckoutWizard.test.tsx",
+    "__tests__/components/ItineraryRebookingDialog.test.tsx",
+    "__tests__/components/ProfileClient.test.tsx",
+    "__tests__/lib/FlightBookingHoldConversion.database.test.ts",
+    "__tests__/lib/bookingReference.database.test.ts",
+    "components/ui/BookingCheckoutWizard.tsx",
+    "components/ui/ItineraryRebookingDialog.tsx",
+    "components/ui/ProfileClient.tsx",
+    "e2e/booking.spec.ts",
+    "e2e/disruption.spec.ts",
+    "prisma/migrations/20260818030000_add_booking_reference/migration.sql",
     "prisma/schema.prisma"
   ],
   "sessions": [
@@ -14,13 +25,20 @@
       "compact_transcript": "/c5/7b13f3ca93/0/transcript.jsonl",
       "content_hash": "/c5/7b13f3ca93/0/content_hash.txt",
       "prompt": "/c5/7b13f3ca93/0/prompt.txt"
+    },
+    {
+      "metadata": "/c5/7b13f3ca93/1/metadata.json",
+      "transcript": "/c5/7b13f3ca93/1/full.jsonl",
+      "compact_transcript": "/c5/7b13f3ca93/1/transcript.jsonl",
+      "content_hash": "/c5/7b13f3ca93/1/content_hash.txt",
+      "prompt": "/c5/7b13f3ca93/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 35138,
+    "input_tokens": 1081188,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 924416,
-    "output_tokens": 4251,
-    "api_call_count": 9230
+    "cache_read_tokens": 75117312,
+    "output_tokens": 96711,
+    "api_call_count": 9865
   }
 }
