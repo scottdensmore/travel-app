@@ -3,11 +3,15 @@
 jest.mock('@/lib/prisma', () => ({
     prisma: { flight: { findMany: jest.fn() } },
 }));
+jest.mock('@/lib/serverClock', () => ({ serverRenderTime: jest.fn() }));
 
 import { prisma } from '@/lib/prisma';
-import FlightsPage from '@/app/flights/page';
+import FlightsPage, { metadata } from '@/app/flights/page';
+import { serverRenderTime } from '@/lib/serverClock';
 
 const findMany = prisma.flight.findMany as unknown as jest.Mock;
+const mockedServerRenderTime = serverRenderTime as unknown as jest.Mock;
+const renderedAt = Date.parse('2026-08-17T12:00:00.000Z');
 
 /**
  * The status board asked for every flight ever scheduled and serialized the lot
@@ -19,6 +23,8 @@ describe('flight status board page', () => {
     beforeEach(() => {
         findMany.mockReset();
         findMany.mockResolvedValue([]);
+        mockedServerRenderTime.mockReset();
+        mockedServerRenderTime.mockResolvedValue(renderedAt);
     });
 
     const queryArgs = async () => {
@@ -27,10 +33,14 @@ describe('flight status board page', () => {
         return findMany.mock.calls[0][0];
     };
 
+    it('describes a scheduled phase rather than promising live on-time data', () => {
+        expect(metadata.description)
+            .toBe('Check a Mona Airways flight\'s scheduled phase or airline-set status.');
+        expect(metadata.description).not.toMatch(/on time|live/i);
+    });
+
     it('asks for a window around now rather than the whole table', async () => {
-        const before = Date.now();
         const { where } = await queryArgs();
-        const after = Date.now();
 
         const { gte, lte } = where.departureDate;
         expect(gte).toBeInstanceOf(Date);
@@ -38,13 +48,23 @@ describe('flight status board page', () => {
 
         // Opens in the past, so a flight that has just left is still answerable,
         // and closes in the future.
-        expect(gte.getTime()).toBeLessThan(before);
-        expect(lte.getTime()).toBeGreaterThan(after);
+        expect(gte.getTime()).toBeLessThan(renderedAt);
+        expect(lte.getTime()).toBeGreaterThan(renderedAt);
 
         // Bounded on both sides: a window measured in days, not the 15 months
         // the seeded table spans.
         const spanDays = (lte.getTime() - gte.getTime()) / 86_400_000;
         expect(spanDays).toBeLessThanOrEqual(10);
+    });
+
+    it('gives the board the same server clock that bounded its query', async () => {
+        const board = await FlightsPage();
+
+        expect(mockedServerRenderTime).toHaveBeenCalledTimes(1);
+        expect(board.props.renderedAt).toBe(renderedAt);
+        const { gte, lte } = findMany.mock.calls[0][0].where.departureDate;
+        expect(gte.toISOString()).toBe('2026-08-17T10:00:00.000Z');
+        expect(lte.toISOString()).toBe('2026-08-24T12:00:00.000Z');
     });
 
     it('caps how many rows it will serialize even inside that window', async () => {

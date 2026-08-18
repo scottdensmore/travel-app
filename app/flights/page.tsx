@@ -3,10 +3,11 @@ import React from 'react';
 import { prisma } from '@/lib/prisma';
 import FlightStatusBoard from '@/components/ui/FlightStatusBoard';
 import { flightRouteInclude, withRouteLabels } from '@/lib/flightRoute';
+import { serverRenderTime } from '@/lib/serverClock';
 
 export const metadata: Metadata = {
     title: 'Flight status',
-    description: 'Check whether a Mona Airways flight is on time, delayed or cancelled.',
+    description: 'Check a Mona Airways flight\'s scheduled phase or airline-set status.',
 };
 
 export const dynamic = 'force-dynamic';
@@ -23,17 +24,16 @@ export const dynamic = 'force-dynamic';
  * a thing people check, and closes a week out to keep the board's own search
  * useful without reaching back toward the whole table.
  *
- * Two hours of history, not a day. Nothing advances `Flight.status` when a
- * flight leaves, so every row of history is a row asserting "On Time" about a
- * departure that has already gone — worse than being absent, because absent
- * reads as ambiguous and "On Time" reads as answered. Against the seed:
+ * Two hours of history, not a day. Airline-set `Flight.status` does not advance
+ * with the clock, so the board derives departed and arrived phases from the
+ * same render instant that bounds this query. Against the seed:
  *
- *     history= 2h -> 28 rows, 1 departed and badged On Time
- *     history= 6h -> 30 rows, 3
- *     history=24h -> 32 rows, 5
+ *     history= 2h -> 28 rows, 1 recent departure
+ *     history= 6h -> 30 rows, 3 recent departures
+ *     history=24h -> 32 rows, 5 recent departures
  *
- * Two keeps the case worth having — "did my flight actually leave?" — and
- * costs one misleading row until #84 marks a departed flight as departed.
+ * Two keeps recent departures answerable without turning the status page into
+ * a historical timetable.
  */
 const HISTORY_HOURS = 2;
 const HORIZON_DAYS = 7;
@@ -49,14 +49,10 @@ const MAX_ROWS = 200;
 /**
  * Durations rather than dates, deliberately.
  *
- * An absolute range reads better — the reader is holding a booking with a date
- * on it — but it cannot be stated correctly yet. The rows format themselves in
- * the viewer's browser timezone, so a range formatted here would sit above rows
- * dated a day either side of it: an Auckland reader saw "covers to Aug 12"
- * above a row dated 13/08. Fixing that means displaying flight times in the
- * airport's timezone, which is #84's job and needs the airport reference it
- * introduces. A duration is relative to an instant, so it is the same sentence
- * everywhere.
+ * An absolute range has no single truthful timezone: each row belongs to the
+ * airport it leaves from, and one board can span many origins and local dates.
+ * A duration is relative to the same server instant everywhere, so the line
+ * cannot contradict any correctly localised row.
  */
 const count = (value: number, unit: string) => `${value} ${unit}${value === 1 ? '' : 's'}`;
 
@@ -65,16 +61,16 @@ const count = (value: number, unit: string) => `${value} ${unit}${value === 1 ? 
  * component body, where the React lint rule rightly objects to it. The page is
  * `force-dynamic`, so this runs per request and the window moves with it.
  */
-function departureWindow(): { start: Date; end: Date } {
-    const now = Date.now();
+function departureWindow(renderedAt: number): { start: Date; end: Date } {
     return {
-        start: new Date(now - HISTORY_HOURS * 60 * 60 * 1000),
-        end: new Date(now + HORIZON_DAYS * 24 * 60 * 60 * 1000),
+        start: new Date(renderedAt - HISTORY_HOURS * 60 * 60 * 1000),
+        end: new Date(renderedAt + HORIZON_DAYS * 24 * 60 * 60 * 1000),
     };
 }
 
 export default async function FlightsPage() {
-    const { start: windowStart, end: windowEnd } = departureWindow();
+    const renderedAt = await serverRenderTime();
+    const { start: windowStart, end: windowEnd } = departureWindow(renderedAt);
 
     const flights = await prisma.flight.findMany({
         where: { departureDate: { gte: windowStart, lte: windowEnd } },
@@ -107,5 +103,5 @@ export default async function FlightsPage() {
         truncated ? count(flights.length, 'flight') : count(HORIZON_DAYS, 'day')
     }`;
 
-    return <FlightStatusBoard flights={routed} coverage={coverage} />;
+    return <FlightStatusBoard flights={routed} renderedAt={renderedAt} coverage={coverage} />;
 }
