@@ -620,6 +620,17 @@ model SeatAssignment {
   /// to overwrite `seatNumber` instead, because the unique index could not tell
   /// a held seat from a released one and so held it forever (#76).
   releasedAt  DateTime?
+  /// When this traveller checked in for this leg, and null until they do.
+  ///
+  /// Here rather than in a table of its own: this row is already "one traveller
+  /// on one leg", which is precisely a check-in's key, and a seat change updates
+  /// it in place so the check-in survives one. Check-in is per leg because the
+  /// window is -- a round trip's return opens a day before the return flight
+  /// (#77).
+  ///
+  /// Not constrained against `releasedAt`. Checking in and then cancelling sets
+  /// both, and that is what happened; readers ask about a live seat instead.
+  checkedInAt DateTime? @db.Timestamptz(3)
 
   /// A traveller sits in exactly one seat on any given leg.
   @@unique([passengerId, legId])

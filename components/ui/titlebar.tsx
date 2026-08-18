@@ -260,6 +260,15 @@ const TitleBar: React.FC = () => {
                             <li className={pathname === '/flights' ? 'selected' : ''}>
                                 <Link href="/flights">Flight Status</Link>
                             </li>
+                            {/* Signed in only. Check-in needs a booking, so an
+                                anonymous visitor following it reaches a page
+                                whose only content is "log in" -- the dead-end
+                                #70 removed the original check-in control for. */}
+                            {session && (
+                                <li className={pathname === '/checkin' ? 'selected' : ''}>
+                                    <Link href="/checkin">Check In</Link>
+                                </li>
+                            )}
                         </>
                     )}
 

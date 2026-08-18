@@ -42,6 +42,32 @@ describe('TitleBar', () => {
         mockGetUserNotifications.mockReturnValue(new Promise(() => { }));
     });
 
+    describe('the Check In entry', () => {
+        beforeEach(() => {
+            (usePathname as jest.Mock).mockReturnValue('/');
+        });
+
+        it('is absent for a visitor who is not signed in', () => {
+            render(<TitleBar />);
+
+            // Check-in needs a booking, so this would lead an anonymous visitor
+            // to a page whose only content is "log in" -- the dead-end #70
+            // removed the original check-in control for.
+            expect(screen.queryByRole('link', { name: 'Check In' })).not.toBeInTheDocument();
+        });
+
+        it('leads to the check-in page once signed in', () => {
+            (require('next-auth/react').useSession as jest.Mock).mockReturnValue({
+                data: { user: { id: 'u1', name: 'Ada' } },
+            });
+
+            render(<TitleBar />);
+
+            expect(screen.getByRole('link', { name: 'Check In' }))
+                .toHaveAttribute('href', '/checkin');
+        });
+    });
+
     describe('when a notifications poll fails', () => {
         let consoleError: jest.SpyInstance;
 
