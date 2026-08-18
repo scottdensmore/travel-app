@@ -8,11 +8,22 @@ import { prisma } from '@/lib/prisma';
 import FlightBookingService from '@/lib/FlightBookingService';
 import { bookHeldFlight } from '@/e2e/helpers/holdBookingSeats';
 import { isActionValidationFailure } from '@/lib/actionResult';
+import { lockFlightForUpdate } from '@/lib/flightLock';
+import { ItineraryRebookingService } from '@/lib/itineraryRebookingService';
 
 // Only the session and cache boundaries are stubbed. The database is real,
 // because what is under test is which rows a check-in stamps and which it must
 // refuse to reach.
 jest.mock('next-auth', () => ({ getServerSession: jest.fn() }));
+// The real lock, wrapped so the call can be asserted. Deleting the
+// `lockFlightForUpdate` line from the action left all of this file green
+// otherwise: nothing here is concurrent, so the one line carrying the strongest
+// claim in the action was the least guarded. Same shape as
+// `itineraryRebookingService.database.test.ts` and `checkoutPaymentService`.
+jest.mock('@/lib/flightLock', () => {
+    const actual = jest.requireActual<typeof import('@/lib/flightLock')>('@/lib/flightLock');
+    return { ...actual, lockFlightForUpdate: jest.fn(actual.lockFlightForUpdate) };
+});
 jest.mock('next/cache', () => ({ revalidatePath: jest.fn() }));
 jest.mock('@/lib/auth', () => ({ authOptions: {} }));
 
@@ -329,6 +340,91 @@ describe('checkInLegAction', () => {
         expect((result as { error: { message: string } }).error.message).toContain('cancelled');
         const after = await prisma.seatAssignment.findMany({ where: { legId: leg.id } });
         expect(after.every(seat => seat.checkedInAt === null)).toBe(true);
+    });
+
+    it("locks the leg's flight before deciding, so a cancellation cannot interleave", async () => {
+        const suffix = `K${Date.now()}`;
+        const flight = await createFlight(`F${suffix}`, 5);
+        const user = await createUser(suffix);
+        const booking = await bookSeats([flight.id], user.id, [
+            { firstName: 'Ada', seatNumbers: ['11A'] },
+        ]);
+        const [leg] = await legsOf(booking.id);
+        const lockSpy = jest.mocked(lockFlightForUpdate);
+        lockSpy.mockClear();
+
+        mockedSession.mockResolvedValue({ user: { id: user.id } });
+
+        try {
+            await checkInLegAction({ bookingId: booking.id, legId: leg.id });
+
+            // `cancelBookingAction` locks every flight on a booking in ascending
+            // id order; this takes the one lock that serialises against it. Under
+            // READ COMMITTED, without it a cancellation can commit between the
+            // eligibility read and the update, checking a traveller in on a
+            // booking that no longer exists to be travelled.
+            expect(lockSpy.mock.calls.map(([, flightId]) => flightId)).toEqual([flight.id]);
+        } finally {
+            lockSpy.mockClear();
+        }
+    });
+
+    it('refuses a superseded leg, whose replacement is the one to check in', async () => {
+        // Superseded through the real rebooking service, not by writing
+        // `supersededAt` directly: a trigger refuses a superseded leg that no
+        // `BookingRebookingLeg` records ("Superseded ItineraryLeg N must be
+        // recorded by a BookingRebookingLeg"), so the orphan state cannot exist
+        // and the only reachable one comes through a rebooking.
+        const suffix = `L${Date.now()}`;
+        const original = await createFlight(`F${suffix}`, 5);
+        // Inside the check-in window, so the second half of this test is about
+        // the superseded filter rather than about the replacement's own window.
+        const replacement = await createFlight(`R${suffix}`, 6);
+        const user = await createUser(suffix);
+        const booking = await bookSeats([original.id], user.id, [
+            { firstName: 'Ada', seatNumbers: ['11A'] },
+        ]);
+        const [oldLeg] = await legsOf(booking.id);
+        const passengerId = oldLeg.seatAssignments[0].passengerId;
+
+        await prisma.flight.update({
+            where: { id: original.id },
+            data: { status: 'CANCELLED' },
+        });
+        await prisma.booking.update({
+            where: { id: booking.id },
+            data: { status: 'DISRUPTED' },
+        });
+
+        await new ItineraryRebookingService().rebook({
+            bookingId: booking.id,
+            // The service scopes the locked booking to this owner when given it.
+            ownerUserId: user.id,
+            replacements: [{
+                fromLegId: oldLeg.id,
+                replacementFlightId: replacement.id,
+                seats: [{ passengerId, seatNumber: '12A' }],
+            }],
+        });
+
+        mockedSession.mockResolvedValue({ user: { id: user.id } });
+
+        // The old leg still exists and still belongs to this booking, so only the
+        // `supersededAt` filter stands between it and a check-in.
+        await expect(
+            checkInLegAction({ bookingId: booking.id, legId: oldLeg.id }),
+        ).rejects.toThrow('Itinerary leg not found');
+
+        const replacementLeg = (await legsOf(booking.id))
+            .find(leg => leg.flightId === replacement.id);
+        expect(replacementLeg).toBeDefined();
+        // And the replacement is checkable in, which is the other half of the
+        // claim: the refusal above is about the superseded row, not the booking.
+        const result = await checkInLegAction({
+            bookingId: booking.id,
+            legId: replacementLeg!.id,
+        });
+        expect(isActionValidationFailure(result)).toBe(false);
     });
 
     it('refuses an unauthenticated caller before reading anything', async () => {

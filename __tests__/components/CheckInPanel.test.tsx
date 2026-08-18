@@ -28,8 +28,9 @@ const leg = (overrides: Partial<CheckInLegView> = {}): CheckInLegView => ({
     statusLabel: 'Check-in open',
     nextStep: 'Confirm your seat to check in for this flight.',
     awaiting: 1,
+    hasOpened: true,
     travellers: [
-        { name: 'Ada Lovelace', seat: 'Seat 11A', cabin: 'Economy', checkedIn: false },
+        { id: 'p1', name: 'Ada Lovelace', seat: 'Seat 11A', cabin: 'Economy', checkedIn: false },
     ],
     ...overrides,
 });
@@ -58,6 +59,7 @@ describe('the check-in page', () => {
             allowed: false,
             reason: 'NOT_YET_OPEN',
             statusLabel: 'Check-in not open yet',
+            hasOpened: false,
             nextStep: 'Check-in opens 24 hours before departure. Come back then, or set a reminder.',
         })]} />);
 
@@ -71,8 +73,8 @@ describe('the check-in page', () => {
         render(<CheckInPanel legs={[leg({
             awaiting: 2,
             travellers: [
-                { name: 'Ada Lovelace', seat: 'Seat 11A', cabin: 'Economy', checkedIn: false },
-                { name: 'Grace Hopper', seat: 'Seat 11B', cabin: 'Economy', checkedIn: false },
+                { id: 'p1', name: 'Ada Lovelace', seat: 'Seat 11A', cabin: 'Economy', checkedIn: false },
+                { id: 'p2', name: 'Grace Hopper', seat: 'Seat 11B', cabin: 'Economy', checkedIn: false },
             ],
         })]} />);
 
@@ -138,8 +140,8 @@ describe('the check-in page', () => {
     it('shows each traveller as checked in or not, in text', () => {
         render(<CheckInPanel legs={[leg({
             travellers: [
-                { name: 'Ada Lovelace', seat: 'Seat 11A', cabin: 'Economy', checkedIn: true },
-                { name: 'Grace Hopper', seat: 'Seat 11B', cabin: 'Economy', checkedIn: false },
+                { id: 'p1', name: 'Ada Lovelace', seat: 'Seat 11A', cabin: 'Economy', checkedIn: true },
+                { id: 'p2', name: 'Grace Hopper', seat: 'Seat 11B', cabin: 'Economy', checkedIn: false },
             ],
         })]} />);
 
@@ -238,6 +240,7 @@ describe('what each card claims', () => {
             allowed: false,
             reason: 'NOT_YET_OPEN',
             statusLabel: 'Check-in not open yet',
+            hasOpened: false,
             nextStep: 'Check-in opens 24 hours before departure.',
         })]} />);
 

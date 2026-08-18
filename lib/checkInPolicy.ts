@@ -115,12 +115,22 @@ export function checkInEligibility(leg: CheckInLeg, now: Date): CheckInEligibili
     if (leg.bookingStatus === 'CANCELLED') return refuse('BOOKING_CANCELLED');
     if (leg.bookingStatus === 'DISRUPTED') return refuse('BOOKING_DISRUPTED');
 
+    // Before `checkedIn`, matching the table above. A traveller who has checked
+    // in and whose flight is then cancelled needs to hear about the flight; being
+    // told "you are checked in, bring photo identification" sends them to an
+    // airport for a flight that is not running.
+    //
+    // Close to unreachable in the running product, and kept anyway:
+    // `updateFlightStatusAction` is the only writer of a CANCELLED flight status
+    // and moves every affected booking to DISRUPTED in the same transaction, and
+    // DISRUPTED is checked above. So this catches the window between those two
+    // facts and any state reached another way, rather than a routine case.
+    if (leg.flightStatus === 'CANCELLED') return refuse('FLIGHT_CANCELLED');
+
     // Before the clock, so that a traveller who has checked in is told so rather
     // than told the desk has closed -- true of every checked-in traveller within
     // the hour before departure, which is most of them.
     if (leg.checkedIn) return refuse('ALREADY_CHECKED_IN');
-
-    if (leg.flightStatus === 'CANCELLED') return refuse('FLIGHT_CANCELLED');
 
     // A delay does not move `Flight.departureDate` -- it is the *scheduled*
     // instant, and airline-set status is a fact the clock does not overwrite
@@ -154,7 +164,7 @@ export function checkInNextStep(reason: CheckInReason): string {
         case 'CLOSED':
             return `Online check-in closed ${CHECK_IN_CLOSES_MINUTES} minutes before departure. Speak to an agent at the airport.`;
         case 'DEPARTED':
-            return 'This flight has departed. Your other flights, if any, are listed above.';
+            return 'This flight has departed. Check in for the rest of your trip from this page.';
         case 'FLIGHT_CANCELLED':
             return 'The airline cancelled this flight. Choose a replacement from your profile, or ask an agent to rebook you.';
         case 'BOOKING_CANCELLED':

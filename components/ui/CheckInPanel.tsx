@@ -5,7 +5,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { checkInLegAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
-import type { CheckInReason } from '@/lib/checkInPolicy';
+import {
+    CHECK_IN_CLOSES_MINUTES,
+    CHECK_IN_OPENS_HOURS,
+    type CheckInReason,
+} from '@/lib/checkInPolicy';
 
 /**
  * One leg of one booking, as the check-in page shows it.
@@ -33,7 +37,13 @@ export interface CheckInLegView {
     nextStep: string;
     /** How many travellers on this leg have still to check in. */
     awaiting: number;
+    /**
+     * Whether the check-in window has opened, decided on the server against the
+     * same instant every time on the card was rendered from.
+     */
+    hasOpened: boolean;
     travellers: Array<{
+        id: string;
         name: string;
         seat: string;
         cabin: string;
@@ -92,7 +102,13 @@ export default function CheckInPanel({ legs }: { legs: CheckInLegView[] }) {
                 message: `Checked in for ${leg.airline} ${leg.flightNumber}.`,
             });
             router.refresh();
-        } catch {
+        } catch (error) {
+            // Logged as well as shown. Every genuine server fault -- a superseded
+            // leg, a transaction timeout while a cancellation holds the flight
+            // lock, a dropped connection -- reaches the customer as the same
+            // sentence, so without this there is nothing anywhere to tell a real
+            // fault from a transient one. `titlebar.tsx` logs its equivalent.
+            console.error('Failed to check in:', error);
             setFeedback({
                 legId: leg.legId,
                 kind: 'error',
@@ -107,10 +123,15 @@ export default function CheckInPanel({ legs }: { legs: CheckInLegView[] }) {
         <div className="page-container checkin">
             <div className="checkin-shell">
                 <h1>Check in</h1>
+                {/* Both numbers come from the policy. Written out as prose they
+                    went on claiming 24 hours after the constant moved, with
+                    nothing failing -- every other mention on this page is
+                    derived. */}
                 <p className="checkin-intro">
-                    Check-in opens 24 hours before each flight leaves and closes
-                    an hour before it. A trip with more than one flight is
-                    checked in one flight at a time.
+                    Check-in opens {CHECK_IN_OPENS_HOURS} hours before each flight
+                    leaves and closes {CHECK_IN_CLOSES_MINUTES} minutes before it.
+                    A trip with more than one flight is checked in one flight at a
+                    time.
                 </p>
 
                 {legs.length === 0 ? (
@@ -178,14 +199,17 @@ export default function CheckInPanel({ legs }: { legs: CheckInLegView[] }) {
                                         <dl className="checkin-facts checkin-window">
                                             <div>
                                                 <dt>
-                                                    {/* Past tense once it has
-                                                        opened. The instant is
-                                                        stated either way, and
-                                                        "opens" beside yesterday
-                                                        read as a contradiction. */}
-                                                    {leg.reason === 'NOT_YET_OPEN'
-                                                        ? 'Check-in opens'
-                                                        : 'Check-in opened'}
+                                                    {/* Past tense once the instant
+                                                        has passed -- not once the
+                                                        reason is something other
+                                                        than NOT_YET_OPEN. A
+                                                        cancelled booking weeks out
+                                                        is neither, and read
+                                                        "opened" about a future
+                                                        date. */}
+                                                    {leg.hasOpened
+                                                        ? 'Check-in opened'
+                                                        : 'Check-in opens'}
                                                 </dt>
                                                 <dd>{leg.opensAtReadable}</dd>
                                             </div>
@@ -198,7 +222,15 @@ export default function CheckInPanel({ legs }: { legs: CheckInLegView[] }) {
                                         {leg.travellers.length > 0 && (
                                             <ul className="checkin-travellers">
                                                 {leg.travellers.map((traveller) => (
-                                                    <li key={`${leg.legId}-${traveller.name}`}>
+                                                    /* Keyed on the traveller, not
+                                                       their name: a booking can
+                                                       carry two people with the
+                                                       same one, and duplicate keys
+                                                       let React reconcile the two
+                                                       rows into each other so a
+                                                       "Checked in" state lands on
+                                                       the wrong person. */
+                                                    <li key={`${leg.legId}-${traveller.id}`}>
                                                         <span className="checkin-traveller-name">
                                                             {traveller.name}
                                                         </span>

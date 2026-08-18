@@ -119,16 +119,70 @@ describe('check-in page', () => {
         await CheckInPage();
 
         const { where, take } = findMany.mock.calls[0][0];
-        const { gte, lte } = where.flight.departureDate;
+        const [ordinary] = where.flight.OR;
 
         // Two hours back, so a flight that has just left is explained rather
         // than absent, and a month forward.
-        expect(renderedAt - gte.getTime()).toBe(2 * HOUR);
-        expect(lte.getTime() - renderedAt).toBe(30 * 24 * HOUR);
+        expect(renderedAt - ordinary.departureDate.gte.getTime()).toBe(2 * HOUR);
+        expect(ordinary.departureDate.lte.getTime() - renderedAt).toBe(30 * 24 * HOUR);
         // `/flights` served 1420 rows into an RSC payload because its query had
-        // no ceiling at all (#153).
+        // no ceiling at all (#153). The ceiling this pins is "bounded at all"
+        // rather than its exact value, so the headroom over MAX_LEGS is
+        // deliberate: the property worth defending is that some limit exists.
         expect(take).toBeGreaterThan(0);
         expect(take).toBeLessThanOrEqual(100);
+    });
+
+    it('reaches further back for a delayed flight, which keeps its scheduled time', async () => {
+        await CheckInPage();
+
+        const { where } = findMany.mock.calls[0][0];
+        const delayed = where.flight.OR.find(
+            (branch: { status?: string }) => branch.status === 'DELAYED',
+        );
+
+        // A delay does not move `departureDate`, so a flight delayed longer than
+        // the ordinary two hours fell off this page while the customer was still
+        // at the airport waiting for it.
+        expect(delayed).toBeDefined();
+        expect(renderedAt - delayed.departureDate.gte.getTime()).toBe(24 * HOUR);
+    });
+
+    it('carries each traveller identity, not just their name', async () => {
+        findMany.mockResolvedValue([leg({
+            passengers: [
+                { id: 'p1', firstName: 'Ada', lastName: 'Lovelace', gender: 'Female' },
+                // A booking really can carry two people with one name.
+                { id: 'p2', firstName: 'Ada', lastName: 'Lovelace', gender: 'Female' },
+            ],
+            seatAssignments: [
+                seat({ passengerId: 'p1', seatNumber: '11A', checkedInAt: new Date(renderedAt - HOUR) }),
+                seat({ passengerId: 'p2', seatNumber: '11B' }),
+            ],
+        })]);
+
+        const [view] = await legsPassedToPanel();
+
+        // Without an id the list keys on the name, and two identical keys let
+        // React reconcile the rows into each other -- landing one traveller's
+        // checked-in state on the other.
+        expect(view.travellers.map(traveller => traveller.id)).toEqual(['p1', 'p2']);
+        expect(view.travellers.map(traveller => traveller.checkedIn)).toEqual([true, false]);
+    });
+
+    it('says whether the window has opened, from the instant rather than the reason', async () => {
+        // A cancelled booking weeks out is not NOT_YET_OPEN, but its opening time
+        // is still in the future -- which is how the card came to say "Check-in
+        // opened" about a date a fortnight away.
+        findMany.mockResolvedValue([leg({ bookingStatus: 'CANCELLED', hoursFromNow: 500 })]);
+        const [future] = await legsPassedToPanel();
+        expect(future.reason).toBe('BOOKING_CANCELLED');
+        expect(future.hasOpened).toBe(false);
+
+        findMany.mockResolvedValue([leg({ bookingStatus: 'CANCELLED', hoursFromNow: 5 })]);
+        const [open] = await legsPassedToPanel();
+        expect(open.reason).toBe('BOOKING_CANCELLED');
+        expect(open.hasOpened).toBe(true);
     });
 
     it('names each leg by its place in the itinerary', async () => {

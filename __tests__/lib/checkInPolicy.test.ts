@@ -138,6 +138,19 @@ describe('states that outrank the clock', () => {
         expect(outcome.reason).toBe('FLIGHT_CANCELLED');
     });
 
+    it('prefers the flight cancellation to a check-in already taken', () => {
+        // Both are true once a traveller checks in and the airline then cancels.
+        // "You are checked in, bring photo identification" sends them to an
+        // airport for a flight that is not running, so the flight wins -- which is
+        // also the order the module's own precedence table states.
+        const outcome = checkInEligibility(
+            leg({ checkedIn: true, flightStatus: 'CANCELLED', departsAt: inHours(5) }),
+            now,
+        );
+
+        expect(outcome.reason).toBe('FLIGHT_CANCELLED');
+    });
+
     it('prefers the booking cancellation to the flight cancellation', () => {
         // Both are true of the same leg after the airline cancels a flight and
         // the customer takes the refund. The booking is the one the customer
@@ -214,6 +227,13 @@ describe('what the customer is told to do next', () => {
             // A refusal with no next step is the defect #77's acceptance
             // criteria name, so an empty string is a failure rather than a gap.
             expect(step.length).toBeGreaterThan(0);
+            // And it has to be prose rather than the reason handed back. A bare
+            // `return reason` satisfies a length check for every one of these,
+            // which made the length assertion nearly free (the enum-leak test
+            // below only looks at three of them, and OPEN has no underscore to
+            // catch). Exhaustiveness itself is carried by the return type.
+            expect(step).not.toBe(reason);
+            expect(step).toMatch(/[a-z]{4,}/);
         }
     });
 

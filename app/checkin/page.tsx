@@ -44,6 +44,17 @@ export const dynamic = 'force-dynamic';
 const HISTORY_HOURS = 2;
 const HORIZON_DAYS = 30;
 
+/**
+ * How far back to reach for a flight the airline has marked delayed.
+ *
+ * `Flight.departureDate` is the *scheduled* instant and a delay does not move it
+ * -- the same fact `checkInPolicy` refuses to call a delayed flight departed for.
+ * Bounding every leg at `HISTORY_HOURS` therefore dropped a flight delayed longer
+ * than that off this page while the customer was still standing in the terminal
+ * waiting for it, which is precisely when they would come looking.
+ */
+const DELAYED_HISTORY_HOURS = 24;
+
 /** A ceiling for a customer with more travel than the window expects. */
 const MAX_LEGS = 60;
 
@@ -79,6 +90,7 @@ export default async function CheckInPage() {
     }
 
     const windowStart = new Date(renderedAt - HISTORY_HOURS * 60 * 60 * 1000);
+    const delayedStart = new Date(renderedAt - DELAYED_HISTORY_HOURS * 60 * 60 * 1000);
     const windowEnd = new Date(renderedAt + HORIZON_DAYS * 24 * 60 * 60 * 1000);
 
     // Scoped to the authenticated owner in the query itself, so no later filter
@@ -89,7 +101,17 @@ export default async function CheckInPage() {
         where: {
             ...activeItineraryLegWhere,
             booking: { userId: session.user.id },
-            flight: { departureDate: { gte: windowStart, lte: windowEnd } },
+            flight: {
+                OR: [
+                    { departureDate: { gte: windowStart, lte: windowEnd } },
+                    // A delayed flight keeps its scheduled instant, so it needs a
+                    // longer reach back or it vanishes mid-delay.
+                    {
+                        status: 'DELAYED',
+                        departureDate: { gte: delayedStart, lte: windowEnd },
+                    },
+                ],
+            },
         },
         orderBy: [{ flight: { departureDate: 'asc' } }, { sequence: 'asc' }],
         take: MAX_LEGS,
@@ -173,6 +195,7 @@ export default async function CheckInPage() {
         const travellers = passengersSeatedOnLeg(leg, leg.booking.passengers)
             .filter(traveller => !traveller.releasedAt)
             .map(traveller => ({
+                id: traveller.id,
                 name: `${traveller.firstName} ${traveller.lastName}`,
                 seat: seatLabel(traveller),
                 cabin: cabinLabel(traveller.cabinClass),
@@ -195,6 +218,12 @@ export default async function CheckInPage() {
             closesAtReadable: boundary(eligibility.closesAt),
             allowed: eligibility.allowed,
             reason: eligibility.reason,
+            // Whether the window has opened, decided against the same server
+            // instant everything else on the card is. Derived from the boundary
+            // rather than from the reason: a cancelled booking three weeks out is
+            // not NOT_YET_OPEN, but its opening time is still in the future, and
+            // labelling that "opened" was the contradiction this replaces.
+            hasOpened: eligibility.opensAt.getTime() <= renderedAt,
             statusLabel: STATUS_LABELS[eligibility.reason],
             nextStep: checkInNextStep(eligibility.reason),
             awaiting: eligibility.awaiting,
