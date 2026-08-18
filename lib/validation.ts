@@ -402,6 +402,20 @@ export const flightBookingServiceSchema = bookingRequestSchema.extend({
 export const checkInRequestSchema = z.object({
     bookingId: positiveId('Booking ID'),
     legId: positiveId('Leg ID'),
+    /**
+     * Whether the customer has just attested that the traveller and document
+     * details given at booking are correct.
+     *
+     * A boolean, and only ever a boolean. `docs/PASSENGER_DATA_POLICY.md` makes
+     * booking creation the only normal write path for a passport number or date
+     * of birth and forbids showing either back to a customer, so check-in cannot
+     * accept those values again -- there is nothing here for them to arrive in,
+     * deliberately.
+     *
+     * Defaults to false so an omitted field is a refusal rather than a silent
+     * confirmation, and so a leg whose party already attested needs no field.
+     */
+    documentsConfirmed: z.boolean().default(false),
 }).strict();
 
 const seatChangeSchema = z.object({

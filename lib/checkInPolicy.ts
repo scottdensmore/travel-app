@@ -41,6 +41,55 @@ export const CHECK_IN_OPENS_HOURS = 24;
  */
 export const CHECK_IN_CLOSES_MINUTES = 60;
 
+/**
+ * What the customer is asked to confirm, and what they are told if they do not.
+ *
+ * Copy rather than policy, but it lives here because `checkInNextStep` already
+ * makes this module the home for check-in wording, and because the wording is
+ * load-bearing: `docs/PASSENGER_DATA_POLICY.md` forbids showing a passport
+ * number or a date of birth back to a customer, so the attestation has to name
+ * the *categories* it covers without displaying a single value.
+ *
+ * Deliberately not a `CheckInReason`. The policy below answers whether a leg may
+ * be checked in by time and status; whether the customer has ticked a box is the
+ * action's input contract, and a union member the policy can never return would
+ * be a lie in the type.
+ */
+export const DOCUMENT_ATTESTATION_LABEL =
+    'I confirm that each traveller\'s name, date of birth and passport details, '
+    + 'as given when this booking was made, are correct and match the document '
+    + 'they will travel on.';
+
+/**
+ * What to do if the details are not right.
+ *
+ * Shown beside the attestation at all times, not only after a refusal. It used to
+ * live in the refusal alone, which meant the only customer who learned there was
+ * a way out was one who had already pressed the button without ticking -- and the
+ * customer who cannot honestly tick the box is exactly the one who needs it. The
+ * sentence above is a dead end without this one.
+ *
+ * There is no self-service correction to offer, and there cannot be: the policy
+ * makes booking creation the only normal write path for these fields. So the
+ * honest recourse is a human.
+ */
+export const DOCUMENT_ATTESTATION_RECOURSE =
+    'We do not show these details back to you. If any of them are wrong, contact '
+    + 'us before checking in rather than confirming:';
+
+/**
+ * Why a check-in was refused when the box was not ticked.
+ *
+ * Says only what is missing. The recourse above is on screen already, and
+ * repeating it here read as a second, different instruction.
+ */
+export const DOCUMENT_ATTESTATION_REQUIRED =
+    'Confirm the traveller and document details before checking in.';
+
+/** Shown once the attestation is on file, so the answer is not just an absence. */
+export const DOCUMENT_ATTESTATION_CONFIRMED =
+    'Traveller and document details confirmed.';
+
 export type CheckInReason =
     /** Inside the window, with the seat still to confirm. */
     | 'OPEN'

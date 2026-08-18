@@ -1993,6 +1993,113 @@ footer a:hover {
   color: #e5e7eb;
 }
 
+/*
+ * The document attestation.
+ *
+ * A real checkbox with a real `<label for>`, so it is reachable by keyboard,
+ * announced with its sentence, and toggled by clicking the text. The sentence is
+ * long on purpose -- it names the categories being confirmed and shows none of
+ * the values, because the policy forbids a passport number or a date of birth
+ * reaching a customer surface at all.
+ */
+.checkin-attestation {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  margin: 1.25rem 0 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 0.6rem;
+  background: rgba(255, 255, 255, 0.05);
+  min-width: 0;
+}
+
+.checkin-attestation input[type="checkbox"] {
+  /* 24px, WCAG 2.5.8's minimum target, rather than leaning on the "equivalent
+     inline target" exception the `<label for>` would grant. The label is still a
+     target -- clicking the sentence toggles the box -- but the box no longer needs
+     it to pass. */
+  width: 1.5rem;
+  height: 1.5rem;
+  margin: 0.1rem 0 0;
+  flex: none;
+  /* The unchecked box rendered as a solid white square: a light-scheme UA control
+     against a dark panel, which at a glance reads as filled rather than empty.
+     Scoped here rather than on the root, where it would restyle every control in
+     the application. */
+  color-scheme: dark;
+  /* The checked fill is 2.78:1 against the panel, just under the 3:1 for
+     non-text contrast -- but the state is carried by the white tick at 5.7:1, so
+     1.4.11 is met. Left as authored rather than lightened, which would cost the
+     tick the contrast that is doing the work. */
+  accent-color: #7c3aed;
+  cursor: pointer;
+}
+
+.checkin-attestation input[type="checkbox"]:focus-visible {
+  outline: 3px solid #f5d0fe;
+  outline-offset: 2px;
+}
+
+.checkin-attestation-text {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.checkin-attestation label {
+  /* 12.8:1 on the panel behind it, measured against the composited pixels. Body
+     copy, not a caption: this is the sentence the customer is agreeing to, so it
+     is not greyed down. */
+  color: #e5e7eb;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  cursor: pointer;
+  min-width: 0;
+}
+
+/*
+ * What to do when the details are wrong. Quieter than the sentence it sits under,
+ * because it is the exception rather than the instruction -- but well clear of the
+ * 4.5:1 floor, since it is the only route out for a customer who cannot tick the
+ * box.
+ */
+.checkin-attestation-recourse {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.checkin-attestation-recourse a {
+  color: #d8b4fe;
+  font-weight: 700;
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+}
+
+/* Marked as an example rather than dressed up as a real desk, as the footer does
+   with the same values (#72). */
+.checkin-attestation-example {
+  color: #a1a1aa;
+  font-size: 0.8rem;
+}
+
+/*
+ * The attestation already on file. Green like the checked-in state, because it is
+ * the same kind of fact: something the customer has completed.
+ */
+.checkin-attestation-done {
+  margin: 1.25rem 0 0;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid rgba(134, 239, 172, 0.35);
+  border-radius: 0.6rem;
+  background: rgba(22, 101, 52, 0.22);
+  color: #bbf7d0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
 .checkin-submit {
   margin-top: 1rem;
   min-height: 44px;
@@ -2021,7 +2128,11 @@ footer a:hover {
 
 .checkin-submit[aria-disabled="true"] {
   background: #4c1d95;
-  cursor: progress;
+  /* `progress` while a request is in flight, but the same attribute now also
+     marks "not yet confirmed", where nothing is in progress at all. `not-allowed`
+     is the honest cursor for both, since pressing it is refused either way and
+     the refusal says which. */
+  cursor: not-allowed;
 }
 
 .checkin-feedback {

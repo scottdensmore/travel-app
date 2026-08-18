@@ -322,6 +322,21 @@ model Passenger {
   sensitiveDataExpiresAt  DateTime?
   sensitiveDataDeletedAt  DateTime?
   gender                  String
+  /// When this traveller's document details were confirmed at check-in, and null
+  /// until they are.
+  ///
+  /// An attestation rather than a re-collection: the policy in
+  /// `docs/PASSENGER_DATA_POLICY.md` forbids showing a passport number or date of
+  /// birth back to a customer and makes booking creation the only normal write
+  /// path for them, so the only honest thing check-in can do is ask whether what
+  /// was given at booking is right and record the answer (#77).
+  ///
+  /// A timestamp holds no identity data and reveals none, so unlike the columns
+  /// above it is safe on a customer projection.
+  ///
+  /// Per traveller, not per leg: a passport does not change between the legs of
+  /// one trip, so confirming it once covers the itinerary.
+  documentsConfirmedAt    DateTime? @db.Timestamptz(3)
 
   bookingId Int
   booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)

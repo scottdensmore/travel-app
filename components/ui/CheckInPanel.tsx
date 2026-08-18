@@ -1,13 +1,18 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { checkInLegAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
+import { SUPPORT } from '@/lib/brand';
 import {
     CHECK_IN_CLOSES_MINUTES,
     CHECK_IN_OPENS_HOURS,
+    DOCUMENT_ATTESTATION_CONFIRMED,
+    DOCUMENT_ATTESTATION_LABEL,
+    DOCUMENT_ATTESTATION_RECOURSE,
+    DOCUMENT_ATTESTATION_REQUIRED,
     type CheckInReason,
 } from '@/lib/checkInPolicy';
 
@@ -42,6 +47,12 @@ export interface CheckInLegView {
      * same instant every time on the card was rendered from.
      */
     hasOpened: boolean;
+    /**
+     * Whether this booking's travellers have already confirmed their document
+     * details. False means the attestation is still to be made, which is a
+     * precondition of checking in rather than a reason the window is shut.
+     */
+    documentsConfirmed: boolean;
     travellers: Array<{
         id: string;
         name: string;
@@ -51,25 +62,108 @@ export interface CheckInLegView {
     }>;
 }
 
+/**
+ * The states in which saying "details confirmed" is worth saying.
+ *
+ * Not gated on `allowed`, which was the first attempt and defeated the purpose:
+ * a leg goes un-allowed the moment it is checked in, and a return leg is
+ * un-allowed until its window opens -- the two cards where a customer most wants
+ * to know the attestation is already on file. Excluded instead are the states
+ * where check-in is over or moot, and where the line would be true but noise
+ * beside "Booking cancelled".
+ */
+const ATTESTATION_WORTH_STATING: readonly CheckInReason[] = [
+    'OPEN',
+    'NOT_YET_OPEN',
+    'CLOSED',
+    'ALREADY_CHECKED_IN',
+];
+
 export default function CheckInPanel({ legs }: { legs: CheckInLegView[] }) {
     const router = useRouter();
     const [pendingLegId, setPendingLegId] = useState<number | null>(null);
+    // Keyed by BOOKING, not by leg. The attestation is recorded per booking -- a
+    // passport does not change between an outbound and a return -- so two legs of
+    // one booking are one question, and keying per leg asked it twice on the same
+    // screen for any itinerary with two legs inside the window. Two *different*
+    // bookings stay independent, which is the distinction that matters.
+    const [attested, setAttested] = useState<Record<number, boolean>>({});
     const [feedback, setFeedback] = useState<{
         legId: number;
         kind: 'success' | 'error';
         message: string;
+        /**
+         * Where to put focus. The message is right for an outcome the customer
+         * can only read; the attestation is right for a refusal whose remedy is
+         * a control on the page, because focusing the message puts that control
+         * *behind* the focus -- it is the last node in the card, and the checkbox
+         * is above the button.
+         */
+        focus: 'message' | 'attestation';
     } | null>(null);
     const feedbackRef = useRef<HTMLParagraphElement | null>(null);
+    const attestationRefs = useRef<Record<number, HTMLInputElement | null>>({});
+
+    /**
+     * Which leg carries the attestation for each booking.
+     *
+     * One control per booking, not per leg. Sharing the answer across a booking's
+     * legs was only half of it: the *question* was still rendered on every open
+     * leg, so a same-day round trip showed the identical three-line sentence
+     * twice, and ticking one silently moved a control hundreds of pixels away that
+     * the customer was not looking at. The earliest open leg that still needs it
+     * owns it; every other leg of that booking is armed by the shared answer, and
+     * a refusal on one of those cards focuses this control wherever it lives.
+     */
+    const attestationOwner = useMemo(() => {
+        const owner: Record<number, number> = {};
+        for (const leg of legs) {
+            if (!leg.allowed || leg.documentsConfirmed) continue;
+            if (owner[leg.bookingId] === undefined) owner[leg.bookingId] = leg.legId;
+        }
+        return owner;
+    }, [legs]);
 
     // Moves focus to the outcome rather than leaving it on a button whose label
     // has changed underneath it, which is what a screen reader user would
     // otherwise have to go looking for (#205's lesson about arriving focus).
     useEffect(() => {
-        if (feedback) feedbackRef.current?.focus();
-    }, [feedback]);
+        if (!feedback) return;
+        if (feedback.focus === 'attestation') {
+            // The control that clears the refusal, wherever it lives -- which for a
+            // booking's second open leg is on another card entirely.
+            const owner = legs.find(leg => leg.legId === feedback.legId);
+            const ownerLegId = owner ? attestationOwner[owner.bookingId] : undefined;
+            const box = ownerLegId === undefined ? null : attestationRefs.current[ownerLegId];
+            if (box) {
+                box.focus();
+                return;
+            }
+        }
+        feedbackRef.current?.focus();
+    }, [feedback, legs, attestationOwner]);
 
     const checkIn = async (leg: CheckInLegView) => {
         if (pendingLegId !== null) return;
+
+        // `aria-disabled` is advisory -- it styles and announces, and the click
+        // still fires. So the attestation is enforced here as well, and it says
+        // why rather than returning silently: a control that does nothing when
+        // pressed is the dead control #70 is about, and "it looked greyed out" is
+        // not feedback.
+        //
+        // The server enforces this independently; this is the half that keeps the
+        // customer informed, not the half that keeps the rule.
+        const confirmed = leg.documentsConfirmed || attested[leg.bookingId] === true;
+        if (!confirmed) {
+            setFeedback({
+                legId: leg.legId,
+                kind: 'error',
+                message: DOCUMENT_ATTESTATION_REQUIRED,
+                focus: 'attestation',
+            });
+            return;
+        }
 
         setPendingLegId(leg.legId);
         setFeedback(null);
@@ -77,12 +171,14 @@ export default function CheckInPanel({ legs }: { legs: CheckInLegView[] }) {
             const result = await checkInLegAction({
                 bookingId: leg.bookingId,
                 legId: leg.legId,
+                documentsConfirmed: true,
             });
             if (isActionValidationFailure(result)) {
                 setFeedback({
                     legId: leg.legId,
                     kind: 'error',
                     message: result.error.message,
+                    focus: 'message',
                 });
                 // Refreshed on the refusal as well as on success. Every reason
                 // the action refuses for is a server-side state change this
@@ -100,6 +196,7 @@ export default function CheckInPanel({ legs }: { legs: CheckInLegView[] }) {
                 legId: leg.legId,
                 kind: 'success',
                 message: `Checked in for ${leg.airline} ${leg.flightNumber}.`,
+                focus: 'message',
             });
             router.refresh();
         } catch (error) {
@@ -113,6 +210,7 @@ export default function CheckInPanel({ legs }: { legs: CheckInLegView[] }) {
                 legId: leg.legId,
                 kind: 'error',
                 message: 'Could not check you in. Please try again.',
+                focus: 'message',
             });
         } finally {
             setPendingLegId(null);
@@ -247,6 +345,100 @@ export default function CheckInPanel({ legs }: { legs: CheckInLegView[] }) {
 
                                         <p className="checkin-next-step">{leg.nextStep}</p>
 
+                                        {attestationOwner[leg.bookingId] === leg.legId && (
+                                            <div className="checkin-attestation">
+                                                <input
+                                                    type="checkbox"
+                                                    id={`checkin-attest-${leg.legId}`}
+                                                    ref={element => {
+                                                        attestationRefs.current[leg.legId] = element;
+                                                    }}
+                                                    // The recourse is the only way
+                                                    // out for a customer who cannot
+                                                    // honestly tick this, and a
+                                                    // screen-reader user moving by
+                                                    // form control would otherwise
+                                                    // never reach the paragraph
+                                                    // that says so.
+                                                    aria-describedby={`checkin-recourse-${leg.legId}`}
+                                                    checked={attested[leg.bookingId] === true}
+                                                    onChange={event => {
+                                                        setAttested(current => ({
+                                                            ...current,
+                                                            [leg.bookingId]: event.target.checked,
+                                                        }));
+                                                        // Clears the refusal the
+                                                        // moment they comply.
+                                                        // Otherwise a red alert
+                                                        // saying "confirm the
+                                                        // details" sat under a
+                                                        // button that had just
+                                                        // gone live, and nothing
+                                                        // announced that the
+                                                        // blocker had lifted.
+                                                        if (event.target.checked) setFeedback(null);
+                                                    }}
+                                                />
+                                                {/* The sentence names the
+                                                    categories and shows not one
+                                                    value: the policy forbids
+                                                    showing a passport number or a
+                                                    date of birth back to a
+                                                    customer, so this cannot be a
+                                                    "check these are right"
+                                                    display. */}
+                                                <div className="checkin-attestation-text">
+                                                    <label htmlFor={`checkin-attest-${leg.legId}`}>
+                                                        {DOCUMENT_ATTESTATION_LABEL}
+                                                    </label>
+                                                    {/* Always on screen, not only
+                                                        after a refusal: the
+                                                        customer who cannot
+                                                        honestly tick the box is
+                                                        the one who needs to know
+                                                        there is a way out, and
+                                                        they never press the
+                                                        button. */}
+                                                    <p
+                                                        className="checkin-attestation-recourse"
+                                                        id={`checkin-recourse-${leg.legId}`}
+                                                    >
+                                                        {DOCUMENT_ATTESTATION_RECOURSE}{' '}
+                                                        {/* An actual route, not the
+                                                            word "contact". Marked as
+                                                            an example the way the
+                                                            footer marks it, because
+                                                            these details are
+                                                            deliberately
+                                                            non-routable (#72). */}
+                                                        <a href={`mailto:${SUPPORT.email}`}>
+                                                            {SUPPORT.email}
+                                                        </a>{' '}
+                                                        or{' '}
+                                                        <a href={`tel:${SUPPORT.phone.replace(/[^\d+]/g, '')}`}>
+                                                            {SUPPORT.phone}
+                                                        </a>{' '}
+                                                        <span className="checkin-attestation-example">
+                                                            (example)
+                                                        </span>
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Says the attestation is on file rather
+                                            than merely not asking again, so a
+                                            customer returning for the return leg
+                                            can tell they already confirmed. A
+                                            timestamp column drives this and no
+                                            value it attests to is named. */}
+                                        {leg.documentsConfirmed
+                                            && ATTESTATION_WORTH_STATING.includes(leg.reason) && (
+                                            <p className="checkin-attestation-done">
+                                                {DOCUMENT_ATTESTATION_CONFIRMED}
+                                            </p>
+                                        )}
+
                                         {leg.allowed && (
                                             <button
                                                 type="button"
@@ -259,14 +451,19 @@ export default function CheckInPanel({ legs }: { legs: CheckInLegView[] }) {
                                                    without this that button looks
                                                    live and does nothing -- the
                                                    dead control #70 is about. */
-                                                aria-disabled={pendingLegId !== null}
+                                                aria-disabled={
+                                                    pendingLegId !== null
+                                                    || !(leg.documentsConfirmed || attested[leg.bookingId] === true)
+                                                }
                                                 aria-busy={busy}
                                             >
                                                 {busy
                                                     ? 'Checking in…'
-                                                    : leg.awaiting > 1
-                                                        ? `Check in ${leg.awaiting} travellers`
-                                                        : 'Check in'}
+                                                    : !(leg.documentsConfirmed || attested[leg.bookingId] === true)
+                                                        ? 'Confirm details to check in'
+                                                        : leg.awaiting > 1
+                                                            ? `Check in ${leg.awaiting} travellers`
+                                                            : 'Check in'}
                                             </button>
                                         )}
 

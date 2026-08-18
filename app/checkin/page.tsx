@@ -123,7 +123,16 @@ export default async function CheckInPage() {
                     id: true,
                     reference: true,
                     status: true,
-                    passengers: { select: safePassengerSelect },
+                    passengers: {
+                        select: {
+                            ...safePassengerSelect,
+                            // Safe on a customer projection precisely because it
+                            // is a timestamp: it records that an attestation
+                            // happened and reveals nothing that was attested to
+                            // (docs/PASSENGER_DATA_POLICY.md).
+                            documentsConfirmedAt: true,
+                        },
+                    },
                     // Only to count the itinerary's positions, which is what
                     // `legDirectionLabel` needs to say "Returning" rather than
                     // "Leg 2". Selecting the whole leg would carry a second copy
@@ -224,6 +233,12 @@ export default async function CheckInPage() {
             // not NOT_YET_OPEN, but its opening time is still in the future, and
             // labelling that "opened" was the contradiction this replaces.
             hasOpened: eligibility.opensAt.getTime() <= renderedAt,
+            // Asked once per booking rather than once per leg, because a passport
+            // does not change between an outbound and a return. Every traveller
+            // on the booking, not only those seated on this leg: the attestation
+            // covers the party the owner is acting for.
+            documentsConfirmed: leg.booking.passengers
+                .every(passenger => passenger.documentsConfirmedAt !== null),
             statusLabel: STATUS_LABELS[eligibility.reason],
             nextStep: checkInNextStep(eligibility.reason),
             awaiting: eligibility.awaiting,

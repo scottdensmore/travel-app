@@ -34,6 +34,52 @@ describe('check-in styling', () => {
         );
     });
 
+    it('gives the attestation checkbox a target the size guideline asks for', () => {
+        // 1.5rem = 24px, WCAG 2.5.8's minimum, rather than leaning on the
+        // "equivalent inline target" exception the `<label for>` would grant. The
+        // label is still a target; the box no longer needs it to pass.
+        expect(css).toContain('.checkin-attestation input[type="checkbox"] {');
+        expect(css).toMatch(/\.checkin-attestation input\[type="checkbox"\] \{[^}]*width: 1\.5rem;/);
+        expect(css).toMatch(/\.checkin-attestation input\[type="checkbox"\] \{[^}]*height: 1\.5rem;/);
+    });
+
+    it('keeps the checkbox from rendering as a solid white square', () => {
+        // A light-scheme UA control on a dark panel reads as filled rather than
+        // empty. Scoped to this block, not the root, where it would restyle every
+        // control in the application.
+        expect(css).toMatch(
+            /\.checkin-attestation input\[type="checkbox"\] \{[^}]*color-scheme: dark;/,
+        );
+    });
+
+    it('makes the attestation checkbox focus visible', () => {
+        expect(css).toContain(
+            '.checkin-attestation input[type="checkbox"]:focus-visible {\n'
+            + '  outline: 3px solid #f5d0fe;\n'
+            + '  outline-offset: 2px;\n'
+            + '}',
+        );
+    });
+
+    it('does not call a blocked control busy', () => {
+        // `aria-disabled` now marks two different states -- a request in flight and
+        // an attestation not yet given -- and nothing is in progress in the second.
+        // `progress` was honest for the first only.
+        expect(css).toMatch(
+            /\.checkin-submit\[aria-disabled="true"\] \{[^}]*cursor: not-allowed;/,
+        );
+        expect(css).not.toMatch(
+            /\.checkin-submit\[aria-disabled="true"\] \{[^}]*cursor: progress;/,
+        );
+    });
+
+    it('ships no escaped markup in its comments', () => {
+        // `&lt;`/`&gt;` reached this stylesheet once through a heredoc. Harmless
+        // inside a comment, but globals.css ships to the browser.
+        expect(css).not.toContain('&lt;');
+        expect(css).not.toContain('&gt;');
+    });
+
     it('does not distinguish an in-sentence link by colour alone', () => {
         // The link colour against the body text around it is 1.43:1, well under
         // the 3:1 WCAG G183 asks for when colour is the only cue. Weight is a

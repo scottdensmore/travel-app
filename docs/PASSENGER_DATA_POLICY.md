@@ -35,6 +35,14 @@ marketing, or routine customer-support work.
   API responses must not contain either plaintext or ciphertext values.
 - Any future operational reveal flow requires a separately authorized,
   audited, purpose-limited action with step-up staff authentication.
+- Check-in confirms these details by attestation, never by display. The customer
+  is asked to confirm that the names, dates of birth and passport details given
+  when the booking was made are correct; the application shows none of those
+  values back and accepts no replacement for them, because booking creation
+  remains the only normal write path. `Passenger.documentsConfirmedAt` records
+  only that the confirmation happened, which is why it is safe on a customer
+  projection where the fields it attests to are not. A customer whose details are
+  wrong is directed to contact the airline rather than to correct them here.
 
 ## Retention and deletion
 
