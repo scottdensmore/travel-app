@@ -58,6 +58,7 @@ import {
     outboundFlight,
 } from '@/lib/bookingItinerary';
 import { cancellableBooking, cancellationNote, cancellationOutcome } from '@/lib/cancellationPolicy';
+import { checkInNextStep, legCheckInEligibility } from '@/lib/checkInPolicy';
 import { buildFlightRoutes, findNearbyOperatingDates } from '@/lib/flightSearch';
 import { airportCodeFor, airportCodesForRoute, airportTimeZoneFor } from '@/lib/airports';
 import { airportDayBounds, airportLocalInstant } from '@/lib/flightTime';
@@ -67,6 +68,7 @@ import { bookingWindowIsoDates } from '@/lib/dates';
 import {
     bookingRequestSchema,
     accountTimeZoneSchema,
+    checkInRequestSchema,
     cityGuideSchema,
     favoriteSchema,
     flightScheduleActivationSchema,
@@ -690,6 +692,108 @@ const DEPARTED_MESSAGE =
  * fault, but it has to unwind the transaction to be one.
  */
 class BookingDepartedError extends Error {}
+
+/**
+ * Check one leg of one booking in, for everybody travelling on it.
+ *
+ * A leg at a time because the window is per leg: a round trip's return opens a
+ * day before the return flight, long after the outbound has flown. Everybody at
+ * once because the booking's owner is acting for their own party, and a control
+ * per traveller buys nothing until there is something that differs between them
+ * -- travel documents (#77) are where that starts.
+ *
+ * Scoped strictly to the owner, with no staff path. `hasVerifiedStaffAccess`
+ * would be the wrong shape here: checking a customer in on their behalf is a
+ * support workflow with its own audit requirements (#86), not a widening of
+ * this action.
+ *
+ * Idempotent. Pressing it twice, or once for a party already checked in, stamps
+ * nothing further and reports success -- so the closed-window refusal below
+ * cannot fire at a customer who is already checked in and has nothing to fix.
+ */
+export async function checkInLegAction(input: { bookingId: number; legId: number }) {
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.id;
+    if (!userId) throw new Error("Unauthorized");
+
+    const parsed = parseActionInput(checkInRequestSchema, input);
+    if (!parsed.ok) return parsed;
+    const { bookingId, legId } = parsed.data;
+
+    // Ownership first, and against the booking rather than the leg: the leg is
+    // then confirmed to belong to it, so naming somebody else's leg beside your
+    // own booking cannot reach the update.
+    const booking = await prisma.booking.findUnique({
+        where: { id: bookingId },
+        select: { userId: true },
+    });
+    if (!booking) throw new Error("Booking not found");
+    if (booking.userId !== userId) throw new Error("Unauthorized");
+
+    const refusal = await prisma.$transaction(async (tx) => {
+        const leg = await tx.itineraryLeg.findFirst({
+            where: { id: legId, bookingId, ...activeItineraryLegWhere },
+            select: { flightId: true },
+        });
+        // A superseded leg lands here too. Its replacement is the one that can be
+        // checked in, and it has its own id.
+        if (!leg) throw new Error("Itinerary leg not found");
+
+        // Serialises this against a concurrent cancellation, which locks every
+        // flight on the booking in ascending id order. One lock cannot form a
+        // cycle with an ordered set, so this adds no deadlock risk. Without it,
+        // READ COMMITTED lets a cancellation commit between the read below and
+        // the update, checking a traveller in on a booking that no longer exists
+        // to be travelled (#76's reasoning, same hazard).
+        await lockFlightForUpdate(tx, leg.flightId);
+
+        // Re-read and re-decide under the lock. The page's answer was taken from
+        // an unlocked read and staff can cancel the flight in between.
+        const locked = await tx.itineraryLeg.findFirstOrThrow({
+            where: { id: legId, bookingId, ...activeItineraryLegWhere },
+            select: {
+                booking: { select: { status: true } },
+                flight: { select: { departureDate: true, status: true } },
+                seatAssignments: { select: { id: true, releasedAt: true, checkedInAt: true } },
+            },
+        });
+
+        const eligibility = legCheckInEligibility({
+            departsAt: locked.flight.departureDate,
+            flightStatus: locked.flight.status,
+            bookingStatus: locked.booking.status,
+            seats: locked.seatAssignments,
+        }, new Date());
+
+        // Nothing left to do is success, not a refusal. Checked before the
+        // window, or a party who checked in yesterday would be told the desk had
+        // closed on them.
+        if (eligibility.reason === 'ALREADY_CHECKED_IN') return null;
+        if (!eligibility.allowed) return eligibility.reason;
+
+        await tx.seatAssignment.updateMany({
+            // Through `heldSeats` rather than restating the release condition
+            // here: a released seat is nobody's boarding position, and the rule
+            // that says so belongs in one place (#143). It also applies last, so
+            // this caller cannot drop it. Naming the condition even in a comment
+            // trips the guard that keeps it there, which is textual by design.
+            //
+            // `checkedInAt: null` keeps this idempotent and keeps the stamp
+            // honest: a traveller who checked in an hour ago did not do so now.
+            where: heldSeats({ legId, checkedInAt: null }),
+            data: { checkedInAt: new Date() },
+        });
+        return null;
+    });
+
+    if (refusal) {
+        // A policy answer, not a fault: the customer can act on the next step.
+        return actionValidationFailure(checkInNextStep(refusal));
+    }
+
+    revalidatePath('/checkin');
+    revalidatePath('/profile');
+}
 
 export async function cancelBookingAction(bookingId: number) {
     const session = await getServerSession(authOptions);

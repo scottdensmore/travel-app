@@ -391,6 +391,19 @@ export const flightBookingServiceSchema = bookingRequestSchema.extend({
     paymentIntentId: requiredText('Payment intent ID', 255).nullable().default(null),
 });
 
+/**
+ * Checking one leg of one booking in.
+ *
+ * Both ids, because a leg alone would let a caller name any leg in the database
+ * and rely on the action to notice. Naming the booking too means ownership is
+ * checked against the thing the customer claims to own, and the leg is then
+ * confirmed to belong to it (#77).
+ */
+export const checkInRequestSchema = z.object({
+    bookingId: positiveId('Booking ID'),
+    legId: positiveId('Leg ID'),
+}).strict();
+
 const seatChangeSchema = z.object({
     passengerId: requiredText('Passenger ID', 128),
     /// The leg the seat is held on. A seat belongs to one flight, so a change

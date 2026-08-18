@@ -1787,3 +1787,274 @@ footer a:hover {
     min-height: 44px;
   }
 }
+
+/*
+ * Check-in (#77).
+ *
+ * Sized in relative units with `min-width: 0` throughout, because the two
+ * defects this layout could reproduce are both horizontal overflow at phone
+ * width -- checkout (#193) and the seat map (#256). Nothing here is given a
+ * fixed width, and the facts list collapses to one column rather than
+ * scrolling.
+ *
+ * Every colour below is checked against the panel it sits on rather than
+ * against pure black: the caption greys that failed AA did so because they were
+ * chosen against the darker page (#199, #250, #290).
+ *
+ * The ratios quoted below were measured against the real composited pixels --
+ * the page gradient and the translucent card overlays included -- during the
+ * rendered review of this change, not estimated against a flat colour. Every one
+ * of them clears AAA.
+ */
+.checkin-shell {
+  width: min(100%, 60rem);
+  min-width: 0;
+}
+
+.checkin-shell h1 {
+  margin: 0 0 0.5rem;
+  font-size: clamp(1.75rem, 5vw, 2.4rem);
+  color: #fff;
+}
+
+.checkin-intro {
+  margin: 0 0 2rem;
+  /* 12.9:1 on the page background. */
+  color: #d4d4d8;
+  max-width: 44rem;
+}
+
+.checkin-empty {
+  padding: 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.04);
+  color: #e5e7eb;
+}
+
+.checkin-empty a,
+.checkin-link {
+  color: #d8b4fe;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+/*
+ * The one link that is an action rather than part of a sentence: the replacement
+ * flights a disrupted booking needs before it can be checked in. It sits where
+ * the check-in button would be, so it gets that button's spacing rather than
+ * running on from the paragraph above it.
+ */
+.checkin-link {
+  display: inline-block;
+  margin-top: 1rem;
+}
+
+.checkin-leg-list {
+  display: grid;
+  gap: 1.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.checkin-card {
+  min-width: 0;
+  padding: clamp(1rem, 3vw, 1.75rem);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.checkin-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 0.75rem;
+}
+
+.checkin-card-head h2 {
+  margin: 0;
+  min-width: 0;
+  font-size: clamp(1.1rem, 3.5vw, 1.4rem);
+  color: #fff;
+  /* A route with two long city names must wrap rather than push the card wide. */
+  overflow-wrap: anywhere;
+}
+
+.checkin-state {
+  margin: 0;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f4f4f5;
+}
+
+.checkin-state-open,
+.checkin-state-already-checked-in {
+  border-color: rgba(134, 239, 172, 0.45);
+  background: rgba(22, 101, 52, 0.35);
+  /* 11.5:1 on the fill behind it. */
+  color: #bbf7d0;
+}
+
+.checkin-state-flight-cancelled,
+.checkin-state-booking-cancelled,
+.checkin-state-booking-disrupted,
+.checkin-state-not-travelling {
+  border-color: rgba(252, 165, 165, 0.45);
+  background: rgba(127, 29, 29, 0.35);
+  color: #fecaca;
+}
+
+.checkin-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: 1rem;
+  margin: 1.25rem 0 0;
+}
+
+.checkin-facts div {
+  min-width: 0;
+}
+
+.checkin-facts dt {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  /* 9.1:1 on the card. Deliberately well above the 4.5:1 floor, not at it. */
+  color: #b9b9c4;
+}
+
+.checkin-facts dd {
+  margin: 0.2rem 0 0;
+  color: #fff;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * Two facts, never split. `auto-fit` on the list above yields four columns at
+ * desktop width, which put "opens" at the end of one row and "closes" alone on
+ * the next; a two-column maximum keeps the pair legible as a pair at every width
+ * that fits them, and stacks them at phone width like everything else.
+ */
+.checkin-window {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  max-width: 30rem;
+}
+
+.checkin-travellers {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1.25rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.checkin-travellers li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.6rem;
+  background: rgba(255, 255, 255, 0.04);
+  min-width: 0;
+}
+
+.checkin-traveller-name {
+  font-weight: 700;
+  color: #fff;
+  overflow-wrap: anywhere;
+}
+
+.checkin-traveller-seat {
+  color: #d4d4d8;
+}
+
+.checkin-traveller-state {
+  margin-left: auto;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #e9d5ff;
+}
+
+.checkin-next-step {
+  margin: 1.25rem 0 0;
+  color: #e5e7eb;
+}
+
+.checkin-submit {
+  margin-top: 1rem;
+  min-height: 44px;
+  width: auto;
+  padding: 0 1.25rem;
+  border: 0;
+  border-radius: 0.6rem;
+  /* Solid rather than the page's gradient, so this control is not one of a row
+     of identical purple pills the way Cancel was (#250). */
+  background: #6d28d9;
+  color: #fff;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.checkin-submit:hover {
+  background: #7c3aed;
+}
+
+.checkin-submit:focus-visible,
+.checkin-shell a:focus-visible {
+  outline: 3px solid #f5d0fe;
+  outline-offset: 2px;
+}
+
+.checkin-submit[aria-disabled="true"] {
+  background: #4c1d95;
+  cursor: progress;
+}
+
+.checkin-feedback {
+  margin: 1rem 0 0;
+  padding: 0.75rem 1rem;
+  border-radius: 0.6rem;
+  border: 1px solid transparent;
+}
+
+.checkin-feedback.success {
+  border-color: rgba(134, 239, 172, 0.45);
+  background: rgba(22, 101, 52, 0.3);
+  color: #bbf7d0;
+}
+
+.checkin-feedback.error {
+  border-color: rgba(252, 165, 165, 0.5);
+  background: rgba(127, 29, 29, 0.3);
+  color: #fecaca;
+}
+
+/*
+ * `:focus`, not `:focus-visible`. The component moves focus here deliberately
+ * after a check-in, and Chrome does not treat a programmatic focus as
+ * focus-visible when the last interaction was a pointer -- so a mouse or touch
+ * user's focus relocated from the button to this paragraph with nothing on
+ * screen saying so, and their next Tab started somewhere unexpected.
+ *
+ * Safe here because the element is only reachable via `tabIndex={-1}`: the only
+ * ring this adds beyond the keyboard case is on a direct click of the message
+ * itself, which is the one place a ring is honest anyway.
+ */
+.checkin-feedback:focus {
+  outline: 3px solid #f5d0fe;
+  outline-offset: 2px;
+}
