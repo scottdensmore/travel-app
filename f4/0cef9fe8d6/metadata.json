@@ -1,0 +1,48 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "f40cef9fe8d6",
+  "strategy": "manual-commit",
+  "branch": "feat/checkin-eligibility",
+  "checkpoints_count": 8,
+  "files_touched": [
+    "__tests__/app/checkIn.database.test.ts",
+    "__tests__/app/checkInPage.test.ts",
+    "__tests__/components/CheckInPanel.test.tsx",
+    "__tests__/components/titlebar.test.tsx",
+    "__tests__/lib/checkInPolicy.test.ts",
+    "__tests__/styles/checkIn.test.ts",
+    "app/actions.ts",
+    "app/checkin/page.tsx",
+    "app/globals.css",
+    "components/ui/CheckInPanel.tsx",
+    "components/ui/titlebar.tsx",
+    "e2e/checkin.spec.ts",
+    "lib/checkInPolicy.ts",
+    "lib/validation.ts",
+    "prisma/migrations/20260818120000_record_traveller_check_in/migration.sql",
+    "prisma/schema.prisma"
+  ],
+  "sessions": [
+    {
+      "metadata": "/f4/0cef9fe8d6/0/metadata.json",
+      "transcript": "/f4/0cef9fe8d6/0/full.jsonl",
+      "compact_transcript": "/f4/0cef9fe8d6/0/transcript.jsonl",
+      "content_hash": "/f4/0cef9fe8d6/0/content_hash.txt",
+      "prompt": "/f4/0cef9fe8d6/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 370,
+    "cache_creation_tokens": 293974,
+    "cache_read_tokens": 37184250,
+    "output_tokens": 161536,
+    "api_call_count": 185,
+    "subagent_tokens": {
+      "input_tokens": 112,
+      "cache_creation_tokens": 122238,
+      "cache_read_tokens": 4448591,
+      "output_tokens": 60026,
+      "api_call_count": 59
+    }
+  }
+}

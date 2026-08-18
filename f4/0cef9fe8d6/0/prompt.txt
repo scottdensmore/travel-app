@@ -1,0 +1,193 @@
+Look through the code and issues and decide what is next to work on. You can work in parallel if you find work that you can do that. Use @AGENTS.md
+
+---
+
+<task-notification>
+<task-id>a81b3ebcd9511db3c</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/3c1f314f-5bc6-4f63-b253-d784d069272c/tasks/a81b3ebcd9511db3c.output</output-file>
+<status>completed</status>
+<summary>Agent "Rendered UI review of check-in" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Fixture restored to exactly the state I was handed (`UIR-100` `ON_TIME`, no check-in stamps, `UIR-102` `CANCELLED`), and `git status` is byte-identical to the session-start snapshot. Report follows.
+
+---
+
+## Tooling note
+
+**The `mcp__plugin_playwright_playwright__browser_*` tools are non-functional on this machine** — the plugin is pinned to the `chrome` channel and errors with `Chromium distribution 'chrome' is not found at /opt/google/chrome/chrome`. Only bundled Chromium is installed (`~/.cache/ms-playwright/chromium-1234`). Per the fallback in `### ui-review`, I drove every journey through throwaway Playwright scripts written outside the repo (in the session scratchpad), using the repo's `playwright` devDependency. All rendered review below was actually performed; nothing is inferred from JSX.
+
+I did not run `npx playwright test`.
+
+## Blocking defects
+
+**1. A refused check-in leaves the card contradicting itself — the refusal never re-renders the leg.**
+`/home/scottdensmore/Developer/scottdensmore/travel-app/components/ui/CheckInPanel.tsx:71-84` — `router.refresh()` is called only on the success branch (line 84). The validation-failure branch returns at line 77 without it.
+
+I exercised this for real: loaded `/checkin`, then had the airline cancel `UIR-100` in the database (exactly the race the action's re-read-under-lock exists for), then pressed the button. The server correctly refused. The rendered card afterwards:
+
+- badge: **"Check-in open"**
+- next step: **"Confirm your seat to check in for this flight."**
+- button: still present, **"Check in 2 travellers"**
+- alert: **"The airline cancelled this flight. Choose a replacement from your profile, or ask an agent to rebook you."**
+- traveller rows: still "Not checked in"
+
+Seen at 390x844 and 1440x900 (`phone-390x844-error-refusal-card.png`, `desktop-1440x900-error-refusal-full.png`). This is the "does it say the true thing" class the brief names: one card asserts check-in is open and simultaneously that the flight is cancelled, and it keeps offering a button that cannot succeed. The likeliest real-world instance is not staff cancellation but the clock: a customer with the page open past T-60min presses the button, is told "Online check-in closed 60 minutes before departure", and the card still says "Check-in open" with a live button — so they press again, and again. Every `CheckInReason` that reaches the failure branch is by definition a server-side state change the page's render is now stale about, so the failure branch wants the same `router.refresh()` the success branch has.
+
+## Moderate
+
+**2. Focus moves to the feedback message with no visible focus indicator on the pointer path.**
+`/home/scottdensmore/Developer/scottdensmore/travel-app/app/globals.css:2018` styles `.checkin-feedback:focus-visible`. Measured after a **mouse** click on the button (desktop 1440x900, success; and phone 390x844, error): `document.activeElement` is the feedback `&lt;p&gt;`, but `activeElement.matches(':focus-visible')` is `false` and computed `outline-style` is `none`. Chrome does not treat programmatic focus on a non-interactive element as focus-visible when the last interaction was a pointer. The keyboard path is correct — after Enter, `focusVisible: true` and a 3px `rgb(245,208,254)` ring (`desktop-1440x900-focus-ring-submit.png` shows the button ring; `tablet-768x1024-success-feedback-focused.png` shows the message ring).
+
+User impact: a mouse or touch user's focus silently relocates from the button they pressed to a paragraph with nothing on screen indicating it, so their next Tab starts from an unexpected place. Because the element is only focusable via `tabIndex={-1}`, styling `:focus` instead of `:focus-visible` is safe here — the only spurious ring would be a direct click on the message text itself.
+
+**3. The new "Check In" nav entry renders as "Check I" at 390px.**
+`/home/scottdensmore/Developer/scottdensmore/travel-app/components/ui/titlebar.tsx:263-271`. At 390x844 signed in, the nav strip has `overflow-x: auto` with `clientWidth` 358 while the "Check In" link's right edge is at 383 — the final "n" and part of the active-page underline are cut (`phone-390x844-nav-signedin.png`). At 360px the entry is entirely off-screen.
+
+Two things worth separating. This is **not** #193/#256: `documentElement.scrollWidth === clientWidth` at every viewport, so the page body does not scroll horizontally; the nav is an intentionally scrollable strip. And the overflow **mechanism pre-exists** — signed in, the nav `&lt;ul&gt;` was already ~469px against a 358px viewport before this entry (the avatar link and Sign Out were already beyond the edge; signed out, "Sign Up" is clipped on `main` too). What this change does is put the new feature's *only* entry point into the clipped zone, where it reads as a truncated word with no scroll affordance. Keyboard users are unaffected (focus scrolls the strip). Either tighten the titlebar at phone width or file it — but shipping the feature's front door as "Check I" on a phone is worth a decision rather than silence.
+
+## Suggestions
+
+4. **The window pair splits at desktop only.** `auto-fit` with `minmax(min(100%, 13rem), 1fr)` yields 4 columns at 1440 for 5 facts, so "Check-in closes" lands alone on row 2 beneath "Flight", separated from "Check-in opens" (`desktop-1440x900-populated-open.png`). At 768 it gives 3 columns and pairs opens/closes on row 2, which reads distinctly better (`tablet-768x1024-populated-open.png`). Worth pinning the pair together or forcing 5 columns at wide widths.
+
+5. **Present-tense label on a past instant.** An open leg reads `CHECK-IN OPENS — Aug 17, 2026 at 15:15 PDT` while it is Aug 18 and check-in is open. `lib/checkInPolicy.ts` deliberately states `opensAt` even when past, which is right; the *label* is what reads oddly. "Check-in opened" when `reason !== 'NOT_YET_OPEN'` would be truer.
+
+6. **The success state says the same thing twice**: next step "You are checked in. Bring photo identification to the airport." immediately above the alert "Checked in for Mona Airways UIR-100. Bring photo identification to the airport."
+
+7. **A round trip's two legs are separated by an unrelated booking.** Ordering by `departureDate` (`app/checkin/page.tsx:93`) renders "Departing: Seattle → Detroit", then "Departing: Seattle → Tokyo" (a different booking), then "Returning: Detroit → Seattle". Every card is truthful and carries its own confirmation reference, so this is not the #137/#253 defect — but "Departing / Departing / Returning" reads as one sequence, and the second card's reference is the only thing that says otherwise. Grouping by booking, or naming the booking above its legs, would remove the ambiguity.
+
+8. **In-sentence links are distinguished by colour and weight, not underline.** `.checkin-empty a` / `.checkin-link` are `#d8b4fe` bold with `text-decoration: none`; against the surrounding `#e5e7eb` body text the link-to-text contrast is **1.43:1**, well under the 3:1 that WCAG G183 wants when colour is the only cue. Bold weight is a second cue, so it is defensible, but an underline on the two in-sentence cases ("log in", "Book a flight") is cheap insurance. Both links pass text-vs-background contrast comfortably.
+
+9. `role="status"` + `aria-live="polite"` *and* a deliberate focus move may double-announce in some screen readers. The focus move is the more valuable behaviour; if it stays, consider dropping the live region.
+
+10. Uppercase `dt` labels come through Chrome's accessibility tree as the transformed text (`"CHECK-IN OPENS"`, `"CONFIRMATION"`). Consistent with the rest of the app, so noting only.
+
+11. A global `transition: all .25s` animates the new focus ring from `currentColor` white at 0 offset to `#f5d0fe` at 2px offset over 250ms — measured `solid 3px rgb(255,255,255) offset 0px` at t=0 and `rgb(245,208,254) offset 2px` at t=1200ms. Clearly visible throughout; not a defect, but it is why a snapshot taken immediately after focus shows a white ring.
+
+12. Minor comment inaccuracy: `app/globals.css` says the `dt` grey is "5.3:1 on the card"; sampled against the real composited pixels it is **9.06:1**. Harmless in the safe direction, but if any test ever pins the commented figure it would be pinning a wrong number.
+
+## Headings with nothing to report
+
+- **Horizontal page scroll (#193, #256):** none. `documentElement.scrollWidth === clientWidth` at 390, 768 and 1440 in the signed-out, populated, success, error and empty states. I additionally stressed the layout beyond the fixture by injecting, in-browser, a 90-character route heading, a 45-character unbroken confirmation token, a 78-character departure string and a 57-character traveller name, at **320x720** — still zero overflow and zero out-of-viewport elements (`narrow-320x720-stress-long-strings.png`). The Seattle→Tokyo card, the longest real route, fits on one heading line even at 390 (`phone-390x844-card-cancelled-tokyo.png`). The `min-width: 0` / `overflow-wrap: anywhere` / `minmax(min(100%, 13rem), 1fr)` combination does what its comment claims.
+- **Contrast (#199, #250, #290):** every target passes AA, and every one also passes AAA. Measured by sampling the real composited pixels (the radial gradient and the translucent overlays included), foreground from computed style:
+
+| Target | fg | sampled bg | size/weight | ratio |
+| --- | --- | --- | --- | --- |
+| `dt` label grey | 185,185,196 | 27,23,34 | 12.8px/400 | 9.06 |
+| `dd` value | 255,255,255 | 27,23,34 | 16px/600 | 17.61 |
+| `.checkin-traveller-seat` | 212,212,216 | 35,32,42 | 16px/400 | 10.83 |
+| `.checkin-traveller-name` | 255,255,255 | 36,32,43 | 16px/700 | 15.95 |
+| `.checkin-traveller-state` | 233,213,255 | 33,31,39 | 13.6px/600 | 11.96 |
+| badge "Check-in open" | 187,247,208 | 23,49,38 | 13.6px/700 | 11.52 |
+| badge "Check-in not open yet" | 244,244,245 | 46,43,55 | 13.6px/700 | 12.60 |
+| badge "Flight cancelled" | 254,202,202 | 60,25,31 | 13.6px/700 | 10.74 |
+| `.checkin-submit` white on `#6d28d9` | 255,255,255 | 109,40,217 | 16px/700 | 7.10 |
+| next step / intro / route heading | — | — | — | 14.26 / 12.88 / 17.61 |
+
+  `CLOSED` and `DEPARTED` have no dedicated rule and fall through to the neutral base badge, i.e. the 12.60 row.
+- **Console errors and React warnings:** clean at every step of every journey — signed out, populated, keyboard activation, pending, success, refusal, empty. The only console error I saw all session was a `401` from my own failed login attempt before I verified the new account's email.
+- **Does each card say the true thing (#137, #253):** verified per card against the database. Card 1 `Departing: Seattle→Detroit`, `UIR-100`, departs Aug 18 15:15 **PDT**, opens Aug 17 15:15 PDT (−24h), closes Aug 18 14:15 PDT (−60m), ref `MA-74670F62C06D4688A79D`, Ada 1A + Grace 1B. Card 3 `Returning: Detroit→Seattle`, `UIR-101`, departs Aug 22 12:15 **EDT**, opens Aug 21 12:15 EDT, closes Aug 22 11:15 EDT, same reference (same booking, correct), same two travellers. Card 2 `Departing: Seattle→Tokyo`, `UIR-102`, its own reference `MA-166DB5911DD14B1BBF87`, Ada 2A only. No leg's data appears on another leg's card; the round trip's two legs do not bleed. `aria-labelledby` on each `&lt;section&gt;` points at that card's own `h2` id.
+- **Window times beside the departure time:** they read sensibly. All three instants per card carry the origin airport's zone and label — PDT on both Seattle-origin cards, EDT on the Detroit-origin card — so "departs 12:15 EDT / closes 11:15 EDT" is self-consistent arithmetic on screen. Worth noting as a strength I verified by reading rather than rendering: `boundary()` (`app/checkin/page.tsx:150-153`) re-derives `zoneLabel` per instant, so a window straddling a DST change labels each time with its own abbreviation rather than borrowing the departure's.
+- **Keyboard and tab order:** the check-in list contains exactly one tabbable element (the submit button) — the other cards expose no interactive controls, which is correct. Document order is header → `h1` → cards → footer, with no positive `tabIndex` anywhere. Focus ring on the button is a clear 3px `#f5d0fe` at 2px offset. Pressing Enter a second time while the request is in flight is correctly ignored (`pendingLegId` guard), and only one feedback element ever exists. The button uses `aria-disabled`/`aria-busy` rather than `disabled`, so it stays focusable while busy — the right choice.
+- **Pending state:** label "Checking in…", `aria-busy="true"`, `aria-disabled="true"`, background `#4c1d95`, `cursor: progress`. Correct at all viewports.
+- **Success state:** badge "Checked in", button gone, both traveller rows "Checked in", next step "You are checked in…", green `role="status"` message. Other cards untouched.
+- **Signed-out state:** heading, a single "log in" link to `/login`, no button, no intro paragraph; no "Check In" nav entry.
+- **Empty state:** reached properly — I signed up a new account through the UI, pulled the verification link from Mailpit, clicked through `/verify-email`, then signed in. It renders "You have no flights in the next month. Book a flight to travel with us." with the intro paragraph and zero cards, at all three viewports.
+- **Nav entry visibility:** present signed in at all three viewports (with finding 3 about its rendering at 390), absent signed out at all three.
+- **Semantics:** one `h1`, one `h2` per card, no skipped levels; `dl`/`dt`/`dd` with `div` wrappers is valid and surfaces as term/definition pairs; state is conveyed as text, not colour alone, in both the badge and the per-traveller row. The header's `/profile` avatar link has no accessible name (`link ""`), which is pre-existing in `titlebar.tsx` and outside this diff.
+
+## Environment changes you should know about
+
+Nothing `git status` would report changed — I confirmed the porcelain output is identical to the session-start snapshot. Two things did change outside tracked source:
+
+- **Your fixture is restored exactly as handed to me.** I checked the outbound leg in four times to capture the keyboard path, the mouse path, the pending state and the refusal, clearing `SeatAssignment.checkedInAt` on `UIR-100` between runs, and I toggled `UIR-100.status` to `CANCELLED` and back to `ON_TIME` for the refusal test. Final verified state: `UIR-100 ON_TIME` / `1A:null, 1B:null`, `UIR-101 ON_TIME` / `1A:null, 1B:null`, `UIR-102 CANCELLED` / `2A:null`, all bookings `CONFIRMED`. So the fixture is reusable as-is — check-in was exercised and then rewound.
+- **I created an account:** `uireview-empty-1787070545919@example.com` (verified, no bookings), to reach the empty state honestly. Delete it if you would rather not carry it; it predates the verifier's `global-setup` snapshot, so it will sit inside the baseline rather than being reported as a leak (#213).
+- A `npm run dev` server is still running on port 3000 — free it before the verifier's Playwright run.
+
+## Screenshots
+
+All under `/home/scottdensmore/Developer/scottdensmore/travel-app/test-results/ui-review/` (gitignored):
+
+Populated, check-in open: `phone-390x844-populated-open.png`, `tablet-768x1024-populated-open.png`, `desktop-1440x900-populated-open.png`
+Outbound card close-up: `phone-390x844-card-open-outbound.png`
+Longest route (Tokyo, cancelled): `phone-390x844-card-cancelled-tokyo.png`, `tablet-768x1024-card-cancelled-tokyo.png`, `desktop-1440x900-card-cancelled-tokyo.png`
+Signed out: `phone-390x844-signedout.png`, `tablet-768x1024-signedout.png`, `desktop-1440x900-signedout.png`
+Empty state: `phone-390x844-empty-no-flights.png`, `tablet-768x1024-empty-no-flights.png`, `desktop-1440x900-empty-no-flights.png`
+Nav entry: `phone-390x844-nav-signedin.png` (finding 3), `phone-390x844-nav-signedout.png`
+Keyboard focus ring: `desktop-1440x900-focus-ring-submit.png` (settled), `tablet-768x1024-focus-ring-submit.png`, `phone-390x844-focus-ring-submit.png` (caught mid-transition, see suggestion 11)
+Pending: `phone-390x844-pending-checking-in.png`, `tablet-768x1024-pending-checking-in.png`, `desktop-1440x900-pending-checking-in.png`
+Success: `tablet-768x1024-success-feedback-focused.png` (ring visible, keyboard path), `desktop-1440x900-success-feedback-focused.png` (no ring, mouse path — finding 2), `phone-390x844-success-card-focus-on-message.png`, `desktop-1440x900-success-card-checked-in.png`, `tablet-768x1024-success-card-checked-in.png`, `phone-390x844-success-checked-in.png`, `tablet-768x1024-success-checked-in-full.png`, `desktop-1440x900-success-checked-in-full.png`
+Refusal (finding 1): `phone-390x844-error-refusal-card.png`, `phone-390x844-error-refusal-full.png`, `desktop-1440x900-error-refusal-card.png`, `desktop-1440x900-error-refusal-full.png`
+Overflow stress: `phone-390x844-stress-long-strings.png`, `narrow-320x720-stress-long-strings.png`
+
+One reading note on the element-level screenshots (`*-card-*.png`, `*-refusal-card.png`, `*-stress-*.png`): the sticky site header draws over the top of the card because Playwright scrolls the element under it. That is a screenshot artifact, not a layout defect. The small dark "N" circle at bottom-left of several images is the Next.js dev-tools indicator, which overlaps the CTA at phone width in development only.
+
+## What I could not exercise
+
+`CLOSED`, `DEPARTED`, `BOOKING_CANCELLED`, `BOOKING_DISRUPTED` and `NOT_TRAVELLING` were not rendered — the fixture holds `OPEN`, `NOT_YET_OPEN`, `FLIGHT_CANCELLED` and (after my check-in) `ALREADY_CHECKED_IN`. `BOOKING_DISRUPTED` is the one with unreviewed rendered output: it is the only reason that renders the extra `.checkin-link` "Choose replacement flights" (`CheckInPanel.tsx:199-203`), so that link's layout beside the button area is unreviewed at every viewport. Its colour and focus ring are the same declarations I verified on the empty-state link. The other four differ from states I did review only in badge text and next-step wording — `CLOSED` and `DEPARTED` share the neutral badge style I measured on `NOT_YET_OPEN`, and the cancelled family shares the red style I measured on `FLIGHT_CANCELLED`.</result>
+<usage><subagent_tokens>126529</subagent_tokens><tool_uses>61</tool_uses><duration_ms>1232227</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>ad96dd1853b594aac</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/3c1f314f-5bc6-4f63-b253-d784d069272c/tasks/ad96dd1853b594aac.output</output-file>
+<status>failed</status>
+<summary>Agent "Verify check-in eligibility slice" failed: Agent terminated early due to an API error: API Error: 529 Overloaded. This is a server-side issue, usually temporary — try again in a moment. If it persists, check https://status.claude.com.</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>ad96dd1853b594aac</task-id>
+<tool-use-id>toolu_01NtS1M2T9NnLyn1t1gNePmL</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/3c1f314f-5bc6-4f63-b253-d784d069272c/tasks/ad96dd1853b594aac.output</output-file>
+<status>failed</status>
+<summary>Agent "Verify check-in eligibility slice" failed: Agent terminated early due to an API error: API Error: 529 Overloaded. This is a server-side issue, usually temporary — try again in a moment. If it persists, check https://status.claude.com.</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bln1zysbz</task-id>
+<tool-use-id>toolu_01MJWfuGgAhQaDBQpjWK8jmu</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/3c1f314f-5bc6-4f63-b253-d784d069272c/tasks/bln1zysbz.output</output-file>
+<status>completed</status>
+<summary>Background command "Wait 90 seconds before retrying" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>ad96dd1853b594aac</task-id>
+<tool-use-id>toolu_01AiCPPkv12t2nRkT6JTCRQy</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/3c1f314f-5bc6-4f63-b253-d784d069272c/tasks/ad96dd1853b594aac.output</output-file>
+<status>failed</status>
+<summary>Agent "Verify check-in eligibility slice" failed: Agent terminated early due to an API error: API Error: 529 Overloaded. This is a server-side issue, usually temporary — try again in a moment. If it persists, check https://status.claude.com.</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a5ce8421c1ffab312</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/3c1f314f-5bc6-4f63-b253-d784d069272c/tasks/a5ce8421c1ffab312.output</output-file>
+<status>failed</status>
+<summary>Agent "/code-review high" failed: Agent terminated early due to an API error: API Error: 529 Overloaded. This is a server-side issue, usually temporary — try again in a moment. If it persists, check https://status.claude.com.</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bod1k3yv2</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/3c1f314f-5bc6-4f63-b253-d784d069272c/tasks/bod1k3yv2.output</output-file>
+<status>completed</status>
+<summary>Background command "Wait before retrying code review" completed (exit code 0)</summary>
+</task-notification>

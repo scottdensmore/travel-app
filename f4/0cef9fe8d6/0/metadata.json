@@ -1,0 +1,280 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "f40cef9fe8d6",
+  "session_id": "3c1f314f-5bc6-4f63-b253-d784d069272c",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-18T17:54:55.790980073Z",
+  "branch": "feat/checkin-eligibility",
+  "checkpoints_count": 8,
+  "save_step_count": 8,
+  "files_touched": [
+    "__tests__/app/checkIn.database.test.ts",
+    "__tests__/app/checkInPage.test.ts",
+    "__tests__/components/CheckInPanel.test.tsx",
+    "__tests__/components/titlebar.test.tsx",
+    "__tests__/lib/checkInPolicy.test.ts",
+    "__tests__/styles/checkIn.test.ts",
+    "app/actions.ts",
+    "app/checkin/page.tsx",
+    "app/globals.css",
+    "components/ui/CheckInPanel.tsx",
+    "components/ui/titlebar.tsx",
+    "e2e/checkin.spec.ts",
+    "lib/checkInPolicy.ts",
+    "lib/validation.ts",
+    "prisma/migrations/20260818120000_record_traveller_check_in/migration.sql",
+    "prisma/schema.prisma"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-5[1m]",
+  "turn_id": "6aaf23ebf57b",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 370,
+    "cache_creation_tokens": 293974,
+    "cache_read_tokens": 37184250,
+    "output_tokens": 161536,
+    "api_call_count": 185,
+    "subagent_tokens": {
+      "input_tokens": 112,
+      "cache_creation_tokens": 122238,
+      "cache_read_tokens": 4448591,
+      "output_tokens": 60026,
+      "api_call_count": 59
+    }
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "claude-skill-toolu_011nJMNRPvqKScdoQAPQzG7e",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "code-review"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "6aaf23ebf57b",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 897,
+        "end": 898,
+        "entry_ids": [
+          "f0ba8db7-6b25-4c33-a9d2-5b9e7cb594e6"
+        ],
+        "tool_use_id": "toolu_011nJMNRPvqKScdoQAPQzG7e"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_011nJMNRPvqKScdoQAPQzG7e"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: code-review",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_014JvJFxXTjY6Pt47ypBiTpW",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "code-review"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "6aaf23ebf57b",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 918,
+        "end": 919,
+        "entry_ids": [
+          "7fce2536-7cc3-4179-93ae-0e77e2641022"
+        ],
+        "tool_use_id": "toolu_014JvJFxXTjY6Pt47ypBiTpW"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_014JvJFxXTjY6Pt47ypBiTpW"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: code-review",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 8
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-18T17:54:55.362876031Z",
+    "agent_lines": 1462,
+    "agent_removed": 0,
+    "human_added": 910,
+    "human_modified": 131,
+    "human_removed": 0,
+    "total_committed": 2477,
+    "total_lines_changed": 2503,
+    "agent_percentage": 58.409908110267686,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 2341,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 114,
+      "user_lines_removed": 9,
+      "agent_lines_added": 2431,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "__tests__/app/checkInPage.test.ts": 10,
+        "__tests__/components/CheckInPanel.test.tsx": 55,
+        "app/checkin/page.tsx": 11,
+        "components/ui/CheckInPanel.tsx": 38
+      },
+      "user_removed_per_file": {
+        "__tests__/components/CheckInPanel.test.tsx": 2,
+        "app/checkin/page.tsx": 4,
+        "components/ui/CheckInPanel.tsx": 3
+      }
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 114,
+      "user_lines_removed": 9,
+      "agent_lines_added": 2431,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "__tests__/app/checkInPage.test.ts": 10,
+        "__tests__/components/CheckInPanel.test.tsx": 55,
+        "app/checkin/page.tsx": 11,
+        "components/ui/CheckInPanel.tsx": 38
+      },
+      "user_removed_per_file": {
+        "__tests__/components/CheckInPanel.test.tsx": 2,
+        "app/checkin/page.tsx": 4,
+        "components/ui/CheckInPanel.tsx": 3
+      }
+    },
+    {
+      "checkpoint_number": 5,
+      "user_lines_added": 114,
+      "user_lines_removed": 9,
+      "agent_lines_added": 2431,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "__tests__/app/checkInPage.test.ts": 10,
+        "__tests__/components/CheckInPanel.test.tsx": 55,
+        "app/checkin/page.tsx": 11,
+        "components/ui/CheckInPanel.tsx": 38
+      },
+      "user_removed_per_file": {
+        "__tests__/components/CheckInPanel.test.tsx": 2,
+        "app/checkin/page.tsx": 4,
+        "components/ui/CheckInPanel.tsx": 3
+      }
+    },
+    {
+      "checkpoint_number": 6,
+      "user_lines_added": 114,
+      "user_lines_removed": 9,
+      "agent_lines_added": 2431,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "__tests__/app/checkInPage.test.ts": 10,
+        "__tests__/components/CheckInPanel.test.tsx": 55,
+        "app/checkin/page.tsx": 11,
+        "components/ui/CheckInPanel.tsx": 38
+      },
+      "user_removed_per_file": {
+        "__tests__/components/CheckInPanel.test.tsx": 2,
+        "app/checkin/page.tsx": 4,
+        "components/ui/CheckInPanel.tsx": 3
+      }
+    },
+    {
+      "checkpoint_number": 7,
+      "user_lines_added": 136,
+      "user_lines_removed": 23,
+      "agent_lines_added": 2431,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "__tests__/app/checkInPage.test.ts": 10,
+        "__tests__/components/CheckInPanel.test.tsx": 55,
+        "__tests__/lib/checkInPolicy.test.ts": 4,
+        "app/checkin/page.tsx": 11,
+        "components/ui/CheckInPanel.tsx": 38,
+        "lib/checkInPolicy.ts": 18
+      },
+      "user_removed_per_file": {
+        "__tests__/components/CheckInPanel.test.tsx": 2,
+        "__tests__/lib/checkInPolicy.test.ts": 4,
+        "app/checkin/page.tsx": 4,
+        "components/ui/CheckInPanel.tsx": 3,
+        "lib/checkInPolicy.ts": 10
+      }
+    },
+    {
+      "checkpoint_number": 8,
+      "user_lines_added": 136,
+      "user_lines_removed": 23,
+      "agent_lines_added": 2431,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "__tests__/app/checkInPage.test.ts": 10,
+        "__tests__/components/CheckInPanel.test.tsx": 55,
+        "__tests__/lib/checkInPolicy.test.ts": 4,
+        "app/checkin/page.tsx": 11,
+        "components/ui/CheckInPanel.tsx": 38,
+        "lib/checkInPolicy.ts": 18
+      },
+      "user_removed_per_file": {
+        "__tests__/components/CheckInPanel.test.tsx": 2,
+        "__tests__/lib/checkInPolicy.test.ts": 4,
+        "app/checkin/page.tsx": 4,
+        "components/ui/CheckInPanel.tsx": 3,
+        "lib/checkInPolicy.ts": 10
+      }
+    },
+    {
+      "checkpoint_number": 9,
+      "user_lines_added": 136,
+      "user_lines_removed": 23,
+      "agent_lines_added": 2431,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "__tests__/app/checkInPage.test.ts": 10,
+        "__tests__/components/CheckInPanel.test.tsx": 55,
+        "__tests__/lib/checkInPolicy.test.ts": 4,
+        "app/checkin/page.tsx": 11,
+        "components/ui/CheckInPanel.tsx": 38,
+        "lib/checkInPolicy.ts": 18
+      },
+      "user_removed_per_file": {
+        "__tests__/components/CheckInPanel.test.tsx": 2,
+        "__tests__/lib/checkInPolicy.test.ts": 4,
+        "app/checkin/page.tsx": 4,
+        "components/ui/CheckInPanel.tsx": 3,
+        "lib/checkInPolicy.ts": 10
+      }
+    }
+  ]
+}
