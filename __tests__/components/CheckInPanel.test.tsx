@@ -29,6 +29,9 @@ const leg = (overrides: Partial<CheckInLegView> = {}): CheckInLegView => ({
     nextStep: 'Confirm your seat to check in for this flight.',
     awaiting: 1,
     hasOpened: true,
+    // Already on file by default, so the existing tests stay about check-in
+    // rather than about the attestation. The attestation has its own block below.
+    documentsConfirmed: true,
     travellers: [
         { id: 'p1', name: 'Ada Lovelace', seat: 'Seat 11A', cabin: 'Economy', checkedIn: false },
     ],
@@ -86,7 +89,11 @@ describe('the check-in page', () => {
 
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Check in' })); });
 
-        expect(mockedCheckIn).toHaveBeenCalledWith({ bookingId: 7, legId: 11 });
+        expect(mockedCheckIn).toHaveBeenCalledWith({
+            bookingId: 7,
+            legId: 11,
+            documentsConfirmed: true,
+        });
         const status = await screen.findByRole('status');
         expect(status).toHaveTextContent('Checked in for Gemini Airways GA-100.');
         // The next-step line under the card already says this; saying it twice
@@ -210,7 +217,11 @@ describe('the check-in page', () => {
 
         // A round trip is two check-ins. Sending the outbound's leg id for the
         // return would check in the wrong flight and report the right one.
-        expect(mockedCheckIn).toHaveBeenCalledWith({ bookingId: 7, legId: 12 });
+        expect(mockedCheckIn).toHaveBeenCalledWith({
+            bookingId: 7,
+            legId: 12,
+            documentsConfirmed: true,
+        });
         expect(await within(returning).findByRole('status'))
             .toHaveTextContent('Gemini Airways GA-101');
     });
@@ -261,5 +272,253 @@ describe('what each card claims', () => {
 
         expect(screen.getByText('Aug 18, 2026 at 08:00 PDT')).toBeInTheDocument();
         expect(screen.getByText('Aug 19, 2026 at 07:00 PDT')).toBeInTheDocument();
+    });
+});
+
+describe('confirming traveller and document details', () => {
+    it('asks for the attestation before it will check anyone in', async () => {
+        render(<CheckInPanel legs={[leg({ documentsConfirmed: false })]} />);
+
+        const box = screen.getByRole('checkbox');
+        expect(box).not.toBeChecked();
+        // The label carries the state, not just a shade of purple: `aria-disabled`
+        // is assistive-tech only and `cursor: not-allowed` never happens on touch,
+        // so a sighted mouse or touch user had no signal at all and the button
+        // read as ready.
+        const blocked = screen.getByRole('button', { name: 'Confirm details to check in' });
+        expect(blocked).toHaveAttribute('aria-disabled', 'true');
+
+        // `aria-disabled` does not stop a click, so pressing it must be refused
+        // in the handler -- and refused out loud, not silently.
+        await act(async () => { fireEvent.click(blocked); });
+        expect(mockedCheckIn).not.toHaveBeenCalled();
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Confirm the traveller and document details');
+    });
+
+    it('clears the refusal the moment the customer complies', async () => {
+        render(<CheckInPanel legs={[leg({ documentsConfirmed: false })]} />);
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Confirm details to check in' }));
+        });
+        expect(await screen.findByRole('alert')).toBeInTheDocument();
+        // Focus is already on the remedy, so the customer can act without hunting.
+        expect(screen.getByRole('checkbox')).toHaveFocus();
+
+        await act(async () => { fireEvent.click(screen.getByRole('checkbox')); });
+
+        // A red alert saying "confirm the details" under a button that has just
+        // gone live tells a customer to do the thing they have just done, and
+        // nothing announces that the blocker lifted.
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Check in' }))
+            .toHaveAttribute('aria-disabled', 'false');
+    });
+
+    it('offers a way out to the customer who cannot honestly confirm', () => {
+        render(<CheckInPanel legs={[leg({ documentsConfirmed: false })]} />);
+
+        // On screen from the start. It used to appear only in the refusal, so the
+        // only customer who learned there was a route out was one who had already
+        // pressed the button without ticking -- never the one who needs it.
+        expect(screen.getByText(/If any of them are wrong, contact us/))
+            .toBeInTheDocument();
+    });
+
+    it('says the attestation is on file rather than merely not asking', () => {
+        render(<CheckInPanel legs={[leg({ documentsConfirmed: true })]} />);
+
+        // A vanished checkbox is an absence, not an answer: a customer returning
+        // for the return leg could not tell whether they had confirmed.
+        expect(screen.getByText('Traveller and document details confirmed.'))
+            .toBeInTheDocument();
+    });
+
+    it('still says so on the legs where the customer most needs to know', () => {
+        // Both of these are `allowed: false`, and gating the line on `allowed`
+        // hid it on exactly the two cards it exists for: the leg just checked in,
+        // and the return whose window has not opened.
+        const checkedIn = leg({
+            legId: 31,
+            documentsConfirmed: true,
+            allowed: false,
+            reason: 'ALREADY_CHECKED_IN',
+            statusLabel: 'Checked in',
+        });
+        const notYetOpen = leg({
+            legId: 32,
+            documentsConfirmed: true,
+            allowed: false,
+            reason: 'NOT_YET_OPEN',
+            statusLabel: 'Check-in not open yet',
+            hasOpened: false,
+        });
+        render(<CheckInPanel legs={[checkedIn, notYetOpen]} />);
+
+        expect(screen.getAllByText('Traveller and document details confirmed.'))
+            .toHaveLength(2);
+    });
+
+    it('does not state it beside a booking that is over', () => {
+        render(<CheckInPanel legs={[leg({
+            documentsConfirmed: true,
+            allowed: false,
+            reason: 'BOOKING_CANCELLED',
+            statusLabel: 'Booking cancelled',
+        })]} />);
+
+        // True, but noise beside "Booking cancelled" -- there is no check-in for
+        // the confirmation to be a step towards.
+        expect(screen.queryByText('Traveller and document details confirmed.'))
+            .not.toBeInTheDocument();
+    });
+
+    it('checks in once the box is ticked, and says the customer confirmed', async () => {
+        render(<CheckInPanel legs={[leg({ documentsConfirmed: false })]} />);
+
+        await act(async () => { fireEvent.click(screen.getByRole('checkbox')); });
+        expect(screen.getByRole('button', { name: 'Check in' }))
+            .toHaveAttribute('aria-disabled', 'false');
+
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Check in' })); });
+
+        expect(mockedCheckIn).toHaveBeenCalledWith({
+            bookingId: 7,
+            legId: 11,
+            documentsConfirmed: true,
+        });
+    });
+
+    it('does not ask again once the attestation is on file', () => {
+        render(<CheckInPanel legs={[leg({ documentsConfirmed: true })]} />);
+
+        // A passport does not change between the legs of one trip, so a second
+        // ask is a question the customer has already answered.
+        expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Check in' }))
+            .toHaveAttribute('aria-disabled', 'false');
+    });
+
+    it('still confirms for a leg whose party attested earlier', async () => {
+        render(<CheckInPanel legs={[leg({ documentsConfirmed: true })]} />);
+
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Check in' })); });
+
+        // The action is idempotent about the attestation, and sending true for a
+        // party already on file keeps the client from having to model the
+        // difference.
+        expect(mockedCheckIn).toHaveBeenCalledWith({
+            bookingId: 7,
+            legId: 11,
+            documentsConfirmed: true,
+        });
+    });
+
+    it('asks a booking whose two legs are both open exactly once', async () => {
+        // A same-day round trip has both legs inside the window. Sharing the
+        // ANSWER across them was only half the fix: the question was still
+        // rendered on each card, so the customer read the same three-line sentence
+        // twice and ticking one silently moved a control on the other.
+        const outbound = leg({ documentsConfirmed: false });
+        const inbound = leg({
+            legId: 12,
+            directionLabel: 'Returning',
+            flightNumber: 'GA-101',
+            documentsConfirmed: false,
+        });
+        render(<CheckInPanel legs={[outbound, inbound]} />);
+
+        expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+
+        await act(async () => { fireEvent.click(screen.getByRole('checkbox')); });
+
+        // One answer arms both legs, which is right -- it is one attestation.
+        for (const button of screen.getAllByRole('button', { name: 'Check in' })) {
+            expect(button).toHaveAttribute('aria-disabled', 'false');
+        }
+    });
+
+    it('sends a refusal on one leg to the attestation living on another', async () => {
+        // The remedy sits above the button, and the feedback paragraph is the last
+        // node in the card, so focusing the message puts the fix behind the focus:
+        // the keyboard user tabs forward and lands on the next card. For a
+        // booking's second open leg the control is on a different card entirely.
+        const outbound = leg({ documentsConfirmed: false });
+        const inbound = leg({
+            legId: 12,
+            directionLabel: 'Returning',
+            flightNumber: 'GA-101',
+            documentsConfirmed: false,
+        });
+        render(<CheckInPanel legs={[outbound, inbound]} />);
+
+        const returning = screen.getByRole('region', { name: /Returning/ });
+        await act(async () => {
+            fireEvent.click(within(returning).getByRole('button', {
+                name: 'Confirm details to check in',
+            }));
+        });
+
+        expect(screen.getByRole('checkbox')).toHaveFocus();
+    });
+
+    it('points the checkbox at the way out, for a reader moving by control', () => {
+        render(<CheckInPanel legs={[leg({ documentsConfirmed: false })]} />);
+
+        const box = screen.getByRole('checkbox');
+        const describedBy = box.getAttribute('aria-describedby');
+        expect(describedBy).toBeTruthy();
+        expect(document.getElementById(describedBy!))
+            .toHaveTextContent(/If any of them are wrong, contact us/);
+    });
+
+    it('names a route out rather than the word "contact"', () => {
+        render(<CheckInPanel legs={[leg({ documentsConfirmed: false })]} />);
+
+        // Deliberately non-routable example details, marked as examples the way the
+        // footer marks them (#72) -- but a route, not an instruction to find one.
+        expect(screen.getByRole('link', { name: 'support@example.com' }))
+            .toHaveAttribute('href', 'mailto:support@example.com');
+        expect(screen.getByRole('link', { name: '+1 (555) 0100' }))
+            .toHaveAttribute('href', 'tel:+15550100');
+        expect(screen.getByText('(example)')).toBeInTheDocument();
+    });
+
+    it('keeps one booking\'s answer off another booking', async () => {
+        const mine = leg({ documentsConfirmed: false });
+        const other = leg({
+            bookingId: 8,
+            legId: 21,
+            reference: 'MA-9876543210FEDCBA9876',
+            flightNumber: 'GA-200',
+            documentsConfirmed: false,
+        });
+        render(<CheckInPanel legs={[mine, other]} />);
+
+        const [first] = screen.getAllByRole('checkbox');
+        await act(async () => { fireEvent.click(first); });
+
+        // Different travellers, different documents. This is the boundary the
+        // per-booking key exists to hold, and it was only ever verified by hand.
+        const boxes = screen.getAllByRole('checkbox');
+        expect(boxes[0]).toBeChecked();
+        expect(boxes[1]).not.toBeChecked();
+        expect(screen.getByRole('button', { name: 'Check in' }))
+            .toHaveAttribute('aria-disabled', 'false');
+        expect(screen.getByRole('button', { name: 'Confirm details to check in' }))
+            .toHaveAttribute('aria-disabled', 'true');
+    });
+
+    it('names what is being confirmed without showing any of it', () => {
+        render(<CheckInPanel legs={[leg({ documentsConfirmed: false })]} />);
+
+        const label = screen.getByText(/I confirm that each traveller/);
+        // The categories are named; no value is shown. The policy forbids a
+        // passport number or a date of birth reaching a customer surface at all,
+        // which is why this is an attestation rather than a review screen.
+        expect(label).toHaveTextContent('passport details');
+        expect(label).toHaveTextContent('date of birth');
+        expect(screen.queryByText(/\d{2}\/\d{2}\/\d{4}/)).not.toBeInTheDocument();
     });
 });

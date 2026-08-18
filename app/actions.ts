@@ -58,7 +58,11 @@ import {
     outboundFlight,
 } from '@/lib/bookingItinerary';
 import { cancellableBooking, cancellationNote, cancellationOutcome } from '@/lib/cancellationPolicy';
-import { checkInNextStep, legCheckInEligibility } from '@/lib/checkInPolicy';
+import {
+    checkInNextStep,
+    DOCUMENT_ATTESTATION_REQUIRED,
+    legCheckInEligibility,
+} from '@/lib/checkInPolicy';
 import { buildFlightRoutes, findNearbyOperatingDates } from '@/lib/flightSearch';
 import { airportCodeFor, airportCodesForRoute, airportTimeZoneFor } from '@/lib/airports';
 import { airportDayBounds, airportLocalInstant } from '@/lib/flightTime';
@@ -711,14 +715,18 @@ class BookingDepartedError extends Error {}
  * nothing further and reports success -- so the closed-window refusal below
  * cannot fire at a customer who is already checked in and has nothing to fix.
  */
-export async function checkInLegAction(input: { bookingId: number; legId: number }) {
+export async function checkInLegAction(input: {
+    bookingId: number;
+    legId: number;
+    documentsConfirmed?: boolean;
+}) {
     const session = await getServerSession(authOptions);
     const userId = session?.user?.id;
     if (!userId) throw new Error("Unauthorized");
 
     const parsed = parseActionInput(checkInRequestSchema, input);
     if (!parsed.ok) return parsed;
-    const { bookingId, legId } = parsed.data;
+    const { bookingId, legId, documentsConfirmed } = parsed.data;
 
     // Ownership first, and against the booking rather than the leg: the leg is
     // then confirmed to belong to it, so naming somebody else's leg beside your
@@ -752,7 +760,15 @@ export async function checkInLegAction(input: { bookingId: number; legId: number
         const locked = await tx.itineraryLeg.findFirstOrThrow({
             where: { id: legId, bookingId, ...activeItineraryLegWhere },
             select: {
-                booking: { select: { status: true } },
+                booking: {
+                    select: {
+                        status: true,
+                        // A timestamp only. No identity data is read here and
+                        // none could be: that is what makes an attestation
+                        // compatible with the policy at all.
+                        passengers: { select: { documentsConfirmedAt: true } },
+                    },
+                },
                 flight: { select: { departureDate: true, status: true } },
                 seatAssignments: { select: { id: true, releasedAt: true, checkedInAt: true } },
             },
@@ -771,6 +787,23 @@ export async function checkInLegAction(input: { bookingId: number; legId: number
         if (eligibility.reason === 'ALREADY_CHECKED_IN') return null;
         if (!eligibility.allowed) return eligibility.reason;
 
+        // The document attestation, which the policy makes the only thing
+        // check-in can honestly ask. Read under the same lock as everything
+        // else, and asked once per traveller rather than once per leg: a passport
+        // does not change between an outbound and a return.
+        const unconfirmed = locked.booking.passengers
+            .filter(passenger => passenger.documentsConfirmedAt === null);
+        if (unconfirmed.length > 0) {
+            if (!documentsConfirmed) return 'DOCUMENTS_NOT_CONFIRMED';
+            await tx.passenger.updateMany({
+                // Only the ones who have not confirmed. Restamping would claim a
+                // traveller attested later than they did, the same way
+                // `checkedInAt` would.
+                where: { bookingId, documentsConfirmedAt: null },
+                data: { documentsConfirmedAt: new Date() },
+            });
+        }
+
         await tx.seatAssignment.updateMany({
             // Through `heldSeats` rather than restating the release condition
             // here: a released seat is nobody's boarding position, and the rule
@@ -786,6 +819,11 @@ export async function checkInLegAction(input: { bookingId: number; legId: number
         return null;
     });
 
+    if (refusal === 'DOCUMENTS_NOT_CONFIRMED') {
+        // Not a policy answer -- the window is open and the booking is fine. The
+        // customer simply has not attested yet, which is an input contract.
+        return actionValidationFailure(DOCUMENT_ATTESTATION_REQUIRED);
+    }
     if (refusal) {
         // A policy answer, not a fault: the customer can act on the next step.
         return actionValidationFailure(checkInNextStep(refusal));

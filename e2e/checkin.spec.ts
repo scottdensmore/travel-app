@@ -125,7 +125,43 @@ test.describe('Check-in journey', () => {
         await expect(returnCard.getByText(/Check-in opens 24 hours before departure/)).toBeVisible();
 
         await expect(outboundCard.getByText('Check-in open', { exact: true })).toBeVisible();
-        await outboundCard.getByRole('button', { name: 'Check in 2 travellers' }).click();
+
+        // The attestation gate. `docs/PASSENGER_DATA_POLICY.md` rules out showing
+        // the details back or re-collecting them, so confirming is the only thing
+        // check-in can honestly ask -- and it has to be asked before check-in.
+        const attestation = outboundCard.getByRole('checkbox');
+        await expect(attestation).not.toBeChecked();
+        // The blocked label says what it wants rather than relying on a shade of
+        // purple and an `aria-disabled` that only assistive tech can see.
+        const submit = outboundCard.getByRole('button', { name: 'Confirm details to check in' });
+        await expect(submit).toHaveAttribute('aria-disabled', 'true');
+
+        // The way out is on screen before any mistake is made: the customer who
+        // cannot honestly confirm never presses the button.
+        await expect(outboundCard.getByText(/If any of them are wrong, contact us/))
+            .toBeVisible();
+
+        // Pressing it before confirming says why rather than doing nothing.
+        //
+        // `force` because Playwright honours `aria-disabled` and refuses to click,
+        // which is itself worth knowing -- but a real mouse click on an
+        // `aria-disabled` button that is not `disabled` does fire, so bypassing the
+        // actionability check is what models the human rather than the tool.
+        await submit.click({ force: true });
+        await expect(outboundCard.getByRole('alert'))
+            .toContainText('Confirm the traveller and document details');
+        await expect(outboundCard.getByText('Check-in open', { exact: true })).toBeVisible();
+
+        // The sentence names the categories and shows no values.
+        await expect(outboundCard.getByText(/I confirm that each traveller/))
+            .toContainText('passport details');
+
+        await attestation.check();
+        // Complying clears the refusal rather than leaving it under a live button.
+        await expect(outboundCard.getByRole('alert')).toHaveCount(0);
+        const ready = outboundCard.getByRole('button', { name: 'Check in 2 travellers' });
+        await expect(ready).toHaveAttribute('aria-disabled', 'false');
+        await ready.click();
 
         await expect(outboundCard.getByRole('status')).toContainText('Checked in for Mona Airways');
         // After the refresh the server is the one saying so, so this asserts the
@@ -134,6 +170,19 @@ test.describe('Check-in journey', () => {
         await expect(outboundCard.getByRole('button', { name: /Check in/ })).toHaveCount(0);
         // The return is untouched by the outbound's check-in.
         await expect(returnCard.getByText('Check-in not open yet', { exact: true })).toBeVisible();
+
+        // And the attestation is not asked again anywhere on the page: a passport
+        // does not change between the legs of one trip. It says so rather than
+        // merely going quiet.
+        await expect(page.getByRole('checkbox')).toHaveCount(0);
+        await expect(outboundCard.getByText('Traveller and document details confirmed.'))
+            .toBeVisible();
+        const confirmed = await prisma.passenger.findMany({
+            where: { booking: { user: { email: customerEmail } } },
+            select: { documentsConfirmedAt: true },
+        });
+        expect(confirmed.length).toBeGreaterThan(0);
+        expect(confirmed.every(passenger => passenger.documentsConfirmedAt !== null)).toBe(true);
 
         const stamps = await prisma.seatAssignment.findMany({
             where: { flightId: { in: [outbound.id, inbound.id] } },

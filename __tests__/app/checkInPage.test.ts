@@ -43,7 +43,13 @@ const leg = (overrides: {
     flightStatus?: 'ON_TIME' | 'DELAYED' | 'CANCELLED';
     bookingStatus?: string;
     positions?: Array<{ id: number; sequence: number }>;
-    passengers?: Array<{ id: string; firstName: string; lastName: string; gender: string }>;
+    passengers?: Array<{
+        id: string;
+        firstName: string;
+        lastName: string;
+        gender: string;
+        documentsConfirmedAt?: Date | null;
+    }>;
     seatAssignments?: ReturnType<typeof seat>[];
 } = {}) => {
     const id = overrides.id ?? 11;
@@ -54,8 +60,12 @@ const leg = (overrides: {
             id: 7,
             reference: 'MA-0123456789ABCDEF0123',
             status: overrides.bookingStatus ?? 'CONFIRMED',
-            passengers: overrides.passengers
-                ?? [{ id: 'p1', firstName: 'Ada', lastName: 'Lovelace', gender: 'Female' }],
+            passengers: (overrides.passengers
+                ?? [{ id: 'p1', firstName: 'Ada', lastName: 'Lovelace', gender: 'Female' }]
+            ).map(passenger => ({
+                documentsConfirmedAt: null,
+                ...passenger,
+            })),
             legs: overrides.positions ?? [{ id, sequence: overrides.sequence ?? 0 }],
         },
         flight: {
@@ -297,5 +307,70 @@ describe('check-in page', () => {
             expect(view.statusLabel).toBe(expected);
             expect(view.nextStep.length).toBeGreaterThan(0);
         }
+    });
+});
+
+describe('the document attestation', () => {
+    beforeEach(() => {
+        findMany.mockReset();
+        findMany.mockResolvedValue([]);
+        mockedServerRenderTime.mockReset();
+        mockedServerRenderTime.mockResolvedValue(renderedAt);
+        mockedSession.mockReset();
+        mockedSession.mockResolvedValue({ user: { id: 'u1' } });
+    });
+
+    const legsPassedToPanel = async (): Promise<CheckInLegView[]> => {
+        const element = await CheckInPage() as { props: { legs: CheckInLegView[] } };
+        return element.props.legs;
+    };
+
+    it('asks for it until every traveller on the booking has confirmed', async () => {
+        findMany.mockResolvedValue([leg({
+            passengers: [
+                { id: 'p1', firstName: 'Ada', lastName: 'Lovelace', gender: 'Female',
+                  documentsConfirmedAt: new Date(renderedAt - HOUR) },
+                { id: 'p2', firstName: 'Grace', lastName: 'Hopper', gender: 'Female' },
+            ],
+            seatAssignments: [
+                seat({ passengerId: 'p1', seatNumber: '11A' }),
+                seat({ passengerId: 'p2', seatNumber: '11B' }),
+            ],
+        })]);
+
+        const [view] = await legsPassedToPanel();
+
+        // One traveller's confirmation is not the party's, the same way one
+        // traveller's check-in is not.
+        expect(view.documentsConfirmed).toBe(false);
+    });
+
+    it('stops asking once the whole party has confirmed', async () => {
+        findMany.mockResolvedValue([leg({
+            passengers: [
+                { id: 'p1', firstName: 'Ada', lastName: 'Lovelace', gender: 'Female',
+                  documentsConfirmedAt: new Date(renderedAt - HOUR) },
+            ],
+        })]);
+
+        const [view] = await legsPassedToPanel();
+
+        expect(view.documentsConfirmed).toBe(true);
+    });
+
+    it('reads only the attestation timestamp, never the identity data behind it', async () => {
+        await CheckInPage();
+
+        const { select } = findMany.mock.calls[0][0];
+        const passengerSelect = select.booking.select.passengers.select;
+
+        // `docs/PASSENGER_DATA_POLICY.md` forbids either plaintext or ciphertext
+        // reaching a customer surface. The attestation is compatible with that
+        // only because it is a timestamp, so this query must not widen.
+        expect(passengerSelect.documentsConfirmedAt).toBe(true);
+        expect(passengerSelect).not.toHaveProperty('passportNumberEncrypted');
+        expect(passengerSelect).not.toHaveProperty('dateOfBirthEncrypted');
+        expect(Object.keys(passengerSelect).sort())
+            .toEqual(['documentsConfirmedAt', 'firstName', 'gender', 'id', 'lastName']);
     });
 });

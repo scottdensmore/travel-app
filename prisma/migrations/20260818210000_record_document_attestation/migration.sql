@@ -1,0 +1,42 @@
+-- Record that a traveller's document details were confirmed at check-in (#77).
+--
+-- An attestation, not a re-collection. `docs/PASSENGER_DATA_POLICY.md` states
+-- that booking creation is the only normal write path for passport numbers and
+-- dates of birth, that customer-facing surfaces receive neither plaintext nor
+-- ciphertext, and that any reveal flow needs separately authorized, audited,
+-- step-up staff authentication. So check-in can neither show these details back
+-- to the customer nor accept them again: the only thing it can honestly do is
+-- ask the customer to confirm that what they gave at booking is correct, and
+-- record that they did. #143 reached the same conclusion before this was built.
+--
+-- This column therefore holds a timestamp and nothing else. It is not identity
+-- data, it reveals no identity data, and it is safe on a customer projection --
+-- which is the whole point of choosing attestation over confirmation-by-display.
+--
+-- On `Passenger` rather than `SeatAssignment`, unlike `checkedInAt`. A passport
+-- belongs to a traveller and does not change between the legs of one trip, so
+-- confirming it once covers the itinerary; `Passenger` is already exactly one
+-- traveller on one booking. Recording it per leg would ask the same customer the
+-- same question again for the return.
+--
+-- Deliberately not constrained against the sensitive-data columns.
+-- `Passenger_sensitive_data_state_check` governs whether the ciphertext is
+-- present or erased, and retention purges that ciphertext 30 days after
+-- departure while keeping the passenger row. An attestation made before the
+-- purge stays true about what happened, so a CHECK tying the two would start
+-- failing the purge rather than the attestation.
+--
+-- To reverse:
+--
+--     BEGIN;
+--     ALTER TABLE "Passenger" DROP COLUMN "documentsConfirmedAt";
+--     DELETE FROM _prisma_migrations
+--       WHERE migration_name = '20260818210000_record_document_attestation';
+--     COMMIT;
+--
+-- Reversal loses which travellers had confirmed, and nothing else: no other
+-- column, index or constraint is derived from it.
+
+SET LOCAL lock_timeout = '3s';
+
+ALTER TABLE "Passenger" ADD COLUMN "documentsConfirmedAt" TIMESTAMPTZ(3);

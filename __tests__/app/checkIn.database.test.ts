@@ -128,7 +128,11 @@ describe('checkInLegAction', () => {
         const before = await legsOf(booking.id);
         mockedSession.mockResolvedValue({ user: { id: user.id } });
 
-        const result = await checkInLegAction({ bookingId: booking.id, legId: before[0].id });
+        const result = await checkInLegAction({
+            bookingId: booking.id,
+            legId: before[0].id,
+            documentsConfirmed: true,
+        });
         expect(isActionValidationFailure(result)).toBe(false);
 
         const after = await legsOf(booking.id);
@@ -243,10 +247,15 @@ describe('checkInLegAction', () => {
 
         mockedSession.mockResolvedValue({ user: { id: user.id } });
 
-        await checkInLegAction({ bookingId: booking.id, legId: leg.id });
+        await checkInLegAction({
+            bookingId: booking.id,
+            legId: leg.id,
+            documentsConfirmed: true,
+        });
         const first = (await legsOf(booking.id))[0].seatAssignments[0].checkedInAt;
         expect(first).not.toBeNull();
 
+        // No attestation the second time: it is already on file.
         const second = await checkInLegAction({ bookingId: booking.id, legId: leg.id });
 
         // Success rather than a refusal, and the same instant: re-stamping would
@@ -273,7 +282,11 @@ describe('checkInLegAction', () => {
 
         mockedSession.mockResolvedValue({ user: { id: user.id } });
 
-        const result = await checkInLegAction({ bookingId: booking.id, legId: leg.id });
+        const result = await checkInLegAction({
+            bookingId: booking.id,
+            legId: leg.id,
+            documentsConfirmed: true,
+        });
         expect(isActionValidationFailure(result)).toBe(false);
 
         const after = await prisma.seatAssignment.findMany({
@@ -307,7 +320,11 @@ describe('checkInLegAction', () => {
 
         mockedSession.mockResolvedValue({ user: { id: user.id } });
 
-        const result = await checkInLegAction({ bookingId: booking.id, legId: leg.id });
+        const result = await checkInLegAction({
+            bookingId: booking.id,
+            legId: leg.id,
+            documentsConfirmed: true,
+        });
         expect(isActionValidationFailure(result)).toBe(false);
 
         const after = await prisma.seatAssignment.findMany({
@@ -356,7 +373,11 @@ describe('checkInLegAction', () => {
         mockedSession.mockResolvedValue({ user: { id: user.id } });
 
         try {
-            await checkInLegAction({ bookingId: booking.id, legId: leg.id });
+            await checkInLegAction({
+                bookingId: booking.id,
+                legId: leg.id,
+                documentsConfirmed: true,
+            });
 
             // `cancelBookingAction` locks every flight on a booking in ascending
             // id order; this takes the one lock that serialises against it. Under
@@ -423,8 +444,174 @@ describe('checkInLegAction', () => {
         const result = await checkInLegAction({
             bookingId: booking.id,
             legId: replacementLeg!.id,
+            documentsConfirmed: true,
         });
         expect(isActionValidationFailure(result)).toBe(false);
+    });
+
+    it('refuses to check in until the travellers confirm their document details', async () => {
+        // `docs/PASSENGER_DATA_POLICY.md` rules out showing a passport number or
+        // date of birth back to a customer, and makes booking creation the only
+        // normal write path for them. So check-in cannot verify documents; it can
+        // only ask the customer to confirm what they already gave, and record it.
+        const suffix = `M${Date.now()}`;
+        const flight = await createFlight(`F${suffix}`, 5);
+        const user = await createUser(suffix);
+        const booking = await bookSeats([flight.id], user.id, [
+            { firstName: 'Ada', seatNumbers: ['11A'] },
+        ]);
+        const [leg] = await legsOf(booking.id);
+
+        mockedSession.mockResolvedValue({ user: { id: user.id } });
+
+        const refused = await checkInLegAction({ bookingId: booking.id, legId: leg.id });
+
+        expect(isActionValidationFailure(refused)).toBe(true);
+        expect((refused as { error: { message: string } }).error.message)
+            .toMatch(/document/i);
+        // Nothing is stamped, so a refusal cannot half-check-in a party.
+        const afterRefusal = await legsOf(booking.id);
+        expect(afterRefusal[0].seatAssignments[0].checkedInAt).toBeNull();
+        const stillUnconfirmed = await prisma.passenger.findMany({
+            where: { bookingId: booking.id },
+            select: { documentsConfirmedAt: true },
+        });
+        expect(stillUnconfirmed.every(p => p.documentsConfirmedAt === null)).toBe(true);
+    });
+
+    it('records the attestation and checks in when the customer confirms', async () => {
+        const suffix = `N${Date.now()}`;
+        const flight = await createFlight(`F${suffix}`, 5);
+        const user = await createUser(suffix);
+        const booking = await bookSeats([flight.id], user.id, [
+            { firstName: 'Ada', seatNumbers: ['11A'] },
+            { firstName: 'Grace', seatNumbers: ['11B'] },
+        ]);
+        const [leg] = await legsOf(booking.id);
+
+        mockedSession.mockResolvedValue({ user: { id: user.id } });
+
+        const result = await checkInLegAction({
+            bookingId: booking.id,
+            legId: leg.id,
+            documentsConfirmed: true,
+        });
+
+        expect(isActionValidationFailure(result)).toBe(false);
+        const after = await legsOf(booking.id);
+        expect(after[0].seatAssignments.every(seat => seat.checkedInAt !== null)).toBe(true);
+        // Every traveller on the booking, because the owner attests for the party
+        // exactly as they check it in.
+        const confirmed = await prisma.passenger.findMany({
+            where: { bookingId: booking.id },
+            select: { documentsConfirmedAt: true },
+        });
+        expect(confirmed).toHaveLength(2);
+        expect(confirmed.every(p => p.documentsConfirmedAt !== null)).toBe(true);
+    });
+
+    it('does not ask a second time for the return leg', async () => {
+        // The attestation is about a passport, which does not change between the
+        // legs of one trip. Asking again on the return would be a question the
+        // customer has already answered.
+        const suffix = `O${Date.now()}`;
+        const outbound = await createFlight(`O${suffix}`, 5);
+        const inbound = await createFlight(`I${suffix}`, 20);
+        const user = await createUser(suffix);
+        const booking = await bookSeats([outbound.id, inbound.id], user.id, [
+            { firstName: 'Ada', seatNumbers: ['11A', '12A'] },
+        ]);
+        const legs = await legsOf(booking.id);
+
+        mockedSession.mockResolvedValue({ user: { id: user.id } });
+
+        await checkInLegAction({
+            bookingId: booking.id,
+            legId: legs[0].id,
+            documentsConfirmed: true,
+        });
+        // No `documentsConfirmed` this time: the attestation is already on file.
+        const second = await checkInLegAction({ bookingId: booking.id, legId: legs[1].id });
+
+        expect(isActionValidationFailure(second)).toBe(false);
+        const after = await legsOf(booking.id);
+        expect(after[1].seatAssignments[0].checkedInAt).not.toBeNull();
+    });
+
+    it('leaves an earlier attestation timestamp alone', async () => {
+        const suffix = `P${Date.now()}`;
+        const outbound = await createFlight(`O${suffix}`, 5);
+        const inbound = await createFlight(`I${suffix}`, 20);
+        const user = await createUser(suffix);
+        const booking = await bookSeats([outbound.id, inbound.id], user.id, [
+            { firstName: 'Ada', seatNumbers: ['11A', '12A'] },
+        ]);
+        const legs = await legsOf(booking.id);
+        const earlier = new Date(Date.now() - 3 * HOUR);
+        await prisma.passenger.updateMany({
+            where: { bookingId: booking.id },
+            data: { documentsConfirmedAt: earlier },
+        });
+
+        mockedSession.mockResolvedValue({ user: { id: user.id } });
+
+        // Confirming again must not claim the customer attested later than they did.
+        await checkInLegAction({
+            bookingId: booking.id,
+            legId: legs[0].id,
+            documentsConfirmed: true,
+        });
+
+        const [passenger] = await prisma.passenger.findMany({
+            where: { bookingId: booking.id },
+            select: { documentsConfirmedAt: true },
+        });
+        expect(passenger.documentsConfirmedAt?.getTime()).toBe(earlier.getTime());
+    });
+
+    it('leaves one traveller\'s attestation alone while recording the other\'s', async () => {
+        // The same blind spot the `checkedInAt` restamp had: with the WHOLE party
+        // already confirmed the update never runs, so nothing could see the
+        // `documentsConfirmedAt: null` filter disappear. It is reachable only with
+        // a partly confirmed party, where the update does run and would rewrite
+        // Ada's attestation to now -- recording that she confirmed later than she
+        // did.
+        const suffix = `Q${Date.now()}`;
+        const flight = await createFlight(`F${suffix}`, 5);
+        const user = await createUser(suffix);
+        const booking = await bookSeats([flight.id], user.id, [
+            { firstName: 'Ada', seatNumbers: ['11A'] },
+            { firstName: 'Grace', seatNumbers: ['11B'] },
+        ]);
+        const [leg] = await legsOf(booking.id);
+        const passengers = await prisma.passenger.findMany({
+            where: { bookingId: booking.id },
+            orderBy: { firstName: 'asc' },
+            select: { id: true },
+        });
+        const earlier = new Date(Date.now() - 3 * HOUR);
+        await prisma.passenger.update({
+            where: { id: passengers[0].id },
+            data: { documentsConfirmedAt: earlier },
+        });
+
+        mockedSession.mockResolvedValue({ user: { id: user.id } });
+
+        const result = await checkInLegAction({
+            bookingId: booking.id,
+            legId: leg.id,
+            documentsConfirmed: true,
+        });
+        expect(isActionValidationFailure(result)).toBe(false);
+
+        const after = await prisma.passenger.findMany({
+            where: { bookingId: booking.id },
+            orderBy: { firstName: 'asc' },
+            select: { documentsConfirmedAt: true },
+        });
+        expect(after[0].documentsConfirmedAt?.getTime()).toBe(earlier.getTime());
+        expect(after[1].documentsConfirmedAt).not.toBeNull();
+        expect(after[1].documentsConfirmedAt!.getTime()).toBeGreaterThan(earlier.getTime());
     });
 
     it('refuses an unauthenticated caller before reading anything', async () => {
