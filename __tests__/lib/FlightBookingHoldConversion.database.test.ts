@@ -98,6 +98,7 @@ describe('converting checkout holds into seat assignments', () => {
 
         const retry = await service.bookFlight(bookingRequest);
         expect(retry).toMatchObject({ id: first.id, wasCreated: false });
+        expect(retry.reference).toBe(first.reference);
     });
 
     it('rolls earlier hold consumption back when any requested hold is missing', async () => {

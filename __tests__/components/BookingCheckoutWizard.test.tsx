@@ -453,6 +453,7 @@ describe('BookingCheckoutWizard', () => {
             });
         mockBookFlightAction.mockResolvedValue({
             id: 12345,
+            reference: 'MA-0123456789ABCDEF0123',
             createdAt: new Date('2026-07-01T00:30:00.000Z'),
             totalPriceCents: 10000,
             // The booking reports one seat per leg, in leg order; the cabin
@@ -531,6 +532,7 @@ describe('BookingCheckoutWizard', () => {
 
         // Verify Boarding Pass renders details
         expect(screen.getByText('Robert Jones')).toBeInTheDocument();
+        expect(screen.getByText('Confirmation MA-0123456789ABCDEF0123')).toBeInTheDocument();
         expect(screen.getByText('GA404')).toBeInTheDocument();
         expect(screen.getByText('11C')).toBeInTheDocument();
         expect(screen.getByText('Economy')).toBeInTheDocument();
@@ -755,6 +757,7 @@ describe('BookingCheckoutWizard', () => {
     it('announces and visibly disables the confirmation action while booking', async () => {
         let resolveBooking!: (value: {
             id: number;
+            reference: string;
             createdAt: Date;
             totalPriceCents: number | null;
             passengers: Array<{ firstName: string; lastName: string; seatNumbers: string[]; cabinClass: string }>;
@@ -787,6 +790,7 @@ describe('BookingCheckoutWizard', () => {
         await act(async () => {
             resolveBooking({
                 id: 12345,
+                reference: 'MA-0123456789ABCDEF0123',
                 createdAt: new Date('2026-07-01T00:30:00.000Z'),
                 totalPriceCents: 10000,
                 passengers: [{ firstName: 'Bob', lastName: 'Jones', seatNumbers: ['11C'], cabinClass: 'ECONOMY' }]
@@ -1517,6 +1521,7 @@ describe('BookingCheckoutWizard', () => {
         it('books both legs with the seat chosen for each', async () => {
             mockBookFlightAction.mockResolvedValue({
                 id: 900,
+                reference: 'MA-0123456789ABCDEF0123',
                 createdAt: new Date('2026-07-01T00:30:00.000Z'),
                 totalPriceCents: 25000,
                 passengers: [{
@@ -1573,6 +1578,7 @@ describe('BookingCheckoutWizard', () => {
             // e-ticket (#137).
             mockBookFlightAction.mockResolvedValue({
                 id: 900,
+                reference: 'MA-0123456789ABCDEF0123',
                 createdAt: new Date('2026-07-01T00:30:00.000Z'),
                 totalPriceCents: 25000,
                 passengers: [{
@@ -1643,6 +1649,7 @@ describe('BookingCheckoutWizard', () => {
             // underscore and capitals — on the artefact people keep (#169).
             mockBookFlightAction.mockResolvedValue({
                 id: 901,
+                reference: 'MA-0123456789ABCDEF0123',
                 createdAt: new Date('2026-07-01T00:30:00.000Z'),
                 totalPriceCents: 25000,
                 passengers: [{

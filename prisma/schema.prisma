@@ -185,6 +185,9 @@ model PaymentWebhookEvent {
 
 model Booking {
   id              Int           @id @default(autoincrement())
+  /// Stable customer-facing confirmation identifier. It is not authorization:
+  /// every lookup still scopes the booking to its authenticated owner (#77).
+  reference       String        @unique @default(dbgenerated("generate_booking_reference()"))
   createdAt       DateTime      @default(now())
   status          BookingStatus @default(CONFIRMED)
   paymentIntentId String?       @unique

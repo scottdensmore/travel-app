@@ -28,6 +28,7 @@ interface CancelledLeg {
 
 interface ItineraryRebookingDialogProps {
     bookingId: number;
+    bookingReference: string;
     passengers: RebookingPassenger[];
     cancelledLegs: CancelledLeg[];
     groups: ReplacementFlightGroup[];
@@ -38,6 +39,7 @@ const seatKey = (legId: number, passengerId: string) => `${legId}:${passengerId}
 
 export default function ItineraryRebookingDialog({
     bookingId,
+    bookingReference,
     passengers,
     cancelledLegs,
     groups,
@@ -178,7 +180,9 @@ export default function ItineraryRebookingDialog({
                         onKeyDown={handleDialogKeyDown}
                     >
                         <div className="rebooking-dialog-heading">
-                            <h2 id={`rebooking-title-${bookingId}`}>Rebook booking {bookingId}</h2>
+                            <h2 id={`rebooking-title-${bookingId}`}>
+                                Rebook confirmation {bookingReference}
+                            </h2>
                             <button
                                 type="button"
                                 aria-label="Close replacement selection"

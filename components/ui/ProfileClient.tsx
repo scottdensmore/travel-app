@@ -57,6 +57,7 @@ interface BookingLeg {
 
 interface Booking {
     id: number;
+    reference: string;
     createdAt: Date | string;
     status: string; // "CONFIRMED", "DISRUPTED" or "CANCELLED"
     totalPriceCents: number | null;
@@ -141,7 +142,7 @@ function ReplacementFlightsPreview({
         >
             <h3 id={headingId}>
                 Replacement flights within 3 days
-                <span className="sr-only"> for booking {bookingId}</span>
+                <span className="sr-only"> for confirmation {booking.reference}</span>
             </h3>
             {groups.map(group => (
                 <div className="replacement-flight-group" key={group.fromLegId}>
@@ -174,6 +175,7 @@ function ReplacementFlightsPreview({
             {allLegsHaveOptions && (
                 <ItineraryRebookingDialog
                     bookingId={booking.id}
+                    bookingReference={booking.reference}
                     passengers={booking.passengers}
                     cancelledLegs={booking.legs.filter(leg => leg.flight?.status === 'CANCELLED')}
                     groups={groups}
@@ -665,9 +667,14 @@ export default function ProfileClient({
                                                     <td className="py-2" data-label="Flight">
                                                         <CellLabel>Flight</CellLabel>
                                                         {index === 0 && (
-                                                            <div style={{ fontSize: '0.7rem', color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                                                                {legs.length > 1 ? 'Round trip' : 'One way'}
-                                                            </div>
+                                                            <>
+                                                                <div style={{ fontSize: '0.7rem', color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                                                    {legs.length > 1 ? 'Round trip' : 'One way'}
+                                                                </div>
+                                                                <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.78)' }}>
+                                                                    Confirmation <span style={{ whiteSpace: 'nowrap' }}>{booking.reference}</span>
+                                                                </div>
+                                                            </>
                                                         )}
                                                         <div>{leg?.flight ? `${leg.flight.airline} ${leg.flight.flightNumber}` : '\u2014'}</div>
                                                         {booking.passengers && booking.passengers.length > 0 && (
@@ -792,7 +799,7 @@ export default function ProfileClient({
                                                             booking={booking}
                                                             groups={replacementOptions[booking.id]}
                                                             onSuccess={() => setRebookingFeedback(
-                                                                `Booking ${booking.id} is confirmed on your replacement flights.`,
+                                                                `Confirmation ${booking.reference} is confirmed on your replacement flights.`,
                                                             )}
                                                         />
                                                     </td>
@@ -828,11 +835,11 @@ export default function ProfileClient({
                                     <article
                                         key={booking.id}
                                         className="payment-receipt-card"
-                                        aria-label={`Receipt for booking ${booking.id}`}
+                                        aria-label={`Receipt for confirmation ${booking.reference}`}
                                     >
                                         <div>
                                             <p className="payment-receipt-eyebrow">Payment receipt</p>
-                                            <h3>Booking {booking.id}</h3>
+                                            <h3>Confirmation {booking.reference}</h3>
                                         </div>
                                         <div className="payment-receipt-details">
                                             <p>Paid <strong>{formatPrice(receipt.amountCents)} {receipt.currency}</strong></p>

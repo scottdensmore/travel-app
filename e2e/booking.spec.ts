@@ -184,6 +184,8 @@ test.describe('Flight Booking Journey', () => {
 
     // --- STEP 4: Success & Boarding Pass ---
     await expect(page.locator('h2:has-text("Booking Confirmed!")')).toBeVisible({ timeout: 10000 });
+    const confirmation = page.getByText(/^Confirmation MA-[0-9A-F]{20}$/);
+    await expect(confirmation).toBeVisible();
     await expect(page.locator('.booking-success-actions')).toHaveCSS('flex-direction', 'column');
     await expect(page.locator('text=Bob Jones').first()).toBeVisible();
     await expect(page.locator('text=11A').first()).toBeVisible();
@@ -195,6 +197,8 @@ test.describe('Flight Booking Journey', () => {
       where: { user: { email: uniqueEmail } },
       orderBy: { createdAt: 'desc' }
     });
+    expect(persistedBooking.reference).toMatch(/^MA-[0-9A-F]{20}$/);
+    await expect(confirmation).toHaveText(`Confirmation ${persistedBooking.reference}`);
     await expect(boardingPass).toContainText('Issued (UTC)');
     await expect(boardingPass).toContainText(
       formatAccountDateTime(persistedBooking.createdAt, 'UTC'),
@@ -240,7 +244,7 @@ test.describe('Flight Booking Journey', () => {
     );
 
     const receipt = page.getByRole('article', {
-      name: `Receipt for booking ${persistedBooking.id}`,
+      name: `Receipt for confirmation ${persistedBooking.reference}`,
     });
     await expect(receipt).toBeVisible();
     await expect(receipt).toContainText(`Paid ${expectedTotal.formatted} USD`);

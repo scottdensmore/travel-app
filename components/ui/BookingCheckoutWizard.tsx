@@ -240,6 +240,7 @@ export default function BookingCheckoutWizard({
     const [bookingSecured, setBookingSecured] = useState(false);
     const [bookingResult, setBookingResult] = useState<{
         id: number;
+        reference: string;
         createdAt: Date | string;
         totalPriceCents: number | null;
         passengers: ConfirmedPassenger[];
@@ -973,6 +974,7 @@ export default function BookingCheckoutWizard({
 
             setBookingResult({
                 id: result.id,
+                reference: result.reference,
                 createdAt: result.createdAt,
                 totalPriceCents: result.totalPriceCents,
                 // The confirmation prints the seat held on each leg, in leg
@@ -1768,6 +1770,9 @@ export default function BookingCheckoutWizard({
                             Booking Confirmed!
                         </h2>
                         <p style={{ color: 'rgba(255,255,255,0.6)', marginBottom: '0.5rem' }}>Your booking was created after Stripe approved the payment.</p>
+                        <p style={{ color: '#f3f0ff', marginBottom: '0.5rem', fontWeight: 600, overflowWrap: 'anywhere' }}>
+                            Confirmation {bookingResult.reference}
+                        </p>
                         <p style={{ color: '#34d399', marginBottom: '2rem', fontWeight: 'bold' }}>Confirmed total: {bookingResult.totalPriceCents !== null ? formatPrice(bookingResult.totalPriceCents) : totalPriceDisplay}</p>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', alignItems: 'center', marginBottom: '2.5rem' }}>
