@@ -61,7 +61,12 @@ jobs:
         run: npm test
 
       - name: Install Playwright Chromium with system dependencies
-        run: npx playwright install chromium --with-deps
+        run: |
+          # GitHub's Ubuntu image prefers the Azure mirror, which can accept
+          # the index request and then stall indefinitely on package lists.
+          # Keep the image's official archive.ubuntu.com fallback only.
+          sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+          npx playwright install chromium --with-deps
 
       - name: Run Playwright E2E tests
         run: npx playwright test

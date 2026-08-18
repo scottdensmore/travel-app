@@ -1,7 +1,18 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import FlightStatusBoard from '@/components/ui/FlightStatusBoard';
+import FlightStatusBoardComponent from '@/components/ui/FlightStatusBoard';
+
+const defaultRenderedAt = Date.parse('2026-06-15T07:00:00.000Z');
+type BoardProps = Omit<React.ComponentProps<typeof FlightStatusBoardComponent>, 'renderedAt'> & {
+    renderedAt?: number;
+};
+const FlightStatusBoard = ({
+    renderedAt = defaultRenderedAt,
+    ...props
+}: BoardProps) => (
+    <FlightStatusBoardComponent {...props} renderedAt={renderedAt} />
+);
 
 const mockFlights = [
     {
@@ -13,7 +24,7 @@ const mockFlights = [
         departureDate: '2026-06-15T08:00:00Z',
         returnDate: null,
         priceCents: 35000,
-        status: 'ON_TIME',
+        status: 'ON_TIME' as const,
     },
     {
         id: 2,
@@ -24,7 +35,7 @@ const mockFlights = [
         departureDate: '2026-06-10T19:30:00Z',
         returnDate: null,
         priceCents: 85000,
-        status: 'DELAYED',
+        status: 'DELAYED' as const,
     },
     {
         id: 3,
@@ -35,7 +46,7 @@ const mockFlights = [
         departureDate: '2026-07-05T11:00:00Z',
         returnDate: null,
         priceCents: 120000,
-        status: 'CANCELLED',
+        status: 'CANCELLED' as const,
     }
 ];
 
@@ -174,7 +185,7 @@ describe('FlightStatusBoard coverage window', () => {
         fireEvent.change(screen.getByPlaceholderText(/Search by flight number/i), {
             target: { value: 'GA101' },
         });
-        fireEvent.change(screen.getByDisplayValue('All Statuses'), { target: { value: 'CANCELLED' } });
+        fireEvent.change(screen.getByDisplayValue('All Phases / Statuses'), { target: { value: 'CANCELLED' } });
 
         expect(
             screen.getByText('No flights on this board match “GA101” and are marked Cancelled.')
@@ -192,7 +203,7 @@ describe('FlightStatusBoard coverage window', () => {
         fireEvent.change(screen.getByPlaceholderText(/Search by flight number/i), {
             target: { value: 'ZZ999' },
         });
-        fireEvent.change(screen.getByDisplayValue('All Statuses'), { target: { value: 'DELAYED' } });
+        fireEvent.change(screen.getByDisplayValue('All Phases / Statuses'), { target: { value: 'DELAYED' } });
 
         expect(
             screen.getByText(
@@ -207,11 +218,23 @@ describe('FlightStatusBoard coverage window', () => {
         // term they had never typed.
         render(<FlightStatusBoard flights={[mockFlights[0]]} coverage={coverage} />);
 
-        fireEvent.change(screen.getByDisplayValue('All Statuses'), { target: { value: 'DELAYED' } });
+        fireEvent.change(screen.getByDisplayValue('All Phases / Statuses'), { target: { value: 'DELAYED' } });
 
         expect(screen.getByText('No flights on this board are marked Delayed.')).toBeInTheDocument();
         expect(screen.queryByText(/Try searching for a different destination/)).not.toBeInTheDocument();
         expect(screen.queryByText(/match “/)).not.toBeInTheDocument();
+    });
+
+    it('describes an empty scheduled phase without calling it airline-set', () => {
+        render(<FlightStatusBoard flights={[mockFlights[0]]} coverage={coverage} />);
+
+        fireEvent.change(screen.getByDisplayValue('All Phases / Statuses'), {
+            target: { value: 'ARRIVED' },
+        });
+
+        expect(screen.getByText('No flights on this board have the Arrived phase.'))
+            .toBeInTheDocument();
+        expect(screen.queryByText(/marked Arrived/)).not.toBeInTheDocument();
     });
 
     it('says the window is empty when nothing has been searched or filtered', () => {
@@ -231,6 +254,8 @@ describe('FlightStatusBoard coverage window', () => {
         // the coverage line directly beneath refuted both a line later (#84).
         render(<FlightStatusBoard flights={mockFlights} coverage={coverage} />);
 
+        expect(screen.queryByRole('heading', { name: 'Live Flight Status' }))
+            .not.toBeInTheDocument();
         expect(screen.queryByText(/Real-time/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/arrivals/i)).not.toBeInTheDocument();
     });
@@ -253,10 +278,74 @@ describe('FlightStatusBoard coverage window', () => {
 });
 
 describe('FlightStatusBoard filtering and search', () => {
+    it('separates scheduled phases from airline-set disruption statuses', () => {
+        const renderedAt = Date.parse('2026-08-17T12:00:00.000Z');
+        const flights = [
+            {
+                ...mockFlights[0], id: 101, flightNumber: 'PH-UPCOMING',
+                departureDate: '2026-08-17T13:00:00.000Z', durationMinutes: 60,
+            },
+            {
+                ...mockFlights[0], id: 102, flightNumber: 'PH-DEPARTED',
+                departureDate: '2026-08-17T11:30:00.000Z', durationMinutes: 60,
+            },
+            {
+                ...mockFlights[0], id: 103, flightNumber: 'PH-ARRIVED',
+                departureDate: '2026-08-17T10:00:00.000Z', durationMinutes: 60,
+            },
+            {
+                ...mockFlights[1], id: 104, flightNumber: 'PH-DELAYED',
+                departureDate: '2026-08-17T10:00:00.000Z', durationMinutes: 60,
+            },
+            {
+                ...mockFlights[2], id: 105, flightNumber: 'PH-CANCELLED',
+                departureDate: '2026-08-17T13:00:00.000Z', durationMinutes: 60,
+            },
+        ];
+        render(<FlightStatusBoard
+            flights={flights}
+            renderedAt={renderedAt}
+            coverage={coverage}
+        />);
+
+        for (const [flightNumber, phase, color, backgroundColor, border] of [
+            ['PH-UPCOMING', 'Upcoming', '#34d399', 'rgba(16, 185, 129, 0.15)', '1px solid rgba(16, 185, 129, 0.3)'],
+            ['PH-DEPARTED', 'Departed', '#60a5fa', 'rgba(59, 130, 246, 0.15)', '1px solid rgba(59, 130, 246, 0.3)'],
+            ['PH-ARRIVED', 'Arrived', '#c4b5fd', 'rgba(139, 92, 246, 0.15)', '1px solid rgba(139, 92, 246, 0.3)'],
+            ['PH-DELAYED', 'Delayed', '#fbbf24', 'rgba(245, 158, 11, 0.15)', '1px solid rgba(245, 158, 11, 0.3)'],
+            ['PH-CANCELLED', 'Cancelled', '#f87171', 'rgba(239, 68, 68, 0.15)', '1px solid rgba(239, 68, 68, 0.3)'],
+        ]) {
+            const row = screen.getByText(flightNumber).closest('tr');
+            expect(row).not.toBeNull();
+            expect(within(row!).getByText(phase)).toHaveStyle({
+                color,
+                backgroundColor,
+                border,
+            });
+        }
+
+        expect(screen.getByRole('columnheader', { name: 'Phase / Status' }))
+            .toBeInTheDocument();
+        expect(screen.getByText(
+            'Scheduled phase and airline-set status for Mona Airways flights.',
+        )).toBeInTheDocument();
+
+        const filter = screen.getByRole('combobox', {
+            name: 'Filter by flight phase or status',
+        });
+        expect(within(filter).getAllByRole('option').map(option => option.textContent)).toEqual([
+            'All Phases / Statuses', 'Upcoming', 'Departed', 'Arrived', 'Delayed', 'Cancelled',
+        ]);
+        fireEvent.change(filter, { target: { value: 'ARRIVED' } });
+        expect(screen.getByText('PH-ARRIVED')).toBeInTheDocument();
+        expect(screen.queryByText('PH-DEPARTED')).not.toBeInTheDocument();
+        expect(screen.getByRole('status')).toHaveTextContent('1 flight shown');
+    });
+
     it('renders the header and table with all flights initially', () => {
         render(<FlightStatusBoard flights={mockFlights} coverage={coverage} />);
 
-        expect(screen.getByText('Live Flight Status')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Flight Status' })).toBeInTheDocument();
         expect(screen.getByText('GA101')).toBeInTheDocument();
         expect(screen.getByText('GA202')).toBeInTheDocument();
         expect(screen.getByText('GA303')).toBeInTheDocument();

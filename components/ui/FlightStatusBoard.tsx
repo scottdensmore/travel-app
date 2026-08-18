@@ -4,6 +4,7 @@ import { flightFareCents, formatPrice } from '@/lib/bookingPricing';
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { durationLabel, flightArrival, flightDeparture } from '@/lib/flightTime';
+import { flightPhaseAt, type FlightPhase } from '@/lib/flightPhase';
 
 interface Flight {
     id: number;
@@ -16,11 +17,13 @@ interface Flight {
     /// created outside a schedule, which then shows no arrival (#84).
     durationMinutes?: number | null;
     priceCents: number;
-    status: string;
+    status: 'ON_TIME' | 'DELAYED' | 'CANCELLED';
 }
 
 interface FlightStatusBoardProps {
     flights: Flight[];
+    /** One server-clock snapshot for every row and filter on this render. */
+    renderedAt: number;
     /**
      * The window this board holds, as a noun phrase the page composes — e.g.
      * "the last 2 hours and the next 7 days". Relative rather than absolute so
@@ -44,9 +47,9 @@ const HIDDEN_BUT_ANNOUNCED: React.CSSProperties = {
     border: 0,
 };
 
-export default function FlightStatusBoard({ flights, coverage }: FlightStatusBoardProps) {
+export default function FlightStatusBoard({ flights, renderedAt, coverage }: FlightStatusBoardProps) {
     const [searchQuery, setSearchQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState('ALL');
+    const [statusFilter, setStatusFilter] = useState<'ALL' | FlightPhase>('ALL');
 
     const matchesQuery = (flight: Flight) => {
         const query = searchQuery.toLowerCase().trim();
@@ -58,16 +61,21 @@ export default function FlightStatusBoard({ flights, coverage }: FlightStatusBoa
         );
     };
 
+    const phasedFlights = useMemo(() => flights.map(flight => ({
+        flight,
+        phase: flightPhaseAt(flight, renderedAt),
+    })), [flights, renderedAt]);
+
     const filteredFlights = useMemo(() => {
-        return flights.filter((flight) => {
+        return phasedFlights.filter(({ flight, phase }) => {
             const matchesStatus =
                 statusFilter === 'ALL' ||
-                flight.status === statusFilter;
+                phase === statusFilter;
 
             return matchesQuery(flight) && matchesStatus;
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [flights, searchQuery, statusFilter]);
+    }, [phasedFlights, searchQuery, statusFilter]);
 
     /**
      * The empty state has four causes and they need four answers. One string
@@ -78,6 +86,11 @@ export default function FlightStatusBoard({ flights, coverage }: FlightStatusBoa
     const emptyStateMessage = () => {
         const query = searchQuery.trim();
         const status = statusFilter === 'ALL' ? null : getStatusLabel(statusFilter);
+        const filterDescription = statusFilter === 'UPCOMING' ||
+            statusFilter === 'DEPARTED' ||
+            statusFilter === 'ARRIVED'
+            ? `have the ${status} phase`
+            : `are marked ${status}`;
         const range = ` It only covers departures in ${coverage}.`;
 
         if (query && status) {
@@ -88,7 +101,7 @@ export default function FlightStatusBoard({ flights, coverage }: FlightStatusBoa
             // is worth raising — that reader is the most likely to be looking
             // for a flight outside it.
             return flights.some(matchesQuery)
-                ? `No flights on this board match “${query}” and are marked ${status}.`
+                ? `No flights on this board match “${query}” and ${filterDescription}.`
                 : `No flights on this board match “${query}”.${range}`;
         }
         if (query) {
@@ -97,17 +110,21 @@ export default function FlightStatusBoard({ flights, coverage }: FlightStatusBoa
             return `No flights on this board match “${query}”.${range}`;
         }
         if (status) {
-            return `No flights on this board are marked ${status}.`;
+            return `No flights on this board ${filterDescription}.`;
         }
         // Nothing typed, nothing filtered: the window itself is empty, so
         // suggesting a different search term would be nonsense.
         return `No departures are scheduled in ${coverage}.`;
     };
 
-    const getStatusStyle = (status: string) => {
+    const getStatusStyle = (status: FlightPhase) => {
         switch (status) {
-            case 'ON_TIME':
+            case 'UPCOMING':
                 return { backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)' };
+            case 'DEPARTED':
+                return { backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)' };
+            case 'ARRIVED':
+                return { backgroundColor: 'rgba(139, 92, 246, 0.15)', color: '#c4b5fd', border: '1px solid rgba(139, 92, 246, 0.3)' };
             case 'DELAYED':
                 return { backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)' };
             case 'CANCELLED':
@@ -117,10 +134,14 @@ export default function FlightStatusBoard({ flights, coverage }: FlightStatusBoa
         }
     };
 
-    const getStatusLabel = (status: string) => {
+    const getStatusLabel = (status: FlightPhase) => {
         switch (status) {
-            case 'ON_TIME':
-                return 'On Time';
+            case 'UPCOMING':
+                return 'Upcoming';
+            case 'DEPARTED':
+                return 'Departed';
+            case 'ARRIVED':
+                return 'Arrived';
             case 'DELAYED':
                 return 'Delayed';
             case 'CANCELLED':
@@ -134,12 +155,11 @@ export default function FlightStatusBoard({ flights, coverage }: FlightStatusBoa
         <div className="page-container" style={{ minHeight: 'calc(100vh - 100px)', padding: '2rem 1rem' }}>
             <div style={{ maxWidth: '1000px', width: '100%', margin: '0 auto', color: '#fff' }}>
                 <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-                    <h1 style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#c084fc', marginBottom: '0.5rem' }}>Live Flight Status</h1>
-                    {/* No arrivals are shown and no feed backs the word
-                        "real-time"; the coverage line below refuted both a line
-                        later, which was worse than saying less. Timezone-aware
-                        status wording is #84. */}
-                    <p style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '1.1rem' }}>Departure and schedule status for Mona Airways flights.</p>
+                    <h1 style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#c084fc', marginBottom: '0.5rem' }}>Flight Status</h1>
+                    {/* No live feed backs either the heading or these derived
+                        schedule phases. Delayed/cancelled remain airline-set
+                        statuses; the coverage line states the board's bounds. */}
+                    <p style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '1.1rem' }}>Scheduled phase and airline-set status for Mona Airways flights.</p>
                     {/* 0.6 rather than 0.45: at 0.45 this measured 4.31:1,
                         under AA, on the one sentence that has to be read to
                         avoid reading "not listed" as "cancelled". */}
@@ -181,8 +201,9 @@ export default function FlightStatusBoard({ flights, coverage }: FlightStatusBoa
                     </div>
                     <div style={{ flex: '1 1 150px' }}>
                         <select
+                            aria-label="Filter by flight phase or status"
                             value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
+                            onChange={(e) => setStatusFilter(e.target.value as 'ALL' | FlightPhase)}
                             style={{ 
                                 width: '100%', 
                                 padding: '0.75rem 1rem', 
@@ -193,8 +214,10 @@ export default function FlightStatusBoard({ flights, coverage }: FlightStatusBoa
                                 backgroundColor: '#181720'
                             }}
                         >
-                            <option value="ALL">All Statuses</option>
-                            <option value="ON_TIME">On Time</option>
+                            <option value="ALL">All Phases / Statuses</option>
+                            <option value="UPCOMING">Upcoming</option>
+                            <option value="DEPARTED">Departed</option>
+                            <option value="ARRIVED">Arrived</option>
                             <option value="DELAYED">Delayed</option>
                             <option value="CANCELLED">Cancelled</option>
                         </select>
@@ -228,12 +251,12 @@ export default function FlightStatusBoard({ flights, coverage }: FlightStatusBoa
                                         <th style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa' }}>From</th>
                                         <th style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa' }}>To</th>
                                         <th style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa' }}>Departure / Arrival</th>
-                                        <th style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa' }}>Status</th>
+                                        <th style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa' }}>Phase / Status</th>
                                         <th style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa', textAlign: 'right' }}>Price</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filteredFlights.map((flight) => {
+                                    {filteredFlights.map(({ flight, phase }) => {
                                     // Once per row: each of these builds Intl
                                     // formatters, and the board renders many.
                                     const departure = flightDeparture(flight);
@@ -282,9 +305,9 @@ export default function FlightStatusBoard({ flights, coverage }: FlightStatusBoa
                                                     fontSize: '0.875rem', 
                                                     fontWeight: '600',
                                                     display: 'inline-block',
-                                                    ...getStatusStyle(flight.status)
+                                                    ...getStatusStyle(phase)
                                                 }}>
-                                                    {getStatusLabel(flight.status)}
+                                                    {getStatusLabel(phase)}
                                                 </span>
                                             </td>
                                             <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right', fontWeight: 'bold', color: '#34d399' }}>
