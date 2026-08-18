@@ -1,5 +1,5 @@
 "use client"
-import React, { useState, useEffect, Suspense, useTransition, useSyncExternalStore } from 'react';
+import React, { useState, useEffect, useRef, Suspense, useTransition, useSyncExternalStore } from 'react';
 import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
 import { toggleFavoriteCityGuideAction, submitCityGuideReviewAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
@@ -67,7 +67,46 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
         setReviewContent('');
         setReviewRating(5);
         setFeedback(null);
+        if (cityName) revealDetail();
     };
+
+    /**
+     * Put the selected city's panel where the customer can see and use it.
+     *
+     * Stacked, the panel renders below a ten-item list and lands about 1200px past
+     * the fold, so choosing a city changed nothing anyone could see: the heading
+     * said the right thing 1200px away, and the only on-screen difference was a
+     * five-pixel dot changing colour.
+     *
+     * Called from the click handler rather than from an effect keyed on the
+     * selection, which got this wrong three ways. Selecting the city that is
+     * *already* selected -- `DEFAULT_CITY_NAME` on every fresh load, so the most
+     * likely first tap on a phone -- sets identical state, React bails out, and no
+     * effect runs. A ref guard meant to skip the mount is defeated by Strict Mode's
+     * double invocation, because refs survive the simulated remount, so the page
+     * scrolled itself on arrival in development. And an effect cannot tell a
+     * selection the customer asked for from one the component chose for them. A
+     * handler runs exactly when somebody acts, which is the condition that was
+     * wanted all along.
+     *
+     * Focus moves with the viewport. Scrolling alone left focus on the marker the
+     * customer had just pressed, now off-screen above, so the next Tab scrolled
+     * back up to the following marker and the panel could not be operated by
+     * keyboard at all. Moving focus also announces the change, which nothing else
+     * here does. `preventScroll` keeps the scrolling in one place below rather than
+     * having focus and `scrollIntoView` each contribute some.
+     */
+    const revealDetail = () => {
+        const panel = detailRef.current;
+        if (!panel) return;
+        panel.focus({ preventScroll: true });
+        // `scroll-margin-top` on `.guide-extra` keeps this clear of the header:
+        // `nearest` start-aligns an element taller than the scrollport, which
+        // otherwise parks the panel's controls underneath it.
+        panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    };
+
+    const detailRef = useRef<HTMLElement | null>(null);
 
     const toggleFavorite = (cityId: number) => {
         startTransition(async () => {
@@ -137,7 +176,32 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
                             <Geographies geography="/map.json">
                                 {({ geographies }: { geographies: Array<{ rsmKey: string }> }) =>
                                     geographies.map((geo) => (
-                                        <Geography key={geo.rsmKey} geography={geo} fill="#444" stroke="#1F2328" />
+                                        <Geography
+                                            key={geo.rsmKey}
+                                            geography={geo}
+                                            fill="#444"
+                                            stroke="#1F2328"
+                                            /* The country outlines are decoration:
+                                               the interactive things on this map
+                                               are the city markers below. Left
+                                               alone, react-simple-maps renders
+                                               each one as a focusable `path` with
+                                               no accessible name and no role --
+                                               202 of them, 176 clipped outside the
+                                               viewBox entirely, so a keyboard user
+                                               reached the first city marker on tab
+                                               stop 209 after 202 stops that
+                                               announce nothing and cannot be
+                                               seen (#78's "inaccessible
+                                               content"). */
+                                            tabIndex={-1}
+                                            aria-hidden="true"
+                                            style={{
+                                                default: { outline: 'none' },
+                                                hover: { outline: 'none' },
+                                                pressed: { outline: 'none' },
+                                            }}
+                                        />
                                     ))}
                             </Geographies>
                             {cities.map((city) => {
@@ -230,7 +294,14 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
                   * the list. That was the overlap (#78).
                   */}
                 {selectedCity ? (
-                    <section className="guide-extra" aria-label={`${selectedCity.city} guide`}>
+                    <section
+                        className="guide-extra"
+                        aria-label={`${selectedCity.city} guide`}
+                        ref={detailRef}
+                        /* Focusable programmatically only: this is a destination for
+                           focus after a selection, not a tab stop of its own. */
+                        tabIndex={-1}
+                    >
                         <div className="guide-detail-actions">
                             <button type="button" onClick={() => selectCity(null)} className="guide-back">
                                 ← All destinations
