@@ -583,6 +583,9 @@ export default function ProfileClient({
         <div className="page-container profile">
             <div className="sidebar-menu">
                 <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+                    {/* OAuth providers may supply arbitrary remote or data URLs
+                        that cannot be enumerated in Next Image configuration. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={userAvatar} className="user-avatar" alt="Avatar" style={{ display: 'inline-block' }} />
                     <h3 style={{ margin: '1rem 0 0.5rem' }}>{userName}</h3>
                     <p style={{ margin: '0.25rem 0' }}><strong>Current Status:</strong> {currentStatus}</p>
@@ -870,6 +873,9 @@ export default function ProfileClient({
                                 <div key={fav.id} className="border rounded-lg p-4 bg-gray-50 flex flex-col justify-between" style={{ border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', padding: '1rem', backgroundColor: 'rgba(255, 255, 255, 0.02)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                                     <div>
                                         {fav.cityGuide.coverImage && (
+                                            // Admin-uploaded covers are stored as data URLs,
+                                            // which are already browser-ready and cannot be optimized.
+                                            // eslint-disable-next-line @next/next/no-img-element
                                             <img src={fav.cityGuide.coverImage} alt={fav.cityGuide.city} style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '4px', marginBottom: '8px' }} />
                                         )}
                                         <h3 style={{ margin: '0 0 4px', fontSize: '1.1rem', color: '#fff' }}>{fav.cityGuide.city}</h3>

@@ -264,6 +264,8 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
                                 {selectedCity.reviews.map(r => (
                                     <li key={r.id}>
                                         <div className="guide-review-head">
+                                            {/* Reviewer avatars can originate from arbitrary OAuth providers. */}
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
                                             <img
                                                 src={r.user?.image || "https://i.pravatar.cc/150"}
                                                 alt=""

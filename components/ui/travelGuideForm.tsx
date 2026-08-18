@@ -123,6 +123,8 @@ const TravelGuideForm: React.FC = () => {
           />
           {coverImage && (
             <div className="mb-4">
+              {/* This preview is a browser-generated data URL, not an optimizable asset. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={coverImage} alt="Cover Preview" className="max-w-xs h-auto rounded shadow" />
             </div>
           )}

@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 // `import type`, not a value import: FlightBookingService is not a server
 // module and pulls in lib/prisma, which now throws if it is ever evaluated in a
@@ -1812,7 +1813,7 @@ export default function BookingCheckoutWizard({
                                                 wordmark and the carrier is named
                                                 in full immediately beside it, so
                                                 alt text would only repeat it. */}
-                                            <img src="/img/logo.svg" alt="" width="20" height="20" />
+                                            <Image src="/img/logo.svg" alt="" width="20" height="20" />
                                             {/* Caps and widely tracked, the same
                                                 treatment the social card uses.
                                                 The identity has two wordmark

@@ -3,6 +3,7 @@
 import { BRAND } from '@/lib/brand';
 import React, { useState, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
@@ -241,7 +242,7 @@ const TitleBar: React.FC = () => {
                     {/* Decorative: the name follows in text inside the same
                         link, so alt would make the link read "Mona Airways
                         Mona Airways". The mark carries no wordmark of its own. */}
-                    <img src="/img/logo.svg" alt="" width="32" height="32" />
+                    <Image src="/img/logo.svg" alt="" width="32" height="32" />
                     <span style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>{BRAND.name}</span>
                 </Link>
                 <span>{pageTitle}</span>
@@ -449,6 +450,8 @@ const TitleBar: React.FC = () => {
 
                             <div className="avatar" style={{ display: 'flex', alignItems: 'center' }}>
                                 <Link href="/profile" style={{ display: 'flex' }}>
+                                    {/* OAuth providers may supply arbitrary remote or data URLs. */}
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
                                     <img src={userAvatar} width="32" height="32" alt="Profile" style={{ borderRadius: '50%', display: 'block' }} />
                                 </Link>
                             </div>
