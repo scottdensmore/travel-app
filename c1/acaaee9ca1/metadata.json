@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "c1acaaee9ca1",
+  "strategy": "manual-commit",
+  "branch": "feat/checkin-eligibility",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "__tests__/app/checkIn.database.test.ts",
+    "__tests__/app/checkInPage.test.ts",
+    "__tests__/components/CheckInPanel.test.tsx",
+    "__tests__/components/checkInIntro.test.tsx",
+    "__tests__/lib/checkInPolicy.test.ts",
+    "app/checkin/page.tsx",
+    "components/ui/CheckInPanel.tsx",
+    "lib/checkInPolicy.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/c1/acaaee9ca1/0/metadata.json",
+      "transcript": "/c1/acaaee9ca1/0/full.jsonl",
+      "compact_transcript": "/c1/acaaee9ca1/0/transcript.jsonl",
+      "content_hash": "/c1/acaaee9ca1/0/content_hash.txt",
+      "prompt": "/c1/acaaee9ca1/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 50,
+    "cache_creation_tokens": 45558,
+    "cache_read_tokens": 9041694,
+    "output_tokens": 30006,
+    "api_call_count": 25
+  }
+}
