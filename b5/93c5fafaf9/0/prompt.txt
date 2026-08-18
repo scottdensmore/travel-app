@@ -1,0 +1,161 @@
+Yep lets take 78
+
+---
+
+<task-notification>
+<task-id>abdf5907431aa4017</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-1000/-home-scottdensmore-Developer-scottdensmore-travel-app/3c1f314f-5bc6-4f63-b253-d784d069272c/tasks/abdf5907431aa4017.output</output-file>
+<status>completed</status>
+<summary>Agent "Rendered review of guide layout" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>## Tooling note
+
+**The `mcp__plugin_playwright_playwright__browser_*` tools are installed but non-functional on this machine** — every call fails with `Chromium distribution 'chrome' is not found at /opt/google/chrome/chrome`. Per the `### ui-review` section I fell back to throwaway Playwright scripts (written in the scratchpad, outside the repo) driving the bundled `chromium-1234`. All findings below come from a real browser against `npm run dev` on http://localhost:3000. I did not run `npx playwright test`.
+
+I started the dev server and **stopped it again** (port 3000 is free for your verifier run). `git status` is byte-identical to what I found: `__tests__/styles/responsiveDashboards.test.ts`, `app/globals.css`, `e2e/travelguide.spec.ts`. I created one account to exercise favourites and reviews and deleted it; `userFavorite` and `review` are both back to 0. Note the DB already held 10 pre-existing `probe-*`/`payment-*` users before I arrived — not mine, and already inside your baseline.
+
+**Headline: the 216px panel overlap is genuinely gone, at every width 320–1440, at rest and scrolled. But the overlap moved rather than disappearing — twice — and both new instances are invisible to a `.map`-vs-`.sticky-sidebar` rect test.**
+
+---
+
+## Blocking
+
+### B1. `calc(100vh - 72px)` / `top: 72px` are wrong: the header is **89px**, and `position: sticky` never engages at all
+
+`app/globals.css:521-524` and `:538-540`. Measured header heights across the sweep: **89px flat from 860 through 1440** (so, answering your specific risk: no, the header does *not* wrap anywhere between 900 and 1440). It wraps to 114.6px at 700–840 and 103px at ≤600 — both below the breakpoint, where `.map` no longer depends on the constant, so that part is harmless. The constant is simply wrong by 17px everywhere it is used.
+
+Two consequences, both measured at 1440×900:
+
+- `.guide` height is 828 and each panel is 828 → `stickySlackPx: 0`. A sticky box cannot move outside its containing block, so **both `position: sticky` declarations are inert.** The old `.guide` had `padding: 40px 20px`, which gave the map 80px of travel; `padding: 0` removed it. So the map does *not* stay put: wheeling over the sidebar scrolled its scrollport to its end (`sbScrollTop` 671 of 671) and then chained to the document, and the map's top went `89 → -149`.
+- The panels are 17px taller than the space below the header (`sidebar.bottom = 917` vs `innerH 900`), so 17px of the sidebar's scrollport is below the fold at rest, and the header's `top: 72px` target sits 17px *above* the header's own bottom edge.
+
+The visible result is bad. `desktop-1440x900-journey-02-sidebar-inner-scrolled.png`: the guide's prose scrolls up under the 75%-opaque, `backdrop-filter: blur(20px)` header and is fully legible through it, colliding with the nav. You can read *"Detroit, also known as Motor City, is a city with a rich history and a vibrant cultural scene…"* running straight through **Flight Status**, **Check In**, the notification bell, the avatar and **Sign Out**. Two texts on top of each other, neither readable. That is the acceptance criterion's "overlap", relocated from panel-vs-panel to content-vs-header, and your rect test cannot see it.
+
+### B2. Below 900px the map SVG overflows `.map` and bleeds into the Destinations panel
+
+`app/globals.css:560-564` sets `height: 45vh; min-height: 260px` with no `overflow`, and `.map` is a plain block, so the aspect-locked `&lt;svg&gt;` (`viewBox="0 0 800 500"`, `width: 100%`) keeps its intrinsic height and spills past the box. Measured spill (`svg.bottom - map.bottom`):
+
+| viewport | spill |
+| --- | --- |
+| 900×900 | **+157.5px** |
+| 880×900 | +145 |
+| 840×900 | +120 |
+| 800×900 | +95 |
+| 768×900 | +75 |
+| **768×1024** | **+19.2** |
+| 700×900 | +32.5 |
+| ≤600 | negative (see M5) |
+
+It paints *behind* the sidebar — `elementFromPoint` in the spill band returns `.sticky-sidebar` and `.guide-city-select`, so it does not block clicks — but the sidebar background is only 85% opaque, so it shows straight through. `stacked-900x900-state-map-overflow-into-list.png`: Mexico, Central America, Cuba, the Caribbean and the top of South America are clearly visible ghosting behind the **DESTINATIONS** heading and the New York / Los Angeles / Chicago rows. The new `border-top` divider reads as a seam drawn across the middle of the map rather than a boundary between two panels — which directly answers your question 2 about the divider: the rule is applied (`borderTopWidth: 1px`, `borderLeftWidth: 0`, confirmed) but at 700–900 it does not *function* as a boundary. `tablet-768x1024-state-map-overflow-into-list.png` shows the milder 19px version: a grey wedge of Colombia/Venezuela sitting below the line, above "DESTINATIONS".
+
+Note the spill depends on viewport *height* too, so a short landscape tablet is worse than the 768×1024 you asked me to check.
+
+### B3. Selecting a city produces no visible change at all in the stacked layout
+
+`.guide-extra` renders *after* the 10-item list, so at stacked widths it is far below the fold and nothing scrolls it into view (`TravelGuideClient.tsx:65-70` — `selectCity` only sets state):
+
+| viewport | action | `.guide-extra` top | in viewport |
+| --- | --- | --- | --- |
+| 768×1024 | marker click | 1263.4 | **false** |
+| 768×1024 | list click | 1263.4 | **false** |
+| 390×844 | marker click | 1192.8 | **false** |
+| 390×844 | list click | 1192.8 | **false** |
+
+The `&lt;h3&gt;` does change to the right city (I verified "New York, USA" then "Miami, USA"), so it *says the true thing* — it just says it 1200px off-screen. A user taps a marker or a city row and the page appears not to respond; the only on-screen change is a 5–10px dot changing colour. At 390 you must scroll ~430px further to see the panel. At desktop it is marginal rather than broken: the detail top lands at 776 in a 900 viewport, so the "← All destinations / Favorite" row is just visible at the bottom edge. This is the single worst thing about the layout nobody has used before.
+
+### B4. The city markers are Tab stop **209**, behind 202 unlabelled focus stops, 176 of them invisible
+
+`react-simple-maps` renders every `&lt;Geography&gt;` as `&lt;path tabindex="0"&gt;` with **no `aria-label` and no `role`**. Measured on `/travelguide`: `geoPaths: 202`, `focusablePaths: 202`, `allFocusable: 246`. Tabbing from the document start, the first city marker is reached at **hop 209** (hops 1–6 are the header links, 7–208 are country paths). Worse, **176 of the 202 paths lie entirely outside the SVG's visible viewport** and are clipped by the SVG viewport — identical count at 1440, 768 and 390, since the crop is viewBox-driven. So a keyboard user gets 176 focus stops on elements that cannot be seen, have no accessible name, and announce nothing.
+
+This is pre-existing (the diff does not touch `Geographies`), but it is the direct answer to your question 5: **you cannot reach the markers by keyboard in any practical sense at any viewport**, and it belongs to the same acceptance criterion this slice closes ("without overlap or inaccessible content"). One incidental effect visible in `phone-390x844-keyboard-country-path-focus.png`: focus landing on a clipped element scrolled the header nav sideways, revealing that "Book Flight" is cut off (see M4).
+
+The ring itself is fine once you get there: `3px solid rgb(192, 132, 252)`, `outline-offset: 2px`, `:focus-visible` matching — so `app/globals.css:768` works. It needs ~250ms to settle because of the global `* { transition: all 0.25s ease }`; my first measurement caught it mid-transition showing the UA white ring, which was my artefact, not a defect. Authoritative evidence is `*-keyboard-marker-focusring-zoom.png` (ignore `*-journey-11-marker-focus.png` and `*-state-keyboard-marker-focus.png`, taken with programmatic focus).
+
+---
+
+## High — the breakpoint and the framing (your questions 1 and 3rd risk)
+
+### H1. 900 is too low: the row layout is already unusable well above it
+
+`row-901x900-01-rest.png` answers this outright. At 901px the map column is 429×828 and the world map inside it is **429×268 — a postage stamp pinned to the top-left corner above 560px (68%) of empty gradient.** The whole eastern US is a smudge and the markers are 5px dots. It looks broken, not intentional. The empty band by width (`.map` height 828 throughout):
+
+| width | svg height | empty below | % of panel empty |
+| --- | --- | --- | --- |
+| 901 | 268 | 560 | 68% |
+| 1024 | 345 | 483 | 58% |
+| 1120 | 405 | 423 | 51% |
+| 1280 | 505 | 323 | 39% |
+| 1440 | 605 | 223 | 27% |
+
+Only around 1280–1440 does the row read as deliberate. So: 900 is the right *side* to stack on, but the wrong number — the row wants roughly 1100–1200, or `.map` wants to stop being a fixed `100vh − header` box holding a top-aligned aspect-locked SVG (centre it, and/or size the box from the SVG's aspect ratio).
+
+### H2. Desktop 1440: legibly framed, not cropped or stretched — but centred on open ocean
+
+`desktop-1440x900-01-rest.png`. The map fills 968×605 with no distortion (uniform viewBox scale, `preserveAspectRatio` default), no awkward crop of the subject, and 223px of soft-gradient letterbox below which reads acceptably because of `.map`'s radial gradient. So the answer to "legibly framed" is yes at 1440.
+
+"Centred on something sensible" is a no. `projectionConfig={{ scale: 600, center: [-70, 28] }}` (`TravelGuideClient.tsx:134`) puts the centre in the Atlantic off the Bahamas, so all ten seeded cities cluster in the upper-left quadrant and the right ~55% is empty ocean. Los Angeles lands at x=21.3 at 1440 (the circle spans x 15–27, 15px from the viewport edge) and the Californian coastline is cropped off. There is an irony worth knowing: the 216px the old absolute sidebar covered was exactly that empty Atlantic on the map's right — so removing the overlap *exposed* the emptiest part of the frame, and the map looks emptier now than it did broken. Moving the centre west (roughly `[-95, 38]`) and/or raising the scale would make the frame match its content. Not a regression; a presentation follow-up.
+
+### H3. Marker hit targets fail WCAG 2.5.8 at every viewport, badly at phone
+
+`r={5}` in viewBox units scales with the map width. Measured rendered diameters: **12.1px at 1440, 9.6px at 768, 4.875px at 390** (selected marker 19.4 / 15.4 / 7.8). WCAG 2.5.8 AA wants 24×24. I could only click them with a synthetic precise/`force` click — a finger cannot hit a 4.9px dot, so the practical answer to "can you see and click the city markers" at 390 is: see, barely; tap, no. This is an *improvement* on the prior state (the map computed to width 0 at 390, so markers did not exist, and were 3.2px at 768), so it is not a regression — but this slice is the one claiming mobile widths work, so a hit-target floor belongs in scope or in an issue.
+
+---
+
+## Medium — pre-existing, reached by this journey, worth filing rather than fixing here
+
+### M4… ordered by severity:
+
+**M1. The rating `&lt;select&gt;` is white text on the UA light default — ~1.2:1.** `#review-rating` computes `color: rgb(255, 255, 255)` over `background-color: rgb(239, 239, 239)`, `appearance: auto`. "★★★★★ Excellent" is invisible at every viewport. See `phone-390x844-state-review-form-select-contrast.png` and the desktop equivalent. `app/globals.css:707-727` styles the label and textarea but never the select. Hard blocker for the review journey, untouched by this diff.
+
+**M2. `.guide-map-state` lands top-left in a large empty panel** — your second risk, confirmed. Error state at 1440: rect `(0, 89)–(968, 161)`, `text-align: start`, one 60%-white italic line with ~750px of unexplained black beneath it (`desktop-1440x900-state-map-error.png`). It reads as a broken page rather than graceful degradation. Centring it in `.map` (which now needs to become a flex/grid container anyway for B2/H1) fixes both at once. Its contrast is fine — `rgba(255,255,255,0.6)` over the dark panel is ≈7:1, passes AA. The message text itself is correct and `role="status"` is present.
+
+**M3. "Loading map…" never appears once hydrated.** With `/map.json` hanging: `svgPresent: true`, `geoPaths: 0`, and **no `.guide-map-state` element at all** — ten unexplained coloured dots on a black gradient (`phone-390x844-state-map-loading.png`). `Geographies` fetches in an effect and does not suspend, so the `Suspense` fallback at `TravelGuideClient.tsx:131` can never fire; the SSR copy at `:128` only covers hydration. So the string describes hydration, not map loading. The change makes this more prominent because the panel is now full-bleed. Pre-existing.
+
+**M4. Header nav clips at ≤600px.** At 390 the last `&lt;li&gt;` ("Sign Up") has a right edge of 441 against a 390 client width, `documentElement.scrollWidth` is still 390 (so no page scroll exposes it), and focusing it scrolls the nav sideways instead. Off-screen and unreachable at rest — visible in `phone-390x844-01-rest.png` (Sign Up absent) versus `phone-390x844-keyboard-country-path-focus.png` (Sign Up present, "Book Flight" now cut). Outside `.guide`, pre-existing, but it is the same acceptance criterion.
+
+**M5. Dead band below the map at ≤600px.** Same root cause as B2, opposite sign: at 390 the svg is 243.8 tall in a 379.8 box, so **136px (36%) of `.map` is empty gradient** before the divider, pushing the list down for nothing (`phone-390x844-01-rest.png`). The crossover from spill to dead band is around 620px at a 900-tall viewport.
+
+---
+
+## Nothing to report under these headings — verified, passing
+
+- **The original defect is fixed.** `.map` and `.sticky-sidebar` rectangles never intersect at 320/390/768/900/901/1024/1440, at rest and at page bottom. Both panels have non-zero width and height, and `sidebar.left ≥ 0` everywhere — the −82px case is gone.
+- **No horizontal page scroll** at any width from 320 to 1440.
+- **The journey works end to end at all three viewports.** Marker click selects (h3 → "New York, USA"); list click selects (h3 → "Miami, USA"); the list heart flips `aria-pressed` `false → true` with no error feedback; the wide detail button flips `❤️ Unfavorite → 🤍 Favorite`; rating select + review text submits and the review renders (`appeared: 1`, `.guide-feedback` empty) at 1440, 768 and 390. Keyboard `Enter` on a marker selects (Seattle). Nothing that worked at desktop broke, and it all functions stacked — subject to B3, which is about feedback, not function.
+- **Console is completely clean.** Zero errors and zero warnings across the whole signed-in journey at all three viewports. No ResizeObserver loop warnings, no D3 warnings, no React hydration or key warnings. Your fourth risk found nothing.
+- **Below 900 both panels are `static`** (`mapPos: "static"`, `sbPos: "static"`, `overflowY: visible`) and the page scrolls as one piece with no pinning — the second half of your question 4 passes.
+- **Above 900 the sidebar does scroll inside itself** (`sbScrollH 1499` / `sbClientH 828`) — the first half of question 4 passes for the sidebar; it fails for the map (B1).
+- **Focus rings on all sidebar controls**: `.guide-city-select`, `.guide-favourite`, `.guide-favourite-wide`, `.guide-back`, `.guide-review-submit` all get `3px solid rgb(192, 132, 252)` at 2px offset, in viewport.
+- **Destinations reachable at 390 without excessive scrolling** — your fourth risk: 4 of 10 rows fully visible at rest, list ends at y=1155 in a 2664-tall document. 45vh is defensible at phone width for *the list*; what makes it unhelpful is the 136px of dead space inside it (M5) and the unreachable detail panel (B3).
+- **Marker hit-testing is not obstructed**: `elementFromPoint` at each marker centre returns the `circle.guide-marker` with its `aria-label`, at all three viewports. Accessible names, `role="button"` and `aria-pressed` are all present and correct on markers and on both favourite controls.
+
+---
+
+## What your Playwright layout test cannot catch
+
+Worth saying explicitly since it passes at all seven widths and three of my four blocking findings are inside its blind spot: it measures `.map`'s box, not the `&lt;svg&gt;` inside it (B2); it measures the two panels against each other, not against the sticky header (B1); and it measures geometry, not whether a state change is visible (B3). If you want geometry to hold the line on B2, the assertion needs to be `.map svg`'s rect against `.sticky-sidebar`'s, or `.map`'s `scrollHeight` against its `clientHeight`.
+
+## Screenshots
+
+All 63 under `/home/scottdensmore/Developer/scottdensmore/travel-app/test-results/ui-review/`. The ones that carry the findings:
+
+- B1 — `desktop-1440x900-journey-02-sidebar-inner-scrolled.png`, `desktop-1440x900-journey-04-page-bottom.png`, `desktop-1440x900-journey-03-page-scrolled-over-map.png`
+- B2 — `stacked-900x900-state-map-overflow-into-list.png`, `tablet-768x1024-state-map-overflow-into-list.png`, `stacked-900x900-01-rest.png`, `tablet-768x1024-01-rest.png`
+- B3 — `tablet-768x1024-journey-06-after-marker-click-fullpage.png`, `phone-390x844-journey-06-after-marker-click-fullpage.png`, `*-journey-05-after-marker-click.png`, `*-journey-07-after-list-click.png`
+- B4 — `phone-390x844-keyboard-country-path-focus.png`, `phone-390x844-keyboard-marker-focusring-zoom.png`, `REDACTED.png`, `desktop-1440x900-keyboard-marker-focusring-zoom.png`
+- H1 — `row-901x900-01-rest.png`, `row-901x900-02-fullpage.png`, `desktop-1024x900-01-rest.png`, `stacked-900x900-01-rest.png`
+- H2 — `desktop-1440x900-01-rest.png`, `desktop-1440x900-journey-01-signedin-rest.png`
+- H3/M5 — `phone-390x844-01-rest.png`, `phone-390x844-journey-11-marker-focus.png`
+- M1 — `phone-390x844-state-review-form-select-contrast.png`, `desktop-1440x900-state-review-form-select-contrast.png`, `*-journey-09-review-form-filled.png`, `*-journey-10-review-submitted.png`
+- M2 — `desktop-1440x900-state-map-error.png`, `row-901x900-state-map-error.png`, `tablet-768x1024-state-map-error.png`, `phone-390x844-state-map-error.png`
+- M3 — `phone-390x844-state-map-loading.png`, `desktop-1440x900-state-map-loading.png`
+- Baseline/other — `*-02-fullpage.png`, `*-journey-08-favourited.png`, `*-journey-12-list-focus.png`, `*-state-keyboard-marker-focus.png`, `phone-390x844-keyboard-marker-focus-full.png`, `phone-390x844-keyboard-marker-focus-zoom.png`, `desktop-1024x900-02-fullpage.png`
+
+## What I could not exercise
+
+- The MCP browser tools themselves, hence no accessibility-tree snapshots — my a11y findings come from computed styles, `getBoundingClientRect`, `matches(':focus-visible')` and real `Tab` presses, not from an AT tree. A screen-reader pass over the 202 unlabelled paths (B4) would likely find more than I can report.
+- Real touch input. Marker taps were synthetic mouse clicks at exact coordinates; H3 is an arithmetic argument against a 4.9px target, not an observed finger miss.
+- Reduced-motion and forced-colors modes, and zoom/`text-spacing` reflow — none of the three changed files touches them, but the global `* { transition: all 0.25s ease }` I ran into while measuring focus rings is a `prefers-reduced-motion` question somebody should ask separately.</result>
+<usage><subagent_tokens>136807</subagent_tokens><tool_uses>55</tool_uses><duration_ms>1088200</duration_ms></usage>
+</task-notification>
