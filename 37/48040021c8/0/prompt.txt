@@ -1,1 +1,1 @@
-I just updated the workflow for this proect. All these changes to use the new skills and subagents. We need to go through the AGENTS.md and ensure that we remove all the old cruft and have one workflow which is the one added between the blocks. Then we should run the project-profile skill to adopt the new. Make sure you have access to all the subagents etc. Don't modify the workflow that is in the blocks
+Did you update the agent-skills repo?
