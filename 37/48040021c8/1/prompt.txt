@@ -1,0 +1,13 @@
+/project-profile
+
+---
+
+Go through the development workflow and get rid of the old one compared to the new one we need to keep. Tell me what you think
+
+---
+
+adopt.sh is in ../agent-skils
+
+---
+
+ok

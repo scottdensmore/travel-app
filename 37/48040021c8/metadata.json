@@ -3,7 +3,7 @@
   "checkpoint_id": "3748040021c8",
   "strategy": "manual-commit",
   "branch": "scottdensmore/docs/adopt-agent-workflow",
-  "checkpoints_count": 1,
+  "checkpoints_count": 5,
   "files_touched": [
     ".agents/agents/verify/agent.json",
     "AGENTS.md"
@@ -15,13 +15,20 @@
       "compact_transcript": "/37/48040021c8/0/transcript.jsonl",
       "content_hash": "/37/48040021c8/0/content_hash.txt",
       "prompt": "/37/48040021c8/0/prompt.txt"
+    },
+    {
+      "metadata": "/37/48040021c8/1/metadata.json",
+      "transcript": "/37/48040021c8/1/full.jsonl",
+      "compact_transcript": "/37/48040021c8/1/transcript.jsonl",
+      "content_hash": "/37/48040021c8/1/content_hash.txt",
+      "prompt": "/37/48040021c8/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 242519,
-    "cache_creation_tokens": 0,
-    "cache_read_tokens": 10805504,
-    "output_tokens": 34558,
-    "api_call_count": 84
+    "input_tokens": 242627,
+    "cache_creation_tokens": 377794,
+    "cache_read_tokens": 16576186,
+    "output_tokens": 89925,
+    "api_call_count": 138
   }
 }
