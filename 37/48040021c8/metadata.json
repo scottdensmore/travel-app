@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "3748040021c8",
+  "strategy": "manual-commit",
+  "branch": "scottdensmore/docs/adopt-agent-workflow",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".agents/agents/verify/agent.json",
+    "AGENTS.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/37/48040021c8/0/metadata.json",
+      "transcript": "/37/48040021c8/0/full.jsonl",
+      "compact_transcript": "/37/48040021c8/0/transcript.jsonl",
+      "content_hash": "/37/48040021c8/0/content_hash.txt",
+      "prompt": "/37/48040021c8/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 242519,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 10805504,
+    "output_tokens": 34558,
+    "api_call_count": 84
+  }
+}
