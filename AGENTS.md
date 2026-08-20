@@ -1,55 +1,72 @@
 # AGENTS
 
-Next.js 16 App Router + Prisma/PostgreSQL + NextAuth. TypeScript strict, Tailwind, shadcn/ui.
+## Project overview
 
-These instructions govern all feature, fix, refactor, documentation, and
-maintenance work in this repository. All agents and sub-agents must follow them.
+Mona Airways is a full-stack airline booking demonstration built with Next.js 16
+App Router, React 18, strict TypeScript, Tailwind/shadcn UI, NextAuth, Prisma 5,
+and PostgreSQL 15. The base branch is `main`.
 
-This is the only file this repository authors agent rules in. The sub-agents'
-instructions are in [Sub-agents](#sub-agents) below rather than in documents of
-their own, because two files describing one split drift: a check named in one and
-reworded in the other is owned by nobody, and five such gaps reached a review at
-once. The definitions under `.claude/agents/` point here and carry no rules —
-except the generated `entire-search.md`, which carries its own. That section says
-why.
+These instructions govern feature, fix, refactor, documentation, and maintenance
+work in this repository. Generated skills and subagent definitions live under
+`.agents/`, `.claude/`, `.codex/`, `.cursor/`, and `.github/`; project-specific
+criteria belong here instead of being duplicated in those generated files.
 
-## Commands
+### UI Domain
 
-```bash
-npm ci                      # Node 22 required (.npmrc engine-strict blocks other majors)
-npm run dev                 # http://localhost:3000
-npm run lint                # eslint app components lib
-npx tsc --noEmit            # typecheck (no npm script)
-npm test                    # Jest, both projects — needs a running Postgres (see Gotchas)
-npm run test:unit -- --testPathPattern flightTime   # one file; see Gotchas before using a bare path
-npm run test:database       # the *.database.test.ts project, serialised
-npx playwright test         # E2E; starts its own dev server, so free port 3000 first
-npm run build               # next build + scripts/sanitize-standalone.mjs
-```
+Responsive web application. User-visible changes must be exercised at phone,
+tablet, and desktop widths, including keyboard, focus, loading, empty, and error
+states reachable through the changed journey.
 
-```bash
-docker compose up --build         # full stack: db + mailpit + proxy, migrates and seeds
-docker compose up -d db mailpit   # just the services Jest and Playwright need
-npx prisma migrate deploy && npx prisma db seed
-```
+## Repo Map
 
-Two gates run only in CI (`.github/workflows/ci.yml`) and nothing local covers
-them, so a change that trips one is invisible until the pull request goes red:
+| Area | Location and ownership |
+|---|---|
+| Routes and rendering | `app/`; `app/layout.tsx` is the root layout and `app/page.tsx` is the landing route |
+| Server mutations | `app/actions.ts` (`'use server'`) |
+| HTTP boundaries | `app/api/` for NextAuth/account routes and the signed Stripe webhook |
+| Reusable UI | `components/`; interactive browser components declare `'use client'` |
+| Business and data logic | `lib/`, primarily `lib/*Service.ts` and focused policy modules |
+| Database contract | `prisma/schema.prisma`, hand-authored SQL in `prisma/migrations/`, and `prisma/seed.ts` |
+| Unit and integration tests | `__tests__/`; database tests end in `.database.test.ts` or `.database.test.tsx` |
+| Browser journeys | `e2e/*.spec.ts`; shared setup, teardown, and helpers also live under `e2e/` |
+| Operational code | `Dockerfile`, `docker-compose.yml`, `deploy/`, and `scripts/` |
 
-```bash
-npm audit --omit=dev --audit-level=high        # blocks on a high-severity production advisory
-./scripts/verify-container-secrets.sh <image>  # plus two probe builds CI expects to be REJECTED
-```
+Generated artifacts must not be hand-edited: `lib/generated/prisma/` is produced
+by `npx prisma generate`; `.next/`, `next-env.d.ts`, and `*.tsbuildinfo` are build
+outputs; `prisma/migrations/migration_lock.toml` explicitly forbids manual edits.
+`node_modules/` is third-party content installed from `package-lock.json`.
 
-Both are assigned in the step 7 table like every other check, rather than left to
-whoever remembers: the audit is seconds and runs on both sides after a dependency
-change, and the container scan needs a built image, so it belongs to the verifier
-whenever the diff touches the `Dockerfile`, the standalone output or
-`scripts/sanitize-standalone.mjs`.
+## Development Commands
 
-## Environment
+All commands run from the repository root. CI's complete gate is declared in
+`.github/workflows/ci.yml`; a command is green only when it exits 0.
 
-`cp .env.example .env`, then generate three secrets:
+| Purpose | Command | Passing evidence and limits |
+|---|---|---|
+| Locked install | `npm ci` | Exits 0 under Node 22; `.npmrc` rejects other majors |
+| Development server | `npm run dev` | Serves `http://localhost:3000`; not a verification gate |
+| Lint | `npm run lint` | ESLint covers `app/`, `components/`, and `lib/` only |
+| Typecheck | `npx tsc --noEmit` | TypeScript exits 0; `tsconfig.json` includes repository `*.ts`/`*.tsx` files |
+| Focused unit test | `npm run test:unit -- --testPathPattern <regex>` or `npm run test:unit -- -t '<name>'` | Jest prints a passing `Tests:` summary; a bare path does not filter |
+| Unit project | `npm run test:unit` | Jest's `unit` project exits 0 |
+| Database project | `npm run test:database` | Jest's `database` project exits 0 serially; PostgreSQL is required |
+| Both Jest projects | `npm test` | Runs unit first, then database; a unit failure means database never ran |
+| Browser journeys | `npx playwright test` | Chromium suite exits 0 and global teardown reports no leaked rows; port 3000 must be free |
+| Production build | `npm run build` | Next build and the standalone sanitizer exit 0; never use bare `next build` |
+| Generate inventory | `npm run inventory:generate` | Idempotently extends scheduled inventory; operational command, not a CI gate |
+| Check inventory | `npm run inventory:check` | Exits nonzero when configured inventory coverage is short; operational command, not a CI gate |
+| Dependency audit | `npm audit --omit=dev --audit-level=high` | No high-severity production advisory |
+| Container secret gate | `docker build --tag travel-app:ci .` then `./scripts/verify-container-secrets.sh travel-app:ci` | Scanner exits 0; CI also requires two deliberately contaminated probe images to be rejected |
+
+For the database-backed gates, start local services with
+`docker compose up -d db mailpit`, then apply and seed with
+`npx prisma migrate deploy` and `npx prisma db seed`. `docker compose up --build`
+starts the full app, proxy, scheduler, database, and Mailpit stack.
+
+## Local Setup
+
+Node 22 is required by `package.json` and `.npmrc`. Run `npm ci`, copy
+`.env.example` to `.env`, then generate three independent local secrets:
 
 - `NEXTAUTH_SECRET` — 32+ characters
 - `PASSENGER_DATA_ENCRYPTION_KEYS` — `local-v1:$(openssl rand -base64 32)`
@@ -76,18 +93,25 @@ values, client secrets or raw webhook bodies belong in this application's
 environment, database or logs.
 
 Never commit a secret value or pass one on the command line. Every environment
-that runs this application injects configuration at runtime.
+that runs this application injects configuration at runtime. Docker and Docker
+Compose are preferred; use Podman and podman-compose when Docker is unavailable.
 
-## Architecture
+## Architecture & Conventions
 
-- `app/actions.ts` — `'use server'`; the primary mutation path for the whole app
-- `app/api/` — auth routes plus the signed Stripe payment webhook
-- `lib/*Service.ts` — data and business logic, called from server actions
-- `lib/validation.ts` — shared Zod schemas; mutations parse through `parseActionInput`
-- `lib/actionResult.ts` — mutations return `{ ok: false, error }` instead of throwing on validation failure
-- `prisma/schema.prisma` — migrations are hand-authored SQL, several security-critical
+- `app/actions.ts` is the primary mutation boundary. Mutations parse untrusted
+  input through `parseActionInput` and shared Zod schemas in `lib/validation.ts`.
+- Put data access and business rules in `lib/*Service.ts` or focused `lib/`
+  policy modules; server actions and route handlers orchestrate those modules.
+- Validation failures use the `ActionResult` contract from `lib/actionResult.ts`
+  (`{ ok: false, error }`) where the action contract supports it.
+- Staff mutations gate on `hasVerifiedStaffAccess(session)`: an authenticated
+  session alone is insufficient until TOTP enrollment and verification complete.
+- Prisma migrations are hand-authored SQL. Preserve security guards, append-only
+  audit contracts, and migration recovery comments when changing them.
+- Use 4-space indentation, single quotes, and semicolons. `@/*` maps to the
+  repository root. Browser-interactive components require `'use client'`.
 
-## Gotchas
+## Gotchas & Troubleshooting
 
 - A migration that fails leaves Prisma refusing to apply anything else: the next
   `migrate deploy` reports `P3009`, not the original error. Fix the data the migration
@@ -120,6 +144,9 @@ that runs this application injects configuration at runtime.
   difference is easy to miss
 - Node-environment tests need `/** @jest-environment node */` (jsdom is the Jest default)
 - Playwright runs `workers: 1, fullyParallel: false` on purpose — parallel runs collide on the DB
+- Playwright sets `reuseExistingServer: false`; stop any process on port 3000
+  before running it. Borrowing an existing server can test stale code, so a port
+  collision is an environment failure, not permission to reuse that process.
 - Playwright's app server sets `E2E_STRIPE_MODE=playwright`, which replaces only
   Stripe's external server/browser boundary so booking journeys remain
   deterministic without account secrets or automated card entry. The adapter
@@ -134,536 +161,8 @@ that runs this application injects configuration at runtime.
   during the run. Fix the failure, or run the suite alone, rather than the report
 - Always `npm run build`, never bare `next build`: the sanitize step strips `.env` files from
   standalone output, and CI asserts no secret survives in any image layer
-- Staff mutations gate on `hasVerifiedStaffAccess(session)` — a session alone is not enough;
-  staff must complete TOTP enrollment (`docs/STAFF_ACCOUNT_POLICY.md`)
-
-## Code Style
-
-4-space indent, single quotes, semicolons. The `@/*` path alias maps to the repo root.
-Chart and other browser-interactive components need `'use client'`.
-
-## Development Workflow
-
-1. **Inspect before changing anything.** Inspect the repository, current Git
-   state, and all applicable instruction files before making changes. Preserve
-   unrelated staged, unstaged, and untracked work.
-
-2. **Create a branch first.** Create a dedicated feature, fix, refactor, chore,
-   test, or documentation branch before making code changes. Never commit
-   directly to `main`, and create the branch from the latest appropriate
-   `main` state.
-
-   While still on `main`, run `npm run lint` and
-   `npm run test:unit 2>&1 | grep -E '^Tests:'` and keep the result. That record
-   is the baseline step 7 requires you to hand the verifier, and this is the only
-   moment you are standing on `main` to take it. You do not own the build, the
-   database project or the full Playwright run, so you will have no baseline for
-   those — say so when you invoke the verifier rather than leaving it unstated.
-   An invented baseline is worse than a missing one, because a real regression
-   gets waved through as pre-existing on your say-so.
-
-3. **Choose a thin vertical slice.** Before implementing a tracked issue or
-   feature, define the smallest end-to-end slice that can be reviewed, tested,
-   shipped, and merged independently. Prefer one coherent user-visible or
-   operational outcome over a broad horizontal layer. If the next issue is too
-   large for one pull request, split it into ordered slices and complete only
-   the current slice. Keep pull requests small enough for thorough review,
-   reliable verification, and quick rollback. When work surfaces a defect or
-   improvement that belongs outside the current slice, do not widen the slice
-   to absorb it — file it as described under Issue Tracking and carry on.
-
-4. **Use test-driven development when behavior or structure is testable.**
-   - Add or update a focused test before implementation.
-   - Run it and confirm it fails for the expected reason.
-   - Implement the smallest appropriate change.
-   - Run focused tests while iterating.
-   - Refactor only while the relevant tests remain green.
-
-5. **Inspect the complete diff.** Review the branch diff plus all staged,
-   unstaged, and untracked files. Remove accidental or unrelated changes while
-   preserving work that belongs to the user.
-
-6. **Run `ui-review` before verification.** After the main agent completes an
-   implementation pass, invoke the `ui-review` sub-agent, whose instructions are
-   under [Sub-agents](#ui-review). Address every actionable finding before
-   running the `verifier`. For changes with no UI impact, explicitly record that
-   rendered UI review is not applicable. If a finding is not applicable, record
-   the concrete reason rather than silently ignoring it.
-
-   The rendered pass depends on the `mcp__plugin_playwright_playwright__browser_*`
-   tools listed on `.claude/agents/ui-review.md`. Those come from an installed
-   plugin rather than from this repository — check they are present before
-   relying on them, as with `/code-review` in step 8. Where they are absent the
-   sub-agent falls back to a throwaway Playwright script and says so at the top
-   of its report; "no browser tooling" recorded as a completed UI review is not
-   acceptable.
-
-7. **Run `verifier` before code review.** Invoke the `verifier` sub-agent, whose
-   instructions are under [Sub-agents](#verifier). It runs the builds, static
-   checks, tests, and journey coverage appropriate for the change, and reports
-   failures, flakes, missing coverage, and environment issues. Fix or explicitly
-   resolve every actionable finding before starting code review. If a finding
-   requires a code change, rerun the focused tests for that change yourself and
-   then hand the settled tree back — do not re-run the whole battery yourself
-   first, because the verifier always runs its own column and you cannot scope
-   its run. "Once a slice is done" in the table below includes a re-hand: run
-   the unit project again before handing the tree over, every time, since it
-   costs seconds. It is the verifier's column that must not be duplicated.
-
-   **The verifier owns the slow checks; do not run them twice.** Split it by
-   what a check costs:
-
-   | Main agent | Verifier |
-   | --- | --- |
-   | The TDD inner loop — one file, via `--testPathPattern` | The full unit *and* database projects |
-   | The **red** step: does it fail for the intended reason | `npm run build` |
-   | The whole unit project once a slice is done | The full `npx playwright test` |
-   | `npm run lint`, `npx tsc --noEmit` | Migrations against a fresh *and* a populated database |
-   | The database tests covering what changed | An audit of every mutant reported killed, and of the selection |
-   | The single Playwright spec whose journey changed | `npm run lint` and `npx tsc --noEmit` again, on the final tree |
-   | `npm audit --omit=dev --audit-level=high` after a dependency change | The same audit, plus the container secret scan when the diff touches the image |
-
-   The verifier's column costs minutes per entry. Running those in both places
-   doubles every slice for no extra signal, and a second concurrent run competes
-   for port 3000 and the shared database — which has already produced failures
-   that looked real and were not. The cheap checks are the deliberate exception
-   to the heading, and appear in both columns: lint, the typecheck and the unit
-   project cost seconds, and the verifier's report is an independent statement
-   about the final state rather than a summary of what it was told.
-
-   Two things cannot move to the verifier. **The red step is a design check, not
-   a verification**: "does this fail for the reason I intended" needs the intent
-   behind the test, so a sub-agent cannot answer it. And **fixing findings is
-   always the main agent's**, which is the expensive half and the reason the
-   rules below matter more than the split.
-
-   **Mutation testing is the main agent's**, and stays focused: run the suite
-   that should catch the mutant, not everything. The verifier does not re-run
-   it — it is barred from changing anything `git status` would report, because a
-   sub-agent that injects a defect leaves one behind whenever a run is
-   interrupted. It audits the claim instead, which means the claim has to reach
-   it in a form it can audit: **hand the verifier a mutant table when you invoke
-   it**, one row per mutant — `file:line`, the exact edit, the suite you ran,
-   died or survived, and whether it died on the first attempt. A name and a
-   suite is not enough: the verifier audits from the source without reproducing,
-   so it needs the edit to say whether an assertion constrains it, and the
-   outcomes to audit the selection. An unreported mutant is an unaudited one,
-   silently. Three that survived 781 tests reached a pull request this way (#231).
-
-   **Choose mutants to defeat the assertion, not to confirm it.** For each one,
-   ask *what edit would leave this test green while making it meaningless*, and
-   run that. Corrupting a value the assertion reads only proves the matcher
-   works. Work this list before picking:
-
-   - a bound with headroom — set the value *to* the limit, and one past it
-   - a matcher that checks a superset or a subset (`arrayContaining`,
-     `objectContaining`, `not.arrayContaining`) — supply the minimum that should fail
-   - a string or regex search — check the literal against the text it is aimed
-     at, character for character
-   - a guard over a document or a table — delete the row or the section, never
-     reword it
-   - an assertion after an early return or a swallowed error — remove the code
-     path entirely
-
-   Four guards written in one slice (#248) passed while asserting nothing, and
-   every one looked rigorous: a line limit with four lines of headroom; the same
-   limit tightened until it caught appends but still admitted a countermand of
-   equal length; a check asking whether a document said `no Write`, against a
-   document that says `no Edit or Write tool`, so it never armed; and
-   `expect(granted).toEqual(expect.not.arrayContaining([...]))`, a superset check
-   that fails only when *every* barred item is present, so granting one walked past.
-
-   The confirming mutants died in all four cases and reported nothing wrong. A
-   table in which every mutant died is not weaker evidence than one containing a
-   survivor — it is *more ambiguous*. It is equally consistent with a strong
-   suite well attacked and with a weak one never attacked, and the table alone
-   cannot separate them. So when everything dies on the first attempt, check the
-   selection before concluding anything about the suite.
-
-   A survivor is a diagnostic, never a target. Producing one on demand is
-   trivial — pick a throwaway mutant, or leave an assertion slightly loose — and
-   a table padded that way is noise dressed as rigor.
-
-   The table lists *runs*, so it understates what the verifier is for. The
-   verifier also classifies every failure as regression, pre-existing or
-   environment, and cannot do that without knowing what was already red before
-   the branch. **Hand it the `main` baseline from step 2** when invoking it, or
-   the classification is a guess dressed as a result.
-
-   **Clear what your own Playwright runs left behind.** `global-setup` snapshots
-   the database as it finds it (`e2e/global-setup.ts`), so rows a failed
-   `afterAll` never deleted are already inside the verifier's baseline and are
-   never reported as leaked (#213). Leaked `Flight` and `FlightSchedule` rows are
-   not inert (#173). Re-run that spec green, or delete its rows, before you
-   invoke the verifier.
-
-   **Running tests is not what fills the context window; unfiltered output is.**
-   A whole unit run reduced to `| grep -E '^Tests:'` costs about fifty tokens for
-   seven hundred tests, so the split above is about wall clock and contention,
-   not context. Three habits protect context far more than it does:
-
-   - **Never launch the verifier until the tree is settled.** It reads from disk
-     throughout rather than snapshotting, so an edit underneath it does not make
-     the report stale — it makes it *incoherent*: early checks ran against one
-     tree and later ones against another, and nothing marks where the boundary
-     fell. The result certifies a state that never existed at any single moment.
-     Wasted on both sides, twice in one session.
-   - **Prefer one thorough pass to several narrow ones.** Batch the fixes for a
-     round of findings and re-verify once. Passes that exist only because the
-     previous round's fixes need re-checking are the ones worth designing out.
-   - **Cap failure triage at two rounds.** Grep to the assertion and its
-     expected/received before reading anything else. If two rounds do not
-     explain the failure, hand the investigation to a `general-purpose`
-     sub-agent rather than reading progressively more output. The same goes for
-     a failure that smells environmental — a stale `.next`, a port collision, a
-     Prisma client left over from a branch switch: ask a `general-purpose`
-     sub-agent whether it is real, not the `verifier`, which runs its whole
-     column by design and would spend minutes on a one-line question.
-
-8. **Review the code before every commit.** `/code-review` gives a full pass,
-   and against a pull request it runs unattended and posts its findings as a
-   comment. It ships in the `code-review@claude-plugins-official` plugin rather
-   than being built in, and this repository does not enable it, so it exists
-   only where someone has installed it themselves — check before relying on
-   it. `/code-review ultra` is deeper still, but it is user-triggered and
-   billed, and an agent cannot launch it. Where the plugin is unavailable, the
-   main agent performs and records an expert review of the complete diff; do
-   not replace it with a bespoke review sub-agent.
-
-   Nothing reviews the pull request afterwards, so this pass is the review
-   rather than a first draft of one.
-
-   Reviewers must act as experts in the languages and frameworks used by this
-   application, including TypeScript, React, Next.js, Prisma, PostgreSQL, Jest,
-   and Playwright. Address every actionable finding before committing. If review
-   findings cause changes, batch them, rerun the focused tests for each, and
-   rerun the verifier **once** — carrying forward the same `main` baseline and
-   the same mutant table step 7 requires, plus any row the new changes warrant.
-   One re-verification pass per review round. If a second round still requires
-   code changes, the slice is too large: stop and split it per step 3 rather
-   than looping.
-
-9. **Commit after approval.** Commit only after verification and code review
-   are complete. Use Conventional Commits:
-
-   ```text
-   <type>(<scope>): <imperative summary>
-   ```
-
-   Keep the subject at 72 characters or fewer, describe why in the body when
-   useful, and do not combine unrelated work.
-
-10. **Create pull requests from the reviewed state.**
-    - Confirm that local verification remains valid.
-    - Rerun code review only if the reviewed state changed after the pre-commit
-      review.
-    - A changed state includes code, tests, documentation, generated files,
-      conflict resolution, or any other staged, unstaged, or untracked content.
-    - Do not repeat code review when the already-reviewed diff and worktree
-      remain unchanged.
-    - Push and create the pull request only after local verification and any
-      required code review are complete.
-    - Open a normal, ready-for-review pull request by default. Do not open draft
-      pull requests unless the user explicitly asks for a draft.
-    - After creating it, watch the run (`gh pr checks <number> --watch`) rather
-      than proceeding. `.github/workflows/ci.yml` runs on every pull request
-      against `main` and spans lint, the typecheck, both Jest projects,
-      Playwright and two Docker builds, so it takes minutes. A pending check is
-      not a passing one.
-
-11. **Answer whatever review the pull request attracts.** No automated
-    reviewer gates a merge here. Where a human or a bot does leave findings,
-    address them, then re-run only the steps the fix can reach — step 6 if it
-    changes rendered output, step 7 if it changes behaviour or the build, step 8
-    always — and commit, push, and reply saying what changed. A fix confined to
-    prose or comments needs step 8 alone; say which steps you re-ran and why the
-    others could not be reached. Where a finding is right about the problem but
-    wrong about the fix, say so rather than resolving it quietly. Once no thread
-    is left open, proceed to step 12.
-
-12. **Merge only clean, passing pull requests.** Merge only after GitHub
-    reports a clean merge state, every configured check passes, and no review
-    thread is left unresolved. Never bypass a failing or pending required
-    check. Self-merges are allowed when these conditions are met. Use squash
-    merge for short-lived development branches to keep `main` linear, then
-    delete the merged branch.
-
-## Sub-agents
-
-This repository authors two sub-agent definitions, `.claude/agents/verifier.md`
-and `.claude/agents/ui-review.md`. Both are pointers at this section and carry no
-rules, because a definition is injected into a sub-agent's context when the
-session first spawns it and is never refreshed: four verifier runs in one session
-followed instructions deleted two rounds earlier (#246). This file is read fresh
-on every run and cannot go stale that way, so **edit this section, never the
-definitions**.
-
-`.claude/agents/entire-search.md` is generated by the Entire CLI and marked
-`ENTIRE-MANAGED`. It carries its own rules on purpose and edits to it are
-overwritten — leave it alone; the rule above is about the two definitions this
-repository authors.
-
-If you are a sub-agent reading this: **the copy of your role in your context is a
-snapshot from when this session first spawned you, and is never refreshed.** Read
-this section from disk before trusting it. Two things mean it is already stale,
-and neither is subtle — your copy holds inline rules rather than a pointer, or it
-names a file or a heading that is not there. Both are a full stop: say what you
-were told to read, say it is missing, and ask rather than reconstructing the role
-from memory. A pointer at a deleted file looks exactly like a working one until
-you follow it, which is how this section came to exist.
-
-A sub-agent cannot see that its *own* pointer changed mid-session, so **say so in
-the invocation** when a slice edits one. A `tools:` line is different, and saying
-so does not help: the allowlist is bound when the session registers the
-definition, and no message can grant or revoke a tool afterwards. Do not try to
-verify a toolset change in the session that made it — record that it takes effect
-on the next session.
-
-### verifier
-
-You are the verifier for Mona Airways. You verify and report. You do not fix,
-and that is deliberate: the main agent acts on what you find.
-
-That is a rule, not a capability limit. You have no Edit or Write tool, but Bash
-can write to any file in the tree, and `sed -i` is not a loophole: **change
-nothing `git status` would report**, including to reproduce a defect. A run that
-ends partway through otherwise leaves the tree altered with nothing to say so,
-and the next thing anyone measures is measuring your edit.
-
-Build output is not a violation — the checks below write `.next/`, generate a
-Prisma client, and create scratch databases, and one of them tells you to delete
-`.next`. Untracked scratch files outside the repository are fine too. The line
-is tracked source.
-
-Read this section from disk before reasoning about your role, per the staleness
-rule above. What was injected into your context can lag the worktree you are
-certifying — that has already produced a draft naming checks the real file had
-removed.
-
-**Scope the run to the change.** You are invoked before the work is committed, so
-`git diff main...HEAD` is routinely **empty** and is never the whole picture.
-Read staged, unstaged and untracked files first — that is where the change is —
-and treat the committed diff as the part that may not exist yet. Then pick the
-checks that can actually catch a regression in it, and justify anything you skip.
-
-**You own the right-hand column of the table in step 7, and cost is never a
-reason to skip an entry.** The main agent runs lint, the typecheck, the unit
-project and focused database and Playwright specs while it works; it deliberately
-does not run the full database project, `npm run build` or the full
-`npx playwright test`, because a second concurrent run competes for port 3000 and
-the shared database. If you skip one of those, nothing else runs it. Skip only
-when the diff cannot reach it, and say which and why.
-
-Re-running the cheap checks yourself is correct even though the main agent
-already did. They cost seconds, and your report is an independent statement
-about the final state rather than a summary of what you were told about it —
-"the main agent said lint was clean" is not a check.
-
-```bash
-npx tsc --noEmit            # typecheck; covers tests too, they are in tsconfig
-npm run lint                # eslint app components lib
-npm run test:unit           # the unit project
-npm run test:database       # the database project; --runInBand, needs Postgres
-npx playwright test         # E2E; auto-starts the dev server
-npm run build               # never bare `next build` - the sanitize step matters
-```
-
-Two more when the diff reaches them, because CI is otherwise the first thing that
-runs them (see Commands):
-
-```bash
-npm audit --omit=dev --audit-level=high        # any dependency change
-./scripts/verify-container-secrets.sh <image>  # the Dockerfile, standalone output or sanitize step
-```
-
-Run the two Jest projects as separate commands and report each result
-separately — never chained, and never via `npm test`. That script is
-`test:unit && test:database`, so a failing unit test means the database project
-never ran, and you own it.
-
-Database work additionally needs proof the migration applies to an *empty*
-database, not just the already-migrated dev one:
-
-```bash
-docker compose up -d db mailpit          # podman/podman-compose if Docker is absent
-npx prisma migrate deploy && npx prisma db seed
-```
-
-Create a scratch database and run `migrate deploy` against it. Then run it
-against a *populated* one as well: a migration that backfills or converts data
-is trivially correct against zero rows, and the guards in this repository exist
-precisely because real rows fail them. If a migration carries a guard, exercise
-it in both directions — make it fire, then make it pass — rather than trusting
-that it would work.
-
-**Environment traps that produce false results:**
-
-- Jest and Playwright need Postgres up; `*.database.test.ts` fail without it
-- After a schema change, run `npx prisma generate`, then **delete `.next`**.
-  A stale build bundles the old Prisma client, and the failure it produces
-  looks like an application bug ("Argument `x` is missing") rather than a
-  cache artifact.
-- A stale dev server holding port 3000 makes Playwright time out on startup
-- Playwright runs `workers: 1, fullyParallel: false` on purpose; do not
-  parallelise it
-- `npm run test:unit -- <path>` does **not** filter. The script ends in
-  `--selectProjects unit`, which takes a list, so the path is read as another
-  project name and ignored: you get the whole project and no warning. Re-running one
-  suite in isolation needs `-- --testPathPattern <regex>` or `-- -t '<name>'`
-- `npx jest --selectProjects database` aborts by design. `jest.database-setup.js`
-  refuses to start when it sees more than one worker, because those tests share
-  one database. Use `npm run test:database`, which passes `--runInBand` — and
-  unlike the unit script, that one *does* forward a trailing path
-
-**Flakes are findings.** A test that passes on retry has not passed. When
-something fails: determine whether it fails for a reason connected to the diff;
-re-run it in isolation and as part of the suite, since order-dependence and
-cold-start timing are common here; and report the mechanism, not just "flaky".
-
-**Cap this at three full-suite runs.** You cannot delegate — you have no Task
-tool — so the bound has to be self-imposed, and characterising a rate precisely
-is worth far less than reporting it roughly and moving on. "Failed twice in
-three runs, always on the same assertion, here is the line" is a finding. Ten
-runs to establish it was 1-in-5 is a finding plus nine runs of nothing.
-
-Distinguish clearly between: a real regression from this change, a pre-existing
-failure the change merely surfaced, and an environment problem. Getting this
-wrong wastes the most time of anything you do, and you cannot do it at all
-without the `main` baseline step 2 requires the main agent to hand you. If the
-invocation did not include one, say so rather than guessing.
-
-**Coverage.** Note behaviour the change introduces that no test would catch. Call
-out assertions that pass vacuously — a mocked return that omits the field under
-test, an assertion the code path never reaches because an earlier error is
-swallowed. A green suite that never exercises the change is a finding.
-
-Where the main agent reports having killed a mutant, audit the claim rather
-than taking it — **from the source, without reproducing it**, per the rule at
-the top of this section. Read the test the row names: does an assertion actually
-constrain the mutated value, or does the suite merely execute the line? A mocked
-return that omits the field, an expectation on a wrapper object that would hold
-for any payload, and an assertion after an early return all read as coverage and
-constrain nothing.
-
-Audit the *selection* as well as each claim. A table in which every mutant died
-on the first attempt is not weaker than one containing a survivor, but it is
-more ambiguous: it may mean the assertions hold, or that only confirming mutants
-were tried, and the table cannot tell you which. Ask what edit would leave the
-test green while making it meaningless — a limit with headroom, a matcher that
-checks a superset, a string search that never matches the wording it is aimed
-at — and say when the reported mutants would not have found it. Four such guards
-shipped past their own mutant tables in one slice (#248).
-
-Do not report the absence of a survivor as a finding in itself. A survivor is a
-diagnostic, not a quota, and treating it as one buys padded tables rather than
-better selection.
-
-Mutants reported dead that were alive have reached a pull request here (#231):
-three of them — two dropped `set_config` calls and a hard-coded zero — passed
-all 781 tests. Say when a claim is not auditable from the source rather than
-passing it, and check the count as well as the kill, since a "two suites went
-red" that was really one is the same reporting error in miniature.
-
-**Silence is also a finding.** A change to behaviour that arrives with no mutant
-named at all is not evidence that none was warranted. Report it as a coverage
-finding unless the invocation says why none was warranted, and say which
-behaviour you would have expected a mutant for.
-
-**Report.** State what you ran, the actual result of each, and the exact output
-for anything that failed. Then list findings, most severe first, each marked as
-regression / pre-existing / environment / coverage gap. Never report success you
-did not observe. If you could not run something, say which and why — an unrun
-check is not a passing one.
-
-### ui-review
-
-You are an expert in website design, usability, responsiveness and accessibility,
-reviewing a change to Mona Airways (Next.js App Router, Tailwind, shadcn/ui).
-
-You review. You do not fix, and that is a rule rather than a capability limit.
-You have no Edit or Write tool, but Bash can write to any file in the tree and
-`sed -i` is not a loophole: **change nothing `git status` would report**. The
-main agent runs the verifier straight after you, and it reads from disk
-throughout rather than snapshotting, so an edit underneath it certifies a tree
-that never existed at any single moment. Report findings and let the main agent
-act on them.
-
-The line is tracked source. A dev server, `.next/`, and the screenshots this
-review requires are not violations, and neither is data you create by driving
-the application — exercising a real booking is the point.
-
-Read this section from disk before reasoning about your role, per the staleness
-rule above — the same one that binds the verifier.
-
-**Read the change first.** Establish what actually changed before opening a
-browser:
-
-- Staged, unstaged and untracked files first. You are invoked before the work is
-  committed, so `git diff main...HEAD` is routinely **empty** and is never the
-  whole picture — read it, but never as the answer on its own
-- Which routes, components and user journeys those files affect
-
-If nothing among those files can alter rendered output — server-only logic,
-tests, migrations, tooling — say so explicitly, state why, and stop. "Rendered
-UI review is not applicable because X" is a complete and valid result. Do not
-invent UI concerns to justify the invocation, and do not reach that conclusion
-from an empty diff range: an uncommitted change is the normal case here, not the
-absence of one.
-
-**Exercise the real application.** For anything that does affect rendered output,
-look at it running. Reading JSX is not review: a component can be correct in
-isolation and still render the wrong thing once real data reaches it.
-
-Check your browser tooling before you rely on it. The
-`mcp__plugin_playwright_playwright__browser_*` tools listed on
-`.claude/agents/ui-review.md` come from an installed plugin rather than from this
-repository, so on a machine without it your toolset is Read, Grep, Glob and Bash
-and none of what follows is directly available. Where they are absent, say so at
-the top of your report and drive the journey through a throwaway Playwright
-script instead: `@playwright/test` is a devDependency, and a script written
-outside the repository is not a change to the tree. Do not report a rendered
-review you did not perform.
-
-Start the app if it is not already up (`npm run dev`, http://localhost:3000).
-Drive the changed journey end to end at three viewports:
-
-- phone, 390x844
-- tablet, 768x1024
-- desktop, 1440x900
-
-Capture a screenshot at each, written under `test-results/ui-review/` with a name
-that says the viewport and the state. Inspect whichever of these the change can
-reach: interaction, loading, empty, error, focus, keyboard, contrast, and
-responsive states.
-
-Prefer the seeded local data over contrived fixtures. Several defects in this
-codebase were invisible to component tests and obvious the moment a real
-round-trip booking was rendered.
-
-**What to look for:**
-
-- **Does it say the true thing?** A card that names one flight while listing
-  another leg's data is a defect even when every element renders correctly.
-- Layout at every width; the page body must never scroll horizontally
-- Keyboard reachability, visible focus, logical tab order, focus restoration
-  after dialogs close
-- Accessible names and roles; anything conveyed only by colour or position
-- Contrast against the dark theme this app uses
-- Loading, empty and error states, not just the happy path
-- Console errors and React warnings during the journey
-
-**Report.** Return a list of findings, most severe first. For each: what is
-wrong, where (`file:line` when you can place it), which viewport and state you
-saw it in, and what the user experiences as a result.
-
-List the screenshot paths you wrote. Your images do not travel back with your
-report — only this text does — so a path the main agent can open is the only way
-the evidence step 6 requires reaches the person who has to act on it.
-
-Separate blocking defects from suggestions, and say plainly when a heading has
-nothing to report. If a finding does not apply, record the concrete reason
-rather than dropping it silently. State honestly what you could not exercise and
-why — a journey you could not reach is a gap in the review, not a pass.
+- After a Prisma schema change, run `npx prisma generate` and remove stale
+  `.next/` output before diagnosing an old-client build error.
 
 ## Testing Expectations
 
@@ -704,10 +203,6 @@ why — a journey you could not reach is a gap in the review, not a pass.
   Playwright for browser journeys.
 - Mock true external boundaries in focused tests; use realistic local services
   for end-to-end verification where appropriate.
-- Every new or changed assertion that pins behavior gets at least one mutant,
-  chosen to defeat it (step 7). Documentation-only, formatting and dependency
-  slices do not — say that explicitly when invoking the verifier, because from
-  there silence and "none was warranted" are indistinguishable.
 - Treat warnings, flakes, skipped checks, and environment failures as findings
   that require an explicit resolution.
 
@@ -733,8 +228,207 @@ why — a journey you could not reach is a gap in the review, not a pass.
   makes the slice wrong or unsafe to ship, say so and stop instead of filing
   around it.
 
-## Containerization Fallback
+## Verification Map
 
-- Docker and Docker Compose are preferred when available.
-- If Docker or Docker Compose is unavailable or fails because this machine uses
-  Podman, fall back to `podman` and `podman-compose` respectively.
+The complete gate is the CI sequence in `.github/workflows/ci.yml`. After that
+gate has passed once on the state entering review, use this map to select only
+the commands a subsequent fix could have invalidated.
+
+| A fix touches | Rerun |
+|---|---|
+| `app/`, `components/`, or `lib/` | `npm run lint`, `npx tsc --noEmit`, affected Jest project(s), `npm run build`; add `npx playwright test` when a browser journey can change |
+| `types/`, `instrumentation.ts`, or another source `*.ts`/`*.tsx` outside the lint roots | `npx tsc --noEmit`, affected Jest project(s), `npm run build`; add Playwright when the runtime journey can change |
+| `__tests__/**`, `jest.config.js`, `jest.setup.js`, or `jest.database-setup.js` | `npx tsc --noEmit` and the affected Jest project; run both projects when shared Jest configuration changes |
+| `e2e/**` or `playwright.config.ts` | `npx tsc --noEmit` and `npx playwright test` |
+| `prisma/schema.prisma` | `npx prisma generate`, both Jest projects, `npx playwright test`, and `npm run build`; delete stale `.next/` first |
+| `prisma/migrations/**` or `prisma/seed.ts` | Apply migrations to fresh and populated disposable databases, run `npm run test:database`, `npx playwright test`, and `npm run build` |
+| `package.json` or `package-lock.json` | `npm ci`, `npm audit --omit=dev --audit-level=high`, then the complete gate |
+| `eslint.config.mjs` | `npm run lint` |
+| `tsconfig.json`, `next.config.*`, or Next/Jest/Babel configuration | `npx tsc --noEmit`, both Jest projects, `npx playwright test`, and `npm run build` |
+| `Dockerfile`, `.dockerignore`, standalone sanitization, container entrypoint, or secret-scan scripts | `npm run build`, build the production image, and run `./scripts/verify-container-secrets.sh <image>` plus CI's two rejected probes |
+| `.github/workflows/ci.yml` | Re-run every local command represented by the changed job; CI remains the only proof of GitHub runner and probe behavior |
+| `AGENTS.md` or generated skill/subagent files | Re-run adoption with `python3 scripts/adopt.py --dry-run --keep-existing <repo>` from the `agent-skills` repository; no product test treats repository instructions as its subject |
+| Anything else | The complete gate |
+
+<!-- agent-skills:begin workflow de3858aa — managed block, edits here are overwritten -->
+## Development Workflow
+
+Follow these stages in order (governed by the global `agent-workflow-skills`). Scale the pipeline to the
+size of the change using the triage table — skipping a stage is a decision to
+state out loud, never a shortcut taken silently. A stage in parentheses applies
+only when its own entry says it does.
+
+| Track | When | Stages |
+|---|---|---|
+| **Trivial** | Docs, comments, typos, config with no logic change | 1 → 6 → 9 |
+| **Single fix** | One bug or small change with a clear, contained cause | 1 → 2 → 5 → 6 → (7) → 8 → 9 |
+| **Feature** | New behavior, several files, or an architectural choice | All stages; repeat 5–8 per slice |
+
+**Division of labor.** The main agent runs only focused checks — the single test
+it just wrote, a formatter over the files it just touched. Whole suites, builds,
+dependency audits, and repository-wide lint go to the **`verifier`** subagent;
+reviews go to **`code-reviewer`** and **`ui-reviewer`**. Each follows the skill
+of the same job (`verifier`, `code-review`, `ui-review`), reads this file for
+what the project's commands and criteria are, and is declared without
+file-editing tools — a read-only sandbox where the host supports one. This is
+not ceremony: it keeps routine command output out of the implementation context,
+and it means each gate is read by something that has not already convinced
+itself the change is correct. If a subagent is unavailable, run the stage
+inline against the same skill and say that you did.
+
+**Stages end.** Every delegated stage returns a verdict, and a verdict is acted
+on once. Fix what came back, then rerun only the stage whose inputs your fix
+touched. If the same finding survives two attempts, stop and report it with what
+you tried — do not loop. Never rerun a stage against a state it has already
+seen; an unchanged tree yields an unchanged verdict.
+
+**Preserve what you did not change.** A worktree may hold work that is not yours.
+Never stage, revert, or "clean up" a change you did not make; when something
+unrelated is in the way, name it and leave it alone.
+
+**Claim only what you observed.** A gate licenses a statement about exactly
+what it measured and nothing more: a green build says the code compiles, not
+that the feature works; a passing test says that test passed, not that the bug
+is gone. If you did not run it, say you did not. "I believe this fixes it" is a
+usable sentence; "fixed and verified" without a command and its output is not.
+
+**Say what you assumed.** When a choice would change what gets delivered and the
+request does not settle it, ask before building rather than after. When it is
+too small to be worth asking, decide, and write the assumption where a reviewer
+will see it. An assumption nobody can see is indistinguishable from a mistake.
+
+**Instructions are part of the change.** When a command, a behavior, or a
+constraint changes, the file that documents it changes in the same commit —
+`AGENTS.md`, the Verification Map, the README, whichever is now wrong. Stale
+instructions are worse than missing ones, because the next agent follows them
+confidently.
+
+1. **Inspect & Branch**: Inspect `git status`, the current branch, and every
+   applicable instruction file before touching anything. Note unrelated staged,
+   unstaged, and untracked work so you can preserve it. Fetch the base branch
+   (`git fetch origin main`) and create a dedicated branch:
+   `git checkout -b <owner>/<type>/<short-description> origin/main`.
+   `<owner>` is your GitHub login (`gh api user --jq .login`); `<type>` is one of
+   `feat`, `fix`, `refactor`, `chore`, `test`, `docs`. Never commit to `main`.
+2. **Plan & Slice (`plan-and-prototype`)**:
+   - **Read before you plan.** Open the code the change will touch, its tests, and
+     its call sites. A plan written without reading them is a guess about a
+     codebase rather than a plan for this one.
+   - Formulate a clear step-by-step plan before writing code. Define the smallest
+     end-to-end slice that can be reviewed, tested, and shipped independently; if
+     the work is too large for one pull request, order the slices and complete only
+     the current one.
+   - **A slice is vertical, not horizontal.** It goes through every layer of one
+     narrow thing and ends in something you can actually verify: "add the new field
+     end to end, with tests" is a slice; "rename the field everywhere" is a sweep.
+     One concern per branch — if a change spans unrelated concerns, that is two
+     branches.
+   - **A new dependency is an architectural decision, not an implementation
+     detail.** Say what it replaces, why writing that yourself is the worse option,
+     and what its license and maintenance status are. Adding one silently is how a
+     project acquires a liability nobody chose.
+3. **Prototype Options (if needed)**: When facing architectural choices, unfamiliar
+   APIs, or UX alternatives, spike lightweight prototypes and compare trade-offs
+   before committing to an approach.
+4. **Track Bugs & Follow-ups**: When bugs, edge cases, technical debt, or follow-up
+   tasks surface mid-change, file them immediately (`gh issue create`, the project's
+   tracker, or `ISSUES.md` when none is configured) instead of expanding the current
+   slice.
+5. **Test-Driven Development (`tdd-workflow`)**:
+   - Write/update a focused test first → confirm it fails for the expected reason →
+     minimal implementation → iterate until passing → refactor. A test that passes
+     before the code exists is testing the wrong thing.
+   - **When the change replaces an existing contract, find the tests pinning the old
+     one first.** A new failing test proves the new behavior is missing; it says
+     nothing about tests still asserting the behavior being removed. Search for
+     assertions on the symbol, attribute, label, or role being changed and update
+     them inside the same red/green loop. Skipping this is silently safe — the new
+     test goes green, the loop looks complete, and the contradiction only surfaces a
+     full gate cycle later.
+   - **A test that has never failed is not evidence of anything.** When you add a
+     regression detector, break the thing it guards and confirm it catches it, then
+     put it back. A detector that cannot be shown to fire is decoration.
+   - Run only the test you authored or changed, filtered by file and name. Whole
+     suites are stage 6's job.
+   - Pure logic (calculations, state machines, business rules) must be unit-tested.
+     Non-testable areas (rendering, audio) must be visually/interactively verified.
+6. **Verification (`verifier` subagent → `verifier` skill)**:
+   - Run the project's full gate: lint, type-check, test suites, build. Focused runs
+     from stage 5 do not substitute for it.
+   - **Know what green looked like before you started.** If you do not know the
+     gate passed on the state you began from, establish that first. Without it a
+     failure is ambiguous — you cannot tell what you broke from what you inherited,
+     and every later decision rests on that distinction.
+   - **Measure the thing you ship, not a proxy for it.** A gate that checks part of
+     the output, or a stand-in for it, reads exactly like one that checks all of it
+     — and certifies the rest by silence. If a command covers less than it appears
+     to, say what it left out.
+   - The subagent runs and reports; fixing is yours. Resolve every actionable
+     finding before code review. When a fix changes code, rerun the affected focused
+     tests, then ask for only the gate commands whose inputs the fix touched — see
+     **Verification Map** below if this project defines one. The complete gate must
+     run in full at least once on the state that enters code review.
+   - Some findings are environmental and no code change resolves them (browsers that
+     will not install, no network, a missing credential). Resolving those means
+     naming them precisely — what ran, what did not, and why — not retrying them.
+7. **UI Review (`ui-reviewer` → `ui-review`)**:
+   - Runs after verification, so the tree builds before anyone looks at it.
+   - **Check whether this stage applies before delegating.** It applies only when
+     the change can alter something a person sees or interacts with. A change
+     confined to documentation, comments, configuration, build scripts, CI, tests,
+     or code with no rendered output does not qualify — skip the stage, record one
+     line saying which of those it was, and move on. A docs-only or test-only diff
+     never needs a UI review.
+   - When it does apply, audit layout, visual hierarchy, contrast (WCAG AA),
+     interaction states, and accessibility according to the project's UI domain.
+   - A project whose UI domain is headless or backend skips this stage every time.
+   - Never invent findings to justify the stage, and never describe an appearance
+     that was not observed running.
+8. **Code Review (`code-reviewer` → `code-review`)**:
+   - The reviewer reads the complete change: `git diff origin/main...HEAD`,
+     plus staged and unstaged edits (`git diff HEAD`) and untracked files (`git
+     status --porcelain`). It reports; it does not edit. **You** remove the
+     accidental or unrelated edits it names, and preserve anything that is the
+     user's.
+   - Enforce architectural boundaries, language idioms, defensive error handling,
+     and zero committed secrets.
+   - Do not repeat this review on an unchanged state. Rerun it only when the
+     reviewed content actually changed.
+9. **Commit & PR Lifecycle (`slice-and-pr`)**:
+   - **Close the loop against the request.** Re-read what was actually asked for,
+     and state how this change satisfies it — and what it deliberately does not.
+     Every gate above proves the code works; none of them prove it is the thing
+     that was wanted. A green pipeline on the wrong feature is the most expensive
+     outcome available.
+   - Commit using Conventional Commits (`<type>(<scope>): <summary>`). Stage files
+     explicitly; never `git add -A` when unrelated work is present.
+   - Open the PR with `gh pr create` and watch CI with `gh pr checks --watch`.
+   - **The description carries the evidence.** Say why the change exists, what it
+     changes grouped by concern rather than by file, and how it was tested — the
+     command you actually ran and its actual result. "Should work" is not a test
+     result. If a test was added, say what it would have caught.
+   - **Stop there and report.** Anything you cannot take back needs explicit
+     approval from the user in the current conversation: merging (`gh pr merge`),
+     force-pushing, rewriting shared history, deleting a branch or tag, dropping
+     or migrating data, removing files wholesale, and publishing or deploying.
+     Approval for one of them is not approval for the next.
+   - **Squash, unless this project says otherwise.** One reviewed slice lands as
+     one commit on the base branch. The false starts, the fixups and the "address
+     review" commits are how the work got made, not what it is; keeping them turns
+     the base branch's history into a diary and makes a revert an archaeology
+     exercise. Because the PR description is what survives, it has to carry the
+     reasoning — see above. A project that requires merge commits or a rebase says
+     so in its own section, and that wins.
+   - **A merge takes its branch with it.** Once a merge is approved and done,
+     delete that branch — remote and local, in the same step. It is the one
+     deletion the merge approval covers, because it is the merge finishing rather
+     than a separate act; no other branch is included. A merged branch left
+     behind is a decoy: it looks like work in flight, and the next person cannot
+     tell it from the real thing without checking.
+   - Verify before deleting, and be aware of the squash case: a squash merge
+     writes a new commit rather than joining histories, so git sees no ancestry
+     and `git branch -d` refuses a branch whose every line is already merged.
+     Confirm with `git diff <base> <branch>` — empty output means nothing is
+     lost — and then `-D` is correct rather than reckless. If that diff is *not*
+     empty, stop: something did not make it in.
+<!-- agent-skills:end workflow -->
