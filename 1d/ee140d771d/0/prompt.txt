@@ -1,5 +1,1 @@
-Look through the code and issues and lets figure out what to work on next. Make sure to use AGENTS.md
-
----
-
 Ok lets do that
