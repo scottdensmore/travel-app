@@ -20,9 +20,10 @@ flowchart TD
     B --> C["3. Track Discoveries (Create issues for side bugs / follow-ups)"]
     C --> D["4. Implement & Test (TDD + Reviews)"]
     D --> E["5. Conventional Commit (After verification & review approval)"]
-    E --> F["6. Open PR via GitHub CLI (gh pr create)"]
-    F --> G["7. Watch CI (gh pr checks --watch)"]
-    G --> H["8. Report PR + CI status — STOP; merge needs explicit approval"]
+    E --> F["6. Push Branch (git push)"]
+    F --> G["7. Open PR via GitHub CLI (gh pr create)"]
+    G --> H["8. Watch CI (gh pr checks --watch)"]
+    H --> I["9. Report PR + CI status — STOP; merge needs explicit approval"]
 ```
 
 ---
@@ -66,13 +67,22 @@ Commit only after UI review, verification, and code review have all passed:
 - Stage files explicitly; never run blind `git add -A` if unrelated work exists in the worktree.
 
 ### E. GitHub CLI (`gh`) Automation
-Always use the GitHub CLI (`gh`) for remote repository interactions:
+Use Git for branch transport and the GitHub CLI (`gh`) for GitHub operations:
+
+- **Match the stopping point to the request.** A request that only asks to commit
+  stops after the local commit. A request that asks to use, follow, or complete
+  the workflow—including "commit based on the workflow"—includes the reversible
+  remote steps: push the branch, open the PR, and watch its checks. It does not
+  authorize a merge or any action in § F.
 
 ```bash
-# 1. Create Pull Request
+# 1. Push Branch
+git push -u origin <branch>
+
+# 2. Create Pull Request
 gh pr create --title "<type>(<scope>): <summary>" --body "<why this change was made and what was verified>"
 
-# 2. Monitor CI status
+# 3. Monitor CI status
 gh pr checks --watch
 ```
 
