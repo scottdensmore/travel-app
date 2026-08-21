@@ -250,7 +250,7 @@ the commands a subsequent fix could have invalidated.
 | `AGENTS.md` or generated skill/subagent files | Re-run adoption with `python3 scripts/adopt.py --dry-run --keep-existing <repo>` from the `agent-skills` repository; no product test treats repository instructions as its subject |
 | Anything else | The complete gate |
 
-<!-- agent-skills:begin workflow de3858aa — managed block, edits here are overwritten -->
+<!-- agent-skills:begin workflow 185672e4 — managed block, edits here are overwritten -->
 ## Development Workflow
 
 Follow these stages in order (governed by the global `agent-workflow-skills`). Scale the pipeline to the
@@ -402,6 +402,12 @@ confidently.
      outcome available.
    - Commit using Conventional Commits (`<type>(<scope>): <summary>`). Stage files
      explicitly; never `git add -A` when unrelated work is present.
+   - **Match the stopping point to the request.** A request that only asks to
+     commit stops after the local commit. A request that asks to use, follow, or
+     complete the workflow—including "commit based on the workflow"—includes the
+     reversible remote steps: push the branch, open the PR, and watch its checks.
+     It does not authorize a merge or any action named under **Stop there and
+     report**.
    - Open the PR with `gh pr create` and watch CI with `gh pr checks --watch`.
    - **The description carries the evidence.** Say why the change exists, what it
      changes grouped by concern rather than by file, and how it was tested — the
