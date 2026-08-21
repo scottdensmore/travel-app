@@ -309,6 +309,111 @@ describe('ProfileClient interactive dashboard', () => {
         });
     });
 
+    it('explains that a checked-in seat is fixed and offers no stale change control', () => {
+        const checkedInBooking = {
+            ...sampleBookings[0],
+            legs: sampleBookings[0].legs.map(leg => ({
+                ...leg,
+                seatAssignments: leg.seatAssignments.map(seatAssignment => ({
+                    ...seatAssignment,
+                    checkedInAt: '2026-06-14T10:00:00.000Z',
+                })),
+            })),
+        };
+
+        render(
+            <ProfileClient
+                userName="Jane Doe"
+                userAvatar="avatar.png"
+                accountTimeZone="UTC"
+                accountTimeZoneChoices={['UTC', 'America/Los_Angeles']}
+                currentStatus="Gold"
+                currentPoints={4200}
+                bookings={[checkedInBooking]}
+                favorites={[]}
+                reviews={[]}
+                activityData={[]}
+                monthlyHistory={[]}
+                renderedAt={new Date('2026-06-01T00:00:00Z').getTime()}
+            />
+        );
+
+        const row = within(screen.getByTestId('booking-row-101'));
+        expect(row.getByText('Seats are fixed after check-in.')).toBeInTheDocument();
+        expect(row.queryByRole('button', { name: 'Change Seats' })).not.toBeInTheDocument();
+        expect(row.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    });
+
+    it('keeps an unchecked companion changeable on the same leg', async () => {
+        mockGetOccupiedSeats.mockResolvedValue([]);
+        mockChangeBookingSeats.mockResolvedValue({ id: 101 });
+        const partlyCheckedInBooking = {
+            ...sampleBookings[0],
+            passengers: [
+                sampleBookings[0].passengers[0],
+                {
+                    ...sampleBookings[0].passengers[0],
+                    id: 'p-2',
+                    firstName: 'Grace',
+                    lastName: 'Hopper',
+                },
+            ],
+            legs: sampleBookings[0].legs.map(leg => ({
+                ...leg,
+                seatAssignments: [
+                    {
+                        ...leg.seatAssignments[0],
+                        checkedInAt: '2026-06-14T10:00:00.000Z',
+                    },
+                    {
+                        passengerId: 'p-2',
+                        seatNumber: '12B',
+                        cabinClass: 'ECONOMY',
+                        checkedInAt: null,
+                    },
+                ],
+            })),
+        };
+
+        render(
+            <ProfileClient
+                userName="Jane Doe"
+                userAvatar="avatar.png"
+                accountTimeZone="UTC"
+                accountTimeZoneChoices={['UTC', 'America/Los_Angeles']}
+                currentStatus="Gold"
+                currentPoints={4200}
+                bookings={[partlyCheckedInBooking]}
+                favorites={[]}
+                reviews={[]}
+                activityData={[]}
+                monthlyHistory={[]}
+                renderedAt={new Date('2026-06-01T00:00:00Z').getTime()}
+            />
+        );
+
+        const row = within(screen.getByTestId('booking-row-101'));
+        expect(row.getByText('Checked-in travellers’ seats are fixed. Other seats can still be changed.'))
+            .toBeInTheDocument();
+        fireEvent.click(row.getByRole('button', { name: 'Change Seats' }));
+
+        expect(await screen.findByRole('button', { name: /Grace Hopper.*Seat: 12B/i }))
+            .toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Jane Doe.*Seat: 12A/i }))
+            .not.toBeInTheDocument();
+        expect(screen.getByText('GA101: Seattle, USA → Detroit, USA'))
+            .toBeInTheDocument();
+
+        fireEvent.click(screen.getByTitle('Select Seat 13D'));
+        fireEvent.click(screen.getByRole('button', { name: 'Save New Seats' }));
+
+        await waitFor(() => {
+            expect(mockChangeBookingSeats).toHaveBeenCalledWith(101, [
+                { passengerId: 'p-2', legId: 501, seatNumber: '13D' },
+            ]);
+        });
+    });
+
     it('uses accessible passenger selectors and announces seat validation errors', async () => {
         mockGetOccupiedSeats.mockResolvedValue([]);
         mockChangeBookingSeats.mockResolvedValue({
@@ -553,6 +658,36 @@ describe('ProfileClient interactive dashboard', () => {
                     { passengerId: 'p-1', legId: 502, seatNumber: '13D' },
                 ]);
             });
+        });
+
+        it('keeps an un-checked return changeable without reopening the checked-in outbound', async () => {
+            mockGetOccupiedSeats.mockResolvedValue([]);
+            const partlyCheckedIn = {
+                ...roundTripBooking,
+                legs: roundTripBooking.legs.map((leg, index) => ({
+                    ...leg,
+                    seatAssignments: leg.seatAssignments.map(seatAssignment => ({
+                        ...seatAssignment,
+                        checkedInAt: index === 0 ? '2026-06-14T10:00:00.000Z' : null,
+                    })),
+                })),
+            };
+            renderBookings([partlyCheckedIn]);
+
+            const row = within(screen.getByTestId('booking-row-202'));
+            await act(async () => {
+                fireEvent.click(row.getByRole('button', { name: 'Change Seats' }));
+            });
+
+            // Only one leg remains changeable, so the modal has no leg switcher
+            // but still names the return before showing its persisted seat.
+            expect(screen.queryByTestId('seat-change-legs')).not.toBeInTheDocument();
+            expect(screen.getByText('GA900: Detroit, USA → Seattle, USA'))
+                .toBeInTheDocument();
+            expect(await screen.findByRole('button', { name: /Jane Doe.*Seat: 4C/i }))
+                .toBeInTheDocument();
+            expect(screen.queryByRole('button', { name: /Jane Doe.*Seat: 12A/i }))
+                .not.toBeInTheDocument();
         });
 
         it('reports a leg with no assignment rather than borrowing a seat', () => {

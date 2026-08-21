@@ -64,6 +64,8 @@ describe('active itinerary page reads', () => {
 
         expect(bookingFindMany.mock.calls[0][0].include.legs.where)
             .toEqual({ supersededAt: null });
+        expect(bookingFindMany.mock.calls[0][0].include.legs.include.seatAssignments.select.checkedInAt)
+            .toBe(true);
         expect(bookingFindMany.mock.calls[0][0].include.statusChanges.select.createdAt)
             .toBe(true);
         expect(userFindUniqueOrThrow).toHaveBeenCalledWith({

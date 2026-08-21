@@ -1,8 +1,9 @@
 /** @jest-environment node */
 import { randomUUID } from 'crypto';
+import { PrismaClient } from '@prisma/client';
 import { getServerSession } from 'next-auth';
 import { airportCodesForRoute } from '@/lib/airports';
-import { checkInLegAction } from '@/app/actions';
+import { changeBookingSeatsAction, checkInLegAction } from '@/app/actions';
 import { CHECK_IN_OPENS_HOURS } from '@/lib/checkInPolicy';
 import { prisma } from '@/lib/prisma';
 import FlightBookingService from '@/lib/FlightBookingService';
@@ -334,6 +335,70 @@ describe('checkInLegAction', () => {
         expect(after[0].checkedInAt?.getTime()).toBe(earlier.getTime());
         expect(after[1].checkedInAt).not.toBeNull();
         expect(after[1].checkedInAt!.getTime()).toBeGreaterThan(earlier.getTime());
+    });
+
+    it('rechecks a boarding-pass seat after waiting behind a concurrent check-in lock', async () => {
+        const suffix = `R${Date.now()}`;
+        const flight = await createFlight(`F${suffix}`, 5);
+        const user = await createUser(suffix);
+        const booking = await bookSeats([flight.id], user.id, [
+            { firstName: 'Ada', seatNumbers: ['11A'] },
+        ]);
+        const [leg] = await legsOf(booking.id);
+        const assignment = leg.seatAssignments[0];
+        mockedSession.mockResolvedValue({ user: { id: user.id, role: 'USER' } });
+
+        const blocker = new PrismaClient();
+        let announceLocked!: () => void;
+        let releaseLock!: () => void;
+        const locked = new Promise<void>(resolve => { announceLocked = resolve; });
+        const release = new Promise<void>(resolve => { releaseLock = resolve; });
+        const concurrentCheckIn = blocker.$transaction(async tx => {
+            await tx.$queryRaw`
+                SELECT "id" FROM "Flight" WHERE "id" = ${flight.id} FOR UPDATE
+            `;
+            announceLocked();
+            await release;
+            await tx.seatAssignment.update({
+                where: { id: assignment.id },
+                data: { checkedInAt: new Date() },
+            });
+        });
+
+        try {
+            await locked;
+            const flightLockSpy = jest.mocked(lockFlightForUpdate);
+            flightLockSpy.mockClear();
+            const attempted = changeBookingSeatsAction(booking.id, [{
+                passengerId: assignment.passengerId,
+                legId: leg.id,
+                seatNumber: '12B',
+            }]);
+            while (flightLockSpy.mock.calls.length === 0) {
+                await new Promise(resolve => setImmediate(resolve));
+            }
+
+            releaseLock();
+            await concurrentCheckIn;
+
+            await expect(attempted).resolves.toMatchObject({
+                ok: false,
+                error: {
+                    code: 'VALIDATION_ERROR',
+                    message: expect.stringMatching(/checked in/i),
+                },
+            });
+            await expect(prisma.seatAssignment.findUniqueOrThrow({
+                where: { id: assignment.id },
+            })).resolves.toMatchObject({
+                seatNumber: '11A',
+                checkedInAt: expect.any(Date),
+            });
+        } finally {
+            releaseLock();
+            await concurrentCheckIn;
+            await blocker.$disconnect();
+        }
     });
 
     it('refuses a cancelled booking whose flight is still in the window', async () => {

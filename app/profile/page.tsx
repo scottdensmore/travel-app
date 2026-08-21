@@ -63,6 +63,9 @@ export default async function ProfilePage() {
               // A released seat shows as released rather than as a number that
               // is no longer this customer's (#76).
               releasedAt: true,
+              // A timestamp only, used to keep the profile from offering a seat
+              // change the server must refuse once a boarding pass exists.
+              checkedInAt: true,
             },
           },
         },

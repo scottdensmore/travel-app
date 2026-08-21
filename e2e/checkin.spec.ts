@@ -102,7 +102,12 @@ test.describe('Check-in journey', () => {
             CHECK_IN_OPENS_HOURS + 72,
             ['Detroit, USA', 'Seattle, USA'],
         );
-        await bookFor(customerEmail, [outbound.id, inbound.id], ['1A', '1A'], ['Ada', 'Grace']);
+        const booking = await bookFor(
+            customerEmail,
+            [outbound.id, inbound.id],
+            ['1A', '1A'],
+            ['Ada', 'Grace'],
+        );
 
         await signInWithCredentials(page, { email: customerEmail, password });
 
@@ -168,8 +173,19 @@ test.describe('Check-in journey', () => {
         // stamp reached the database rather than only the browser's state.
         await expect(outboundCard.getByText('Checked in', { exact: true }).first()).toBeVisible();
         await expect(outboundCard.getByRole('button', { name: /Check in/ })).toHaveCount(0);
+        const passes = outboundCard.getByRole('article', { name: /Boarding pass for/ });
+        await expect(passes).toHaveCount(2);
+        const adaPass = outboundCard.getByRole('article', {
+            name: new RegExp(`Boarding pass for Ada Lovelace on Mona Airways ${outbound.flightNumber}`),
+        });
+        await expect(adaPass).toContainText('Seattle, USA');
+        await expect(adaPass).toContainText('Detroit, USA');
+        await expect(adaPass).toContainText('Seat 1A');
+        await expect(adaPass).toContainText('Economy');
+        await expect(adaPass).toContainText(booking.reference);
         // The return is untouched by the outbound's check-in.
         await expect(returnCard.getByText('Check-in not open yet', { exact: true })).toBeVisible();
+        await expect(returnCard.getByRole('article', { name: /Boarding pass for/ })).toHaveCount(0);
 
         // And the attestation is not asked again anywhere on the page: a passport
         // does not change between the legs of one trip. It says so rather than
@@ -207,6 +223,7 @@ test.describe('Check-in journey', () => {
         // empty state rather than somebody else's confirmation reference.
         await expect(page.getByText(/no flights in the next month/)).toBeVisible();
         await expect(page.getByRole('region')).toHaveCount(0);
+        await expect(page.getByRole('article', { name: /Boarding pass for/ })).toHaveCount(0);
     });
 
     test('does not offer check-in to a visitor who is not signed in', async ({ page }) => {

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { checkInLegAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
 import { SUPPORT } from '@/lib/brand';
+import BoardingPass from '@/components/ui/BoardingPass';
 import {
     CHECK_IN_CLOSES_MINUTES,
     CHECK_IN_OPENS_HOURS,
@@ -78,6 +79,13 @@ const ATTESTATION_WORTH_STATING: readonly CheckInReason[] = [
     'CLOSED',
     'ALREADY_CHECKED_IN',
 ];
+
+/** A checked-in stamp survives disruption, but its boarding pass does not. */
+const BOARDING_PASS_WITHDRAWN_REASONS = new Set<CheckInReason>([
+    'FLIGHT_CANCELLED',
+    'BOOKING_CANCELLED',
+    'BOOKING_DISRUPTED',
+]);
 
 export default function CheckInPanel({ legs }: { legs: CheckInLegView[] }) {
     const router = useRouter();
@@ -341,6 +349,28 @@ export default function CheckInPanel({ legs }: { legs: CheckInLegView[] }) {
                                                     </li>
                                                 ))}
                                             </ul>
+                                        )}
+
+                                        {!BOARDING_PASS_WITHDRAWN_REASONS.has(leg.reason)
+                                            && leg.travellers.some(traveller => traveller.checkedIn) && (
+                                            <div className="checkin-boarding-passes">
+                                                {leg.travellers
+                                                    .filter(traveller => traveller.checkedIn)
+                                                    .map(traveller => (
+                                                        <BoardingPass
+                                                            key={`${leg.legId}-${traveller.id}`}
+                                                            passengerName={traveller.name}
+                                                            reference={leg.reference}
+                                                            airline={leg.airline}
+                                                            flightNumber={leg.flightNumber}
+                                                            from={leg.from}
+                                                            to={leg.to}
+                                                            departureReadable={leg.departureReadable}
+                                                            seat={traveller.seat}
+                                                            cabin={traveller.cabin}
+                                                        />
+                                                    ))}
+                                            </div>
                                         )}
 
                                         <p className="checkin-next-step">{leg.nextStep}</p>

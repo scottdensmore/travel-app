@@ -2056,6 +2056,42 @@ describe('changeBookingSeatsAction', () => {
         expect(mockTx.passenger.update).not.toHaveBeenCalled();
     });
 
+    it('refuses to move a traveller after check-in has fixed their boarding-pass seat', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        mockedBookingFindUnique.mockResolvedValue({
+            id: 1,
+            userId: 'user-123',
+            flightId: 10,
+            legs: [{ id: 50, sequence: 1, flightId: 10, flight: { id: 10 } }],
+            passengers: [{ id: 'p-1', firstName: 'Jane' }],
+        });
+        mockTx.seatAssignment.findMany.mockImplementation(({ where }: any) =>
+            Promise.resolve(
+                where?.legId
+                    ? [{
+                        passengerId: 'p-1',
+                        legId: 50,
+                        cabinClass: 'ECONOMY',
+                        checkedInAt: new Date('2026-08-19T10:00:00.000Z'),
+                    }]
+                    : [],
+            ),
+        );
+
+        const result = await changeBookingSeatsAction(1, [
+            { passengerId: 'p-1', legId: 50, seatNumber: '12B' },
+        ]);
+
+        expect(result).toMatchObject({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: expect.stringMatching(/checked in/i),
+            },
+        });
+        expect(mockTx.seatAssignment.updateMany).not.toHaveBeenCalled();
+    });
+
     it('rejects if a seat is already occupied', async () => {
         mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
         mockedBookingFindUnique.mockResolvedValue({

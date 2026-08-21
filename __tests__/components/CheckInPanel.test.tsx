@@ -158,16 +158,61 @@ describe('the check-in page', () => {
         expect(screen.getByText('Not checked in')).toBeInTheDocument();
     });
 
+    it('issues one boarding pass for each traveller checked in on this leg', () => {
+        render(<CheckInPanel legs={[leg({
+            allowed: false,
+            reason: 'ALREADY_CHECKED_IN',
+            statusLabel: 'Checked in',
+            awaiting: 0,
+            travellers: [
+                { id: 'p1', name: 'Ada Lovelace', seat: 'Seat 11A', cabin: 'Economy', checkedIn: true },
+                { id: 'p2', name: 'Grace Hopper', seat: 'Seat 11B', cabin: 'Economy', checkedIn: false },
+            ],
+        })]} />);
+
+        const pass = screen.getByRole('article', {
+            name: 'Boarding pass for Ada Lovelace on Gemini Airways GA-100',
+        });
+        expect(within(pass).getByText('MA-0123456789ABCDEF0123')).toBeInTheDocument();
+        expect(within(pass).getByText('Seattle, USA')).toBeInTheDocument();
+        expect(within(pass).getByText('Tokyo, Japan')).toBeInTheDocument();
+        expect(within(pass).getByText('Assignment')).toBeInTheDocument();
+        expect(within(pass).queryByText('Seat')).not.toBeInTheDocument();
+        expect(within(pass).getByText('Seat 11A')).toBeInTheDocument();
+        expect(within(pass).getByText('Economy')).toBeInTheDocument();
+        expect(screen.queryByRole('article', { name: /Grace Hopper/ })).not.toBeInTheDocument();
+    });
+
+    it('withdraws a boarding pass when the airline cancels after check-in', () => {
+        render(<CheckInPanel legs={[leg({
+            allowed: false,
+            reason: 'FLIGHT_CANCELLED',
+            statusLabel: 'Flight cancelled',
+            nextStep: 'The airline cancelled this flight. Choose a replacement from your profile.',
+            travellers: [
+                { id: 'p1', name: 'Ada Lovelace', seat: 'Seat 11A', cabin: 'Economy', checkedIn: true },
+            ],
+        })]} />);
+
+        expect(screen.getByText('Flight cancelled')).toBeInTheDocument();
+        expect(screen.queryByRole('article', { name: /Boarding pass/ })).not.toBeInTheDocument();
+    });
+
     it('sends a disrupted booking to the rebooking it needs', () => {
         render(<CheckInPanel legs={[leg({
             allowed: false,
             reason: 'BOOKING_DISRUPTED',
             statusLabel: 'Flights changed',
             nextStep: 'Your flights changed. Choose replacement flights in your profile to rebook, then check in.',
+            travellers: [
+                { id: 'p1', name: 'Ada Lovelace', seat: 'Seat 11A', cabin: 'Economy', checkedIn: true },
+            ],
         })]} />);
 
         expect(screen.getByRole('link', { name: 'Choose replacement flights' }))
             .toHaveAttribute('href', '/profile');
+        expect(screen.queryByRole('article', { name: /Boarding pass/ }))
+            .not.toBeInTheDocument();
     });
 
     it('offers a way forward when there is nothing to check in for', () => {

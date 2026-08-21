@@ -46,6 +46,7 @@ interface SeatAssignment {
     seatNumber: string;
     cabinClass: string;
     releasedAt?: Date | string | null;
+    checkedInAt?: Date | string | null;
 }
 
 interface BookingLeg {
@@ -212,6 +213,21 @@ function CellLabel({ children }: { children: string }) {
     return <span className="cell-label" aria-hidden="true">{children}</span>;
 }
 
+/** A pass fixes only the traveller and leg it names. */
+function passengerCanChangeSeatOnLeg(leg: BookingLeg, passengerId: string): boolean {
+    return leg.seatAssignments?.some(
+        seat => seat.passengerId === passengerId
+            && !seat.releasedAt
+            && !seat.checkedInAt,
+    ) ?? false;
+}
+
+function legHasCheckedInTraveller(leg: BookingLeg): boolean {
+    return leg.seatAssignments?.some(
+        seat => !seat.releasedAt && Boolean(seat.checkedInAt),
+    ) ?? false;
+}
+
 function bookingPresentation(booking: Booking, renderedAt: number) {
     const legs = orderedLegs(booking).filter(leg => leg.flight);
     const isCancelled = booking.status === 'CANCELLED';
@@ -229,6 +245,10 @@ function bookingPresentation(booking: Booking, renderedAt: number) {
         ? new Date(legs[0].flight.departureDate).getTime() <= renderedAt
         : false;
     const refund = booking.statusChanges?.[0]?.paymentRefund ?? null;
+    const hasCheckedInLeg = legs.some(legHasCheckedInTraveller);
+    const hasChangeableLeg = legs.some(leg => booking.passengers.some(
+        passenger => passengerCanChangeSeatOnLeg(leg, passenger.id),
+    ));
     const refundText = refund
         ? refund.status === 'SUCCEEDED'
             ? `${formatPrice(refund.amountCents)} refund sent.`
@@ -246,6 +266,8 @@ function bookingPresentation(booking: Booking, renderedAt: number) {
         cancelledLeg,
         departed,
         cancellable: !isCancelled && !departed,
+        hasCheckedInLeg,
+        canChangeSeats: !isCancelled && !departed && hasChangeableLeg,
         statusText: isCancelled
             ? 'Cancelled'
             : isDisrupted
@@ -352,9 +374,19 @@ export default function ProfileClient({
     const [isSavingSeats, setIsSavingSeats] = useState<boolean>(false);
 
     const modalLegs = selectedBooking
-        ? orderedLegs(selectedBooking).filter(leg => leg.flight)
+        ? orderedLegs(selectedBooking).filter(
+            leg => leg.flight && selectedBooking.passengers.some(
+                passenger => passengerCanChangeSeatOnLeg(leg, passenger.id),
+            ),
+        )
         : [];
     const activeLeg = modalLegs[activeLegIdx] ?? null;
+    const activePassengers = selectedBooking && activeLeg
+        ? selectedBooking.passengers.filter(
+            passenger => passengerCanChangeSeatOnLeg(activeLeg, passenger.id),
+        )
+        : [];
+    const activePassenger = activePassengers[activePassengerIdx];
     /** Seat state is keyed by leg and passenger together. */
     const seatKey = (legId: number, passengerId: string) => `${legId}:${passengerId}`;
     const seatFor = (passengerId: string) =>
@@ -366,7 +398,11 @@ export default function ProfileClient({
 
     useEffect(() => {
         if (!selectedBooking) return;
-        const legs = orderedLegs(selectedBooking).filter(leg => leg.flight);
+        const legs = orderedLegs(selectedBooking).filter(
+            leg => leg.flight && selectedBooking.passengers.some(
+                passenger => passengerCanChangeSeatOnLeg(leg, passenger.id),
+            ),
+        );
         if (legs.length === 0) return;
 
         // Each leg's own flight, so a seat taken on the outbound does not read
@@ -490,13 +526,17 @@ export default function ProfileClient({
         if (!selectedBooking) return;
 
         for (const leg of modalLegs) {
-            for (const p of selectedBooking.passengers) {
+            const changeablePassengers = selectedBooking.passengers.filter(
+                passenger => passengerCanChangeSeatOnLeg(leg, passenger.id),
+            );
+            for (const p of changeablePassengers) {
                 if (!passengerSeats[seatKey(leg.id, p.id)]) {
                     const which = modalLegs.length > 1
                         ? ` on the ${leg.id === modalLegs[0].id ? 'departing' : 'returning'} flight`
                         : '';
                     setModalError(`Please select a seat for ${p.firstName} ${p.lastName}${which}`);
                     setActiveLegIdx(modalLegs.indexOf(leg));
+                    setActivePassengerIdx(0);
                     return;
                 }
             }
@@ -507,11 +547,13 @@ export default function ProfileClient({
 
         try {
             const seatChanges = modalLegs.flatMap(leg =>
-                selectedBooking.passengers.map(p => ({
-                    passengerId: p.id,
-                    legId: leg.id,
-                    seatNumber: passengerSeats[seatKey(leg.id, p.id)]
-                }))
+                selectedBooking.passengers
+                    .filter(passenger => passengerCanChangeSeatOnLeg(leg, passenger.id))
+                    .map(p => ({
+                        passengerId: p.id,
+                        legId: leg.id,
+                        seatNumber: passengerSeats[seatKey(leg.id, p.id)]
+                    }))
             );
 
             const result = await changeBookingSeatsAction(selectedBooking.id, seatChanges);
@@ -561,7 +603,6 @@ export default function ProfileClient({
 
     const isSeatOccupied = (seat: string) => {
         if (!selectedBooking || !activeLeg) return false;
-        const activePassenger = selectedBooking.passengers[activePassengerIdx];
 
         // Seats the other travellers on this booking hold on this leg.
         const selectedByOthers = selectedBooking.passengers
@@ -655,7 +696,8 @@ export default function ProfileClient({
                                     const {
                                         legs, legRows, isDisrupted, cancelledLeg, cancellable,
                                         statusText, statusColour, disruptionNote, refundText,
-                                        refundRetryable, priceLabel, seatFor,
+                                        refundRetryable, priceLabel, seatFor, hasCheckedInLeg,
+                                        canChangeSeats,
                                     } = bookingPresentation(booking, renderedAt);
                                     const refundAmountCents = booking.statusChanges?.[0]?.paymentRefund?.amountCents;
                                     const isRetryingRefund = activeRefundBookingId === booking.id;
@@ -736,22 +778,36 @@ export default function ProfileClient({
                                                                         {refundText}
                                                                     </p>
                                                                 )}
+                                                                {hasCheckedInLeg && (
+                                                                    <p style={{
+                                                                        margin: '4px 0 0',
+                                                                        fontSize: '0.75rem',
+                                                                        color: 'rgba(255,255,255,0.82)',
+                                                                        maxWidth: '14rem',
+                                                                    }}>
+                                                                        {canChangeSeats
+                                                                            ? 'Checked-in travellers’ seats are fixed. Other seats can still be changed.'
+                                                                            : 'Seats are fixed after check-in.'}
+                                                                    </p>
+                                                                )}
                                                             </td>
                                                             <td className="py-2 text-right align-top booking-actions-cell" rowSpan={legRows.length}>
                                                                 {(cancellable || refundRetryable) && (
                                                                     <div className="booking-actions">
+                                                                        {canChangeSeats && (
+                                                                            <button
+                                                                                onClick={() => setSelectedBooking(booking)}
+                                                                                disabled={isPending}
+                                                                                style={{
+                                                                                    backgroundColor: '#8b5cf6', color: 'white', borderRadius: '4px',
+                                                                                    height: 'auto', width: 'auto', cursor: 'pointer', whiteSpace: 'nowrap'
+                                                                                }}
+                                                                            >
+                                                                                Change Seats
+                                                                            </button>
+                                                                        )}
                                                                         {cancellable && (
                                                                             <>
-                                                                                <button
-                                                                                    onClick={() => setSelectedBooking(booking)}
-                                                                                    disabled={isPending}
-                                                                                    style={{
-                                                                                        backgroundColor: '#8b5cf6', color: 'white', borderRadius: '4px',
-                                                                                        height: 'auto', width: 'auto', cursor: 'pointer', whiteSpace: 'nowrap'
-                                                                                    }}
-                                                                                >
-                                                                                    Change Seats
-                                                                                </button>
                                                                                 <button
                                                                                     onClick={() => handleCancelBooking(booking.id, cancelledLeg?.flight?.flightNumber || '', isDisrupted)}
                                                                                     disabled={isPending}
@@ -1001,6 +1057,15 @@ export default function ProfileClient({
                             </div>
                         )}
 
+                        {activeLeg?.flight && (
+                            <p
+                                data-testid="seat-change-flight"
+                                style={{ margin: '0 0 1.5rem', color: 'rgba(255,255,255,0.82)' }}
+                            >
+                                {activeLeg.flight.flightNumber}: {activeLeg.flight.from} → {activeLeg.flight.to}
+                            </p>
+                        )}
+
                         {modalLegs.length > 1 && (
                             <div
                                 role="tablist"
@@ -1016,7 +1081,10 @@ export default function ProfileClient({
                                             type="button"
                                             role="tab"
                                             aria-selected={isActive}
-                                            onClick={() => setActiveLegIdx(index)}
+                                            onClick={() => {
+                                                setActiveLegIdx(index);
+                                                setActivePassengerIdx(0);
+                                            }}
                                             style={{
                                                 // globals.css pins buttons to 52px.
                                                 height: 'auto',
@@ -1048,7 +1116,7 @@ export default function ProfileClient({
                             <div style={{ flex: '1 1 200px' }}>
                                 <h3 style={{ fontSize: '0.95rem', color: '#a78bfa', marginBottom: '0.75rem' }}>Passengers</h3>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                    {selectedBooking.passengers.map((p, idx) => (
+                                    {activePassengers.map((p, idx) => (
                                         <button
                                             type="button"
                                             key={p.id}
@@ -1079,12 +1147,12 @@ export default function ProfileClient({
                             {(() => {
                                 const parsedPattern = outboundFlight(selectedBooking)?.seatPattern || "ABC-DEF";
                                 const activeCabinRows = getRowsForClass(
-                                    cabinFor(selectedBooking.passengers[activePassengerIdx]?.id ?? '')
+                                    cabinFor(activePassenger?.id ?? '')
                                 );
                                 return (
                                     <div style={{ flex: '2 1 300px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                         <h3 style={{ fontSize: '0.95rem', color: '#a78bfa', marginBottom: '0.75rem' }}>
-                                            Select Seat for {selectedBooking.passengers[activePassengerIdx]?.firstName}
+                                            Select Seat for {activePassenger?.firstName}
                                         </h3>
                                         {activeCabinRows.length === 0 ? (
                                             <p role="alert" style={{ color: '#f87171', textAlign: 'center' }}>
@@ -1163,15 +1231,15 @@ export default function ProfileClient({
                                                             const letter = char;
                                                             const seatId = `${row}${letter}`;
                                                             const occupied = isSeatOccupied(seatId);
-                                                            const selected = seatFor(selectedBooking.passengers[activePassengerIdx]?.id) === seatId;
+                                                            const selected = seatFor(activePassenger?.id ?? '') === seatId;
                                                             return (
                                                                 <button
                                                                     key={letter}
                                                                     type="button"
                                                                     disabled={occupied}
                                                                     onClick={() => {
-                                                                        const pid = selectedBooking.passengers[activePassengerIdx].id;
-                                                                        if (!activeLeg) return;
+                                                                        const pid = activePassenger?.id;
+                                                                        if (!activeLeg || !pid) return;
                                                                         setPassengerSeats({ ...passengerSeats, [seatKey(activeLeg.id, pid)]: seatId });
                                                                         setModalError(null);
                                                                     }}
