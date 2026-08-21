@@ -1,0 +1,55 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "1dee140d771d",
+  "session_id": "01a02234-61a1-73a0-8791-eebe3fefca0e",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-21T04:14:57.595132011Z",
+  "branch": "scottdensmore/feat/checkin-boarding-passes",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "__tests__/app/actions.test.ts",
+    "__tests__/app/activeItineraryReads.test.tsx",
+    "__tests__/app/checkIn.database.test.ts",
+    "__tests__/components/CheckInPanel.test.tsx",
+    "__tests__/components/ProfileClient.test.tsx",
+    "app/actions.ts",
+    "app/globals.css",
+    "app/profile/page.tsx",
+    "components/ui/BoardingPass.tsx",
+    "components/ui/CheckInPanel.tsx",
+    "components/ui/ProfileClient.tsx",
+    "e2e/checkin.spec.ts"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.6-sol",
+  "turn_id": "f9546edfb3d4",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 346329,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 23023872,
+    "output_tokens": 44750,
+    "api_call_count": 195
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-21T04:14:56.746258156Z",
+    "agent_lines": 703,
+    "agent_removed": 95,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 703,
+    "total_lines_changed": 798,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}

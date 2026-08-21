@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "1dee140d771d",
+  "strategy": "manual-commit",
+  "branch": "scottdensmore/feat/checkin-boarding-passes",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "__tests__/app/actions.test.ts",
+    "__tests__/app/activeItineraryReads.test.tsx",
+    "__tests__/app/checkIn.database.test.ts",
+    "__tests__/components/CheckInPanel.test.tsx",
+    "__tests__/components/ProfileClient.test.tsx",
+    "app/actions.ts",
+    "app/globals.css",
+    "app/profile/page.tsx",
+    "components/ui/BoardingPass.tsx",
+    "components/ui/CheckInPanel.tsx",
+    "components/ui/ProfileClient.tsx",
+    "e2e/checkin.spec.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/1d/ee140d771d/0/metadata.json",
+      "transcript": "/1d/ee140d771d/0/full.jsonl",
+      "compact_transcript": "/1d/ee140d771d/0/transcript.jsonl",
+      "content_hash": "/1d/ee140d771d/0/content_hash.txt",
+      "prompt": "/1d/ee140d771d/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 346329,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 23023872,
+    "output_tokens": 44750,
+    "api_call_count": 195
+  }
+}
