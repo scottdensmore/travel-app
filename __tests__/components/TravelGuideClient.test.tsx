@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { TextEncoder } from 'util';
 import '@testing-library/jest-dom';
 import TravelGuideClient from '@/components/ui/TravelGuideClient';
@@ -22,9 +22,15 @@ jest.mock('@/app/actions', () => ({
     submitCityGuideReviewAction: jest.fn(),
 }));
 
+// What `Geographies` yields is configurable, because the bug in #318 lives in
+// the window where it yields nothing: it fetches its topology in an effect and
+// never suspends, so an in-flight fetch renders an empty list rather than
+// triggering any fallback.
+let mockGeographies: Array<{ rsmKey: string }> = [{ rsmKey: '1' }];
+
 jest.mock('react-simple-maps', () => ({
     ComposableMap: ({ children }: any) => <svg data-testid="map">{children}</svg>,
-    Geographies: ({ children }: any) => children({ geographies: [{ rsmKey: '1' }] }),
+    Geographies: ({ children }: any) => children({ geographies: mockGeographies }),
     // Forwards the two props the component sets deliberately. The real
     // `Geography` puts them on the `path` it renders, so this is what the fix
     // actually consists of.
@@ -68,9 +74,145 @@ const sampleCities = [
 ];
 
 describe('TravelGuideClient', () => {
+    // The component owns the `/map.json` request now and passes the parsed
+    // topology to `Geographies`, so jsdom's missing `fetch` is no longer a
+    // detail the tests can ignore — without one the panel correctly reports
+    // failure. Resolving a stub topology is what the browser does.
+    const stubTopology = { type: 'Topology', objects: {} };
+    let realFetch: typeof fetch;
+
     beforeEach(() => {
         jest.clearAllMocks();
         global.alert = jest.fn();
+        mockGeographies = [{ rsmKey: '1' }];
+        realFetch = global.fetch;
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            json: () => Promise.resolve(stubTopology),
+        }) as unknown as typeof fetch;
+    });
+
+    afterEach(() => {
+        global.fetch = realFetch;
+    });
+
+    it('says the map is loading while the topology is still in flight', async () => {
+        // #318: `Geographies` fetches in an effect and does not suspend, so the
+        // `Suspense` fallback can never fire and the pre-hydration branch is
+        // already past. With the topology in flight the panel rendered city
+        // markers over nothing, with no `.guide-map-state` element at all —
+        // ten unexplained dots on a black gradient.
+        mockGeographies = [];
+
+        const { container } = render(
+            <TravelGuideClient cities={sampleCities} initialFavorites={[]} />
+        );
+
+        const status = await screen.findByRole('status');
+        expect(status).toHaveTextContent(/loading map/i);
+        // The modifier is the half with the visual consequence, and it was
+        // unpinned: without it the message is a flex sibling of the SVG rather
+        // than an overlay, which squeezes the map to an 85px column and
+        // rescales every marker by 13.7-30.9% when the message leaves. Deleting
+        // the class left the whole suite green.
+        expect(status).toHaveClass('guide-map-state', 'guide-map-state--overlay');
+        expect(container.querySelector('.guide-map-state--overlay')).not.toBeNull();
+    });
+
+    it('drops the loading message once the topology arrives', async () => {
+        render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
+
+        await waitFor(() => {
+            expect(screen.queryByText(/loading map/i)).not.toBeInTheDocument();
+        });
+        expect(screen.getByTestId('map')).toBeInTheDocument();
+    });
+
+    it('keeps the markers when the topology is slow, and recovers if it arrives', async () => {
+        // The first cut of #318's fix flipped `mapFailed` on a 10s deadline,
+        // which unmounted the whole map branch: focus dropped to <body>, the ten
+        // city markers vanished, and because `GeographyLayer` went with them
+        // `geographiesReady` could never become true again — a topology arriving
+        // at t=11s was discarded for the rest of the session. A slow connection
+        // lost working, clickable markers permanently.
+        let resolveTopology: (value: unknown) => void = () => undefined;
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            json: () => new Promise((resolve) => { resolveTopology = resolve; }),
+        }) as unknown as typeof fetch;
+
+        jest.useFakeTimers();
+        try {
+            const { rerender } = render(
+                <TravelGuideClient cities={sampleCities} initialFavorites={[]} />
+            );
+
+            expect(screen.getByTestId('map')).toBeInTheDocument();
+
+            await act(async () => {
+                jest.advanceTimersByTime(11_000);
+            });
+
+            // It says so — and the map is still there. `status`, not `alert`:
+            // the condition is transient and may clear itself.
+            expect(screen.getByRole('status')).toHaveTextContent(/taking longer/i);
+            expect(screen.getByTestId('map')).toBeInTheDocument();
+            expect(screen.getAllByTestId('marker')).toHaveLength(sampleCities.length);
+
+            // And it is not a one-way door: a late topology still clears it.
+            await act(async () => {
+                resolveTopology({ type: 'Topology', objects: {} });
+                rerender(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
+            });
+
+            expect(screen.queryByText(/taking longer/i)).not.toBeInTheDocument();
+            expect(screen.queryByText(/loading map/i)).not.toBeInTheDocument();
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it('reports failure when the map file is unreadable', async () => {
+        // jsdom exposes no `fetch`, so the probe returned early in every test
+        // and this whole branch — including its precedence over the timeout —
+        // was untested. The case that matters is not a 404: it is a body that
+        // arrives with 200 and does not parse, which is what a CDN serving an
+        // HTML error page produces, and what `react-simple-maps` swallows.
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            json: () => Promise.reject(new SyntaxError('Unexpected token <')),
+        }) as unknown as typeof fetch;
+        render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
+
+        // Wait for the failure text specifically: `findByRole('status')`
+        // resolves on the loading overlay, which is already present.
+        const failure = await screen.findByText(/could not be loaded/i);
+        expect(failure).toBeInTheDocument();
+        expect(screen.queryByText(/loading map/i)).not.toBeInTheDocument();
+    });
+
+    // The quiet sibling of the unreadable case above. An HTML error page fails
+    // to parse and is handled; a JSON error body parses fine, reaches
+    // `prepareFeatures`, and throws during render — a crash rather than a
+    // message. A literal `null` is quieter still: it would set `topology` to
+    // null and leave the panel loading forever.
+    //
+    // `it.each` so a failure names the body that caused it. Note what this can
+    // and cannot see: `react-simple-maps` is mocked at module level here, so
+    // `prepareFeatures` never runs and the crash itself is not detected — only
+    // that the guard produced the failure message. The crash is reachable in a
+    // real browser.
+    it.each([
+        ['a JSON error body', { error: 'not found' }],
+        ['a literal null', null],
+    ])('reports failure when map.json parses to %s', async (_label, body) => {
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            json: () => Promise.resolve(body),
+        }) as unknown as typeof fetch;
+
+        render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
+        expect(await screen.findByText(/could not be loaded/i)).toBeInTheDocument();
     });
 
     it('defers the D3 map until after client hydration', () => {
@@ -271,22 +413,35 @@ describe('TravelGuideClient', () => {
 });
 
 describe('the travel guide map, as assistive technology and a keyboard meet it', () => {
-    it('keeps the decorative country outlines out of the tab order', () => {
-        render(
-            <TravelGuideClient
-                cities={sampleCities as never}
-                initialFavorites={[]}
-            />
-        );
+    it('keeps the decorative country outlines out of the tab order', async () => {
+        const realFetch = global.fetch;
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            json: () => Promise.resolve({ type: 'Topology', objects: {} }),
+        }) as unknown as typeof fetch;
+        try {
+            render(
+                <TravelGuideClient
+                    cities={sampleCities as never}
+                    initialFavorites={[]}
+                />
+            );
 
-        // `react-simple-maps` renders every country as a focusable `path` with no
-        // accessible name and no role. There are 202 of them on the real map and
-        // 176 are clipped outside the viewBox, so a keyboard user reached the first
-        // city marker on tab stop 209 having passed 202 stops that announce nothing
-        // and cannot be seen. The interactive things here are the markers.
-        for (const outline of screen.getAllByTestId('geography')) {
-            expect(outline).toHaveAttribute('tabindex', '-1');
-            expect(outline).toHaveAttribute('aria-hidden', 'true');
+            // The outlines exist only once the topology has been fetched and parsed:
+            // the component owns that request now and passes the object down.
+            await screen.findAllByTestId('geography');
+
+            // `react-simple-maps` renders every country as a focusable `path` with no
+            // accessible name and no role. There are 202 of them on the real map and
+            // 176 are clipped outside the viewBox, so a keyboard user reached the first
+            // city marker on tab stop 209 having passed 202 stops that announce nothing
+            // and cannot be seen. The interactive things here are the markers.
+            for (const outline of screen.getAllByTestId('geography')) {
+                expect(outline).toHaveAttribute('tabindex', '-1');
+                expect(outline).toHaveAttribute('aria-hidden', 'true');
+            }
+        } finally {
+            global.fetch = realFetch;
         }
     });
 });
