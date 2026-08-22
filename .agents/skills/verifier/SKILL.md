@@ -12,6 +12,18 @@ This skill acts as the automated verification gatekeeper. It executes all requir
 
 ---
 
+## Execution Context
+
+When verification is a stage of the managed workflow, it runs in the `verifier`
+subagent, invoked by the main agent — never in the main agent's own context.
+The gate is requested there, not performed there.
+
+Being asked directly for a gate run is not a managed stage: run it, and say
+which context it ran in. Inside the subagent, follow the protocol below and
+never delegate again — that would recurse.
+
+---
+
 ## 1. Verification Protocol
 
 ```mermaid
@@ -50,10 +62,22 @@ The verifier inspects `AGENTS.md` (or project metadata) for canonical commands. 
 3. **Check Worktree Cleanliness**:
    - Ensure no build artifacts (binaries, `.DS_Store`, generated caches) are left untracked or mistakenly added to git.
 4. **Iterative Verification**:
-   - The complete gate must run at least once on the state entering code review.
-     After a verifier finding is fixed, use the repository's `Verification Map`
+   - Every gate command must have run green on a state whose inputs **it reads**
+     have not changed since, or be recorded `NOT RUN` with the reason it could
+     not. An environmental failure is a state, not an exemption.
+   - The invariant is per command on purpose. "The complete gate ran on the state
+     entering code review" cannot be satisfied once a finding is fixed, because
+     the state that enters review is not the state the gate ran on.
+   - **A command is `NOT RUN` only after you ran it and it failed for a reason no
+     code change resolves.** Not before you tried, and not because it looked slow,
+     irrelevant, or likely to fail. Unrunnable is something you observe — a browser
+     that will not install, no network, a missing credential, an unmet system
+     dependency. Name it precisely, and do not retry it hoping for a different
+     answer.
+   - After a verifier finding is fixed, use the repository's `Verification Map`
      to rerun only commands whose inputs changed. If the repository defines no
-     map, rerun the complete gate.
+     map, rerun the complete gate — not because the invariant demands it, but
+     because without a map you cannot tell which commands the fix invalidated.
 5. **Stale documentation is a finding, not a failure**:
    - You already read `AGENTS.md` to learn the commands. While you are there, check
      it against what you found: a command it lists that does not resolve, a path in
@@ -80,13 +104,18 @@ The verifier inspects `AGENTS.md` (or project metadata) for canonical commands. 
 #### Executed Checks
 | Check | Command | Result | Notes |
 |---|---|---|---|
-| Formatting | `<e.g. gofmt -l .>` | [PASS / FAIL] | Clean |
-| Static Analysis | `<e.g. go vet ./...>` | [PASS / FAIL] | No warnings |
-| Type Check / Build | `<e.g. go build ./...>` | [PASS / FAIL] | Success |
-| Test Suite | `<e.g. go test ./...>` | [PASS / FAIL] | X tests passed, 0 failed |
+| Formatting | `<e.g. gofmt -l .>` | [PASS / FAIL / NOT RUN] | Clean |
+| Static Analysis | `<e.g. go vet ./...>` | [PASS / FAIL / NOT RUN] | No warnings |
+| Type Check / Build | `<e.g. go build ./...>` | [PASS / FAIL / NOT RUN] | Success |
+| Test Suite | `<e.g. go test ./...>` | [PASS / FAIL / NOT RUN] | X tests passed, 0 failed |
 
-- **Verdict**: [VERIFIED | BLOCKED]
+- **Verdict**: [VERIFIED | VERIFIED (partial) | BLOCKED]
 - **Findings / Blockers**: (None, or list of issues needing resolution)
+- **Not run**: (None, or each `NOT RUN` row with what stopped it. A command that
+  could not run is never `PASS`. The verdict is `VERIFIED (partial)` whenever any
+  row is `NOT RUN` — `VERIFIED` with a command nobody ran is certification by
+  silence, which is the one thing this report exists to prevent. Your caller
+  decides whether a partial verdict is enough.)
 - **Stale docs**: (None, or what `AGENTS.md` claims that is no longer true — the
   command or path, and what it is now. Never affects the verdict.)
 ```

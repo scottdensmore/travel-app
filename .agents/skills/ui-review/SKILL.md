@@ -16,6 +16,18 @@ the application.
 
 ---
 
+## Execution Context
+
+When UI review is a stage of the managed workflow, it runs in the `ui-reviewer`
+subagent, invoked by the main agent — never in the main agent's own context.
+The review is requested there, not performed there.
+
+Being asked directly for a UI review is not a managed stage: perform it, and say
+which context it ran in. Inside the subagent, follow the review protocol and
+never delegate again — that would recurse.
+
+---
+
 ## 1. Domain Detection & Scope
 
 Determine the project's UI domain from `AGENTS.md` (or inspect repository files):

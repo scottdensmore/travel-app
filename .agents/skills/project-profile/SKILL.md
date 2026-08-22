@@ -22,22 +22,79 @@ This skill replaces that draft with facts.
 
 | Section | This skill |
 |---|---|
-| `## Project overview` | fills if placeholder |
-| `## Repo Map` | fills if placeholder or `unverified` |
-| `## Development Commands` | fills if placeholder or `unverified` |
-| `## Local Setup` | fills if placeholder or `unverified` |
-| `## Architecture & Conventions` | fills if placeholder |
-| `## Gotchas & Troubleshooting` | fills if placeholder |
-| `## Verification Map` | fills if placeholder |
+| `## Project overview` | owns if `profiled`; fills if placeholder or missing |
+| `## Repo Map` | owns if `profiled`; fills if placeholder, `unverified`, or missing |
+| `## Development Commands` | owns if `profiled`; fills if placeholder, `unverified`, or missing |
+| `## Local Setup` | owns if `profiled`; fills if placeholder, `unverified`, or missing |
+| `## Architecture & Conventions` | owns if `profiled`; fills if placeholder or missing |
+| `## Gotchas & Troubleshooting` | owns if `profiled`; fills if placeholder or missing |
+| `## Verification Map` | owns if `profiled`; fills if placeholder or missing |
 | `## Notes & Learned Patterns` | never — belongs to the humans |
 | anything between `agent-skills:begin/end workflow` | **never** — overwritten on next adopt |
 | any other section the project wrote | never edits; may propose |
 
-**Fill blanks, propose the rest.** A section that is empty or still carries
-placeholders (`<command>`, `[Key architectural boundary 1]`) or an
-`<!-- unverified -->` marker is yours to write. A section already written by a
-human is not: report what you found and what you would change, and leave the edit
-to them.
+### Who owns a section
+
+Three cases, and each is decidable by looking at the section's own bytes:
+
+1. **It ends with an `agent-skills:profiled` marker** — this skill wrote it. Rewrite
+   it freely, and stamp it again.
+2. **It is missing, empty, or still carries placeholders** (`<command>`,
+   `[Key architectural boundary 1]`) **or an `<!-- unverified -->` marker** — write
+   it, and stamp it.
+3. **It has content and no marker** — a human wrote it. Report what you found and
+   what you would change, and leave the edit to them.
+
+Deleting the marker is how someone takes a section back. Say so if you rewrite a
+section they may have wanted to keep.
+
+### The marker
+
+Stamp the last line of every section body you write:
+
+```markdown
+<!-- agent-skills:profiled 2026-08-21 sources=package.json@3c17e1e8,.github/workflows/ci.yml@ef015b7c -->
+```
+
+- The date is the day of the run, `YYYY-MM-DD`.
+- `sources` lists the files the section's facts came from — the manifest or lockfile
+  you read the commands out of, the CI workflow, the task runner's config. List only
+  files you actually opened; a source you did not read is a claim you cannot support.
+- Each fingerprint is the first 8 characters of `git hash-object --no-filters <path>`.
+  Use that command; it is the same value the adoption tool computes, and a different
+  one makes every future run report rot that is not there.
+- A note may follow the source list, so the marker can tell the next reader what
+  deleting it does:
+
+  ```markdown
+  <!-- agent-skills:profiled 2026-08-21 sources=package.json@3c17e1e8 — delete this line to take ownership -->
+  ```
+
+  Two rules, and each exists because breaking it fails quietly:
+
+  - **No spaces inside the list.** `sources=a.json@1111,b.json@2222`, never
+    `, b.json@2222`. The list ends at the first space, so a space truncates it —
+    and rather than record half a list, the tool records none and reports the
+    section stale.
+  - **Close the comment.** A marker whose `-->` is missing usually records
+    nothing: the search for it runs on into the document and stops at the next
+    `<!--`, which is the following marker or the managed block. Markers after it
+    are still read either way, so one bad stamp costs one section, not the file.
+
+  The shape up to the sources is fixed — `agent-skills:profiled`, the date, then
+  `sources=` — and everything after the list is free text. The note may contain
+  `>`, and the closing `-->` may wrap to the next line. The one thing it may not
+  contain is `<!--`: that reads as a marker running past its own end, and the
+  section is reported stale.
+
+  Break a rule and the marker records nothing, which reads as stale. That is the
+  safe direction — a section re-derived needlessly rather than a rotted one
+  trusted — but it is still a marker doing nothing, so it is worth getting right.
+
+This is the whole re-run mechanism. Without it, a run that fills a section also
+deletes the `unverified` marker that identified the section as this skill's work,
+so the next run sees prose it cannot attribute, correctly declines to touch it
+under case 3, and the file can never be updated again.
 
 ---
 
@@ -166,7 +223,25 @@ pass it never saw.
 
 Most runs after the first are not about blanks — they are about rot. A section
 written a year ago is not wrong because it was careless; it is wrong because the
-project moved. Sweep for the four kinds of decay, in this order:
+project moved.
+
+**Start by asking what moved, before re-deriving anything.** For each section
+carrying an `agent-skills:profiled` marker, recompute
+`git hash-object --no-filters <path>` for every source it records:
+
+- Every fingerprint still matches → that section is current. Say so in the report
+  and skip it. Nothing it was derived from has changed, so re-reading the project
+  to reach the same conclusion costs a run and proves nothing.
+- Any fingerprint differs, or the file is gone → that section is suspect. Re-derive
+  it, and re-stamp it with the new fingerprints.
+- No marker at all → the section predates this mechanism, or a human took it back.
+  Treat it under case 3 above: read it, report, do not edit.
+
+The cost of a re-run then scales with what actually changed rather than with the
+size of the project, which is what makes running it often practical.
+
+For each section the check flagged, sweep for the four kinds of decay, in this
+order:
 
 1. **Commands that no longer resolve.** A script renamed, a task removed, a
    package manager swapped. Check each row of Development Commands the same way
@@ -184,9 +259,11 @@ project moved. Sweep for the four kinds of decay, in this order:
    a struck-through gotcha with the fix noted is more useful than silence,
    because it answers the question a second time.
 
-Apply the fixes you can prove and **report the rest** — a section a human wrote
-is still theirs, even when it has gone stale. Say what is now untrue, what you
-verified it should say, and leave the edit to them.
+Apply the fixes you can prove and **report the rest** — a section carrying no
+`agent-skills:profiled` marker is theirs, even when it has gone stale. Say what is
+now untrue, what you verified it should say, and leave the edit to them. In a
+section you do own, fix it and re-stamp; the marker is what makes that decidable
+rather than a judgment about who probably wrote which paragraph.
 
 ### What the workflow asks this project to answer
 
@@ -204,6 +281,7 @@ should not.
 | *Preserve what you did not change* | Files that a build or tool rewrites on its own, and that will show up dirty without anyone having edited them. | `## Gotchas & Troubleshooting` |
 | *A verdict is acted on once* | Any gate that partially succeeds — where some artifacts appear even on failure — and which artifact actually proves success. | `## Gotchas & Troubleshooting` |
 | *UI review applies only to what a person sees* | The project's UI domain, honestly. `Headless / Backend` if nothing renders; the stage is then skipped every time rather than argued about per change. | `## Project overview` |
+| *Localization review keeps the application localizable* | Which locales the project ships, where the catalogs live if any, and — the load-bearing part — **whether the project has decided it will never localize**. That decision is the only thing that makes the stage `N/A`, and it has to be written rather than inferred: an internal CLI or a service with no human-facing text says `single locale, not intended`. A missing catalog is **not** an `N/A`; it is the case the stage exists for, since keeping the door open is cheapest before a second locale exists. Say which of the two a bare `single locale` means, because the reviewer cannot tell. | `## Project overview` |
 | The reviewers judge against this file | Where the review criteria live — the invariants, contracts, and traps a change is checked against, with `file:line` anchors where they exist. | `## Architecture & Conventions`, `## Gotchas` |
 | Branch, commit, and PR conventions | Any place this project's rules differ from the generic block — branch naming, commit format, PR sections. State plainly which one wins. | the project's own section (often `## Git`) |
 
@@ -285,9 +363,17 @@ edit goes wrong:
   Check the content, not just the heading. Structural checks pass happily on a
   file where nothing was written.
 
-Then re-run adoption against the repository with `--keep-existing`. It must report
-`AGENTS.md already current` and write nothing. If it wants to change something,
-your edit broke a structure it depends on.
+Then re-run adoption against the repository with `--dry-run --keep-existing`. It
+must report `AGENTS.md already current` and end with `Dry run — no files were
+written.` If it wants to change something, your edit broke a structure it depends
+on.
+
+Both flags, always. `--keep-existing` alone is not a check — it is an install, and
+it writes. In a repository adopted with `--skip-skills` or `--no-pointers` it puts
+back everything that was deliberately left out: skills and subagents across every
+host directory, and a `GEMINI.md` the project may have declined. That lands in the
+middle of someone's unrelated slice, against the workflow's own rule to preserve
+what you did not change.
 
 ## 6. Report
 

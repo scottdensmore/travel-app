@@ -5,8 +5,7 @@ description: >-
   a verdict rather than the output. Use after a change is written and before code review,
   or whenever you need to know whether the tree is green. It runs the gate and reports; it
   does not change your code.
-model: inherit
-readonly: false
+kind: local
 ---
 
 <!-- Generated from agents/verifier.md by agent-workflow-skills. Edit that file and re-run the installer. -->

@@ -5,8 +5,7 @@ description: >-
   handling, and secrets — and returns a ranked list of findings with file:line. Use after
   verification is green and before committing or opening a PR. It reads code only and
   cannot edit files.
-subagent: true
-model: inherit
+kind: local
 ---
 
 <!-- Generated from agents/code-reviewer.md by agent-workflow-skills. Edit that file and re-run the installer. -->

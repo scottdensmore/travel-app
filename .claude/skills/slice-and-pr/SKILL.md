@@ -59,7 +59,19 @@ flowchart TD
 
 ### D. Conventional Commits
 
-Commit only after UI review, verification, and code review have all passed:
+Commit only after every stage your track includes has **passed**, returned `N/A`, or
+been recorded `NOT RUN` per § E. A verdict alone is not enough:
+`CHANGES_REQUESTED` is a verdict, and it is the one outcome that must be acted on
+before you commit rather than recorded.
+
+`VERIFIED (partial)` is a fourth thing and counts as passed on one condition: every
+`NOT RUN` row it names is carried into the PR description per § E. The word
+`VERIFIED` inside it is not the verdict — a partial result you do not pass on is a
+full one you invented.
+
+A stage the triage table excluded is not a missing precondition: the Trivial track
+runs neither review, and a docs-only change skips UI review by the workflow's own
+instruction.
 
 ```text
 <type>(<scope>): <imperative summary>
@@ -74,25 +86,51 @@ Commit only after UI review, verification, and code review have all passed:
 
 Use Git for branch transport and the GitHub CLI (`gh`) for GitHub operations:
 
-- **Match the stopping point to the request.** A request that only asks to commit
-  stops after the local commit. A request that asks to use, follow, or complete
-  the workflow—including "commit based on the workflow"—includes the reversible
-  remote steps: push the branch, open the PR, and watch its checks. It does not
-  authorize a merge or any action in § F.
+- **Finish at a pull request by default.** After verification and review pass,
+  finish the reversible lifecycle by committing, pushing the branch, opening a
+  ready-for-review PR, and watching its checks. Stop after the local commit only
+  when the user explicitly asks for a local-only or commit-only result. Creating
+  a PR does not authorize a merge or any action in § F.
+- **Recording a stage that did not pass.** `N/A` is one line naming why the stage
+  does not apply — which track excluded it, or what about the change means it
+  judges nothing. It goes in the PR description and needs nothing else.
+- **A command that did not run travels with the verdict.** A verifier returning
+  `VERIFIED (partial)` names the commands it could not run and what stopped each.
+  Copy that list into the description under its own heading. The stage passed and
+  the PR is ready for review — but a command nobody ran, inside a stage that
+  otherwise passed, is the quiet version of a stage nobody ran, and the reader
+  decides what it is worth rather than never learning of it.
+- **What the description has to carry.** Why the change exists; what it changes,
+  grouped by concern rather than by file; and how it was tested — the command you
+  actually ran and its actual result. "Should work" is not a test result. If a
+  test was added, say what it would have caught. This matters more under a squash
+  (§ G): the intermediate commits do not survive, so the description is the only
+  record of how the change was reasoned about.
+- **A gate that did not run makes it a draft.** Every applicable stage having
+  passed is what "ready for review" means. A stage marked `NOT RUN` — a subagent
+  you invoked and could not reach, or one the user waived — means
+  `gh pr create --draft` instead, recording the subagent, the host, the exact
+  invocation and the exact error where a reviewer cannot miss them. A gate you
+  could not run never blocks the work, and is never described as passed.
+  Publish the PR once the stage has actually run.
 
 ```bash
 # 1. Push Branch
 git push -u origin <branch>
 
-# 2. Create Pull Request
-gh pr create --title "<type>(<scope>): <summary>" --body "<why this change was made and what was verified>"
+# 2. Create Pull Request — every applicable gate passed
+gh pr create --title "<type>(<scope>): <summary>" --body "<why this change was made, what was verified, and any command the verifier could not run>"
+
+# 2b. Or, with a stage that could not run
+gh pr create --draft --title "<type>(<scope>): <summary>" --body "<the above, plus a NOT RUN section naming the subagent, host, invocation and error>"
 
 # 3. Monitor CI status
 gh pr checks --watch
 ```
 
 - Never bypass failing or pending CI checks.
-- Open ready-for-review PRs by default unless explicitly asked for a draft.
+- Open ready-for-review PRs whenever the gates allow it: a draft is what an
+  unrun gate forces, or what the user asked for, never a way to lower the bar.
 
 ### F. Actions That Require Explicit Approval
 
