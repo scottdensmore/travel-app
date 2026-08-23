@@ -567,6 +567,10 @@ button:active, button[type="submit"]:active {
   justify-content: center;
   overflow: hidden;
   background: radial-gradient(circle at center, #1b192e 0%, #0d0c14 100%);
+  /* The containing block for `.guide-map-state--overlay`. Without it the status
+     message becomes a flex *sibling* of the SVG and squeezes it to an 85px
+     column, wrapping "Loading map…" onto two lines even at 1440px. */
+  position: relative;
 }
 
 /*
@@ -646,7 +650,9 @@ button:active, button[type="submit"]:active {
     width: 100%;
     height: 45vh;
     min-height: 260px;
-    position: static;
+    /* `position` is deliberately not reset here: `.map` is the containing block
+       for the status overlay at every width. It used to say `static`, which was
+       a no-op while `.map` had no position of its own. */
   }
 
   .sticky-sidebar {
@@ -840,6 +846,37 @@ button:active, button[type="submit"]:active {
 
 .guide-map-state {
   padding: 24px;
+}
+
+/*
+ * The in-flight status, laid over the map rather than beside it.
+ *
+ * The city markers live inside the map and stay visible and clickable while the
+ * topology is in flight, so this cannot replace it. As a flex sibling it
+ * displaced the SVG and rescaled every city marker by 13.7%-30.9% when it
+ * unmounted; laid over the top, the drawing does not move.
+ */
+.guide-map-state--overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  /* The markers underneath stay operable. They are the interactive thing on
+     this panel, and an overlay that swallowed clicks would take them away
+     precisely when the map is slow. */
+  pointer-events: none;
+  /* Legibility, *not* a contrast fix — measured, because the obvious reading is
+     wrong. At 375px the wrapped second line crosses the New Orleans and Orlando
+     markers. A shadow paints behind the glyph, but this text is 60% white and
+     composites over its own shadow, so glyph and surround darken together and
+     the ratio barely moves: 1.62→1.70 (Orlando), 2.48→2.68 (New Orleans). The
+     control that proves the mechanism is opaque text with the same shadow,
+     which moves 3-4x further and still falls short of 4.5:1. The overlap is 4px
+     and 32px of mostly-antialiased pixels, so it reads fine; what would actually
+     clear it is moving the message off the marker band below 1100px. */
+  text-shadow: 0 1px 3px rgba(13, 12, 20, 0.95);
 }
 
 .guide-detail-empty {

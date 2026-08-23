@@ -1,11 +1,14 @@
 "use client"
-import React, { useState, useEffect, useRef, Suspense, useTransition, useSyncExternalStore } from 'react';
+import React, { useState, useEffect, useRef, useTransition, useSyncExternalStore } from 'react';
 import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
 import { toggleFavoriteCityGuideAction, submitCityGuideReviewAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
 import { useRouter } from 'next/navigation';
 
 const DEFAULT_CITY_NAME = 'Detroit';
+// How long the topology may be in flight before the panel stops calling it
+// loading and offers the list instead. See the deadline effect below.
+const MAP_LOAD_TIMEOUT_MS = 10_000;
 const subscribeToHydration = () => () => undefined;
 const getClientSnapshot = () => true;
 const getServerSnapshot = () => false;
@@ -35,6 +38,8 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
     const [reviewContent, setReviewContent] = useState('');
     const [reviewRating, setReviewRating] = useState(5);
     const [mapFailed, setMapFailed] = useState(false);
+    const [topology, setTopology] = useState<object | null>(null);
+    const [mapTimedOut, setMapTimedOut] = useState(false);
     const [feedback, setFeedback] = useState<string | null>(null);
     const isHydrated = useSyncExternalStore(
         subscribeToHydration,
@@ -46,15 +51,62 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
     // The map is decoration over a list that works without it, so a missing
     // geography file should say so rather than render an empty rectangle.
     useEffect(() => {
-        // An enhancement, not a requirement: where fetch is unavailable the map
-        // is simply assumed to work, rather than the check taking the page down.
-        if (typeof fetch !== 'function') return;
+        // Without fetch the topology cannot be loaded at all, so say so rather
+        // than leaving the panel claiming to be loading forever.
+        if (typeof fetch !== 'function') { setMapFailed(true); return; }
         let cancelled = false;
-        fetch('/map.json', { method: 'HEAD' })
-            .then(response => { if (!cancelled && !response.ok) setMapFailed(true); })
+        // One fetch, and the result is kept. `Geographies` accepts a parsed
+        // topology as well as a URL, so passing the object means this component
+        // owns the request — and owning it is the only way to see a failure at
+        // all: `react-simple-maps` swallows every failure of its own fetch
+        // (non-ok, reject, and a `res.json()` parse error alike) into a
+        // `console.log`, resolves undefined, and leaves `geographies` empty
+        // forever. A HEAD probe could not see it either, since a truncated file
+        // or an HTML error page served with 200 has a perfectly good status.
+        fetch('/map.json')
+            .then(response => {
+                if (!response.ok) throw new Error(`map.json: ${response.status}`);
+                return response.json();
+            })
+            .then(parsed => {
+                if (cancelled) return;
+                // Parsing is not validating, and the difference is a crash. A
+                // gateway answering 200 with `{"error":"not found"}` parses
+                // perfectly; `Geographies` then calls `.map()` on that object
+                // during render and throws, taking the tree to the nearest
+                // error boundary. A body of literal `null` is quieter and worse
+                // — it leaves the panel on "taking longer" forever. Accept the
+                // two shapes the library actually handles.
+                const shape = parsed as { type?: string; features?: unknown } | null;
+                const isTopology = !!shape && typeof shape === 'object'
+                    && (shape.type === 'Topology' || Array.isArray(shape.features));
+                if (!isTopology) throw new Error('map.json: not a topology');
+                setTopology(parsed);
+                // Insurance against a future second `setTopology`: today this
+                // batches with the line above and the overlay is gated on
+                // `!topology`, so nothing can render the stale copy.
+                setMapTimedOut(false);
+            })
             .catch(() => { if (!cancelled) setMapFailed(true); });
         return () => { cancelled = true; };
     }, []);
+
+    /**
+     * A request that never resolves is not a loading state forever.
+     *
+     * The probe above catches a response that arrives and is bad, one that
+     * rejects, and a body that will not parse. A request that never resolves
+     * satisfies none of them, and #318's own repro is exactly that — so without
+     * a deadline the honest loading message this component renders would simply
+     * never go away. Ten seconds is a judgement call: long enough that a slow
+     * connection still gets its map, short enough that nobody reads
+     * "Loading map…" as the final answer.
+     */
+    useEffect(() => {
+        if (mapFailed || topology) return;
+        const timer = setTimeout(() => setMapTimedOut(true), MAP_LOAD_TIMEOUT_MS);
+        return () => clearTimeout(timer);
+    }, [mapFailed, topology]);
 
     /**
      * Selecting a city also resets the review form.
@@ -167,43 +219,69 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
                             : 'Loading map…'}
                     </p>
                 ) : (
-                    <Suspense fallback={<p className="guide-map-state">Loading map…</p>}>
+                    <>
+                        {/*
+                          * Laid *over* the map, not beside it. The city markers
+                          * live inside `ComposableMap` and stay visible and
+                          * clickable while the topology is in flight, and as a
+                          * flex sibling this squeezed the SVG and rescaled every
+                          * marker when it left. It also never unmounts the map:
+                          * a slow topology still arriving at t=11s clears this
+                          * message, where flipping `mapFailed` would have thrown
+                          * the markers away for the rest of the session.
+                          *
+                          * `role="status"` rather than `alert` even once timed
+                          * out: the condition is transient and self-healing, and
+                          * the genuine failure above is only `status` too.
+                          * React hydrates the pre-hydration element into this
+                          * one — same node, patched class — so the text does not
+                          * re-announce on hydration.
+                          */}
+                        {!topology && (
+                            <p
+                                className="guide-map-state guide-map-state--overlay"
+                                role="status"
+                            >
+                                {mapTimedOut
+                                    ? 'The map is taking longer than expected. Choose a destination from the list instead.'
+                                    : 'Loading map…'}
+                            </p>
+                        )}
                         <ComposableMap
                             projection="geoEqualEarth"
                             projectionConfig={{ scale: 600, center: [-70, 28] }}
                             viewBox="0 0 800 500"
                         >
-                            <Geographies geography="/map.json">
-                                {({ geographies }: { geographies: Array<{ rsmKey: string }> }) =>
-                                    geographies.map((geo) => (
-                                        <Geography
-                                            key={geo.rsmKey}
-                                            geography={geo}
-                                            fill="#444"
-                                            stroke="#1F2328"
-                                            /* The country outlines are decoration:
-                                               the interactive things on this map
-                                               are the city markers below. Left
-                                               alone, react-simple-maps renders
-                                               each one as a focusable `path` with
-                                               no accessible name and no role --
-                                               202 of them, 176 clipped outside the
-                                               viewBox entirely, so a keyboard user
-                                               reached the first city marker on tab
-                                               stop 209 after 202 stops that
-                                               announce nothing and cannot be
-                                               seen (#78's "inaccessible
-                                               content"). */
-                                            tabIndex={-1}
-                                            aria-hidden="true"
-                                            style={{
-                                                default: { outline: 'none' },
-                                                hover: { outline: 'none' },
-                                                pressed: { outline: 'none' },
-                                            }}
-                                        />
-                                    ))}
-                            </Geographies>
+                            {topology && (
+                                <Geographies geography={topology}>
+                                    {({ geographies }: { geographies: Array<{ rsmKey: string }> }) =>
+                                        geographies.map((geo) => (
+                                            <Geography
+                                                key={geo.rsmKey}
+                                                geography={geo}
+                                                fill="#444"
+                                                stroke="#1F2328"
+                                                /* The country outlines are decoration: the
+                                                   interactive things on this map are the city
+                                                   markers below. Left alone, react-simple-maps
+                                                   renders each one as a focusable `path` with no
+                                                   accessible name and no role -- 202 of them, 176
+                                                   clipped outside the viewBox entirely, so a
+                                                   keyboard user reached the first city marker on
+                                                   tab stop 209 after 202 stops that announce
+                                                   nothing and cannot be seen (#78's
+                                                   "inaccessible content"). */
+                                                tabIndex={-1}
+                                                aria-hidden="true"
+                                                style={{
+                                                    default: { outline: 'none' },
+                                                    hover: { outline: 'none' },
+                                                    pressed: { outline: 'none' },
+                                                }}
+                                            />
+                                        ))}
+                                </Geographies>
+                            )}
                             {cities.map((city) => {
                                 const isSelected = city.city === selectedCityName;
                                 return (
@@ -239,7 +317,7 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
                                 );
                             })}
                         </ComposableMap>
-                    </Suspense>
+                    </>
                 )}
             </div>
 
