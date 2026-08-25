@@ -22,13 +22,13 @@ This skill replaces that draft with facts.
 
 | Section | This skill |
 |---|---|
-| `## Project overview` | owns if `profiled`; fills if placeholder or missing |
+| `## Project overview` | owns if `profiled`; fills if placeholder, `unverified`, or missing |
 | `## Repo Map` | owns if `profiled`; fills if placeholder, `unverified`, or missing |
 | `## Development Commands` | owns if `profiled`; fills if placeholder, `unverified`, or missing |
 | `## Local Setup` | owns if `profiled`; fills if placeholder, `unverified`, or missing |
-| `## Architecture & Conventions` | owns if `profiled`; fills if placeholder or missing |
-| `## Gotchas & Troubleshooting` | owns if `profiled`; fills if placeholder or missing |
-| `## Verification Map` | owns if `profiled`; fills if placeholder or missing |
+| `## Architecture & Conventions` | owns if `profiled`; fills if placeholder, `unverified`, or missing |
+| `## Gotchas & Troubleshooting` | owns if `profiled`; fills if placeholder, `unverified`, or missing |
+| `## Verification Map` | owns if `profiled`; fills if placeholder, `unverified`, or missing |
 | `## Notes & Learned Patterns` | never — belongs to the humans |
 | anything between `agent-skills:begin/end workflow` | **never** — overwritten on next adopt |
 | any other section the project wrote | never edits; may propose |
@@ -60,6 +60,10 @@ Stamp the last line of every section body you write:
 - `sources` lists the files the section's facts came from — the manifest or lockfile
   you read the commands out of, the CI workflow, the task runner's config. List only
   files you actually opened; a source you did not read is a claim you cannot support.
+  In particular, the config a `nothing` row rests on is a **source**, not just
+  something to mention in prose: only `sources` is fingerprinted, so a config
+  named in the text and left out of the list can be widened without flagging
+  the row it was holding up.
 - Each fingerprint is the first 8 characters of `git hash-object --no-filters <path>`.
   Use that command; it is the same value the adoption tool computes, and a different
   one makes every future run report rot that is not there.
@@ -119,6 +123,19 @@ seen it declared:
 - a committed CI workflow that invokes it
 - an executable file that exists (`./scripts/lint.sh`)
 
+Then **the file a command resolves *through* is a source**, not only the file
+you found the command declared in. `Lint | ./scripts/lint.sh` is confirmed by
+that script existing, and existing is all a later run can re-confirm: rewrite
+the script and every recorded fingerprint still matches while the command does
+something else. Record `scripts/lint.sh` and the rewrite flags the section.
+
+The same sentence as the `nothing` row's config, for the same reason — a claim
+is only as durable as the fingerprint watching what it rests on. Where the
+command and its definition share a file this is already true: `make test` is
+confirmed by a target name, but the `Makefile` is the source, so a changed
+recipe moves it. It is a shim, a task file calling another file, or a script
+invoked from CI that slips through.
+
 When you must execute, execute only inspection: `--help`, `--version`, `-list`,
 `--dry-run`, `-n`. **Never run a command that could mutate anything** — no
 `deploy`, `publish`, `release`, `migrate`, `--fix`, `--write`, no installs, no
@@ -171,13 +188,15 @@ Then invert it: for each path group, list the commands that read it.
 |---|---|
 | `app/` or `tests/` | `npm run test`, `npm run lint`, `npm run build` |
 | `eslint.config.mjs` | everything above |
-| `docs/*.md` | nothing; no gate command reads it |
+| `docs/*.md` | nothing — `eslint.config.mjs` ignores it, `vitest.config.mts` and `tsconfig.json` cover only `app/` |
 | anything else | the complete gate |
 ```
 
 A "nothing" row is a strong claim: it is only safe when a tool's configuration
 excludes the path, not when convention suggests it should. State which config
-makes it true. If you cannot show that, the row is `the complete gate`.
+makes it true, **and record that config in the section's `sources`** — the row
+is only as durable as the fingerprint watching its justification. If you cannot
+show that, the row is `the complete gate`.
 
 ### Repo Map
 
@@ -238,7 +257,37 @@ carrying an `agent-skills:profiled` marker, recompute
   Treat it under case 3 above: read it, report, do not edit.
 
 The cost of a re-run then scales with what actually changed rather than with the
-size of the project, which is what makes running it often practical.
+size of the project, which is what makes running it often practical. It scales
+with how *widely a source is cited*, though, not with how small the edit was:
+the manifest tends to be both the most-edited file and the most-cited source, so
+adding a dependency can legitimately flag every section at once.
+
+**A standing `unverified` marker is checked on every run, whatever the
+fingerprints say.** Two rules point opposite ways here and this is the
+precedence between them: a section can carry a `profiled` marker whose sources
+all match *and* an `unverified` marker inside it, which case 2 calls a section
+to write. Fingerprints decide whether to **re-derive** the section; they say
+nothing about the open question. Most `unverified` markers are about the
+**environment** rather than a file — "eslint is not installed here", "the
+credential does not exist yet" — and the environment is not a source, so no
+fingerprint will ever move and a marker gated on one would stand forever while
+the section reported as current. Retry the marker; leave the rest of the section
+alone unless a fingerprint moved.
+
+**A `nothing` row whose justification is missing from `sources` is repaired on
+every run, whatever the fingerprints say** — like the `unverified` rule above,
+this overrides "every fingerprint still matches → skip it", and it says so
+itself rather than borrowing the point, so moving either rule cannot leave this
+one pointing at nothing. The reason is the same: a marker stamped before that rule has its justifying config
+absent from `sources` by hypothesis, so nothing moves, nothing flags, and the
+sweep below is never entered for it. Saying "whether or not the section was
+flagged" inside a loop over flagged sections is a no-op — the first draft of
+this rule was itself inert, for exactly the failure it describes. Add the
+missing config now. If there is no config you can point at — the row rested
+on a reading of the tool rather than its configuration — then the row was
+never safe, and it becomes `the complete gate`, which is the same answer the
+fill rule gives. An unflagged section never re-reads that rule, so it is
+repeated here.
 
 For each section the check flagged, sweep for the four kinds of decay, in this
 order:
@@ -246,13 +295,27 @@ order:
 1. **Commands that no longer resolve.** A script renamed, a task removed, a
    package manager swapped. Check each row of Development Commands the same way
    you confirmed it originally — declaration first, `--help` at most.
-2. **Paths that no longer exist.** Every path in the Repo Map and the
-   Verification Map. A moved directory silently makes a map worse than no map,
-   because it is confidently wrong.
-3. **`unverified` markers still standing.** Each one is a question someone could
-   not answer then. Try again — the browser may now install, the credential may
-   now exist — and either confirm it or narrow the marker to what is still
-   genuinely unconfirmed.
+2. **Paths that no longer exist, and justifications that no longer hold.**
+   Every path in the Repo Map and the Verification Map — a moved directory
+   silently makes a map worse than no map, because it is confidently wrong.
+   Then the claims those maps rest on, which existence cannot answer: a
+   `nothing` row rests on a config that **still exists but now excludes less**,
+   which invalidates the row while every path in it is still there. Re-read
+   each such config against the row it justifies.
+
+   Note that **not every entry in either map is a path**. A row may route on a
+   kind of change rather than a location — `anything else`, or an installed
+   copy that was edited rather than deleted — and there is nothing to check the
+   existence of. Read those against whether the routing is still true.
+3. **`unverified` markers still standing** — in every section, not only the ones
+   the check flagged, for the reason given above. Each one is a question someone
+   could not answer then. Re-run the *evidence*, under the same limits as the
+   first time: the declaration may now exist, the config file may have been
+   added, the `grep` may now find a caller. Then either confirm it or narrow the
+   marker to what is still genuinely unconfirmed. **Never lift the §2 limits to
+   close one** — if confirming still needs an install, a network call, or
+   anything that mutates, the marker stays, and the note says which command a
+   human should run once to settle it.
 4. **Gotchas whose cause is gone.** A workaround for a bug that has since been
    fixed sends the next agent around an obstacle that is no longer there. Where
    history shows the fix landed, say so rather than deleting the entry outright:
@@ -350,13 +413,32 @@ after:
 ### Self-check before you finish
 
 Run every one of these. They take seconds and each corresponds to a real way this
-edit goes wrong:
+edit goes wrong.
 
-- Every `##` heading appears **exactly once** — no duplicates.
+**Most of these judge the half of the file you may edit**, so something inside
+the managed block that looks like a violation is adoption's shape rather than
+your splice. Three collided with it before that was stated, and the reader
+reaction was the same each time: a check that reports a violation on a correct
+run is one people stop reading, and the next thing it reports is real.
+
+**Two are the exception, and they are the ones the block is *for*.** `exactly
+one agent-skills:end workflow` and `byte-identical` take the block as their
+subject: a violation there is not adoption's shape, it is you having damaged
+the thing you were told not to touch. Read those two literally.
+
+- Every `##` heading **you are responsible for** appears exactly once. Adoption
+  itself can leave two `## Development Workflow` headings — where a project's
+  older workflow section was kept alongside the new block, which it reports as
+  `coexists` — and neither copy is yours to remove.
 - The file contains **exactly one** `agent-skills:end workflow`.
 - The managed block is **byte-identical** to before your edit.
-- No placeholder token survives in the file.
-- Every heading is preceded by a blank line — no `text.## Heading` splices.
+- No placeholder token survives **outside the managed block**. Inside it,
+  `<owner>`, `<type>`, `<base>` and the rest are metavariables in the commands
+  the workflow documents — `git checkout -b <owner>/<type>/<short-description>`
+  — not blanks anyone fills.
+- Every heading **outside the managed block** is preceded by a blank line — no
+  `text.## Heading` splices. Inside it, `## Development Workflow` sits directly
+  under the begin marker: adoption's shape, not a splice.
 - Nothing that was in the file before is gone unless you replaced a generated
   draft. Diff old against new and account for every removed line.
 - **Every section you set out to write is actually in the file, with its body.**

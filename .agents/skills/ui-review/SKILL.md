@@ -79,7 +79,14 @@ flowchart TD
    - ANSI color codes readable on both dark and light terminal backgrounds.
    - Clean stderr vs stdout separation.
 
-### D. Headless / Pure Backend / Internal Refactor (No UI Impact)
+### D. No UI Impact (Headless, Backend, or Nothing That Renders)
+
+A change lands here two ways, and the second is the common one. Either the
+project's UI domain is headless or backend — or nothing this change touches
+renders: every file is documentation, comments, configuration, a build script,
+CI, or a test, **or it is code with no rendered output**. A docs-only change to
+a web application is this case, and so is a backend query layer inside one;
+neither is an internal refactor, and neither needs to be.
 
 - Explicitly record that UI review is **Not Applicable** and state the concrete reason (e.g. *"Changes are strictly internal data structures / CLI flags without visual presentation impact"*). Never skip UI review silently.
 
@@ -103,6 +110,15 @@ When UI review is completed, generate a markdown report:
 | Interactive States & Contrast | [PASS / FAIL / NA] | Loading, error, and hover states verified |
 | Accessibility / Input Ergonomics | [PASS / FAIL / NA] | Keyboard navigability & high contrast |
 
-- **Verdict**: [APPROVED | CHANGES_REQUESTED]
+- **Verdict**: [APPROVED | CHANGES_REQUESTED | N/A]
 - **Actionable Findings**: (List blocking UI issues if any)
 ```
+
+The verdict is `N/A` only when § 2 D applies — the change cannot alter a rendered
+frame, or the project has no UI. Name which one, in a line. A review that ran and
+found nothing is `APPROVED`, and says what it looked at.
+
+**Never borrow `APPROVED` for a change you did not examine.** The caller cannot
+tell the two apart: `slice-and-pr` treats a passed stage and an `N/A` one as the
+same precondition for committing, so a stand-in `APPROVED` is a gate reporting
+success on work it never did — and it reads identically to one that did.
