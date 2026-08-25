@@ -167,15 +167,62 @@ can tell it from the real thing without diffing it against the base.
 
 Two things to know before deleting:
 
-- **Check first.** `git diff <base> <branch>` — empty output means every line is in
-  the base and nothing is lost. If it is not empty, stop and find out why.
+- **Check the paths the branch touched, not the whole tree.** `git diff <base>
+  <branch>` is symmetric: it reports everything the *base* has that the branch
+  lacks as well, so it is non-empty the moment anything else merges ahead of
+  you. Measured after merging two pull requests in sequence: both branches were
+  fully merged and byte-identical on `main`, and the plain diff read **3060** and
+  **499** lines. A rule that says "stop if it is not empty" stops on the second
+  merge of every pair. Restrict the comparison to the files the branch changed,
+  and it answers the question you actually have — is my work in the base?
 - **Squash merges look unmerged.** A squash writes a new commit instead of joining
   histories, so git sees no ancestry and `git branch -d` refuses a branch that is
-  fully merged. After the diff above comes back empty, `-D` is the correct tool
+  fully merged. Once the scoped check above is clean, `-D` is the correct tool
   there, not a force.
 
 ```bash
-git diff main scottdensmore/feat/thing   # expect no output
-git branch -D scottdensmore/feat/thing   # -d refuses after a squash merge
+# Ask, per path the branch changed: does the base already have this content?
+# Never assume `main`. If the remote was added but never fetched this exits 128
+# and leaves `base` empty — the checks below then fail closed, but § A's fallback
+# is better: use what AGENTS.md records under **Base Branch**.
+base=$(git symbolic-ref --short refs/remotes/origin/HEAD)
+git diff --name-only "$base...scottdensmore/feat/thing"     # the paths to check
+git diff --quiet "$base" scottdensmore/feat/thing -- "<one path>"   # silence = base has it
+```
+
+**Do not expand those paths through an unquoted `$(...)`.** A path containing a
+space splits into several pathspecs that match nothing, `git diff --quiet` exits
+**0** on a pathspec that matches nothing, and a `&&` chain then deletes a branch
+whose work was never merged. Measured on a fixture: an unmerged branch touching
+`sub/my notes.md` reported clean. A glob character or a leading `-` in a filename
+does the same. The old whole-tree rule failed *closed* — it stopped too often.
+This one fails *open*, on the single action this skill lists as unrecoverable, so
+check the paths one at a time and quote each.
+
+Two more ways to get it wrong, both silent:
+
+- **No paths at all — check the exit status, not the output.** An empty list
+  and a *failed* enumeration are indistinguishable on stdout: a mistyped base
+  exits 128 and prints nothing, exactly like a branch that changed nothing. One
+  means there is nothing to lose; the other means you have not looked, and the
+  branch may hold unmerged work. Only treat empty as empty when the command also
+  **succeeded**. Anything else is "cannot enumerate safely" — leave the branch.
+  (An empty pathspec list would also degrade to comparing the whole tree, which
+  is the false alarm this check exists to remove.)
+- **Renames.** `--name-only` lists the new path; the base has the old one. Check
+  `git diff --name-status` and treat an `R` as work the base may not hold under
+  that name.
+
+**If any check is not clean, or you cannot enumerate the paths safely, stop and
+leave the branch.** A decoy branch costs someone a minute; a deleted branch with
+unmerged work costs whatever was in it.
+
+```bash
+# Only after every path above came back clean, from a command that succeeded.
+git branch -D scottdensmore/feat/thing        # -d refuses after a squash merge
 git push origin --delete scottdensmore/feat/thing
 ```
+
+**Gate the deletion on the check, do not merely print it.** Running the check and
+then deleting unconditionally is how the guard becomes decoration — which is
+exactly what happened the day this was written.

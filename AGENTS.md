@@ -250,7 +250,7 @@ the commands a subsequent fix could have invalidated.
 | `AGENTS.md` or generated skill/subagent files | Re-run adoption with `python3 scripts/adopt.py --dry-run --keep-existing <repo>` from the `agent-skills` repository; no product test treats repository instructions as its subject |
 | Anything else | The complete gate |
 
-<!-- agent-skills:begin workflow 14818c07 — managed block, edits here are overwritten -->
+<!-- agent-skills:begin workflow 2d838e7f — managed block, edits here are overwritten -->
 ## Development Workflow
 
 Follow these stages in order (governed by the global `agent-workflow-skills`). Scale the pipeline to the
@@ -481,14 +481,25 @@ skipping it is how the file starts describing a project that no longer exists.
       approval from the user in the current conversation: merging (`gh pr merge`),
       force-pushing, rewriting shared history, deleting a branch or tag, dropping
       or migrating data, removing files wholesale, and publishing or deploying.
-      Approval for one of them is not approval for the next.
+      Approval for one of them is not approval for the next — except deleting the
+      branch an approved merge just took, which that merge does as part of itself,
+      not as a second act.
     - **Squash, unless this project says otherwise.** One reviewed slice lands as
       one commit on the base branch; the PR description is what survives, which is
       why it carries the reasoning. A project that requires merge commits or a
       rebase says so in its own section, and that wins.
     - **A merge takes its branch with it.** Once approved and done, delete that
-      branch — remote and local, in the same step, and no other branch. Confirm
-      with `git diff <base> <branch>` first: a squash leaves no ancestry, so
-      `git branch -d` refuses and `-D` is right once that diff is empty. If it is
-      not empty, stop.
+      branch — remote and local, in the same step, and no other branch. Check the
+      paths it touched, not the whole tree: `git diff <base> <branch>` is
+      symmetric and reads non-empty the moment anything merges ahead of you.
+      List them with `git diff --name-only <base>...<branch>`, then check each
+      changed path separately and quoted — expanding them through
+      an unquoted `$(...)` makes a path with a space match nothing, and
+      `--quiet` exits 0 on a pathspec matching nothing, so the delete runs on
+      unmerged work. Judge an empty result by the command's **exit status**, not
+      its output: a mistyped base prints nothing and exits 128, exactly like a
+      branch that changed nothing. A squash leaves no ancestry, so
+      `git branch -d` refuses and `-D` is right once every path is clean.
+      **Gate the deletion on that, and if you cannot check safely, leave the
+      branch.**
 <!-- agent-skills:end workflow -->

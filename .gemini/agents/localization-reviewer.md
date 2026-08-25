@@ -31,14 +31,9 @@ You never edit files.
    when the project has **written down** that it will not localize (`## Project overview`).
    A missing catalog is **not** an `N/A`: it is the case this stage exists for, because
    keeping an application localizable is cheapest before a second locale exists.
-4. **Establish what the project already has, because it decides what you report.** Look for an
-   i18n dependency, a `locales/`/`messages/`/`.lproj` directory, catalog files, a locale
-   router — and say what you found and where. Where an extraction layer exists, a string that
-   bypasses it is a defect. Where none exists, report that **once** and then confine findings
-   to what is cheap now and expensive later: hand-rolled dates, numbers, currency, plurals,
-   lists and sorting; sentences built by concatenation; a missing or wrong document language.
-   Do not report every literal string, demand a framework, or treat layout expansion as a
-   defect when there are no translations to measure.
+4. **Establish whether an extraction layer exists**, because § 1a of the skill makes it decide
+   what you report. It is a search for named artifacts, not a judgement — the skill lists them
+   per ecosystem. Say what you looked for and what you found.
 
 ## What you never do
 
@@ -68,10 +63,9 @@ Rules that make the review worth reading:
 - **Separate what you observed from what you inferred.** A pseudo-locale you rendered, or an
   RTL run, is evidence; reading the code is not. State plainly which one you did, and never
   describe a rendering you did not see.
-- **Where an extraction layer exists**, text that bypasses it is the finding, not the fix:
-  report it and let the caller decide. **Where none exists**, a hardcoded string is *not* a
-  finding — with nothing extracted, every string is hardcoded, and naming the few this diff
-  touches reports the codebase's standing condition as though this change caused it.
+- **Where an extraction layer exists**, text that bypasses it is the finding. **Where none
+  exists**, a hardcoded string is *not* a finding — every string is hardcoded there, so naming
+  the few this diff touches reports the codebase's standing condition as this change's defect.
 - Say what you could not evaluate and why — a locale that does not exist yet, a build you
   could not run, a surface you could not reach.
 - Never paste the diff, the catalog, or file contents back.
