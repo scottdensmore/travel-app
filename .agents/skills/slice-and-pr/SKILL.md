@@ -19,7 +19,7 @@ flowchart TD
     A["1. Inspect & Branch (Fetch base branch, create branch)"] --> B["2. Choose Thin Vertical Slice"]
     B --> C["3. Track Discoveries (Create issues for side bugs / follow-ups)"]
     C --> D["4. Implement & Test (TDD + Reviews)"]
-    D --> E["5. Conventional Commit (After verification & review approval)"]
+    D --> E["5. Conventional Commit (after every stage your track includes)"]
     E --> F["6. Push Branch (git push)"]
     F --> G["7. Open PR via GitHub CLI (gh pr create)"]
     G --> H["8. Watch CI (gh pr checks --watch)"]
@@ -69,9 +69,18 @@ before you commit rather than recorded.
 `VERIFIED` inside it is not the verdict — a partial result you do not pass on is a
 full one you invented.
 
-A stage the triage table excluded is not a missing precondition: the Trivial track
-runs neither review, and a docs-only change skips UI review by the workflow's own
-instruction.
+A stage the triage table excluded is not a missing precondition — the Trivial track
+runs neither review, and a stage that was never owed cannot be missing.
+
+A stage that *applies* and cannot alter what it judges is a different case, and it
+is not excluded: a docs-only change on the Feature track still owes UI review an
+`N/A`, which the rule at the top of this section already accepts. It is a verdict,
+not a skip.
+
+The **Single fix** track is where the two are hardest to tell apart, because its
+stages 7 and 8 are parenthesized. Parentheses are not exclusion: the workflow says
+a stage in them "applies only when its own entry says it does", and those entries
+end in `N/A` rather than in silence. So that track owes the same line.
 
 ```text
 <type>(<scope>): <imperative summary>
@@ -106,13 +115,31 @@ Use Git for branch transport and the GitHub CLI (`gh`) for GitHub operations:
   test was added, say what it would have caught. This matters more under a squash
   (§ G): the intermediate commits do not survive, so the description is the only
   record of how the change was reasoned about.
-- **A gate that did not run makes it a draft.** Every applicable stage having
-  passed is what "ready for review" means. A stage marked `NOT RUN` — a subagent
-  you invoked and could not reach, or one the user waived — means
-  `gh pr create --draft` instead, recording the subagent, the host, the exact
-  invocation and the exact error where a reviewer cannot miss them. A gate you
-  could not run never blocks the work, and is never described as passed.
-  Publish the PR once the stage has actually run.
+- **A gate that did not run is named in the title.** A stage marked `NOT RUN` — a
+  subagent you invoked and could not reach, or one the user waived — opens
+  **ready for review** with `[NOT RUN: <stage>]` leading the title and a
+  `## NOT RUN` section giving the subagent, the host, the exact invocation and the
+  exact error. Drop the prefix once the stage has actually run.
+
+  **A draft is what a user asks for, never what an unrun gate forces.** A draft
+  hides the change from the people best placed to say whether the missing gate
+  mattered, and reads as "not finished" when the work is finished and one gate is
+  not. The marker says the true thing instead, in the one place a reviewer cannot
+  scroll past. A gate you could not run never blocks the work, and is never
+  described as passed.
+
+  **Remove the prefix before merging.** It announces an unrun gate, and merging is
+  the moment that stops being true — or the moment someone decides it no longer
+  matters. Whether it also reaches the commit subject depends on a repository
+  setting: `squash_merge_commit_title` is `COMMIT_OR_PR_TITLE` by default, which
+  takes the *commit's* subject when the pull request has exactly one commit and
+  the title only when it has more. Since one reviewed slice lands as one commit,
+  the prefix usually never reaches the subject and a `commitlint` step never sees
+  it — so do not rely on that as the reason. On a multi-commit branch, or where
+  the setting is `PR_TITLE`, it does reach it.
+
+  This is a *stage*, not a command. A verifier returning `VERIFIED (partial)` has
+  passed its stage; its unrun commands go in the description and earn no prefix.
 
 ```bash
 # 1. Push Branch
@@ -121,16 +148,18 @@ git push -u origin <branch>
 # 2. Create Pull Request — every applicable gate passed
 gh pr create --title "<type>(<scope>): <summary>" --body "<why this change was made, what was verified, and any command the verifier could not run>"
 
-# 2b. Or, with a stage that could not run
-gh pr create --draft --title "<type>(<scope>): <summary>" --body "<the above, plus a NOT RUN section naming the subagent, host, invocation and error>"
+# 2b. Or, with a stage that could not run — still ready for review
+gh pr create --title "[NOT RUN: <stage>] <type>(<scope>): <summary>" --body "<the above, plus a ## NOT RUN section naming the subagent, host, invocation and error>"
 
 # 3. Monitor CI status
 gh pr checks --watch
 ```
 
 - Never bypass failing or pending CI checks.
-- Open ready-for-review PRs whenever the gates allow it: a draft is what an
-  unrun gate forces, or what the user asked for, never a way to lower the bar.
+- A PR opens ready for review unless the user asks for a draft. An unrun gate is
+  never the reason: it is disclosed in the title and the description, never by
+  withholding the PR — the reviewer decides what the gap is worth, which they
+  cannot do if they never see it.
 
 ### F. Actions That Require Explicit Approval
 
@@ -142,6 +171,17 @@ gh pr merge --squash --delete-branch   # merging
 git push --force / --force-with-lease  # rewriting published history
 gh pr close / gh issue close           # closing others' work
 ```
+
+**These three are not the whole list** — they are the ones you reach for most
+often. The workflow's own **Stop there and report** bullet is the boundary, and it
+names merging, force-pushing, rewriting shared history, deleting a branch or tag,
+closing an issue or pull request, dropping or migrating data, removing files
+wholesale, and publishing or deploying.
+
+**With one carve-out, and it is the one you will meet.** Deleting the branch an
+approved merge just took is part of that merge, not a second act needing its own
+approval — see § G. Read the three commands above as the shell you would type, not
+as the edge of what needs asking.
 
 Approval given for one PR does not carry to the next. When work is ready, report the
 PR URL and CI status, then wait.

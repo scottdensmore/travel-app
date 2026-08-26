@@ -236,8 +236,26 @@ Where you cannot run it, say plainly that the finding comes from reading the cod
 rather than from running it. That distinction is the same one the UI reviewer
 owes, and for the same reason: only running it tells you what it does.
 
+**"Where the project can render one" includes the host you are running on.** This
+reviewer declares `sandbox_mode: read-only`. Where a host turns that into a
+filesystem sandbox, writes are denied everywhere including the temporary
+directory; where it turns it into a `readonly` flag, state-changing shell commands
+are denied outright. Generating a pseudo-locale and building the application are
+each one of those, so on such a host the render is unavailable **by construction**
+— not a step you skipped, and not a thing to keep retrying. Name the host and move
+on. On a host that denies only the file-editing tools, a render that needs no
+change to the project's files — a pseudo-locale the build already supports, a
+translation that ships, an RTL locale you can select — is available, and skipping
+it is a choice you have to justify. One that would first require writing a catalog
+or a fixture into the worktree is **not** yours to make: you never edit files, and
+a reviewer that leaves artifacts behind hands its caller a tree it did not change.
+Report that the render needs them, and review by reading. The rule above holds
+either way; what changes is which half of it you can satisfy.
+
 Report what you could not evaluate and why — a locale that does not exist yet, a
-build you could not run, a surface you could not reach.
+build you could not run, a surface you could not reach. Being unable to render is
+never by itself an `N/A`: § 1 decides whether this stage applies, and it decides
+that from the change, not from what you were able to execute.
 
 ---
 
@@ -262,6 +280,30 @@ build you could not run, a surface you could not reach.
 With no extraction layer, `Extraction` is `NA` for per-string reporting — say so
 once in Observations — while `Formatting` and `Non-rendered surfaces` still
 apply, and `Rendered consequence` is `NA` because there is nothing to measure.
+
+Where the render was unavailable (§ 3), the two statuses are not symmetric, and
+that is what decides every row: **a `FAIL` needs one defect you can stand behind;
+a `PASS` needs the whole row.** So reading can produce a `FAIL` on a row it can
+never produce a `PASS` on, and a row reading settles only in part is `NA` with the
+unreached half named in Observations.
+
+`Rendered consequence` can never be `PASS` from reading — *survives +30% text and
+RTL* is a measurement, and a project that already ships two locales is exactly the
+case where reading makes it look answerable. **Where the project has an extraction
+layer**, it is still a `FAIL` where the diff settles one: a physical `margin-left`
+where a logical property belongs, a fixed `height` around translated text. Where
+it has none, the row stays `NA` and those observations stay a single note, exactly
+as § 1a says — there are no translations, so there is still nothing to measure,
+and the render being unavailable changes nothing about that.
+
+`Extraction` and `Formatting` are settled by reading and keep whatever the
+paragraph above gives them, which for `Extraction` in a project with no extraction
+layer is still `NA`. `Non-rendered surfaces` splits by where the text lives rather
+than by category: what is in the source settles — `lang`, titles, accessible
+names, server-side validation strings, log messages, and the *template* behind an
+email — while what only exists once generated does not, which is the sent email,
+the rendered PDF and the export. Settle what you can read and mark the rest. Name
+the host in `Evidence / Run Method`.
 
 - **Verdict**: [APPROVED | CHANGES_REQUESTED | N/A]
 - **Actionable Findings**: (with `file:line`, most severe first — or None)

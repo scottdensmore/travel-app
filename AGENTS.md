@@ -250,7 +250,7 @@ the commands a subsequent fix could have invalidated.
 | `AGENTS.md` or generated skill/subagent files | Re-run adoption with `python3 scripts/adopt.py --dry-run --keep-existing <repo>` from the `agent-skills` repository; no product test treats repository instructions as its subject |
 | Anything else | The complete gate |
 
-<!-- agent-skills:begin workflow 2d838e7f — managed block, edits here are overwritten -->
+<!-- agent-skills:begin workflow e8785e5e — managed block, edits here are overwritten -->
 ## Development Workflow
 
 Follow these stages in order (governed by the global `agent-workflow-skills`). Scale the pipeline to the
@@ -307,8 +307,8 @@ not a second opinion, whatever it is labelled.
 **Unavailable is observed, never assumed.** A subagent is unavailable only after
 you invoked it and the invocation failed. Then the stage is `NOT RUN`: record
 the subagent, the host, the exact invocation and the exact error, both in your
-report and in the pull request description, and open that pull request as a
-draft. Nothing is blocked by a gate you could not run, and nothing you could not
+report and in the pull request, and lead the title with `[NOT RUN: <stage>]`.
+Nothing is blocked by a gate you could not run, and nothing you could not
 run is ever described as passed. A user may waive a stage outright; quote the
 waiver and mark the stage the same way.
 
@@ -344,8 +344,11 @@ skipping it is how the file starts describing a project that no longer exists.
 
 1. **Inspect & Branch**: Inspect `git status`, the current branch, and every
    applicable instruction file before touching anything. Note unrelated staged,
-   unstaged, and untracked work so you can preserve it. Fetch the base branch
-   (`git fetch origin main`) and create a dedicated branch:
+   unstaged, and untracked work so you can preserve it. The base branch was
+   `main` when this file was generated; confirm it with `git symbolic-ref
+   --short refs/remotes/origin/HEAD`, which answers `origin/<base>` — branch from
+   that, and fetch the bare name (`git fetch origin main`). Create a
+   dedicated branch:
    `git checkout -b <owner>/<type>/<short-description> origin/main`.
    `<owner>` is your GitHub login (`gh api user --jq .login`); `<type>` is one of
    `feat`, `fix`, `refactor`, `chore`, `test`, `docs`. Never commit to `main`.
@@ -414,7 +417,8 @@ skipping it is how the file starts describing a project that no longer exists.
      state entering review" is unsatisfiable once a finding is fixed.
    - **A command is `NOT RUN` only after it ran and failed for a reason no code
      change resolves** — not before it was tried, and not because it looked slow or
-     unlikely to matter. Name every one in the pull request description.
+     unlikely to matter. Name every one in the description — a command, not
+     the stage, which passed, and earning no title prefix.
    - Some findings are environmental and no code change resolves them. Resolving
      those means naming them precisely — what ran, what did not, and why.
 7. **UI Review (`ui-reviewer` → `ui-review`)**:
@@ -422,18 +426,19 @@ skipping it is how the file starts describing a project that no longer exists.
    - **Check whether this stage applies before delegating.** It applies only when
      the change can alter something a person sees or interacts with. A change
      confined to documentation, comments, configuration, build scripts, CI, tests,
-     or code with no rendered output does not qualify — skip the stage, record one
-     line saying which of those it was, and move on. A docs-only or test-only diff
-     never needs a UI review.
+     or code with no rendered output does not qualify — report `N/A` in one line
+     naming which of those it was, and move on. That is **Not applicable** above,
+     not a skip: it returns a verdict.
    - When it does apply, audit layout, visual hierarchy, contrast (WCAG AA),
      interaction states, and accessibility according to the project's UI domain.
-   - A project whose UI domain is headless or backend skips this stage every time.
+   - A project whose UI domain is headless or backend is `N/A` every time.
    - Never invent findings to justify the stage.
 8. **Localization Review (`localization-reviewer` → `localization-review`)**:
-   - Runs after UI review, over the same surface, asking the question UI review
-     does not: not "does this look right" but "could this ship in another
-     language without a rewrite". One rendered English frame answers the first
-     and hides the second.
+   - Runs after UI review — over the same surface where there was one, and on its
+     own where UI review was `N/A`: a headless project still has server-side
+     messages and email templates. It asks what UI review does not: not "does this
+     look right" but "could this ship in another language without a rewrite". One
+     rendered English frame answers the first and hides the second.
    - **Check whether this stage applies before delegating.** It applies when the
      change adds or alters user-visible text, or the formatting of a date, number,
      currency, name, or list. `N/A` only for documentation, comments, config,
@@ -471,16 +476,18 @@ skipping it is how the file starts describing a project that no longer exists.
       when the user explicitly asks for a local-only or commit-only result. Creating
       a PR does not authorize a merge or any action named under **Stop there and
       report**.
-    - **A gate that did not run makes it a draft.** A stage marked `NOT RUN` means
-      `gh pr create --draft` instead, with the subagent, the host, the exact
-      invocation and the exact error in the description. Publish it once the stage
-      has actually run.
+    - **A gate that did not run is named in the title.** A stage marked `NOT RUN`
+      opens ready for review with `[NOT RUN: <stage>]` leading the title and a
+      `## NOT RUN` section giving the subagent, the host, the exact invocation and
+      the exact error. Not a draft — a draft is what a user asks for, never what an
+      unrun gate forces. Remove the prefix before merging: it announces an unrun gate.
     - **The description carries the evidence** — why the change exists, what it
       changes, and the command you actually ran with its actual result.
     - **Stop there and report.** Anything you cannot take back needs explicit
       approval from the user in the current conversation: merging (`gh pr merge`),
-      force-pushing, rewriting shared history, deleting a branch or tag, dropping
-      or migrating data, removing files wholesale, and publishing or deploying.
+      force-pushing, rewriting shared history, deleting a branch or tag, closing
+      an issue or pull request, dropping or migrating data, removing files
+      wholesale, and publishing or deploying.
       Approval for one of them is not approval for the next — except deleting the
       branch an approved merge just took, which that merge does as part of itself,
       not as a second act.
