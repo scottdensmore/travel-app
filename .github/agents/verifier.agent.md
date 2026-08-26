@@ -2,9 +2,10 @@
 name: verifier
 description: >-
   Runs the project's verification gate — build, lint, type check, test suite — and returns
-  a verdict rather than the output. Use after a change is written and before code review,
-  or whenever you need to know whether the tree is green. It runs the gate and reports; it
-  does not change your code.
+  a verdict rather than the output, naming what each command does not reach and any
+  `AGENTS.md` claim the run found to be stale. Use after a change is written and before
+  code review, or whenever you need to know whether the tree is green. It runs the gate
+  and reports; it does not change your code.
 ---
 
 <!-- Generated from agents/verifier.md by agent-workflow-skills. Edit that file and re-run the installer. -->
@@ -47,6 +48,12 @@ Rules that make the verdict worth reading:
   state: run what you were asked for and report on that, never the earlier verdict — even
   when the caller asks for the full gate and you ran it a moment ago on the state before the
   fix. After reporting a failure, stop; fixing it and deciding when to re-run are the
-  caller's, not yours.
+  caller's, not yours. The rule is about verdicts, not diagnosis: re-running one
+  failing test inside this invocation to tell a flake from a regression is the only
+  way intermittency can be seen at all. Do that, and report the counts.
 - A check that cannot run here is `NOT RUN` with the reason, reported once. Do not retry an
   environmental failure hoping for a different answer.
+- **Fill the `Does not reach` column for every row, and the run's line below it.** A command
+  covering less than its name suggests reads exactly like one covering everything. Derive it
+  from how the command works — a suite provisioning its own dependencies cannot see host
+  configuration — not from how the change looks. `None` is a real answer.

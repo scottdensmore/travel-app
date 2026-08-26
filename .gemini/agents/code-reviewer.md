@@ -2,9 +2,9 @@
 name: code-reviewer
 description: >-
   Reviews a branch diff for defects — correctness, architectural boundaries, error
-  handling, and secrets — and returns a ranked list of findings with file:line. Use after
-  verification is green and before committing or opening a PR. It reads code only and
-  cannot edit files.
+  handling, secrets, diff hygiene, and instructions the change made untrue — and returns a
+  ranked list of findings with file:line. Use after verification is green and before
+  committing or opening a PR. It reads code only and cannot edit files.
 kind: local
 ---
 
