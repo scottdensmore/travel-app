@@ -25,8 +25,8 @@ const mockSave = saveFlightScheduleAction as jest.Mock;
 function fill() {
     fireEvent.change(screen.getByLabelText(/Flight Number/i), { target: { value: 'MA900' } });
     fireEvent.change(screen.getByLabelText(/Airline/i), { target: { value: 'Mona Airways' } });
-    fireEvent.change(screen.getByLabelText(/From \(Origin\)/i), { target: { value: 'New York' } });
-    fireEvent.change(screen.getByLabelText(/To \(Destination\)/i), { target: { value: 'Boston' } });
+    fireEvent.change(screen.getByLabelText(/From \(Origin\)/i), { target: { value: 'Seattle, USA' } });
+    fireEvent.change(screen.getByLabelText(/To \(Destination\)/i), { target: { value: 'Detroit, USA' } });
     // The form checks the rest of the required fields before it calls the
     // action, so they have to be present for the server's answer to be reached.
     fireEvent.change(screen.getByLabelText(/Departure \(HH:MM\)/i), { target: { value: '08:00' } });
@@ -42,10 +42,10 @@ describe('flight schedule form field errors', () => {
             ok: false,
             error: {
                 code: 'VALIDATION_ERROR',
-                message: 'No airport is known for "New York". No airport is known for "Boston".',
+                message: 'Origin airport route is unavailable. Destination airport route is unavailable.',
                 fields: {
-                    from: ['No airport is known for "New York". Use a place the airline flies from, such as "Seattle, USA".'],
-                    to: ['No airport is known for "Boston". Use a place the airline flies to, such as "Detroit, USA".'],
+                    from: ['Origin airport route is unavailable.'],
+                    to: ['Destination airport route is unavailable.'],
                 },
             },
         });
@@ -61,8 +61,8 @@ describe('flight schedule form field errors', () => {
 
         await waitFor(() => expect(origin).toHaveAttribute('aria-invalid', 'true'));
         expect(destination).toHaveAttribute('aria-invalid', 'true');
-        expect(origin).toHaveAccessibleDescription(/No airport is known for "New York"/);
-        expect(destination).toHaveAccessibleDescription(/No airport is known for "Boston"/);
+        expect(origin).toHaveAccessibleDescription(/Origin airport route is unavailable/);
+        expect(destination).toHaveAccessibleDescription(/Destination airport route is unavailable/);
     });
 
     it('takes the caller to the first field they have to change', async () => {
@@ -81,7 +81,7 @@ describe('flight schedule form field errors', () => {
         fireEvent.click(screen.getByRole('button', { name: /Create Schedule/i }));
         await waitFor(() => expect(screen.getByLabelText(/From \(Origin\)/i)).toHaveAttribute('aria-invalid', 'true'));
 
-        fireEvent.change(screen.getByLabelText(/From \(Origin\)/i), { target: { value: 'New York, USA' } });
+        fireEvent.change(screen.getByLabelText(/From \(Origin\)/i), { target: { value: 'Chicago, USA' } });
 
         expect(screen.getByLabelText(/From \(Origin\)/i)).not.toHaveAttribute('aria-invalid');
         // The other field is still wrong and still says so.

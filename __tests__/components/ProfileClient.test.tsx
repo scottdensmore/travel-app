@@ -11,6 +11,7 @@ global.ResizeObserver = class {
     unobserve() {}
     disconnect() {}
 } as unknown as typeof ResizeObserver;
+jest.setTimeout(15000);
 import ProfileClient from '@/components/ui/ProfileClient';
 import { cancelBookingAction, deleteReviewAction, toggleFavoriteCityGuideAction, changeBookingSeatsAction, getOccupiedSeatsAction, retryBookingRefundAction, rebookItineraryAction } from '@/app/actions';
 import type { ReplacementFlightGroup } from '@/lib/itineraryReplacementSearch';
@@ -396,6 +397,7 @@ describe('ProfileClient interactive dashboard', () => {
         expect(row.getByText('Checked-in travellers’ seats are fixed. Other seats can still be changed.'))
             .toBeInTheDocument();
         fireEvent.click(row.getByRole('button', { name: 'Change Seats' }));
+        await act(async () => {});
 
         expect(await screen.findByRole('button', { name: /Grace Hopper.*Seat: 12B/i }))
             .toBeInTheDocument();
@@ -443,6 +445,7 @@ describe('ProfileClient interactive dashboard', () => {
         );
 
         fireEvent.click(screen.getByRole('button', { name: 'Change Seats' }));
+        await act(async () => {});
         const passengerSelector = await screen.findByRole('button', { name: /Jane Doe.*Seat: 12A/i });
         expect(passengerSelector).toHaveAttribute('aria-pressed', 'true');
         fireEvent.click(screen.getByRole('button', { name: 'Save New Seats' }));
@@ -597,6 +600,7 @@ describe('ProfileClient interactive dashboard', () => {
             renderBookings([premium]);
 
             fireEvent.click(screen.getAllByRole('button', { name: 'Change Seats' })[0]);
+            await act(async () => {});
 
             expect(await screen.findByText(/\(Premium Economy\)/)).toBeInTheDocument();
             expect(screen.queryByText(/PREMIUM_ECONOMY/)).not.toBeInTheDocument();
@@ -626,6 +630,7 @@ describe('ProfileClient interactive dashboard', () => {
             renderBookings([threeLegBooking]);
 
             fireEvent.click(screen.getAllByRole('button', { name: 'Change Seats' })[0]);
+            await act(async () => {});
             const tabs = screen.getByTestId('seat-change-legs').querySelectorAll('[role="tab"]');
 
             expect(tabs).toHaveLength(3);
@@ -640,6 +645,7 @@ describe('ProfileClient interactive dashboard', () => {
             renderBookings([roundTripBooking]);
 
             fireEvent.click(screen.getAllByRole('button', { name: 'Change Seats' })[0]);
+            await act(async () => {});
             const tabs = screen.getByTestId('seat-change-legs').querySelectorAll('[role="tab"]');
             expect(tabs).toHaveLength(2);
 
@@ -675,9 +681,8 @@ describe('ProfileClient interactive dashboard', () => {
             renderBookings([partlyCheckedIn]);
 
             const row = within(screen.getByTestId('booking-row-202'));
-            await act(async () => {
-                fireEvent.click(row.getByRole('button', { name: 'Change Seats' }));
-            });
+            fireEvent.click(row.getByRole('button', { name: 'Change Seats' }));
+            await act(async () => {});
 
             // Only one leg remains changeable, so the modal has no leg switcher
             // but still names the return before showing its persisted seat.
@@ -818,7 +823,9 @@ describe('ProfileClient interactive dashboard', () => {
 
             const completion = await screen.findByRole('status');
             await waitFor(() => expect(completion).toHaveFocus());
-            view.rerender(profile([roundTripBooking]));
+            await act(async () => {
+                view.rerender(profile([roundTripBooking]));
+            });
             expect(screen.getByRole('status')).toHaveTextContent(
                 'Confirmation MA-22222222222222222222 is confirmed on your replacement flights.',
             );

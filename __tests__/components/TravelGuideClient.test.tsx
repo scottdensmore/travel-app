@@ -103,6 +103,7 @@ describe('TravelGuideClient', () => {
         // markers over nothing, with no `.guide-map-state` element at all —
         // ten unexplained dots on a black gradient.
         mockGeographies = [];
+        global.fetch = jest.fn().mockReturnValue(new Promise(() => {}));
 
         const { container } = render(
             <TravelGuideClient cities={sampleCities} initialFavorites={[]} />
@@ -224,8 +225,9 @@ describe('TravelGuideClient', () => {
         expect(serverHtml).not.toContain('data-testid="map"');
     });
 
-    it('renders the map, city lists, and default city sidebar details', () => {
+    it('renders the map, city lists, and default city sidebar details', async () => {
         render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
+        await screen.findByTestId('geography');
         
         expect(screen.getByTestId('map')).toBeInTheDocument();
         
@@ -240,8 +242,9 @@ describe('TravelGuideClient', () => {
         expect(screen.getByText('Great music history!')).toBeInTheDocument();
     });
 
-    it('shows one guide at a time, for the city that is selected', () => {
+    it('shows one guide at a time, for the city that is selected', async () => {
         render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
+        await screen.findByTestId('geography');
 
         // Every city used to mount its own panel, all absolutely positioned at
         // the same coordinates. Only the selected one exists now (#78).
@@ -257,8 +260,9 @@ describe('TravelGuideClient', () => {
             .toHaveAttribute('aria-pressed', 'true');
     });
 
-    it('carries the review draft with the city it was typed for', () => {
+    it('carries the review draft with the city it was typed for', async () => {
         render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
+        await screen.findByTestId('geography');
 
         // One shared piece of state drove every mounted form, so a draft for one
         // city was the draft for all of them.
@@ -274,6 +278,7 @@ describe('TravelGuideClient', () => {
         mockToggleFavorite.mockResolvedValue({ isFavorite: true });
 
         render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
+        await screen.findByTestId('geography');
 
         // Toggle favorite for Detroit (id: 1)
         // The buttons carry a label now, rather than leaving a screen reader to
@@ -281,6 +286,9 @@ describe('TravelGuideClient', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Add Detroit to favourites' }));
 
         expect(mockToggleFavorite).toHaveBeenCalledWith(1);
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: 'Remove Detroit from favourites' })).not.toBeDisabled();
+        });
 
         // Now mock failure
         mockToggleFavorite.mockRejectedValue(new Error('Unauthorized'));
@@ -306,6 +314,7 @@ describe('TravelGuideClient', () => {
         });
 
         render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
+        await screen.findByTestId('geography');
         const favoriteButton = screen.getByRole('button', { name: 'Add Detroit to favourites' });
         fireEvent.click(favoriteButton);
 
@@ -324,6 +333,7 @@ describe('TravelGuideClient', () => {
         (useRouter as jest.Mock).mockReturnValue({ refresh: mockRefresh });
 
         render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
+        await screen.findByTestId('geography');
 
         // Find review input inside highlighted section (Detroit)
         const reviewInput = screen.getByLabelText('Your review');
@@ -353,8 +363,9 @@ describe('TravelGuideClient', () => {
 
 
 
-    it('returns to the list, and says what to do next', () => {
+    it('returns to the list, and says what to do next', async () => {
         render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
+        await screen.findByTestId('geography');
 
         fireEvent.click(screen.getByRole('button', { name: '← All destinations' }));
 
@@ -363,8 +374,9 @@ describe('TravelGuideClient', () => {
         expect(screen.getByText(/Choose a destination/i)).toBeInTheDocument();
     });
 
-    it('selects a city from the keyboard', () => {
+    it('selects a city from the keyboard', async () => {
         render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
+        await screen.findByTestId('geography');
 
         // The map answered only to a mouse, which made it a decoration for
         // anyone not using one.
@@ -377,8 +389,9 @@ describe('TravelGuideClient', () => {
         expect(parisMarker).toHaveAttribute('aria-pressed', 'true');
     });
 
-    it('says so when there are no guides at all', () => {
+    it('says so when there are no guides at all', async () => {
         render(<TravelGuideClient cities={[]} initialFavorites={[]} />);
+        await screen.findByTestId('geography');
 
         expect(screen.getByText('No destination guides yet.')).toBeInTheDocument();
         expect(screen.queryByRole('region')).not.toBeInTheDocument();
@@ -389,6 +402,7 @@ describe('TravelGuideClient', () => {
         mockToggleFavorite.mockResolvedValue({ isFavorite: true });
         
         render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
+        await screen.findByTestId('geography');
 
         // 1. Marker click
         const markers = screen.getAllByTestId('marker');
@@ -404,6 +418,9 @@ describe('TravelGuideClient', () => {
         const cardFavoriteButton = screen.getByRole('button', { name: '🤍 Favorite' });
         fireEvent.click(cardFavoriteButton);
         expect(mockToggleFavorite).toHaveBeenCalledWith(2);
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: '❤️ Unfavorite' })).not.toBeDisabled();
+        });
 
         // 4. Ignore empty review submit
         const submitButton = screen.getByRole('button', { name: 'Submit Review' });
@@ -448,24 +465,32 @@ describe('the travel guide map, as assistive technology and a keyboard meet it',
 
 describe('selecting a city', () => {
     let scrollIntoView: jest.SpyInstance;
+    let realFetch: typeof fetch;
 
     beforeEach(() => {
+        realFetch = global.fetch;
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            json: () => Promise.resolve({ type: 'Topology', objects: {} }),
+        }) as unknown as typeof fetch;
         scrollIntoView = jest
             .spyOn(Element.prototype, 'scrollIntoView')
             .mockImplementation(() => {});
     });
 
     afterEach(() => {
+        global.fetch = realFetch;
         scrollIntoView.mockRestore();
     });
 
-    it('brings its panel into view, because stacked it is a screen away', () => {
+    it('brings its panel into view, because stacked it is a screen away', async () => {
         render(
             <TravelGuideClient
                 cities={sampleCities as never}
                 initialFavorites={[]}
             />
         );
+        await screen.findByTestId('geography');
 
         fireEvent.click(screen.getByRole('button', { name: 'Paris, France' }));
 
@@ -479,13 +504,14 @@ describe('selecting a city', () => {
         );
     });
 
-    it('reveals the panel even when the city is already selected', () => {
+    it('reveals the panel even when the city is already selected', async () => {
         render(
             <TravelGuideClient
                 cities={sampleCities as never}
                 initialFavorites={[]}
             />
         );
+        await screen.findByTestId('geography');
 
         // Detroit is selected on mount, so this is the most likely first tap on a
         // phone -- and it sets identical state, which React bails out of. An effect
@@ -498,13 +524,14 @@ describe('selecting a city', () => {
         );
     });
 
-    it('moves focus to the panel it scrolled to', () => {
+    it('moves focus to the panel it scrolled to', async () => {
         render(
             <TravelGuideClient
                 cities={sampleCities as never}
                 initialFavorites={[]}
             />
         );
+        await screen.findByTestId('geography');
 
         fireEvent.click(screen.getByRole('button', { name: 'Paris, France' }));
 
@@ -515,13 +542,14 @@ describe('selecting a city', () => {
         expect(screen.getByRole('region', { name: 'Paris guide' })).toHaveFocus();
     });
 
-    it('does not scroll the page on load', () => {
+    it('does not scroll the page on load', async () => {
         render(
             <TravelGuideClient
                 cities={sampleCities as never}
                 initialFavorites={[]}
             />
         );
+        await screen.findByTestId('geography');
 
         // A city is selected on mount, so an effect keyed only on the selection
         // fires immediately and scrolled the page under a customer who had just
@@ -529,13 +557,14 @@ describe('selecting a city', () => {
         expect(scrollIntoView).not.toHaveBeenCalled();
     });
 
-    it('does not scroll when the selection is cleared', () => {
+    it('does not scroll when the selection is cleared', async () => {
         render(
             <TravelGuideClient
                 cities={sampleCities as never}
                 initialFavorites={[]}
             />
         );
+        await screen.findByTestId('geography');
 
         fireEvent.click(screen.getByRole('button', { name: 'Paris, France' }));
         scrollIntoView.mockClear();

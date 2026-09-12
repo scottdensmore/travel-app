@@ -687,7 +687,7 @@ test.describe('Flight Booking Journey', () => {
     await page.click('button:has-text("Review Booking →")');
     await expect(page.locator('h2:has-text("Select Your Seats")')).toBeVisible();
     // Not [role="alert"]: Next's route announcer is also one.
-    await expect(page.getByText(/Please select a returning seat/i)).toBeVisible();
+    await expect(page.getByText(/Please select a seat on the return flight/i)).toBeVisible();
     await expect(legTabs.nth(1)).toHaveAttribute('aria-selected', 'true');
 
     // Deliberately not the first free seat: both legs are empty and identically

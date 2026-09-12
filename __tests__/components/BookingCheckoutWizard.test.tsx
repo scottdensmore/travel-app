@@ -1287,7 +1287,7 @@ describe('BookingCheckoutWizard', () => {
             // Advancing again now stops on the missing seat rather than
             // silently asking for the dead one a second time.
             fireEvent.click(screen.getByText('Review Booking →'));
-            expect(await screen.findByRole('alert')).toHaveTextContent(/returning seat for Passenger 1/i);
+            expect(await screen.findByRole('alert')).toHaveTextContent(/seat on the return flight for Passenger 1/i);
         });
 
         it('will not advance while a leg is unseated, and points at the leg that needs one', async () => {
@@ -1300,7 +1300,7 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByText('Review Booking →'));
 
             expect(screen.getByText('Select Your Seats')).toBeInTheDocument();
-            expect(screen.getByRole('alert')).toHaveTextContent(/returning seat for Passenger 1/i);
+            expect(screen.getByRole('alert')).toHaveTextContent(/seat on the return flight for Passenger 1/i);
             await waitFor(() =>
                 expect(screen.getByRole('tab', { name: /Returning/ })).toHaveAttribute('aria-selected', 'true')
             );

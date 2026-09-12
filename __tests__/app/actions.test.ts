@@ -2146,7 +2146,7 @@ describe('changeBookingSeatsAction', () => {
 
         await expect(changeBookingSeatsAction(1, [
             { passengerId: 'p-1', legId: 50, seatNumber: '1A' }
-        ])).rejects.toThrow('Seat 1A is not available for ECONOMY on this flight.');
+        ])).rejects.toThrow('Seat 1A is not an Economy seat on this flight.');
 
         expect(mockTx.passenger.update).not.toHaveBeenCalled();
     });
@@ -3165,7 +3165,7 @@ describe('admin flight schedule actions', () => {
                     premiumEconomyRows: 1,
                     economyRows: 5,
                     seatPattern: 'ABC-DEF'
-                })).rejects.toThrow('Occupied seat 30F is not available for ECONOMY in the requested layout.');
+                })).rejects.toThrow('Occupied seat 30F is not available for Economy in the requested layout.');
 
                 expect(mockTx.flight.update).not.toHaveBeenCalled();
                 // Seats held on the flight, from whichever leg holds them, so a
@@ -3207,7 +3207,7 @@ describe('admin flight schedule actions', () => {
                     economyRows: 19,
                     seatPattern: 'ABC-DEF'
                 })).rejects.toThrow(
-                    'Occupied seat 11A is not available for ECONOMY in the requested layout.'
+                    'Occupied seat 11A is not available for Economy in the requested layout.'
                 );
 
                 expect(mockTx.flight.update).not.toHaveBeenCalled();

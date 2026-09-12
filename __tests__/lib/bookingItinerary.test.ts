@@ -3,6 +3,7 @@ import {
     bookingFlights,
     cabinLabel,
     legDirectionLabel,
+    legFlightClause,
     outboundFlight,
     passengersSeatedOnLeg,
     seatLabel,
@@ -145,6 +146,33 @@ describe('booking itinerary', () => {
         it('numbers every leg between the first and last of a longer trip', () => {
             expect([0, 1, 2, 3, 4].map((index) => legDirectionLabel(index, 5))).toEqual([
                 'Departing', 'Leg 2', 'Leg 3', 'Leg 4', 'Returning',
+            ]);
+        });
+    });
+
+    describe('legFlightClause', () => {
+        it('gives empty string for a one-way trip', () => {
+            expect(legFlightClause(0, 1)).toBe('');
+        });
+
+        it('distinguishes departing and return flights on a round trip', () => {
+            expect(legFlightClause(0, 2)).toBe(' on the departing flight');
+            expect(legFlightClause(1, 2)).toBe(' on the return flight');
+        });
+
+        it('numbers middle legs on multi-leg trips', () => {
+            expect(legFlightClause(0, 3)).toBe(' on the departing flight');
+            expect(legFlightClause(1, 3)).toBe(' on leg 2');
+            expect(legFlightClause(2, 3)).toBe(' on the return flight');
+        });
+
+        it('handles longer multi-leg journeys', () => {
+            expect([0, 1, 2, 3, 4].map((index) => legFlightClause(index, 5))).toEqual([
+                ' on the departing flight',
+                ' on leg 2',
+                ' on leg 3',
+                ' on leg 4',
+                ' on the return flight',
             ]);
         });
     });
