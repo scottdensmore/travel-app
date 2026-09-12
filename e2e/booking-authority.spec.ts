@@ -56,7 +56,7 @@ test.describe('Authoritative booking persistence', () => {
     const passenger = {
       firstName: 'Race', lastName: 'Traveler', dateOfBirth: '1990-01-01',
       passportNumber: 'RACE123', gender: 'Other', seatNumbers: ['1A'],
-      cabinClass: 'ECONOMY'
+      cabinClass: 'ECONOMY' as const
     };
 
     const requests = [
@@ -138,7 +138,7 @@ test.describe('Authoritative booking persistence', () => {
       passengers: [{
         firstName: 'Repeat', lastName: 'Traveler', dateOfBirth: '1990-01-01',
         passportNumber: 'REPEAT123', gender: 'Other', seatNumbers: ['1A'],
-        cabinClass: 'BUSINESS'
+        cabinClass: 'BUSINESS' as const
       }],
       idempotencyKey: 'd9a8ce21-1b61-4e30-8670-cc6ab48534b9'
     };

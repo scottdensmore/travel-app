@@ -73,7 +73,22 @@ export default function FlightScheduleDeletionForm({
                     />{' '}
                     I understand this inactive template will be deleted permanently.
                 </label>
-                <button type="submit" disabled={!confirmed} aria-disabled={isPending || !confirmed} aria-busy={isPending} style={{ alignSelf: 'flex-start', color: '#fca5a5' }}>
+                <button
+                    type="submit"
+                    disabled={!confirmed}
+                    aria-disabled={isPending || !confirmed}
+                    aria-busy={isPending}
+                    style={{
+                        alignSelf: 'flex-start',
+                        backgroundColor: confirmed ? '#dc2626' : '#2b2938',
+                        backgroundImage: 'none',
+                        color: confirmed ? '#ffffff' : '#d4d4d8',
+                        border: confirmed ? '1px solid transparent' : '1px solid rgba(255, 255, 255, 0.2)',
+                        boxShadow: 'none',
+                        cursor: !confirmed || isPending ? 'not-allowed' : 'pointer',
+                        opacity: isPending ? 0.75 : 1,
+                    }}
+                >
                     {isPending ? 'Deleting template...' : 'Delete template permanently'}
                 </button>
             </form>

@@ -2,15 +2,17 @@
 
 import React, { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import type { FlightStatus } from '@prisma/client';
 import { updateFlightStatusAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
+import { FLIGHT_STATUSES, flightStatusLabel } from '@/lib/flightStatus';
 
-export default function FlightStatusSelector({ id, currentStatus }: { id: number, currentStatus: string }) {
+export default function FlightStatusSelector({ id, currentStatus }: { id: number, currentStatus: FlightStatus }) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
 
     const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const nextStatus = e.target.value as 'ON_TIME' | 'DELAYED' | 'CANCELLED';
+        const nextStatus = e.target.value as FlightStatus;
         startTransition(async () => {
             try {
                 const result = await updateFlightStatusAction(id, nextStatus);
@@ -43,9 +45,11 @@ export default function FlightStatusSelector({ id, currentStatus }: { id: number
                 width: '120px'
             }}
         >
-            <option value="ON_TIME" style={{ backgroundColor: '#181720', color: '#fff' }}>On Time</option>
-            <option value="DELAYED" style={{ backgroundColor: '#181720', color: '#fff' }}>Delayed</option>
-            <option value="CANCELLED" style={{ backgroundColor: '#181720', color: '#fff' }}>Cancelled</option>
+            {FLIGHT_STATUSES.map((status) => (
+                <option key={status} value={status} style={{ backgroundColor: '#181720', color: '#fff' }}>
+                    {flightStatusLabel(status)}
+                </option>
+            ))}
         </select>
     );
 }

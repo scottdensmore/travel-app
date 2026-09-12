@@ -38,7 +38,7 @@ import CityGuide from '@/lib/types/CityGuide';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { hasVerifiedStaffAccess } from '@/lib/staffAuthorization';
-import type { Flight } from '@prisma/client';
+import type { Flight, FlightStatus } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { assertSeatAvailableForCabin, validateSeatingLayout } from '@/lib/seatLayout';
 import { lockBookingsOnFlightForUpdate, lockFlightForUpdate } from '@/lib/flightLock';
@@ -1712,7 +1712,7 @@ export async function deleteFlightScheduleAction(data: {
     redirect('/admin/flights');
 }
 
-export async function updateFlightStatusAction(flightId: number, status: 'ON_TIME' | 'DELAYED' | 'CANCELLED') {
+export async function updateFlightStatusAction(flightId: number, status: FlightStatus) {
     const session = await getServerSession(authOptions);
     if (!hasVerifiedStaffAccess(session)) throw new Error("Unauthorized");
 

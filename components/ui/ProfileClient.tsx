@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useRef, useTransition } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import PointsActivityTable from "@/components/ui/pointsActivityTable";
 import NextStatusChart from "@/components/ui/charts/nextStatusChart";
@@ -367,6 +367,10 @@ export default function ProfileClient({
     // Occupancy and seat choices are both per leg: a seat belongs to one
     // flight, so a round trip holds a different one on each.
     const [modalOccupiedSeats, setModalOccupiedSeats] = useState<{ [legId: number]: string[] }>({});
+    const [modalOccupiedError, setModalOccupiedError] = useState<string | null>(null);
+    const [isLoadingOccupancy, setIsLoadingOccupancy] = useState<boolean>(false);
+    const activeBookingIdRef = useRef<number | null>(null);
+    const occupancyRequestIdRef = useRef<number>(0);
     const [passengerSeats, setPassengerSeats] = useState<{ [legAndPassenger: string]: string }>({});
     const [activePassengerIdx, setActivePassengerIdx] = useState<number>(0);
     const [activeLegIdx, setActiveLegIdx] = useState<number>(0);
@@ -396,8 +400,67 @@ export default function ProfileClient({
         activeLeg?.seatAssignments?.find(seat => seat.passengerId === passengerId)?.cabinClass
         ?? 'ECONOMY';
 
+    const loadOccupancyForBooking = useCallback(async (booking: Booking) => {
+        const bookingId = booking.id;
+        const requestId = ++occupancyRequestIdRef.current;
+        const legs = orderedLegs(booking).filter(
+            leg => leg.flight && booking.passengers.some(
+                passenger => passengerCanChangeSeatOnLeg(leg, passenger.id),
+            ),
+        );
+        if (legs.length === 0) {
+            setIsLoadingOccupancy(false);
+            setModalOccupiedError(null);
+            return;
+        }
+
+        setIsLoadingOccupancy(true);
+        setModalOccupiedError(null);
+
+        try {
+            // Each leg's own flight, so a seat taken on the outbound does not read
+            // as taken on the return.
+            const entries = await Promise.all(
+                legs.map(async leg => {
+                    const seats = await getOccupiedSeatsAction(leg.flight!.id);
+                    if (isActionValidationFailure(seats) || !Array.isArray(seats)) {
+                        throw new Error('Failed to load seats');
+                    }
+                    return [leg.id, seats] as const;
+                }),
+            );
+            if (activeBookingIdRef.current !== bookingId || occupancyRequestIdRef.current !== requestId) return;
+            setModalOccupiedSeats(Object.fromEntries(entries));
+            setModalOccupiedError(null);
+        } catch {
+            if (activeBookingIdRef.current !== bookingId || occupancyRequestIdRef.current !== requestId) return;
+            setModalOccupiedSeats({});
+            setModalOccupiedError('Unable to load current seat occupancy. Please try again.');
+        } finally {
+            if (activeBookingIdRef.current === bookingId && occupancyRequestIdRef.current === requestId) {
+                setIsLoadingOccupancy(false);
+            }
+        }
+    }, []);
+
+    const handleRetryOccupancy = () => {
+        if (selectedBooking) {
+            loadOccupancyForBooking(selectedBooking);
+        }
+    };
+
     useEffect(() => {
-        if (!selectedBooking) return;
+        if (!selectedBooking) {
+            activeBookingIdRef.current = null;
+            occupancyRequestIdRef.current += 1;
+            setModalOccupiedSeats({});
+            setModalOccupiedError(null);
+            setIsLoadingOccupancy(false);
+            return;
+        }
+
+        activeBookingIdRef.current = selectedBooking.id;
+
         const legs = orderedLegs(selectedBooking).filter(
             leg => leg.flight && selectedBooking.passengers.some(
                 passenger => passengerCanChangeSeatOnLeg(leg, passenger.id),
@@ -405,15 +468,7 @@ export default function ProfileClient({
         );
         if (legs.length === 0) return;
 
-        // Each leg's own flight, so a seat taken on the outbound does not read
-        // as taken on the return.
-        Promise.all(legs.map(leg =>
-            getOccupiedSeatsAction(leg.flight!.id)
-                .then(seats => [leg.id, seats] as const)
-                .catch(() => [leg.id, [] as string[]] as const)
-        )).then(entries => {
-            setModalOccupiedSeats(Object.fromEntries(entries));
-        });
+        loadOccupancyForBooking(selectedBooking);
 
         const initial: { [key: string]: string } = {};
         for (const leg of legs) {
@@ -429,7 +484,11 @@ export default function ProfileClient({
         setActivePassengerIdx(0);
         setActiveLegIdx(0);
         setModalError(null);
-    }, [selectedBooking]);
+
+        return () => {
+            activeBookingIdRef.current = null;
+        };
+    }, [selectedBooking, loadOccupancyForBooking]);
 
     const handleCancelBooking = (bookingId: number, flightNumber: string, disrupted = false) => {
         // A disruption is the airline's doing, so the prompt says what the
@@ -524,6 +583,10 @@ export default function ProfileClient({
 
     const handleSaveSeats = async () => {
         if (!selectedBooking) return;
+        if (modalOccupiedError || isLoadingOccupancy) {
+            setModalError('Cannot save seats while seat occupancy is unavailable.');
+            return;
+        }
 
         for (const leg of modalLegs) {
             const changeablePassengers = selectedBooking.passengers.filter(
@@ -1152,7 +1215,53 @@ export default function ProfileClient({
                                         <h3 style={{ fontSize: '0.95rem', color: '#a78bfa', marginBottom: '0.75rem' }}>
                                             Select Seat for {activePassenger?.firstName}
                                         </h3>
-                                        {activeCabinRows.length === 0 ? (
+                                        {modalOccupiedError ? (
+                                            <div
+                                                role="alert"
+                                                data-testid="seat-occupancy-error"
+                                                style={{
+                                                    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                                                    color: '#f87171',
+                                                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                                                    borderRadius: '12px',
+                                                    padding: '1.5rem',
+                                                    textAlign: 'center',
+                                                    maxWidth: '320px',
+                                                    width: '100%',
+                                                    margin: '1rem 0',
+                                                }}
+                                            >
+                                                <p style={{ margin: '0 0 1rem', fontSize: '0.9rem', lineHeight: 1.4 }}>
+                                                    {modalOccupiedError}
+                                                </p>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleRetryOccupancy}
+                                                    disabled={isLoadingOccupancy}
+                                                    style={{
+                                                        backgroundColor: '#8b5cf6',
+                                                        color: '#fff',
+                                                        border: 'none',
+                                                        padding: '8px 16px',
+                                                        borderRadius: '6px',
+                                                        cursor: isLoadingOccupancy ? 'not-allowed' : 'pointer',
+                                                        fontWeight: 'bold',
+                                                        fontSize: '0.85rem',
+                                                    }}
+                                                >
+                                                    {isLoadingOccupancy ? 'Retrying…' : 'Retry'}
+                                                </button>
+                                            </div>
+                                        ) : isLoadingOccupancy ? (
+                                            <div style={{
+                                                padding: '2rem 1rem',
+                                                textAlign: 'center',
+                                                color: 'rgba(255, 255, 255, 0.7)',
+                                                fontSize: '0.9rem',
+                                            }}>
+                                                Loading seat availability...
+                                            </div>
+                                        ) : activeCabinRows.length === 0 ? (
                                             <p role="alert" style={{ color: '#f87171', textAlign: 'center' }}>
                                                 This cabin has no seats in the current flight layout. Contact support to change this booking.
                                             </p>
@@ -1277,8 +1386,17 @@ export default function ProfileClient({
                             </button>
                             <button
                                 onClick={handleSaveSeats}
-                                disabled={isSavingSeats}
-                                style={{ backgroundColor: '#8b5cf6', color: '#fff', border: 'none', padding: '8px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+                                disabled={isSavingSeats || Boolean(modalOccupiedError) || isLoadingOccupancy}
+                                style={{
+                                    backgroundColor: '#8b5cf6',
+                                    color: '#fff',
+                                    border: 'none',
+                                    padding: '8px 20px',
+                                    borderRadius: '6px',
+                                    cursor: (isSavingSeats || Boolean(modalOccupiedError) || isLoadingOccupancy) ? 'not-allowed' : 'pointer',
+                                    fontWeight: 'bold',
+                                    opacity: (isSavingSeats || Boolean(modalOccupiedError) || isLoadingOccupancy) ? 0.6 : 1,
+                                }}
                             >
                                 {isSavingSeats ? 'Saving...' : 'Save New Seats'}
                             </button>

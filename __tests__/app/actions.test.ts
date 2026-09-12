@@ -883,7 +883,7 @@ describe('bookFlightAction', () => {
         const passengers = [{
             firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
             passportNumber: 'AB123456', gender: 'Female', seatNumbers: ['11A'],
-            cabinClass: 'ECONOMY'
+            cabinClass: 'ECONOMY' as const
         }];
         const result = await bookFlightAction({
             flightIds: [42],
@@ -926,7 +926,7 @@ describe('bookFlightAction', () => {
         const passenger = {
             firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
             passportNumber: 'AB123456', gender: 'Female', seatNumbers: ['11A'],
-            cabinClass: 'ECONOMY'
+            cabinClass: 'ECONOMY' as const
         };
 
         await expect(bookFlightAction({

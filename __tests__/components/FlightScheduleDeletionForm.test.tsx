@@ -80,4 +80,41 @@ describe('FlightScheduleDeletionForm', () => {
         await waitFor(() => expect(alert).toHaveFocus());
         expect(alert).not.toHaveTextContent('private database detail');
     });
+
+    it('provides accessible text contrast for the delete action in both disabled and enabled states', () => {
+        const contrastRatio = (foreground: string, background: string) => {
+            const luminance = (hex: string) => {
+                const channels = hex.match(/[a-f\d]{2}/gi)!.map(channel => parseInt(channel, 16) / 255);
+                const [red, green, blue] = channels.map(channel =>
+                    channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+                );
+                return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+            };
+            const values = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+            return (values[0] + 0.05) / (values[1] + 0.05);
+        };
+
+        // WCAG AA requirement is >= 4.5:1
+        expect(contrastRatio('#d4d4d8', '#2b2938')).toBeGreaterThanOrEqual(4.5);
+        expect(contrastRatio('#ffffff', '#dc2626')).toBeGreaterThanOrEqual(4.5);
+
+        render(<FlightScheduleDeletionForm flightScheduleId={17} occurrenceCount={5} protectedOccurrenceCount={2} />);
+        const button = screen.getByRole('button', { name: 'Delete template permanently' });
+
+        // Disabled state: clear, readable disabled styling without failing contrast
+        expect(button).toHaveStyle({
+            backgroundColor: '#2b2938',
+            color: '#d4d4d8',
+            cursor: 'not-allowed',
+        });
+
+        // Enabled state: solid destructive background with high-contrast text
+        fireEvent.click(screen.getByRole('checkbox'));
+        expect(button).toHaveStyle({
+            backgroundColor: '#dc2626',
+            color: '#ffffff',
+            cursor: 'pointer',
+        });
+    });
 });
+

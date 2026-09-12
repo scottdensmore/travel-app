@@ -310,6 +310,60 @@ describe('ProfileClient interactive dashboard', () => {
         });
     });
 
+    it('shows an informative error and retry affordance without rendering a free seat map when occupancy fails to load', async () => {
+        mockGetOccupiedSeats.mockRejectedValue(new Error('Network error'));
+
+        render(
+            <ProfileClient
+                userName="Jane Doe"
+                userAvatar="avatar.png"
+                accountTimeZone="UTC"
+                accountTimeZoneChoices={['UTC', 'America/Los_Angeles']}
+                currentStatus="Gold"
+                currentPoints={4200}
+                bookings={sampleBookings}
+                favorites={[]}
+                reviews={[]}
+                activityData={[]}
+                monthlyHistory={[]}
+                renderedAt={new Date('2026-06-01T00:00:00Z').getTime()}
+            />
+        );
+
+        // Click Change Seats button
+        const changeSeatsBtn = screen.getByRole('button', { name: 'Change Seats' });
+        fireEvent.click(changeSeatsBtn);
+
+        // Modal title is present
+        expect(screen.getByRole('heading', { name: 'Change Seats' })).toBeInTheDocument();
+
+        // Informative error alert is rendered
+        const errorAlert = await screen.findByRole('alert');
+        expect(errorAlert).toHaveTextContent('Unable to load current seat occupancy. Please try again.');
+
+        // Retry affordance is present
+        const retryBtn = screen.getByRole('button', { name: /retry/i });
+        expect(retryBtn).toBeInTheDocument();
+
+        // The seat map is NOT shown as completely free (no selectable or free seat buttons rendered)
+        expect(screen.queryByTitle(/Select Seat/)).not.toBeInTheDocument();
+        expect(screen.queryByTitle(/Occupied/)).not.toBeInTheDocument();
+
+        // Save New Seats button is disabled while occupancy is unavailable
+        expect(screen.getByRole('button', { name: 'Save New Seats' })).toBeDisabled();
+
+        // Retrying after network recovers loads occupancy and renders seat map
+        mockGetOccupiedSeats.mockResolvedValue(['11B', '11C']);
+        fireEvent.click(retryBtn);
+
+        const seat11A = await screen.findByTitle('Select Seat 11A');
+        expect(seat11A).toBeInTheDocument();
+        const seat11B = await screen.findByTitle('Seat 11B Occupied');
+        expect(seat11B).toBeDisabled();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Save New Seats' })).not.toBeDisabled();
+    });
+
     it('explains that a checked-in seat is fixed and offers no stale change control', () => {
         const checkedInBooking = {
             ...sampleBookings[0],
@@ -664,6 +718,22 @@ describe('ProfileClient interactive dashboard', () => {
                     { passengerId: 'p-1', legId: 502, seatNumber: '13D' },
                 ]);
             });
+        });
+
+        it('renders the occupancy error and hides the seat grid when any leg of a round trip fails to load', async () => {
+            mockGetOccupiedSeats
+                .mockResolvedValueOnce(['11B'])
+                .mockRejectedValueOnce(new Error('Network error on leg 2'));
+
+            renderBookings([roundTripBooking]);
+
+            fireEvent.click(screen.getAllByRole('button', { name: 'Change Seats' })[0]);
+
+            const errorAlert = await screen.findByRole('alert');
+            expect(errorAlert).toHaveTextContent('Unable to load current seat occupancy. Please try again.');
+            expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
+            expect(screen.queryByTitle(/Select Seat/)).not.toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Save New Seats' })).toBeDisabled();
         });
 
         it('keeps an un-checked return changeable without reopening the checked-in outbound', async () => {

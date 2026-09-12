@@ -51,7 +51,7 @@ function request(userId: string, flightId: number, idempotencyKey: string, seatN
             passportNumber: `PASS${index}12345`,
             gender: 'Other',
             seatNumbers: [seatNumber],
-            cabinClass: 'ECONOMY',
+            cabinClass: 'ECONOMY' as const,
         })),
         idempotencyKey,
     };
