@@ -156,7 +156,6 @@ never set it in a deployed environment or against data that must be retained.
 - `prisma/schema.prisma` and `prisma/migrations/`: database model and
   hand-authored migrations.
 - `e2e/` and `__tests__/`: browser, unit, integration, and database coverage.
-- `AGENTS.md`: contributor and automated-agent workflow.
 
 ## Security and operational policy
 

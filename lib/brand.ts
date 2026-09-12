@@ -3,7 +3,7 @@
  *
  * The application called itself Mona Airways while every seeded flight was
  * operated by "Gemini Airways", so the site and its inventory disagreed about
- * who the customer was buying from. AGENTS.md names the product, so that is the
+ * who the customer was buying from. Mona Airways is the canonical product
  * name; the other was demo residue (#72).
  *
  * Anything a customer reads about the airline itself comes from here, so the

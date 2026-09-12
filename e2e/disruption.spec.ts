@@ -24,8 +24,8 @@ loadEnvConfig(process.cwd());
  * refusal was exercised end to end, and the disruption path was not exercised
  * at all.
  *
- * These cross staff, customer, database and money in one pass, which is the
- * kind of crossing AGENTS.md asks for a journey test on.
+ * These cross staff, customer, database and money in one pass, requiring
+ * browser journey test coverage.
  */
 const suffix = `${Date.now()}`;
 const customerEmail = `disrupt-customer-${suffix}@example.com`;
