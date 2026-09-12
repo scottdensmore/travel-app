@@ -34,5 +34,5 @@ Product hardening work is tracked in GitHub issues labelled `roadmap`, grouped i
 PR close the issue once its acceptance criteria are met. Update `README.md` only when
 setup steps or user-facing features actually change.
 
-Full workflow policy (TDD, review gates, commit and merge rules) is in
+Development commands, conventions, and testing expectations are in
 [AGENTS.md](../AGENTS.md).
