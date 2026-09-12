@@ -160,15 +160,30 @@ export function cabinLabel(cabinClass: string | null | undefined): string {
  * It lives beside `seatLabel` because both answer the same kind of question:
  * how a piece of an itinerary reads to a customer.
  *
- * This covers the places that *label* a leg. Two seat-validation messages still
- * build their own lowercase "departing"/"returning" inline, because they read as
- * prose in a sentence rather than as a label and cannot take these strings as
- * they stand (#171).
+ * This covers the places that *label* a leg. Prepositional phrases for
+ * sentences that need a leg direction ("on the departing flight", "on the return flight")
+ * are provided by `legFlightClause` below (#171).
  */
 export function legDirectionLabel(legIndex: number, legCount: number): string {
     if (legIndex === 0) return 'Departing';
     if (legIndex === legCount - 1) return 'Returning';
     return `Leg ${legIndex + 1}`;
+}
+
+/**
+ * Describes which flight of an itinerary a seat is needed on, for prose error messages.
+ *
+ * Distinct from `legDirectionLabel`, which returns capitalized labels ("Departing",
+ * "Returning", "Leg 2") meant for tabs and badges. When dropped into a sentence,
+ * "Please select a Leg 2 seat" does not read (#171). Phrased as a prepositional
+ * phrase ("on the departing flight", "on the return flight", "on leg 2"), it drops
+ * cleanly into error sentences without treating the leg name as an adjective.
+ */
+export function legFlightClause(legIndex: number, legCount: number): string {
+    if (legCount <= 1) return '';
+    if (legIndex === 0) return ' on the departing flight';
+    if (legIndex === legCount - 1) return ' on the return flight';
+    return ` on leg ${legIndex + 1}`;
 }
 
 /**

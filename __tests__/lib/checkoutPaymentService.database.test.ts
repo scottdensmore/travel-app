@@ -430,7 +430,7 @@ describe('starting a checkout payment', () => {
         await expect(new CheckoutPaymentService(fake.value).startPayment({
             ...request(user.id, flight.id, checkoutId),
             passengers: [{ seatNumbers: ['2A'], cabinClass: 'ECONOMY' }],
-        })).rejects.toThrow('Seat 2A is not available for ECONOMY on this flight.');
+        })).rejects.toThrow('Seat 2A is not an Economy seat on this flight.');
         expect(fake.createAuthorization).not.toHaveBeenCalled();
     });
 

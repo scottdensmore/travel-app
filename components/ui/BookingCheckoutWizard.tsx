@@ -12,7 +12,7 @@ import { bookFlightAction, holdChosenSeatsAction, startCheckoutPaymentAction } f
 import { isActionValidationFailure, type ActionValidationFailure } from '@/lib/actionResult';
 import { CABIN_FARE_PERCENT, calculatePassengerFareCents, flightFareCents, formatPrice } from '@/lib/bookingPricing';
 import { BRAND } from '@/lib/brand';
-import { cabinLabel, legDirectionLabel } from '@/lib/bookingItinerary';
+import { cabinLabel, legDirectionLabel, legFlightClause } from '@/lib/bookingItinerary';
 import { durationLabel, flightArrival, flightDeparture } from '@/lib/flightTime';
 import CheckoutPaymentForm from '@/components/ui/CheckoutPaymentForm';
 import {
@@ -336,9 +336,8 @@ export default function BookingCheckoutWizard({
             const missingLeg = passengers[i].seatNumbers.findIndex(seat => !seat);
             if (missingLeg !== -1) {
                 setActiveLegIndex(missingLeg);
-                setErrorMessage(flights.length > 1
-                    ? `Please select a ${missingLeg === 0 ? 'departing' : 'returning'} seat for Passenger ${i + 1}.`
-                    : `Please select a seat for Passenger ${i + 1}.`);
+                const legClause = legFlightClause(missingLeg, flights.length);
+                setErrorMessage(`Please select a seat${legClause} for Passenger ${i + 1}.`);
                 return false;
             }
         }

@@ -1,6 +1,7 @@
 /** @jest-environment node */
 import { FlightStatus } from '@prisma/client';
 import { flightStatusSchema } from '@/lib/validation';
+import { FLIGHT_STATUSES, flightStatusLabel, flightStatusStyle } from '@/lib/flightStatus';
 
 /**
  * Two independent lists of the same three statuses.
@@ -28,5 +29,24 @@ describe('flight status', () => {
         // here as well as by the column.
         expect(STATUSES).toContain('CANCELLED');
         expect(FlightStatus.CANCELLED).toBe('CANCELLED');
+    });
+
+    it('derives FLIGHT_STATUSES from flightStatusSchema options without drift', () => {
+        expect([...FLIGHT_STATUSES].sort()).toEqual(STATUSES);
+    });
+
+    it('maps all valid FlightStatus values to human-readable labels', () => {
+        expect(flightStatusLabel('ON_TIME')).toBe('On Time');
+        expect(flightStatusLabel('DELAYED')).toBe('Delayed');
+        expect(flightStatusLabel('CANCELLED')).toBe('Cancelled');
+    });
+
+    it('provides styles for all valid FlightStatus values', () => {
+        for (const status of FLIGHT_STATUSES) {
+            const style = flightStatusStyle(status);
+            expect(style).toHaveProperty('backgroundColor');
+            expect(style).toHaveProperty('color');
+            expect(style).toHaveProperty('border');
+        }
     });
 });

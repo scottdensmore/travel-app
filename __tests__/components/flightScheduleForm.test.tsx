@@ -31,8 +31,14 @@ describe('FlightScheduleForm', () => {
         expect(screen.getByText('Create Flight Schedule')).toBeInTheDocument();
         expect(screen.getByLabelText(/Flight Number \*/i)).toBeInTheDocument();
         expect(screen.getByLabelText(/Airline Name \*/i)).toBeInTheDocument();
-        expect(screen.getByLabelText(/From \(Origin\) \*/i)).toBeInTheDocument();
-        expect(screen.getByLabelText(/To \(Destination\) \*/i)).toBeInTheDocument();
+        const fromSelect = screen.getByLabelText(/From \(Origin\) \*/i);
+        const toSelect = screen.getByLabelText(/To \(Destination\) \*/i);
+        expect(fromSelect).toBeInTheDocument();
+        expect(toSelect).toBeInTheDocument();
+        expect(fromSelect.tagName).toBe('SELECT');
+        expect(toSelect.tagName).toBe('SELECT');
+        expect(fromSelect).toHaveValue('');
+        expect(toSelect).toHaveValue('');
         expect(screen.getByLabelText(/Departure \(HH:MM\) \*/i)).toBeInTheDocument();
         expect(screen.getByLabelText(/Price \(\$\) \*/i)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Create Schedule' })).toBeInTheDocument();
@@ -42,6 +48,30 @@ describe('FlightScheduleForm', () => {
         dayLabels.forEach(day => {
             expect(screen.getByLabelText(day)).toBeInTheDocument();
         });
+    });
+
+    it('renders the 10 airport options plus default prompt in the origin and destination selects', () => {
+        render(<FlightScheduleForm />);
+
+        const fromSelect = screen.getByLabelText(/From \(Origin\) \*/i) as HTMLSelectElement;
+        const toSelect = screen.getByLabelText(/To \(Destination\) \*/i) as HTMLSelectElement;
+
+        expect(fromSelect.options).toHaveLength(11);
+        expect(toSelect.options).toHaveLength(11);
+        expect(fromSelect.options[0].text).toBe('Select origin');
+        expect(toSelect.options[0].text).toBe('Select destination');
+        expect(Array.from(fromSelect.options).slice(1).map(opt => opt.value)).toEqual([
+            'Seattle, USA',
+            'Detroit, USA',
+            'New York, USA',
+            'London, UK',
+            'San Francisco, USA',
+            'Tokyo, Japan',
+            'Chicago, USA',
+            'Paris, France',
+            'Miami, USA',
+            'Rio de Janeiro, Brazil',
+        ]);
     });
 
     it('offers no return time, because a return is a schedule of its own', () => {
@@ -58,8 +88,8 @@ describe('FlightScheduleForm', () => {
             id: 42,
             flightNumber: 'AA123',
             airline: 'American Airlines',
-            from: 'New York',
-            to: 'London',
+            from: 'New York, USA',
+            to: 'London, UK',
             departureTime: '14:30',
             durationMinutes: 245,
             daysOfWeek: [1, 3, 5],
@@ -71,8 +101,8 @@ describe('FlightScheduleForm', () => {
         expect(screen.getByText('Edit Flight Schedule')).toBeInTheDocument();
         expect(screen.getByLabelText(/Flight Number \*/i)).toHaveValue('AA123');
         expect(screen.getByLabelText(/Airline Name \*/i)).toHaveValue('American Airlines');
-        expect(screen.getByLabelText(/From \(Origin\) \*/i)).toHaveValue('New York');
-        expect(screen.getByLabelText(/To \(Destination\) \*/i)).toHaveValue('London');
+        expect(screen.getByLabelText(/From \(Origin\) \*/i)).toHaveValue('New York, USA');
+        expect(screen.getByLabelText(/To \(Destination\) \*/i)).toHaveValue('London, UK');
         expect(screen.getByLabelText(/Departure \(HH:MM\) \*/i)).toHaveValue('14:30');
         expect(screen.getByLabelText(/Price \(\$\) \*/i)).toHaveValue('$850');
 
@@ -101,8 +131,8 @@ describe('FlightScheduleForm', () => {
         // Fill required fields
         fireEvent.change(screen.getByLabelText(/Flight Number \*/i), { target: { value: 'AA123' } });
         fireEvent.change(screen.getByLabelText(/Airline Name \*/i), { target: { value: 'American Airlines' } });
-        fireEvent.change(screen.getByLabelText(/From \(Origin\) \*/i), { target: { value: 'New York' } });
-        fireEvent.change(screen.getByLabelText(/To \(Destination\) \*/i), { target: { value: 'London' } });
+        fireEvent.change(screen.getByLabelText(/From \(Origin\) \*/i), { target: { value: 'New York, USA' } });
+        fireEvent.change(screen.getByLabelText(/To \(Destination\) \*/i), { target: { value: 'London, UK' } });
         fireEvent.change(screen.getByLabelText(/Price \(\$\) \*/i), { target: { value: '850' } });
 
         // A duration, so the form reaches the departure-format check rather
@@ -124,8 +154,8 @@ describe('FlightScheduleForm', () => {
 
         fireEvent.change(screen.getByLabelText(/Flight Number \*/i), { target: { value: 'AA123' } });
         fireEvent.change(screen.getByLabelText(/Airline Name \*/i), { target: { value: 'American Airlines' } });
-        fireEvent.change(screen.getByLabelText(/From \(Origin\) \*/i), { target: { value: 'New York' } });
-        fireEvent.change(screen.getByLabelText(/To \(Destination\) \*/i), { target: { value: 'London' } });
+        fireEvent.change(screen.getByLabelText(/From \(Origin\) \*/i), { target: { value: 'New York, USA' } });
+        fireEvent.change(screen.getByLabelText(/To \(Destination\) \*/i), { target: { value: 'London, UK' } });
         fireEvent.change(screen.getByLabelText(/Departure \(HH:MM\) \*/i), { target: { value: '08:00' } });
         fireEvent.change(screen.getByLabelText(/Duration \(minutes\) \*/i), { target: { value: '245' } });
         fireEvent.change(screen.getByLabelText(/Price \(\$\) \*/i), { target: { value: '850' } });
@@ -145,8 +175,8 @@ describe('FlightScheduleForm', () => {
 
         fireEvent.change(screen.getByLabelText(/Flight Number \*/i), { target: { value: 'AA123' } });
         fireEvent.change(screen.getByLabelText(/Airline Name \*/i), { target: { value: 'American Airlines' } });
-        fireEvent.change(screen.getByLabelText(/From \(Origin\) \*/i), { target: { value: 'New York' } });
-        fireEvent.change(screen.getByLabelText(/To \(Destination\) \*/i), { target: { value: 'London' } });
+        fireEvent.change(screen.getByLabelText(/From \(Origin\) \*/i), { target: { value: 'New York, USA' } });
+        fireEvent.change(screen.getByLabelText(/To \(Destination\) \*/i), { target: { value: 'London, UK' } });
         fireEvent.change(screen.getByLabelText(/Departure \(HH:MM\) \*/i), { target: { value: '08:00' } });
         fireEvent.change(screen.getByLabelText(/Duration \(minutes\) \*/i), { target: { value: '245' } });
         fireEvent.change(screen.getByLabelText(/Price \(\$\) \*/i), { target: { value: '850' } });
@@ -162,8 +192,8 @@ describe('FlightScheduleForm', () => {
                 id: undefined,
                 flightNumber: 'AA123',
                 airline: 'American Airlines',
-                from: 'New York',
-                to: 'London',
+                from: 'New York, USA',
+                to: 'London, UK',
                 departureTime: '08:00',
                 durationMinutes: 245,
                 daysOfWeek: [1, 3],
@@ -200,8 +230,8 @@ describe('FlightScheduleForm', () => {
             id: 42,
             flightNumber: 'AA123',
             airline: 'American Airlines',
-            from: 'New York',
-            to: 'London',
+            from: 'New York, USA',
+            to: 'London, UK',
             departureTime: '14:30',
             durationMinutes: 245,
             daysOfWeek: [1],
@@ -221,8 +251,8 @@ describe('FlightScheduleForm', () => {
                 id: 42,
                 flightNumber: 'AA123',
                 airline: 'American Airlines',
-                from: 'New York',
-                to: 'London',
+                from: 'New York, USA',
+                to: 'London, UK',
                 departureTime: '14:30',
                 durationMinutes: 245,
                 daysOfWeek: [6],
@@ -248,8 +278,8 @@ describe('FlightScheduleForm', () => {
 
         fireEvent.change(screen.getByLabelText(/Flight Number \*/i), { target: { value: 'AA123' } });
         fireEvent.change(screen.getByLabelText(/Airline Name \*/i), { target: { value: 'American Airlines' } });
-        fireEvent.change(screen.getByLabelText(/From \(Origin\) \*/i), { target: { value: 'New York' } });
-        fireEvent.change(screen.getByLabelText(/To \(Destination\) \*/i), { target: { value: 'London' } });
+        fireEvent.change(screen.getByLabelText(/From \(Origin\) \*/i), { target: { value: 'New York, USA' } });
+        fireEvent.change(screen.getByLabelText(/To \(Destination\) \*/i), { target: { value: 'London, UK' } });
         fireEvent.change(screen.getByLabelText(/Departure \(HH:MM\) \*/i), { target: { value: '08:00' } });
         fireEvent.change(screen.getByLabelText(/Duration \(minutes\) \*/i), { target: { value: '245' } });
         fireEvent.change(screen.getByLabelText(/Price \(\$\) \*/i), { target: { value: '850' } });
@@ -269,8 +299,8 @@ describe('FlightScheduleForm', () => {
 
         fireEvent.change(screen.getByLabelText(/Flight Number \*/i), { target: { value: 'AA123' } });
         fireEvent.change(screen.getByLabelText(/Airline Name \*/i), { target: { value: 'American Airlines' } });
-        fireEvent.change(screen.getByLabelText(/From \(Origin\) \*/i), { target: { value: 'New York' } });
-        fireEvent.change(screen.getByLabelText(/To \(Destination\) \*/i), { target: { value: 'London' } });
+        fireEvent.change(screen.getByLabelText(/From \(Origin\) \*/i), { target: { value: 'New York, USA' } });
+        fireEvent.change(screen.getByLabelText(/To \(Destination\) \*/i), { target: { value: 'London, UK' } });
         fireEvent.change(screen.getByLabelText(/Departure \(HH:MM\) \*/i), { target: { value: '08:00' } });
         fireEvent.change(screen.getByLabelText(/Duration \(minutes\) \*/i), { target: { value: '245' } });
         fireEvent.change(screen.getByLabelText(/Price \(\$\) \*/i), { target: { value: '850' } });
@@ -296,8 +326,8 @@ describe('FlightScheduleForm', () => {
                 id: undefined,
                 flightNumber: 'AA123',
                 airline: 'American Airlines',
-                from: 'New York',
-                to: 'London',
+                from: 'New York, USA',
+                to: 'London, UK',
                 departureTime: '08:00',
                 durationMinutes: 245,
                 daysOfWeek: [1],
@@ -316,8 +346,8 @@ describe('FlightScheduleForm', () => {
 
         fireEvent.change(screen.getByLabelText(/Flight Number \*/i), { target: { value: 'AA123' } });
         fireEvent.change(screen.getByLabelText(/Airline Name \*/i), { target: { value: 'American Airlines' } });
-        fireEvent.change(screen.getByLabelText(/From \(Origin\) \*/i), { target: { value: 'New York' } });
-        fireEvent.change(screen.getByLabelText(/To \(Destination\) \*/i), { target: { value: 'London' } });
+        fireEvent.change(screen.getByLabelText(/From \(Origin\) \*/i), { target: { value: 'New York, USA' } });
+        fireEvent.change(screen.getByLabelText(/To \(Destination\) \*/i), { target: { value: 'London, UK' } });
         fireEvent.change(screen.getByLabelText(/Departure \(HH:MM\) \*/i), { target: { value: '08:00' } });
         fireEvent.change(screen.getByLabelText(/Duration \(minutes\) \*/i), { target: { value: '245' } });
         fireEvent.change(screen.getByLabelText(/Price \(\$\) \*/i), { target: { value: '850' } });

@@ -494,7 +494,7 @@ describe('FlightBookingService', () => {
             userId: 'u1',
             passengers: [passenger],
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
-        })).rejects.toThrow('Seat 1A is not available for ECONOMY on this flight.');
+        })).rejects.toThrow('Seat 1A is not an Economy seat on this flight.');
 
         passenger.seatNumbers = ['8F'];
         await expect(new FlightBookingService().bookFlight({
@@ -502,7 +502,7 @@ describe('FlightBookingService', () => {
             userId: 'u1',
             passengers: [passenger],
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
-        })).rejects.toThrow('Seat 8F is not available for ECONOMY on this flight.');
+        })).rejects.toThrow('Seat 8F is not an Economy seat on this flight.');
         expect(mockTx.booking.create).not.toHaveBeenCalled();
     });
 

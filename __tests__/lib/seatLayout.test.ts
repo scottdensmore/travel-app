@@ -1,6 +1,7 @@
 /** @jest-environment node */
 import {
     DEFAULT_SEATING_LAYOUT,
+    assertSeatAvailableForCabin,
     isSeatAvailableForCabin,
     seatsForCabin,
 } from '@/lib/seatLayout';
@@ -34,5 +35,34 @@ describe('seatsForCabin', () => {
 
     it('returns no choices for an unavailable cabin', () => {
         expect(seatsForCabin('PREMIUM_ECONOMY', compactLayout)).toEqual([]);
+    });
+});
+
+describe('assertSeatAvailableForCabin', () => {
+    it('allows a seat that falls within the cabin layout', () => {
+        expect(() =>
+            assertSeatAvailableForCabin('3A', 'FIRST', DEFAULT_SEATING_LAYOUT)
+        ).not.toThrow();
+        expect(() =>
+            assertSeatAvailableForCabin('4A', 'BUSINESS', DEFAULT_SEATING_LAYOUT)
+        ).not.toThrow();
+    });
+
+    it('throws with formatted cabin label and article when seat is not in cabin', () => {
+        expect(() =>
+            assertSeatAvailableForCabin('1A', 'ECONOMY', DEFAULT_SEATING_LAYOUT)
+        ).toThrow('Seat 1A is not an Economy seat on this flight.');
+
+        expect(() =>
+            assertSeatAvailableForCabin('3A', 'BUSINESS', DEFAULT_SEATING_LAYOUT)
+        ).toThrow('Seat 3A is not a Business seat on this flight.');
+
+        expect(() =>
+            assertSeatAvailableForCabin('1A', 'PREMIUM_ECONOMY', DEFAULT_SEATING_LAYOUT)
+        ).toThrow('Seat 1A is not a Premium Economy seat on this flight.');
+
+        expect(() =>
+            assertSeatAvailableForCabin('4A', 'FIRST', DEFAULT_SEATING_LAYOUT)
+        ).toThrow('Seat 4A is not a First Class seat on this flight.');
     });
 });

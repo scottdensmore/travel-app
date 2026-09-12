@@ -2,6 +2,7 @@
 
 import { BRAND } from '@/lib/brand';
 import { formatPrice } from '@/lib/bookingPricing';
+import AirportData from '@/lib/data/AirportData';
 
 import React, { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
@@ -237,17 +238,35 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
             <div className="admin-form-grid admin-form-grid--two">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <label htmlFor="from" style={{ fontSize: '0.85rem', color: '#a78bfa', fontWeight: 'bold' }}>From (Origin) *</label>
-                    <input 
+                    <select
                         id="from"
-                        type="text" 
-                        value={from} 
-                        onChange={e => { setFrom(e.target.value); setFieldErrors(previous => ({ ...previous, from: '' })); }} 
-                        placeholder="e.g. Seattle, USA"
+                        value={from}
+                        onChange={e => { setFrom(e.target.value); setFieldErrors(previous => ({ ...previous, from: '' })); }}
                         disabled={isPending}
                         required
                         aria-invalid={Boolean(fieldErrors.from) || undefined}
                         aria-describedby={fieldErrors.from ? 'from-error' : undefined}
-                    />
+                        style={{
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            color: '#fff',
+                            borderRadius: '6px',
+                            padding: '12px',
+                            fontSize: '0.95rem',
+                            cursor: 'pointer',
+                            outline: 'none',
+                        }}
+                    >
+                        <option value="" style={{ backgroundColor: '#1f2937', color: '#fff' }}>Select origin</option>
+                        {from && !AirportData.some(a => a.label === from) && (
+                            <option value={from} style={{ backgroundColor: '#1f2937', color: '#fff' }}>{from}</option>
+                        )}
+                        {AirportData.map(airport => (
+                            <option key={airport.iataCode} value={airport.label} style={{ backgroundColor: '#1f2937', color: '#fff' }}>
+                                {airport.label}
+                            </option>
+                        ))}
+                    </select>
                     {fieldErrors.from && (
                         <p id="from-error" style={{ margin: 0, fontSize: '0.8rem', color: '#f87171' }}>
                             {fieldErrors.from}
@@ -256,17 +275,35 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <label htmlFor="to" style={{ fontSize: '0.85rem', color: '#a78bfa', fontWeight: 'bold' }}>To (Destination) *</label>
-                    <input 
+                    <select
                         id="to"
-                        type="text" 
-                        value={to} 
-                        onChange={e => { setTo(e.target.value); setFieldErrors(previous => ({ ...previous, to: '' })); }} 
-                        placeholder="e.g. Detroit, USA"
+                        value={to}
+                        onChange={e => { setTo(e.target.value); setFieldErrors(previous => ({ ...previous, to: '' })); }}
                         disabled={isPending}
                         required
                         aria-invalid={Boolean(fieldErrors.to) || undefined}
                         aria-describedby={fieldErrors.to ? 'to-error' : undefined}
-                    />
+                        style={{
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            color: '#fff',
+                            borderRadius: '6px',
+                            padding: '12px',
+                            fontSize: '0.95rem',
+                            cursor: 'pointer',
+                            outline: 'none',
+                        }}
+                    >
+                        <option value="" style={{ backgroundColor: '#1f2937', color: '#fff' }}>Select destination</option>
+                        {to && !AirportData.some(a => a.label === to) && (
+                            <option value={to} style={{ backgroundColor: '#1f2937', color: '#fff' }}>{to}</option>
+                        )}
+                        {AirportData.map(airport => (
+                            <option key={airport.iataCode} value={airport.label} style={{ backgroundColor: '#1f2937', color: '#fff' }}>
+                                {airport.label}
+                            </option>
+                        ))}
+                    </select>
                     {fieldErrors.to && (
                         <p id="to-error" style={{ margin: 0, fontSize: '0.8rem', color: '#f87171' }}>
                             {fieldErrors.to}

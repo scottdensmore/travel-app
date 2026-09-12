@@ -1,3 +1,5 @@
+import { cabinLabel } from './bookingItinerary';
+
 export const DEFAULT_SEATING_LAYOUT = {
     firstClassRows: 3,
     businessRows: 3,
@@ -101,7 +103,9 @@ export function assertSeatAvailableForCabin(
     layout: SeatingLayout
 ): void {
     if (!isSeatAvailableForCabin(seatNumber, cabinClass, layout)) {
-        throw new Error(`Seat ${seatNumber} is not available for ${cabinClass} on this flight.`);
+        const label = cabinLabel(cabinClass);
+        const article = /^[aeiou]/i.test(label) ? 'an' : 'a';
+        throw new Error(`Seat ${seatNumber} is not ${article} ${label} seat on this flight.`);
     }
 }
 

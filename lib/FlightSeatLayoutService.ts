@@ -1,6 +1,7 @@
 import { heldSeats } from '@/lib/seatOccupancy';
 import { prisma } from '@/lib/prisma';
 import { lockFlightForUpdate } from '@/lib/flightLock';
+import { cabinLabel } from '@/lib/bookingItinerary';
 import {
     assertSeatAvailableForCabin,
     SeatingLayout,
@@ -56,7 +57,7 @@ export async function updateFlightSeatingLayout(
             } catch {
                 throw new Error(
                     `Occupied seat ${held.seatNumber} is not available for ` +
-                    `${held.cabinClass} in the requested layout.`
+                    `${cabinLabel(held.cabinClass)} in the requested layout.`
                 );
             }
         }

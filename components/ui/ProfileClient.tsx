@@ -6,7 +6,7 @@ import PointsActivityTable from "@/components/ui/pointsActivityTable";
 import NextStatusChart from "@/components/ui/charts/nextStatusChart";
 import PointsHistoryChart from "@/components/ui/charts/pointsHistoryChart";
 import { flightFareCents, formatPrice } from '@/lib/bookingPricing';
-import { cabinLabel, legDirectionLabel, orderedLegs, outboundFlight, seatLabel } from '@/lib/bookingItinerary';
+import { cabinLabel, legDirectionLabel, legFlightClause, orderedLegs, outboundFlight, seatLabel } from '@/lib/bookingItinerary';
 import { cancelBookingAction, deleteReviewAction, toggleFavoriteCityGuideAction, changeBookingSeatsAction, getOccupiedSeatsAction, retryBookingRefundAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
 import { PointsActivityDisplayData } from '@/lib/types/PointsActivity';
@@ -531,9 +531,7 @@ export default function ProfileClient({
             );
             for (const p of changeablePassengers) {
                 if (!passengerSeats[seatKey(leg.id, p.id)]) {
-                    const which = modalLegs.length > 1
-                        ? ` on the ${leg.id === modalLegs[0].id ? 'departing' : 'returning'} flight`
-                        : '';
+                    const which = legFlightClause(modalLegs.indexOf(leg), modalLegs.length);
                     setModalError(`Please select a seat for ${p.firstName} ${p.lastName}${which}`);
                     setActiveLegIdx(modalLegs.indexOf(leg));
                     setActivePassengerIdx(0);
