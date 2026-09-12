@@ -1848,15 +1848,15 @@ export default function BookingCheckoutWizard({
                                     {/* Ticket content */}
                                     <div style={{ padding: '1.5rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '1rem' }}>
                                         <div>
-                                            <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Passenger</div>
+                                            <div style={{ fontSize: '0.7rem', color: 'rgba(255, 255, 255, 0.75)', textTransform: 'uppercase' }}>Passenger</div>
                                             <div style={{ fontSize: '0.95rem', fontWeight: 'bold', marginTop: '3px' }}>{p.firstName} {p.lastName}</div>
                                         </div>
                                         <div>
-                                            <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Flight</div>
+                                            <div style={{ fontSize: '0.7rem', color: 'rgba(255, 255, 255, 0.75)', textTransform: 'uppercase' }}>Flight</div>
                                             <div style={{ fontSize: '0.95rem', fontWeight: 'bold', marginTop: '3px', color: '#a78bfa' }}>{legFlight.flightNumber}</div>
                                         </div>
                                         <div>
-                                            <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Seat</div>
+                                            <div style={{ fontSize: '0.7rem', color: 'rgba(255, 255, 255, 0.75)', textTransform: 'uppercase' }}>Seat</div>
                                             <div style={{ fontSize: '1.1rem', fontWeight: 'bold', marginTop: '3px', color: '#34d399' }}>
                                                 {p.seatNumbers[legIndex]}
                                             </div>
@@ -1881,7 +1881,7 @@ export default function BookingCheckoutWizard({
                                     {/* Ticket bottom strip */}
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', background: 'rgba(0,0,0,0.3)', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                                         <div>
-                                            <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)' }}>ROUTE</div>
+                                            <div style={{ fontSize: '0.65rem', color: 'rgba(255, 255, 255, 0.75)' }}>ROUTE</div>
                                             <div style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>{legFlight.from.split(',')[0]} to {legFlight.to.split(',')[0]}</div>
                                         </div>
                                         {/* Fake barcode block */}

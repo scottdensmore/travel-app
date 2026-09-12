@@ -5,6 +5,7 @@ import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { durationLabel, flightArrival, flightDeparture } from '@/lib/flightTime';
 import { flightPhaseAt, type FlightPhase } from '@/lib/flightPhase';
+import type { FlightStatus } from '@prisma/client';
 
 interface Flight {
     id: number;
@@ -17,7 +18,7 @@ interface Flight {
     /// created outside a schedule, which then shows no arrival (#84).
     durationMinutes?: number | null;
     priceCents: number;
-    status: 'ON_TIME' | 'DELAYED' | 'CANCELLED';
+    status: FlightStatus;
 }
 
 interface FlightStatusBoardProps {

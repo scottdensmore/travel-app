@@ -3,6 +3,7 @@ import { flightFareCents, formatPrice } from '@/lib/bookingPricing';
 
 import { cabinLabel, seatLabel } from '@/lib/bookingItinerary';
 import React, { useEffect, useRef, useState } from 'react';
+import type { FlightStatus } from '@prisma/client';
 import FlightStatusSelector from './FlightStatusSelector';
 import { flightDeparture } from '@/lib/flightTime';
 
@@ -37,7 +38,7 @@ interface Flight {
     to: string;
     departureDate: Date | string;
     priceCents: number;
-    status: string;
+    status: FlightStatus;
     bookings: Booking[];
 }
 

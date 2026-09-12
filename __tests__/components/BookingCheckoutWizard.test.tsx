@@ -1632,6 +1632,10 @@ describe('BookingCheckoutWizard', () => {
             for (const boardingPass of [outboundPass, inboundPass]) {
                 const issuedCaption = within(boardingPass).getByText('Issued (America/Los_Angeles)');
                 expect(issuedCaption).toHaveStyle({ color: '#f3f0ff' });
+                expect(within(boardingPass).getByText('Passenger')).toHaveStyle({ color: 'rgba(255, 255, 255, 0.75)' });
+                expect(within(boardingPass).getByText('Flight')).toHaveStyle({ color: 'rgba(255, 255, 255, 0.75)' });
+                expect(within(boardingPass).getByText('Seat')).toHaveStyle({ color: 'rgba(255, 255, 255, 0.75)' });
+                expect(within(boardingPass).getByText('ROUTE')).toHaveStyle({ color: 'rgba(255, 255, 255, 0.75)' });
                 expect(boardingPass).toHaveTextContent('June 30, 2026 at 5:30 PM PDT');
                 expect(within(boardingPass).getByText('June 30, 2026 at 5:30 PM PDT'))
                     .toHaveAttribute('datetime', '2026-07-01T00:30:00.000Z');

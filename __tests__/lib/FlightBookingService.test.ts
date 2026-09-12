@@ -423,7 +423,7 @@ describe('FlightBookingService', () => {
             userId: 'u1',
             passengers: [{
                 firstName: 'Alice', lastName: 'Smith', dateOfBirth: '1995-05-15',
-                passportNumber: 'US123456', gender: 'Female', seatNumbers: ['11A'], cabinClass: 'ECONOMY'
+                passportNumber: 'US123456', gender: 'Female', seatNumbers: ['11A'], cabinClass: 'ECONOMY' as const
             }],
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
         };
@@ -446,7 +446,7 @@ describe('FlightBookingService', () => {
             passengers: [{
                 firstName: 'Alice', lastName: 'Smith', dateOfBirth: '1995-05-15',
                 passportNumber: 'US123456', gender: 'Female', seatNumbers: ['11A'],
-                cabinClass: 'ECONOMY'
+                cabinClass: 'ECONOMY' as const
             }],
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
         };
@@ -520,7 +520,7 @@ describe('FlightBookingService', () => {
             passportNumber: 'US123456',
             gender: 'Female',
             seatNumbers: ['11A'],
-            cabinClass: 'ECONOMY'
+            cabinClass: 'ECONOMY' as const
         };
 
         await expect(new FlightBookingService().bookFlight({
