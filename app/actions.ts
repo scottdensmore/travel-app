@@ -56,6 +56,7 @@ import {
     activeItineraryLegWhere,
     bookingFlights,
     cabinLabel,
+    legFlightClause,
     outboundFlight,
 } from '@/lib/bookingItinerary';
 import { cancellableBooking, cancellationNote, cancellationOutcome } from '@/lib/cancellationPolicy';
@@ -438,7 +439,14 @@ export async function bookFlightAction(bookingData: {
         const field = legIndex >= 0 && passengerIndex >= 0
             ? `passengers.${passengerIndex}.seatNumbers.${legIndex}`
             : '_root';
-        return actionValidationFailure(error.message, field);
+        const hasLegClause = Boolean(error.legClause) || error.message.includes(' on the ') || error.message.includes(' on leg ');
+        const clause = !hasLegClause && bookingData.flightIds.length > 1 && legIndex >= 0
+            ? legFlightClause(legIndex, bookingData.flightIds.length)
+            : '';
+        const message = !hasLegClause && clause
+            ? `Seat ${error.claim.seatNumber}${clause} is no longer held for this checkout. Please choose a seat again.`
+            : error.message;
+        return actionValidationFailure(message, field);
     }
 
     try {
@@ -503,7 +511,14 @@ export async function startCheckoutPaymentAction(paymentData: {
         const field = legIndex >= 0 && passengerIndex >= 0
             ? `passengers.${passengerIndex}.seatNumbers.${legIndex}`
             : '_root';
-        return actionValidationFailure(error.message, field);
+        const hasLegClause = Boolean(error.legClause) || error.message.includes(' on the ') || error.message.includes(' on leg ');
+        const clause = !hasLegClause && parsed.data.flightIds.length > 1 && legIndex >= 0
+            ? legFlightClause(legIndex, parsed.data.flightIds.length)
+            : '';
+        const message = !hasLegClause && clause
+            ? `Seat ${error.claim.seatNumber}${clause} is no longer held for this checkout. Please choose a seat again.`
+            : error.message;
+        return actionValidationFailure(message, field);
     }
 }
 

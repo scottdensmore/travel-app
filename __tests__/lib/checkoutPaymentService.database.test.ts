@@ -532,7 +532,7 @@ describe('starting a checkout payment', () => {
                 { seatNumbers: ['2A', '2A'], cabinClass: 'BUSINESS' },
                 { seatNumbers: ['2B', '2B'], cabinClass: 'BUSINESS' },
             ],
-        })).rejects.toThrow('Seat 2B is no longer held for this checkout.');
+        })).rejects.toThrow('Seat 2B on the return flight is no longer held for this checkout.');
         expect(fake.createAuthorization).not.toHaveBeenCalled();
         expect(await prisma.paymentAttempt.count({ where: { userId: user.id } })).toBe(0);
     });

@@ -3,6 +3,7 @@ import FlightBookingService, { PassengerInput } from '@/lib/FlightBookingService
 import { prisma } from '@/lib/prisma';
 import { safePassengerSelect } from '@/lib/passengerDataAccess';
 import { encryptPassengerData } from '@/lib/passengerDataProtection';
+import { SeatHoldUnavailableError } from '@/lib/seatHolds';
 
 const mockTx = {
     $queryRaw: jest.fn(),
@@ -580,5 +581,78 @@ describe('FlightBookingService', () => {
         } as any)).rejects.toThrow('Unrecognized');
 
         expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('includes the leg clause in SeatHoldUnavailableError for multi-leg booking hold failure', async () => {
+        mockTx.flight.findMany.mockResolvedValue([
+            {
+                id: 7,
+                priceCents: 35000,
+                status: 'ON_TIME',
+                departureDate: new Date('2099-01-01T10:00:00Z'),
+                firstClassRows: 2,
+                businessRows: 4,
+                premiumEconomyRows: 4,
+                economyRows: 20,
+                seatPattern: 'ABC-DEF'
+            },
+            {
+                id: 8,
+                priceCents: 35000,
+                status: 'ON_TIME',
+                departureDate: new Date('2099-01-05T10:00:00Z'),
+                firstClassRows: 2,
+                businessRows: 4,
+                premiumEconomyRows: 4,
+                economyRows: 20,
+                seatPattern: 'ABC-DEF'
+            }
+        ]);
+        mockTx.booking.findFirst.mockResolvedValue(null);
+        mockTx.seatAssignment.findMany.mockResolvedValue([]);
+
+        // Fail hold consumption on the return flight (flight 8)
+        mockTx.$executeRaw.mockImplementation((_query: unknown, ...values: unknown[]) => {
+            if (values.includes(8)) return Promise.resolve(0);
+            return Promise.resolve(1);
+        });
+
+        await expect(new FlightBookingService().bookFlight({
+            flightIds: [7, 8],
+            userId: 'u1',
+            passengers: [{
+                firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
+                passportNumber: 'US1111111', gender: 'Female',
+                seatNumbers: ['12A', '12B'], cabinClass: 'ECONOMY'
+            }],
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
+        })).rejects.toThrow(
+            new SeatHoldUnavailableError(
+                { flightId: 8, seatNumber: '12B', holderKey: 'mock' },
+                ' on the return flight'
+            ).message
+        );
+
+        // Fail hold consumption on outbound flight (flight 7)
+        mockTx.$executeRaw.mockImplementation((_query: unknown, ...values: unknown[]) => {
+            if (values.includes(7)) return Promise.resolve(0);
+            return Promise.resolve(1);
+        });
+
+        await expect(new FlightBookingService().bookFlight({
+            flightIds: [7, 8],
+            userId: 'u1',
+            passengers: [{
+                firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
+                passportNumber: 'US1111111', gender: 'Female',
+                seatNumbers: ['12A', '12B'], cabinClass: 'ECONOMY'
+            }],
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
+        })).rejects.toThrow(
+            new SeatHoldUnavailableError(
+                { flightId: 7, seatNumber: '12A', holderKey: 'mock' },
+                ' on the departing flight'
+            ).message
+        );
     });
 });

@@ -44,11 +44,16 @@ export interface SeatHoldBatchResult {
 
 export class SeatHoldUnavailableError extends Error {
     readonly claim: SeatClaim;
+    readonly legClause?: string;
 
-    constructor(claim: SeatClaim) {
-        super(`Seat ${claim.seatNumber} is no longer held for this checkout. Please choose a seat again.`);
+    constructor(claim: SeatClaim, legClauseOrDirection?: string) {
+        const clause = legClauseOrDirection
+            ? (legClauseOrDirection.startsWith(' ') ? legClauseOrDirection : ` on the ${legClauseOrDirection} flight`)
+            : '';
+        super(`Seat ${claim.seatNumber}${clause} is no longer held for this checkout. Please choose a seat again.`);
         this.name = 'SeatHoldUnavailableError';
         this.claim = claim;
+        this.legClause = clause;
     }
 }
 

@@ -4,7 +4,7 @@ import { BRAND } from '@/lib/brand';
 import { formatPrice } from '@/lib/bookingPricing';
 import AirportData from '@/lib/data/AirportData';
 
-import React, { useState, useTransition } from 'react';
+import React, { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { saveFlightScheduleAction } from '@/app/actions';
 import { validateSeatingLayout } from '@/lib/seatLayout';
@@ -63,7 +63,17 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
      * explanation in a box that is often scrolled off the top of the page.
      */
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+    const [firstErrorField, setFirstErrorField] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!firstErrorField) return;
+        const input = document.getElementById(firstErrorField);
+        if (input) {
+            input.focus();
+            input.scrollIntoView?.({ block: 'center' });
+        }
+    }, [firstErrorField]);
 
     const weekdays = [
         { label: 'Sun', value: 0 },
@@ -87,6 +97,7 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
         e.preventDefault();
         setError(null);
         setSuccess(null);
+        setFirstErrorField(null);
 
         // Validation
         if (!flightNumber || !airline || !from || !to || !departureTime || !durationMinutes || !price) {
@@ -153,17 +164,12 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                     // body, from where Tab walks forward out of the form.
                     const firstField = Object.keys(fields)[0];
                     if (firstField) {
-                        requestAnimationFrame(() => {
-                            const input = document.getElementById(firstField);
-                            input?.focus();
-                            // Optional: not every environment implements it, and focus alone
-                            // already brings the field into view in a browser.
-                            input?.scrollIntoView?.({ block: 'center' });
-                        });
+                        setFirstErrorField(firstField);
                     }
                     return;
                 }
                 setFieldErrors({});
+                setFirstErrorField(null);
 
                 setSuccess(initialSchedule ? 'Schedule updated successfully!' : 'New schedule created successfully!');
                 if (!initialSchedule) {
@@ -241,7 +247,11 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                     <select
                         id="from"
                         value={from}
-                        onChange={e => { setFrom(e.target.value); setFieldErrors(previous => ({ ...previous, from: '' })); }}
+                        onChange={e => {
+                            setFrom(e.target.value);
+                            setFieldErrors(previous => ({ ...previous, from: '' }));
+                            setFirstErrorField(previous => (previous === 'from' ? null : previous));
+                        }}
                         disabled={isPending}
                         required
                         aria-invalid={Boolean(fieldErrors.from) || undefined}
@@ -278,7 +288,11 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                     <select
                         id="to"
                         value={to}
-                        onChange={e => { setTo(e.target.value); setFieldErrors(previous => ({ ...previous, to: '' })); }}
+                        onChange={e => {
+                            setTo(e.target.value);
+                            setFieldErrors(previous => ({ ...previous, to: '' }));
+                            setFirstErrorField(previous => (previous === 'to' ? null : previous));
+                        }}
                         disabled={isPending}
                         required
                         aria-invalid={Boolean(fieldErrors.to) || undefined}
