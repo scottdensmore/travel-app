@@ -68,7 +68,7 @@ import {
 import { buildFlightRoutes, findNearbyOperatingDates } from '@/lib/flightSearch';
 import { airportCodeFor, airportCodesForRoute, airportTimeZoneFor } from '@/lib/airports';
 import { airportDayBounds, airportLocalInstant, flightDeparture } from '@/lib/flightTime';
-import { flightRouteInclude, flightRouteWhere, withRouteLabels } from '@/lib/flightRoute';
+import { flightRouteInclude, flightRouteWhere, resolveFlightRouteWhere, withRouteLabels } from '@/lib/flightRoute';
 import type { RoutedFlight } from '@/lib/flightRoute';
 import {
     sendTravelDocumentsEmail,
@@ -287,7 +287,7 @@ async function searchOneDirection(
         ? { gt: now }
         : { gte: startOfDay };
 
-    const route = flightRouteWhere(from, to);
+    const route = await resolveFlightRouteWhere(from, to, prisma);
     if (route === null) return { flights: [], nearbyDates: [] };
 
     const flights = flightsForCabin((await prisma.flight.findMany({

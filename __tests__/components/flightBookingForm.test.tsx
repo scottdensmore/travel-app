@@ -161,6 +161,51 @@ describe('changing the route', () => {
         expect(commits.at(-1)).toEqual({ departure: '2026-07-18', returnDate: '2026-07-25' });
     });
 
+    it('never shows a stale return date when departure date is directly edited (#218)', () => {
+        const commits: Array<{ departure: string; returnDate: string }> = [];
+        const record = () => {
+            const departure = document.querySelector<HTMLInputElement>('#depart');
+            const returnInput = document.querySelector<HTMLInputElement>('#returnDate');
+            if (departure && returnInput) {
+                commits.push({ departure: departure.value, returnDate: returnInput.value });
+            }
+        };
+
+        render(
+            <React.Profiler id="form" onRender={record}>
+                <FlightBookingForm
+                    routes={routes}
+                    minimumDepartureDate="2026-07-14"
+                    maximumDepartureDate="2027-07-14"
+                />
+            </React.Profiler>
+        );
+
+        // Clear initial mount renders
+        commits.length = 0;
+
+        // Choose a departure date later than the initial return date (2026-07-22)
+        // so any stale render would have returnDate < departureDate
+        const nextDepart = '2026-08-01';
+        fireEvent.change(screen.getByLabelText('Depart', { exact: true }), {
+            target: { value: nextDepart },
+        });
+
+        expect(commits.length).toBeGreaterThan(0);
+        for (const { departure, returnDate } of commits) {
+            if (returnDate === '') continue;
+            // Assert that in every render, returnDate is at or after departureDate
+            expect(returnDate >= departure).toBe(true);
+            // and specifically equal to defaultReturnDate(departureDate) (7 days later)
+            expect(returnDate).toBe(addDaysToIsoDate(departure, 7));
+        }
+
+        expect(commits.at(-1)).toEqual({
+            departure: nextDepart,
+            returnDate: addDaysToIsoDate(nextDepart, 7),
+        });
+    });
+
     it('clamps the return against the new origin\'s window, not the old one\'s', () => {
         // The route effect used to read a ref that a *later* effect refreshes,
         // so on a route change across timezones it clamped against the previous
@@ -1498,4 +1543,67 @@ describe('FlightBookingForm', () => {
         });
     });
 
+    describe('results navigation and keyboard skip link (Issue #205)', () => {
+        it('renders accessible Modify search link when search results are present and moves focus to #from', async () => {
+            renderForm();
+
+            // Link is not present before search results are displayed
+            expect(screen.queryByRole('link', { name: /modify search/i })).not.toBeInTheDocument();
+
+            fireEvent.click(screen.getByText('Find your trip'));
+            await waitFor(() => {
+                expect(screen.getByText('Available Flights')).toBeInTheDocument();
+            });
+
+            // Heading receives focus when results arrive
+            const heading = screen.getByRole('heading', { name: 'Available Flights' });
+            expect(heading).toHaveFocus();
+
+            // Modify search link is rendered
+            const modifyLink = screen.getByRole('link', { name: /modify search/i });
+            expect(modifyLink).toBeInTheDocument();
+            expect(modifyLink).toHaveAttribute('href', '#flight-search-form');
+            expect(modifyLink).toHaveClass('modify-search-link');
+
+            // Link is keyboard-focusable
+            modifyLink.focus();
+            expect(modifyLink).toHaveFocus();
+
+            // Activating the link moves focus to #from input
+            fireEvent.click(modifyLink);
+            const fromSelect = screen.getByLabelText('From', { exact: true });
+            expect(fromSelect).toHaveFocus();
+            expect(fromSelect.id).toBe('from');
+        });
+
+        it('provides accessible Modify search link when arriving by shared search link (#205)', async () => {
+            renderForm({
+                from: 'Seattle, USA',
+                to: 'Detroit, USA',
+                departureDate: '2026-07-15',
+                returnDate: '',
+                tripType: 'one-way',
+                cabinClass: 'ECONOMY' as const,
+            });
+
+            await waitFor(() => expect(screen.getByText('Available Flights')).toBeInTheDocument());
+
+            const heading = screen.getByRole('heading', { name: 'Available Flights' });
+            expect(heading).toHaveFocus();
+
+            const modifyLink = screen.getByRole('link', { name: /modify search/i });
+            expect(modifyLink).toBeInTheDocument();
+            expect(modifyLink).toHaveAttribute('href', '#flight-search-form');
+
+            // Keyboard-focusable
+            modifyLink.focus();
+            expect(modifyLink).toHaveFocus();
+
+            // Activating moves focus to #from
+            fireEvent.click(modifyLink);
+            expect(screen.getByLabelText('From', { exact: true })).toHaveFocus();
+        });
+    });
+
 });
+

@@ -354,4 +354,47 @@ describe('isUnusableSearchLink', () => {
     it('is false for parameters that are nothing to do with a search', () => {
         expect(isUnusableSearchLink({ utm_source: 'newsletter' }, undefined)).toBe(false);
     });
+
+    it('is true when from is an unrecognized airport', () => {
+        const params = { from: 'Atlantis', to: 'DTW', trip: 'one-way' };
+        const parsed = parseFlightSearchParams(params, routes, bookingWindow);
+        expect(parsed).toBeUndefined();
+        expect(isUnusableSearchLink(params, parsed)).toBe(true);
+    });
+
+    it('is true when from and to are valid codes but not a flown route', () => {
+        const params = { from: 'SEA', to: 'LHR', trip: 'one-way' };
+        const parsed = parseFlightSearchParams(params, routes, bookingWindow);
+        expect(parsed).toBeUndefined();
+        expect(isUnusableSearchLink(params, parsed)).toBe(true);
+    });
+
+    it('is true when dates are outside the booking window', () => {
+        const pastParams = { from: 'SEA', to: 'DTW', depart: '2020-01-01', trip: 'one-way' };
+        const parsedPast = parseFlightSearchParams(pastParams, routes, bookingWindow);
+        expect(parsedPast).toBeUndefined();
+        expect(isUnusableSearchLink(pastParams, parsedPast)).toBe(true);
+
+        const futureParams = { from: 'SEA', to: 'DTW', depart: '2099-01-01', trip: 'one-way' };
+        const parsedFuture = parseFlightSearchParams(futureParams, routes, bookingWindow);
+        expect(parsedFuture).toBeUndefined();
+        expect(isUnusableSearchLink(futureParams, parsedFuture)).toBe(true);
+    });
+
+    it('is true when unparseable or malicious query parameters are passed', () => {
+        const arrayParams = { from: ['SEA', 'JFK'], to: 'DTW', trip: 'one-way' };
+        const parsedArray = parseFlightSearchParams(arrayParams, routes, bookingWindow);
+        expect(parsedArray).toBeUndefined();
+        expect(isUnusableSearchLink(arrayParams, parsedArray)).toBe(true);
+
+        const malformedDate = { from: 'SEA', to: 'DTW', depart: 'not-a-date', trip: 'one-way' };
+        const parsedMalformed = parseFlightSearchParams(malformedDate, routes, bookingWindow);
+        expect(parsedMalformed).toBeUndefined();
+        expect(isUnusableSearchLink(malformedDate, parsedMalformed)).toBe(true);
+
+        const maliciousCabin = { from: 'SEA', to: 'DTW', cabin: '<script>alert(1)</script>' };
+        const parsedMalicious = parseFlightSearchParams(maliciousCabin, routes, bookingWindow);
+        expect(parsedMalicious).toBeUndefined();
+        expect(isUnusableSearchLink(maliciousCabin, parsedMalicious)).toBe(true);
+    });
 });
