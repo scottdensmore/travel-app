@@ -1029,31 +1029,46 @@ export async function cancelBookingAction(bookingId: number) {
             where: { id: bookingId },
             data: { status: "CANCELLED" }
         });
-        if (settled.refundCents <= 0 || !lockedBooking.paymentIntentId) {
-            return { updatedBooking, refundId: null };
+
+        let refundId: string | null = null;
+        if (settled.refundCents > 0 && lockedBooking.paymentIntentId) {
+            // The status trigger wrote this row in the update above. Linking the
+            // refund request inside the same transaction means a committed
+            // cancellation can always be retried, even if Stripe is unavailable
+            // immediately afterwards.
+            const change = await tx.bookingStatusChange.findFirstOrThrow({
+                where: {
+                    bookingId,
+                    from: lockedBooking.status,
+                    to: 'CANCELLED',
+                },
+                orderBy: { sequence: 'desc' },
+            });
+            const refund = await tx.paymentRefund.create({
+                data: {
+                    bookingStatusChangeId: change.id,
+                    providerIntentId: lockedBooking.paymentIntentId,
+                    amountCents: settled.refundCents,
+                    currency: lockedBooking.currency,
+                },
+            });
+            refundId = refund.id;
         }
 
-        // The status trigger wrote this row in the update above. Linking the
-        // refund request inside the same transaction means a committed
-        // cancellation can always be retried, even if Stripe is unavailable
-        // immediately afterwards.
-        const change = await tx.bookingStatusChange.findFirstOrThrow({
-            where: {
-                bookingId,
-                from: lockedBooking.status,
-                to: 'CANCELLED',
-            },
-            orderBy: { sequence: 'desc' },
-        });
-        const refund = await tx.paymentRefund.create({
-            data: {
-                bookingStatusChangeId: change.id,
-                providerIntentId: lockedBooking.paymentIntentId,
-                amountCents: settled.refundCents,
-                currency: lockedBooking.currency,
-            },
-        });
-        return { updatedBooking, refundId: refund.id };
+        const flight = outboundFlight(lockedBooking);
+        if (flight && lockedBooking.userId) {
+            const points = Math.floor(bookingTotalCents(lockedBooking, flight) / 100);
+            await tx.notification.create({
+                data: {
+                    userId: lockedBooking.userId,
+                    title: `Booking Cancelled: ${flight.airline} ${flight.flightNumber}`,
+                    message: `Booking for flight ${flight.flightNumber} has been cancelled. Deducted -${points} status points.`,
+                    type: "POINTS",
+                },
+            });
+        }
+
+        return { updatedBooking, refundId };
         });
         updated = cancellation.updatedBooking;
         refundId = cancellation.refundId;
@@ -1076,23 +1091,6 @@ export async function cancelBookingAction(bookingId: number) {
                 refundId,
             });
         }
-    }
-
-    try {
-        const flight = outboundFlight(booking);
-        if (flight && booking.userId) {
-            const points = Math.floor(bookingTotalCents(booking, flight) / 100);
-            await prisma.notification.create({
-                data: {
-                    userId: booking.userId,
-                    title: `Booking Cancelled: ${flight.airline} ${flight.flightNumber}`,
-                    message: `Booking for flight ${flight.flightNumber} has been cancelled. Deducted -${points} status points.`,
-                    type: "POINTS"
-                }
-            });
-        }
-    } catch (err) {
-        console.error("Failed to generate cancellation notification:", err);
     }
 
     revalidatePath('/profile');
@@ -1829,7 +1827,7 @@ export async function updateFlightStatusAction(flightId: number, status: FlightS
     // flight's own lock. Cancelling a flight used to change only the flight:
     // the bookings stayed CONFIRMED, holding their seats, and the customer kept
     // a boarding pass for a flight that was not operating (#76).
-    const { withAirports, outcomes } = await prisma.$transaction(async (tx) => {
+    const withAirports = await prisma.$transaction(async (tx) => {
         // No explicit flight lock: the update below takes the row's write lock
         // and holds it to commit, which is what a `SELECT ... FOR UPDATE` here
         // would have done a statement earlier. What needed locking was the
@@ -1908,38 +1906,28 @@ export async function updateFlightStatusAction(flightId: number, status: FlightS
                 }),
         ).values()];
 
-        return { withAirports, outcomes };
+        if (outcomes.length > 0) {
+            const route = `${withAirports.flightNumber} from ${withAirports.fromAirport.label} to ${withAirports.toAirport.label}`;
+            await tx.notification.createMany({
+                data: outcomes.map(({ userId: targetUserId, stillGrounded }) => ({
+                    userId: targetUserId,
+                    title: `Flight Update: ${withAirports.airline} ${withAirports.flightNumber}`,
+                    message: status === 'CANCELLED'
+                        ? `Your flight ${route} has been cancelled by the airline. Your seat is held while you decide; cancel the booking from your profile for a full refund.`
+                        : stillGrounded
+                            ? `Your flight ${route} is operating again, but another flight in this booking is still cancelled.`
+                            : `Your upcoming flight ${route} is now ${status.replace('_', ' ')}.`,
+                    type: "FLIGHT_STATUS",
+                })),
+            });
+        }
+
+        return withAirports;
     });
 
     // The relation objects would otherwise ride this return value across to
     // the client, which reads it only to check for a validation failure.
     const updated = withRouteLabels(withAirports);
-
-    try {
-        if (outcomes.length > 0) {
-            const route = `${updated.flightNumber} from ${updated.from} to ${updated.to}`;
-            await prisma.notification.createMany({
-                data: outcomes.map(({ userId: targetUserId, stillGrounded }) => ({
-                    userId: targetUserId,
-                    title: `Flight Update: ${updated.airline} ${updated.flightNumber}`,
-                    message: status === 'CANCELLED'
-                        // Says what to do about it, because "cancelled" alone
-                        // leaves the customer holding a booking with no
-                        // obvious next step.
-                        ? `Your flight ${route} has been cancelled by the airline. Your seat is held while you decide; cancel the booking from your profile for a full refund.`
-                        : stillGrounded
-                            // Their trip is still broken by another leg, so
-                            // "is now ON TIME" would read as good news it is
-                            // not.
-                            ? `Your flight ${route} is operating again, but another flight in this booking is still cancelled.`
-                            : `Your upcoming flight ${route} is now ${status.replace('_', ' ')}.`,
-                    type: "FLIGHT_STATUS"
-                }))
-            });
-        }
-    } catch (err) {
-        console.error("Failed to generate flight status notifications:", err);
-    }
 
     revalidatePath('/flights');
     revalidatePath('/admin/flights');

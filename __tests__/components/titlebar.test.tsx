@@ -180,6 +180,22 @@ describe('TitleBar', () => {
 
             expect(consoleError).not.toHaveBeenCalled();
         });
+
+        it('shows an error alert in the drawer instead of caught up when fetching notifications fails (#209)', async () => {
+            mockGetUserNotifications.mockRejectedValue(new Error('Internal Server Error'));
+
+            render(<TitleBar />);
+
+            await waitFor(() => expect(consoleError).toHaveBeenCalled());
+
+            const bell = screen.getByRole('button', { name: /toggle notifications/i });
+            fireEvent.click(bell);
+
+            const alert = await screen.findByRole('alert');
+            expect(alert).toBeInTheDocument();
+            expect(alert).toHaveTextContent('Unable to load notifications. Please try again.');
+            expect(screen.queryByText("You're all caught up!")).not.toBeInTheDocument();
+        });
     });
 
     it('renders the correct title when pathname is /book', () => {
@@ -269,13 +285,38 @@ describe('TitleBar', () => {
         render(<TitleBar />);
 
         // Bell should be visible
-        const bellButton = screen.getByRole('button', { name: 'Toggle notifications' });
+        const bellButton = screen.getByRole('button', { name: /toggle notifications/i });
         expect(bellButton).toBeInTheDocument();
 
         // Unread badge count should show "1"
         await waitFor(() => {
             expect(screen.getByText('1')).toBeInTheDocument();
         });
+    });
+
+    it('includes unread count in bell aria-label and provides high-contrast badge background (#210)', async () => {
+        (usePathname as jest.Mock).mockReturnValue('/book');
+        (require('next-auth/react').useSession as jest.Mock).mockReturnValue({
+            data: { user: { id: 'u1', name: 'Bob', role: 'USER' } }
+        });
+        mockGetUserNotifications.mockResolvedValue([
+            { id: 'n1', userId: 'u1', title: 'Flight Delayed', message: 'Flight AA100 is delayed', type: 'FLIGHT_STATUS', isRead: false, createdAt: new Date() },
+            { id: 'n2', userId: 'u1', title: 'Gate Changed', message: 'Gate is now B12', type: 'FLIGHT_STATUS', isRead: false, createdAt: new Date() },
+        ]);
+
+        render(<TitleBar />);
+
+        // Initially before fetch completes, bell has default label
+        expect(screen.getByRole('button', { name: 'Toggle notifications' })).toBeInTheDocument();
+
+        // Once notifications load with 2 unread items:
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: 'Toggle notifications, 2 unread' })).toBeInTheDocument();
+        });
+
+        // Badge has WCAG AA compliant background color #b91c1c
+        const badge = screen.getByText('2');
+        expect(badge).toHaveStyle({ backgroundColor: '#b91c1c' });
     });
 
     it('toggles drawer and triggers mark as read actions', async () => {
@@ -291,7 +332,7 @@ describe('TitleBar', () => {
         render(<TitleBar />);
 
         // Open notifications drawer
-        const bellButton = screen.getByRole('button', { name: 'Toggle notifications' });
+        const bellButton = screen.getByRole('button', { name: /toggle notifications/i });
         fireEvent.click(bellButton);
 
         // Drawer header should be present
@@ -325,7 +366,7 @@ describe('TitleBar', () => {
 
         render(<TitleBar />);
 
-        const bellButton = screen.getByRole('button', { name: 'Toggle notifications' });
+        const bellButton = screen.getByRole('button', { name: /toggle notifications/i });
         fireEvent.click(bellButton);
 
         await waitFor(() => {
@@ -550,5 +591,141 @@ describe('titlebar navigation, scroll affordance, and accessibility', () => {
         expect(nav).toHaveAttribute('data-scroll-right', 'false');
     });
 });
+
+describe('drawer loading and empty states (#209)', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (usePathname as jest.Mock).mockReturnValue('/');
+        (require('next-auth/react').useSession as jest.Mock).mockReturnValue({
+            data: { user: { id: 'u1', name: 'Bob', role: 'USER' } },
+        });
+    });
+
+    it('shows loading placeholder while fetching notifications', async () => {
+        let resolvePromise: (val: any) => void = () => {};
+        mockGetUserNotifications.mockReturnValue(new Promise(resolve => { resolvePromise = resolve; }));
+
+        render(<TitleBar />);
+
+        const bell = screen.getByRole('button', { name: /toggle notifications/i });
+        fireEvent.click(bell);
+
+        expect(screen.getByText('Loading notifications...')).toBeInTheDocument();
+        expect(screen.queryByText("You're all caught up!")).not.toBeInTheDocument();
+
+        await act(async () => {
+            resolvePromise([]);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText("You're all caught up!")).toBeInTheDocument();
+            expect(screen.queryByText('Loading notifications...')).not.toBeInTheDocument();
+        });
+    });
+
+    it('shows caught up message when notifications list is empty after successful load', async () => {
+        mockGetUserNotifications.mockResolvedValue([]);
+
+        render(<TitleBar />);
+
+        const bell = screen.getByRole('button', { name: /toggle notifications/i });
+        fireEvent.click(bell);
+
+        await waitFor(() => {
+            expect(screen.getByText("You're all caught up!")).toBeInTheDocument();
+        });
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+});
+
+describe('notification row keyboard accessibility and operability (#241)', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (usePathname as jest.Mock).mockReturnValue('/');
+        (require('next-auth/react').useSession as jest.Mock).mockReturnValue({
+            data: { user: { id: 'u1', name: 'Bob', role: 'USER' } },
+        });
+        mockGetUserNotifications.mockResolvedValue([
+            {
+                id: 'n1', userId: 'u1', title: 'Flight Delayed',
+                message: 'Flight AA100 is delayed', type: 'FLIGHT_STATUS',
+                isRead: false, createdAt: new Date(),
+            },
+            {
+                id: 'n2', userId: 'u1', title: 'Points Earned',
+                message: 'You earned 350 points', type: 'POINTS',
+                isRead: true, createdAt: new Date(),
+            },
+        ]);
+        mockMarkNotificationAsRead.mockResolvedValue({ id: 'n1', isRead: true });
+    });
+
+    it('assigns role="button", tabIndex={0}, and aria-label to unread notifications and marks them read on Enter', async () => {
+        render(<TitleBar />);
+
+        fireEvent.click(screen.getByRole('button', { name: /toggle notifications/i }));
+
+        const unreadItem = await screen.findByRole('button', { name: 'Mark notification "Flight Delayed" as read' });
+        expect(unreadItem).toHaveAttribute('tabindex', '0');
+
+        fireEvent.keyDown(unreadItem, { key: 'Enter' });
+
+        await waitFor(() => {
+            expect(mockMarkNotificationAsRead).toHaveBeenCalledWith('n1');
+        });
+    });
+
+    it('marks unread notification as read on Space key press', async () => {
+        render(<TitleBar />);
+
+        fireEvent.click(screen.getByRole('button', { name: /toggle notifications/i }));
+
+        const unreadItem = await screen.findByRole('button', { name: 'Mark notification "Flight Delayed" as read' });
+        fireEvent.keyDown(unreadItem, { key: ' ' });
+
+        await waitFor(() => {
+            expect(mockMarkNotificationAsRead).toHaveBeenCalledWith('n1');
+        });
+    });
+
+    it('ignores other keyboard keys on unread notifications', async () => {
+        render(<TitleBar />);
+
+        fireEvent.click(screen.getByRole('button', { name: /toggle notifications/i }));
+
+        const unreadItem = await screen.findByRole('button', { name: 'Mark notification "Flight Delayed" as read' });
+        fireEvent.keyDown(unreadItem, { key: 'ArrowDown' });
+
+        expect(mockMarkNotificationAsRead).not.toHaveBeenCalled();
+    });
+
+    it('omits button role and keyboard tab stops on already-read notifications', async () => {
+        render(<TitleBar />);
+
+        fireEvent.click(screen.getByRole('button', { name: /toggle notifications/i }));
+
+        await screen.findByText('Points Earned');
+        const readItem = screen.getByText('Points Earned').closest('.notification-item');
+        expect(readItem).not.toHaveAttribute('role', 'button');
+        expect(readItem).not.toHaveAttribute('tabindex', '0');
+        expect(readItem).not.toHaveAttribute('aria-label');
+    });
+
+    it('renders focus-visible stylesheet rule for accessible notification item outlines', async () => {
+        const { container } = render(<TitleBar />);
+
+        const styleTags = container.querySelectorAll('style');
+        const styleContent = Array.from(styleTags).map(tag => tag.textContent).join('\n');
+
+        expect(styleContent).toContain('.notification-item:focus-visible');
+        expect(styleContent).toContain('outline: 2px solid #c084fc');
+        expect(styleContent).toContain('outline-offset: -2px');
+
+        await waitFor(() => {
+            expect(screen.getByText('1')).toBeInTheDocument();
+        });
+    });
+});
+
 
 

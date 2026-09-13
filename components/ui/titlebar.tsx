@@ -30,6 +30,9 @@ const TitleBar: React.FC = () => {
     const pathname = usePathname();
     const { data: session } = useSession();
     const [notifications, setNotifications] = useState<Notification[]>([]);
+    const [notificationsStatus, setNotificationsStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>(
+        session?.user ? 'loading' : 'idle'
+    );
     const [isOpen, setIsOpen] = useState(false);
     const drawerRef = useRef<HTMLLIElement>(null);
     const bellRef = useRef<HTMLButtonElement>(null);
@@ -161,17 +164,25 @@ const TitleBar: React.FC = () => {
         const poll = async () => {
             if (!session?.user) {
                 setNotifications([]);
+                if (active) setNotificationsStatus('idle');
                 return;
             }
             try {
                 const notifs = await getUserNotificationsAction();
-                if (active) setNotifications(notifs as Notification[]);
+                if (active) {
+                    setNotifications(notifs as Notification[]);
+                    setNotificationsStatus('loaded');
+                }
             } catch (err) {
                 if (!active || leavingPage.current) return;
+                setNotificationsStatus('error');
                 console.error("Failed to load notifications:", err);
             }
         };
 
+        if (session?.user) {
+            setNotificationsStatus(prev => (prev === 'loaded' ? 'loaded' : 'loading'));
+        }
         poll();
         const interval = setInterval(poll, 3000);
         return () => {
@@ -301,6 +312,12 @@ const TitleBar: React.FC = () => {
 
     return (
         <header className={pathname?.startsWith('/admin') ? 'admin-header' : ''}>
+            <style>{`
+                .notification-item:focus-visible {
+                    outline: 2px solid #c084fc;
+                    outline-offset: -2px;
+                }
+            `}</style>
             <div className="logo">
                 <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}>
                     {/* Decorative: the name follows in text inside the same
@@ -357,7 +374,7 @@ const TitleBar: React.FC = () => {
                                 <button 
                                     ref={bellRef}
                                     onClick={() => setIsOpen(!isOpen)}
-                                    aria-label="Toggle notifications"
+                                    aria-label={unreadCount > 0 ? `Toggle notifications, ${unreadCount} unread` : 'Toggle notifications'}
                                     aria-haspopup="dialog"
                                     aria-expanded={isOpen}
                                     aria-controls={isOpen ? 'notification-drawer' : undefined}
@@ -382,7 +399,7 @@ const TitleBar: React.FC = () => {
                                             position: 'absolute',
                                             top: '-2px',
                                             right: '-2px',
-                                            backgroundColor: '#ef4444',
+                                            backgroundColor: '#b91c1c',
                                             color: '#fff',
                                             borderRadius: '50%',
                                             padding: '2px 5px',
@@ -475,7 +492,16 @@ const TitleBar: React.FC = () => {
                                                     return (
                                                         <div 
                                                             key={notif.id}
+                                                            role={isUnread ? 'button' : undefined}
+                                                            tabIndex={isUnread ? 0 : undefined}
+                                                            aria-label={isUnread ? `Mark notification "${notif.title}" as read` : undefined}
                                                             onClick={() => isUnread && handleMarkAsRead(notif.id)}
+                                                            onKeyDown={isUnread ? (e) => {
+                                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                                    e.preventDefault();
+                                                                    handleMarkAsRead(notif.id);
+                                                                }
+                                                            } : undefined}
                                                             style={{
                                                                 padding: '12px 16px',
                                                                 borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
@@ -513,13 +539,38 @@ const TitleBar: React.FC = () => {
                                                         </div>
                                                     );
                                                 })
+                                            ) : notificationsStatus === 'error' ? (
+                                                <div
+                                                    role="alert"
+                                                    style={{
+                                                        padding: '24px',
+                                                        textAlign: 'center',
+                                                        color: 'rgba(255, 255, 255, 0.72)',
+                                                        fontSize: '0.85rem'
+                                                    }}
+                                                >
+                                                    Unable to load notifications. Please try again.
+                                                </div>
+                                            ) : notificationsStatus === 'loading' ? (
+                                                <div
+                                                    style={{
+                                                        padding: '24px',
+                                                        textAlign: 'center',
+                                                        color: 'rgba(255, 255, 255, 0.72)',
+                                                        fontSize: '0.85rem'
+                                                    }}
+                                                >
+                                                    Loading notifications...
+                                                </div>
                                             ) : (
-                                                <div style={{
-                                                    padding: '24px',
-                                                    textAlign: 'center',
-                                                    color: 'rgba(255, 255, 255, 0.72)',
-                                                    fontSize: '0.85rem'
-                                                }}>
+                                                <div
+                                                    style={{
+                                                        padding: '24px',
+                                                        textAlign: 'center',
+                                                        color: 'rgba(255, 255, 255, 0.72)',
+                                                        fontSize: '0.85rem'
+                                                    }}
+                                                >
                                                     {"You're all caught up!"}
                                                 </div>
                                             )}

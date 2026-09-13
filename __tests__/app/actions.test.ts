@@ -197,7 +197,11 @@ const mockTx = {
     seatAssignment: {
         updateMany: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
-    }
+    },
+    notification: {
+        create: jest.fn(),
+        createMany: jest.fn(),
+    },
 };
 
 jest.mock('@/lib/prisma', () => ({
@@ -1495,6 +1499,8 @@ describe('cancelBookingAction', () => {
         // The action re-reads and re-decides under the flight locks, so the
         // locked row needs the same shape the policy reads (#76).
         mockTx.booking.findUnique.mockResolvedValue({
+            id: 1,
+            userId: 'user-123',
             status: 'CONFIRMED', totalPriceCents: 20000, legs: [{
                 sequence: 1,
                 flight: {
@@ -1546,6 +1552,22 @@ describe('cancelBookingAction', () => {
                 seatAssignments: [{ cabinClass: 'ECONOMY' }],
             }]
         });
+        mockTx.booking.findUnique.mockResolvedValue({
+            id: 1,
+            userId: 'user-123',
+            totalPriceCents: 6997,
+            status: 'CONFIRMED',
+            legs: [{
+                sequence: 1,
+                flight: {
+                    flightNumber: 'GA101',
+                    airline: 'Gemini Airways',
+                    priceCents: 20000,
+                    departureDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                },
+                seatAssignments: [{ cabinClass: 'ECONOMY' }],
+            }],
+        });
         mockTx.booking.update.mockResolvedValue({ id: 1 });
 
         const result = await cancelBookingAction(1);
@@ -1582,7 +1604,7 @@ describe('cancelBookingAction', () => {
         });
         expect(result).toEqual({ id: 1 });
         expect(mockTx.$queryRaw).toHaveBeenCalled();
-        expect(mockedNotificationCreate).toHaveBeenCalledWith({
+        expect(mockTx.notification.create).toHaveBeenCalledWith({
             data: {
                 userId: 'user-123',
                 title: 'Booking Cancelled: Gemini Airways GA101',
@@ -1590,6 +1612,7 @@ describe('cancelBookingAction', () => {
                 type: 'POINTS'
             }
         });
+        expect(mockedNotificationCreate).not.toHaveBeenCalled();
     });
 
     it('leaves the seat assignment alone, because the database releases it', async () => {
@@ -1870,6 +1893,7 @@ describe('cancelBookingAction', () => {
             error: { code: 'VALIDATION_ERROR', message: expect.stringMatching(/already departed/i) },
         });
         expect(mockTx.booking.update).not.toHaveBeenCalled();
+        expect(mockTx.notification.create).not.toHaveBeenCalled();
         expect(mockedNotificationCreate).not.toHaveBeenCalled();
     });
 
@@ -1892,6 +1916,22 @@ describe('cancelBookingAction', () => {
                 seatAssignments: [{ cabinClass: 'ECONOMY' }],
             }]
         });
+        mockTx.booking.findUnique.mockResolvedValue({
+            id: 1,
+            userId: 'some-user',
+            totalPriceCents: 20000,
+            status: 'CONFIRMED',
+            legs: [{
+                sequence: 1,
+                flight: {
+                    flightNumber: 'GA101',
+                    airline: 'Gemini Airways',
+                    priceCents: 20000,
+                    departureDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                },
+                seatAssignments: [{ cabinClass: 'ECONOMY' }],
+            }],
+        });
         mockTx.booking.update.mockResolvedValue({ id: 1 });
 
         const result = await cancelBookingAction(1);
@@ -1902,7 +1942,7 @@ describe('cancelBookingAction', () => {
         });
         expect(result).toEqual({ id: 1 });
 
-        expect(mockedNotificationCreate).toHaveBeenCalledWith({
+        expect(mockTx.notification.create).toHaveBeenCalledWith({
             data: {
                 userId: 'some-user',
                 title: 'Booking Cancelled: Gemini Airways GA101',
@@ -1910,6 +1950,7 @@ describe('cancelBookingAction', () => {
                 type: 'POINTS'
             }
         });
+        expect(mockedNotificationCreate).not.toHaveBeenCalled();
     });
 });
 
@@ -2789,7 +2830,7 @@ describe('admin flight schedule actions', () => {
             // A delay moves nobody's booking status.
             expect(mockTx.booking.update).not.toHaveBeenCalled();
 
-            expect(mockedNotificationCreateMany).toHaveBeenCalledWith({
+            expect(mockTx.notification.createMany).toHaveBeenCalledWith({
                 data: [
                     {
                         userId: 'user-1',
@@ -2805,6 +2846,46 @@ describe('admin flight schedule actions', () => {
                     }
                 ]
             });
+            expect(mockedNotificationCreateMany).not.toHaveBeenCalled();
+        });
+
+        it('creates flight cancellation notifications with next-step instructions when cancelled by airline', async () => {
+            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
+            mockTx.flight.update.mockResolvedValue({
+                id: 99,
+                airline: 'Gemini Airways',
+                flightNumber: 'GA101',
+                fromAirport: { label: 'Seattle, USA' },
+                toAirport: { label: 'Detroit, USA' },
+                status: 'CANCELLED'
+            });
+            mockTx.$queryRaw.mockResolvedValue([{ id: 1 }]);
+            mockTx.booking.findMany.mockResolvedValue([
+                {
+                    id: 1,
+                    userId: 'user-1',
+                    status: 'CONFIRMED',
+                    legs: [{ flight: { status: 'CANCELLED' } }],
+                },
+            ]);
+
+            await updateFlightStatusAction(99, 'CANCELLED');
+
+            expect(mockTx.booking.update).toHaveBeenCalledWith({
+                where: { id: 1 },
+                data: { status: 'DISRUPTED' },
+            });
+            expect(mockTx.notification.createMany).toHaveBeenCalledWith({
+                data: [
+                    {
+                        userId: 'user-1',
+                        title: 'Flight Update: Gemini Airways GA101',
+                        message: 'Your flight GA101 from Seattle, USA to Detroit, USA has been cancelled by the airline. Your seat is held while you decide; cancel the booking from your profile for a full refund.',
+                        type: 'FLIGHT_STATUS'
+                    }
+                ]
+            });
+            expect(mockedNotificationCreateMany).not.toHaveBeenCalled();
         });
     });
 
