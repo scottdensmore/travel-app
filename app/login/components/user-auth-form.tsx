@@ -18,17 +18,19 @@ export default function UserAuthForm({ className, type, ...props }: UserAuthForm
     const errorSummaryRef = React.useRef<HTMLDivElement>(null);
     const router = useRouter();
 
+    React.useEffect(() => {
+        if (!formError) return;
+        const firstInvalidField = ['name', 'email', 'password']
+            .find(field => formError.fields[field]?.length);
+        if (firstInvalidField) {
+            document.getElementById(firstInvalidField)?.focus();
+        } else {
+            errorSummaryRef.current?.focus();
+        }
+    }, [formError]);
+
     const showFormError = (message: string, fields: Record<string, string[]> = {}) => {
         setFormError({ message, fields });
-        window.setTimeout(() => {
-            const firstInvalidField = ['name', 'email', 'password']
-                .find(field => fields[field]?.length);
-            if (firstInvalidField) {
-                document.getElementById(firstInvalidField)?.focus();
-            } else {
-                errorSummaryRef.current?.focus();
-            }
-        }, 0);
     };
 
     async function onSubmit(event: React.FormEvent<HTMLFormElement>) {

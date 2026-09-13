@@ -36,6 +36,44 @@ const chartConfig = {
 } satisfies ChartConfig
 
 export default function NextStatusChart({ points = 1300 }: { points?: number }) {
+  const [hasUsableDimensions, setHasUsableDimensions] = React.useState(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const element = containerRef.current;
+    if (!element) {
+      return;
+    }
+
+    const checkDimensions = (width: number, height: number) => {
+      if (width > 0 && height > 0) {
+        setHasUsableDimensions(true);
+      }
+    };
+
+    const initialRect = element.getBoundingClientRect();
+    checkDimensions(initialRect.width, initialRect.height);
+
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver((entries) => {
+        const entry = entries?.[0];
+        const width = entry?.contentRect
+          ? entry.contentRect.width
+          : element.getBoundingClientRect().width;
+        const height = entry?.contentRect
+          ? entry.contentRect.height
+          : element.getBoundingClientRect().height;
+        checkDimensions(width, height);
+      });
+
+      observer.observe(element);
+
+      return () => {
+        observer.disconnect();
+      };
+    }
+  }, []);
+
   const { chartData, nextTier, remainingPoints } = React.useMemo(() => {
     const bronze = Math.min(points, 1000);
     const silver = Math.min(Math.max(points - 1000, 0), 2000);
@@ -75,54 +113,68 @@ export default function NextStatusChart({ points = 1300 }: { points?: number }) 
   return (
    <>
       <CardContent>
-        <ChartContainer
-          config={chartConfig}
-          className="mx-auto aspect-square max-h-[350px]"
+        <div
+          ref={containerRef}
+          className="mx-auto aspect-square max-h-[350px] w-full"
+          data-testid="next-status-chart-container"
         >
-          <PieChart>
-            <ChartTooltip
-              cursor={false}
-              content={<ChartTooltipContent hideLabel />}
-            />
-            <Pie
-              data={chartData}
-              dataKey="points"
-              nameKey="status"
-              innerRadius={30}
-              strokeWidth={5}
+          {hasUsableDimensions ? (
+            <ChartContainer
+              config={chartConfig}
+              className="mx-auto aspect-square max-h-[350px] w-full"
             >
-              <Label
-                content={({ viewBox }) => {
-                  if (viewBox && "cx" in viewBox && "cy" in viewBox) {
-                    return (
-                      <text
-                        x={viewBox.cx}
-                        y={viewBox.cy}
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                      >
-                        <tspan
-                          x={viewBox.cx}
-                          y={viewBox.cy}
-                          className="fill-foreground text-3xl font-bold"
-                        >
-                          {points.toLocaleString()}
-                        </tspan>
-                        <tspan
-                          x={viewBox.cx}
-                          y={(viewBox.cy || 0) + 24}
-                          className="fill-muted-foreground"
-                        >
-                          points
-                        </tspan>
-                      </text>
-                    )
-                  }
-                }}
-              />
-            </Pie>
-          </PieChart>
-        </ChartContainer>
+              <PieChart>
+                <ChartTooltip
+                  cursor={false}
+                  content={<ChartTooltipContent hideLabel />}
+                />
+                <Pie
+                  data={chartData}
+                  dataKey="points"
+                  nameKey="status"
+                  innerRadius={30}
+                  strokeWidth={5}
+                >
+                  <Label
+                    content={({ viewBox }) => {
+                      if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                        return (
+                          <text
+                            x={viewBox.cx}
+                            y={viewBox.cy}
+                            textAnchor="middle"
+                            dominantBaseline="middle"
+                          >
+                            <tspan
+                              x={viewBox.cx}
+                              y={viewBox.cy}
+                              className="fill-foreground text-3xl font-bold"
+                            >
+                              {points.toLocaleString()}
+                            </tspan>
+                            <tspan
+                              x={viewBox.cx}
+                              y={(viewBox.cy || 0) + 24}
+                              className="fill-muted-foreground"
+                            >
+                              points
+                            </tspan>
+                          </text>
+                        )
+                      }
+                    }}
+                  />
+                </Pie>
+              </PieChart>
+            </ChartContainer>
+          ) : (
+            <div
+              className="h-full w-full"
+              data-testid="next-status-chart-placeholder"
+              aria-hidden="true"
+            />
+          )}
+        </div>
       </CardContent>
         <div className="text-center font-semibold text-sm text-gray-700 mt-2">
           {remainingPoints > 0 
