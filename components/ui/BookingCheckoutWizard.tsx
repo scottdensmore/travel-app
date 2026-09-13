@@ -1746,7 +1746,7 @@ export default function BookingCheckoutWizard({
 
                 {/* STEP 4: SUCCESS / E-TICKET BOARDING PASS */}
                 {step === 4 && bookingResult && (
-                    <div style={{ textAlign: 'center' }}>
+                    <div style={{ textAlign: 'center', scrollMarginTop: '120px' }}>
                         <div style={{
                             width: '64px',
                             height: '64px',
@@ -1765,7 +1765,7 @@ export default function BookingCheckoutWizard({
                         <h2
                             ref={confirmationHeadingRef}
                             tabIndex={-1}
-                            style={{ fontSize: '2rem', color: '#34d399', fontWeight: 'bold', marginBottom: '0.5rem' }}
+                            style={{ fontSize: '2rem', color: '#34d399', fontWeight: 'bold', marginBottom: '0.5rem', scrollMarginTop: '120px' }}
                         >
                             Booking Confirmed!
                         </h2>

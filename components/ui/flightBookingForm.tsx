@@ -742,10 +742,16 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
 
                 <div className="fields-container">
                     <label htmlFor="from">From</label>
-                    <select id="from" name="from" value={fromLocation} onChange={(e) => {
-                        setFromLocation(e.target.value);
-                        clearEmptySearchState();
-                    }}>
+                    <select
+                        id="from"
+                        name="from"
+                        value={fromLocation}
+                        className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
+                        onChange={(e) => {
+                            setFromLocation(e.target.value);
+                            clearEmptySearchState();
+                        }}
+                    >
                         {origins.map((loc) => (
                             <option key={loc} value={loc}>{loc}</option>
                         ))}
@@ -754,10 +760,16 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
 
                 <div className="fields-container">
                     <label htmlFor="to">To</label>
-                    <select id="to" name="to" value={toLocation} onChange={(e) => {
-                        setToLocation(e.target.value);
-                        clearEmptySearchState();
-                    }}>
+                    <select
+                        id="to"
+                        name="to"
+                        value={toLocation}
+                        className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
+                        onChange={(e) => {
+                            setToLocation(e.target.value);
+                            clearEmptySearchState();
+                        }}
+                    >
                         {destinations.map((loc) => (
                             <option key={loc} value={loc}>{loc}</option>
                         ))}
@@ -771,6 +783,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                             type="date"
                             id="depart"
                             name="depart"
+                            className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
                             min={bookingWindow.earliestDate}
                             max={bookingWindow.latestDate}
                             value={departureDate}
@@ -780,7 +793,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                             }}
                         />
                     </div>
-                    <div style={{ marginLeft: '12px' }}
+                    <div
                         className={isOneWay ? 'date-disabled' : ''}
                     >
                         <label htmlFor="returnDate">Return</label>
@@ -788,7 +801,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                             type="date"
                             id="returnDate"
                             name="returnDate"
-                            className="w-full p-2 border border-gray-300 rounded text-lg"
+                            className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
                             min={departureDate || bookingWindow.earliestDate}
                             max={bookingWindow.latestDate}
                             value={returnDate}
@@ -807,6 +820,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                         id="class"
                         name="class"
                         value={cabinClass}
+                        className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
                         onChange={e => handleCabinChange(e.target.value as SearchCabin)}
                     >
                         {/* Named from the shared label, not written out here:
@@ -832,6 +846,20 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
             data-search-ready={isSearchReady ? 'true' : 'false'}
             style={{ minHeight: '100vh', padding: '40px 20px' }}
         >
+            <style>{`
+                #from:focus-visible,
+                #to:focus-visible,
+                #class:focus-visible,
+                #sortBy:focus-visible,
+                #depart:focus-visible,
+                #returnDate:focus-visible {
+                    outline: 2px solid #8b5cf6;
+                    outline-offset: 2px;
+                }
+                .date-container input[type="date"] {
+                    min-width: 0;
+                }
+            `}</style>
             <div className="content" style={{
                 display: 'flex',
                 width: '100%',
@@ -1030,6 +1058,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                         id="sortBy" 
                                         value={sortBy} 
                                         onChange={e => setSortBy(e.target.value)}
+                                        className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
                                         style={{
                                             backgroundColor: 'rgba(255, 255, 255, 0.05)',
                                             border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -1037,7 +1066,6 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                             borderRadius: '6px',
                                             padding: '6px 12px',
                                             fontSize: '0.85rem',
-                                            outline: 'none',
                                             cursor: 'pointer'
                                         }}
                                     >

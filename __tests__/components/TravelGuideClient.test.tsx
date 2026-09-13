@@ -461,6 +461,115 @@ describe('the travel guide map, as assistive technology and a keyboard meet it',
             global.fetch = realFetch;
         }
     });
+
+    it('retains accessibility attributes (aria-label, role="button") on city markers with an aria-hidden hit target', async () => {
+        const realFetch = global.fetch;
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            json: () => Promise.resolve({ type: 'Topology', objects: {} }),
+        }) as unknown as typeof fetch;
+        try {
+            render(
+                <TravelGuideClient
+                    cities={sampleCities as never}
+                    initialFavorites={[]}
+                />
+            );
+            await screen.findAllByTestId('geography');
+
+            for (const city of sampleCities) {
+                const markerButton = screen.getByRole('button', {
+                    name: `Show the guide for ${city.city}, ${city.country}`,
+                });
+                expect(markerButton).toBeInTheDocument();
+                expect(markerButton).toHaveAttribute('tabindex', '0');
+                expect(markerButton).toHaveClass('guide-marker');
+                expect(markerButton).toHaveAttribute(
+                    'aria-pressed',
+                    city.city === 'Detroit' ? 'true' : 'false'
+                );
+            }
+
+            const hitTargets = screen.getAllByTestId('marker-hit-target');
+            expect(hitTargets).toHaveLength(sampleCities.length);
+            for (const hitTarget of hitTargets) {
+                expect(hitTarget).toHaveAttribute('aria-hidden', 'true');
+                expect(hitTarget).toHaveAttribute('fill', 'transparent');
+                expect(hitTarget).toHaveAttribute('pointer-events', 'all');
+                expect(hitTarget).toHaveStyle({ cursor: 'pointer' });
+                expect(Number(hitTarget.getAttribute('r'))).toBeGreaterThanOrEqual(14);
+            }
+        } finally {
+            global.fetch = realFetch;
+        }
+    });
+
+    it('selects the city when clicking anywhere on the hit target', async () => {
+        const realFetch = global.fetch;
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            json: () => Promise.resolve({ type: 'Topology', objects: {} }),
+        }) as unknown as typeof fetch;
+        try {
+            render(
+                <TravelGuideClient
+                    cities={sampleCities as never}
+                    initialFavorites={[]}
+                />
+            );
+            await screen.findAllByTestId('geography');
+
+            // Detroit is selected on mount; Paris is not
+            expect(screen.getByText('Motor City')).toBeInTheDocument();
+            expect(screen.queryByText('City of Lights')).not.toBeInTheDocument();
+
+            const hitTargets = screen.getAllByTestId('marker-hit-target');
+            const parisHitTarget = hitTargets.find(
+                (target) => target.getAttribute('data-city') === 'Paris'
+            );
+            expect(parisHitTarget).toBeDefined();
+
+            fireEvent.click(parisHitTarget!);
+
+            expect(screen.getByText('City of Lights')).toBeInTheDocument();
+            expect(screen.queryByText('Motor City')).not.toBeInTheDocument();
+
+            const parisMarker = screen.getByRole('button', {
+                name: 'Show the guide for Paris, France',
+            });
+            expect(parisMarker).toHaveAttribute('aria-pressed', 'true');
+        } finally {
+            global.fetch = realFetch;
+        }
+    });
+
+    it('forwards keyboard interactions on the hit target to select the city', async () => {
+        const realFetch = global.fetch;
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            json: () => Promise.resolve({ type: 'Topology', objects: {} }),
+        }) as unknown as typeof fetch;
+        try {
+            render(
+                <TravelGuideClient
+                    cities={sampleCities as never}
+                    initialFavorites={[]}
+                />
+            );
+            await screen.findAllByTestId('geography');
+
+            const hitTargets = screen.getAllByTestId('marker-hit-target');
+            const parisHitTarget = hitTargets.find(
+                (target) => target.getAttribute('data-city') === 'Paris'
+            );
+
+            fireEvent.keyDown(parisHitTarget!, { key: 'Enter' });
+
+            expect(screen.getByText('City of Lights')).toBeInTheDocument();
+        } finally {
+            global.fetch = realFetch;
+        }
+    });
 });
 
 describe('selecting a city', () => {

@@ -1223,17 +1223,61 @@ button:active, button[type="submit"]:active {
     min-width: 0;
     overflow-x: auto;
     overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+    -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
+    mask-image: linear-gradient(to right, black 85%, transparent 100%);
+  }
+
+  header nav[data-scroll-left="true"][data-scroll-right="true"] {
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 1.5rem, black calc(100% - 1.5rem), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0%, black 1.5rem, black calc(100% - 1.5rem), transparent 100%);
+  }
+
+  header nav[data-scroll-left="true"][data-scroll-right="false"] {
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 1.5rem, black 100%);
+    mask-image: linear-gradient(to right, transparent 0%, black 1.5rem, black 100%);
+  }
+
+  header nav[data-overflowing="false"],
+  header nav[data-scroll-left="false"][data-scroll-right="false"] {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  header nav::-webkit-scrollbar {
+    height: 3px;
+  }
+
+  header nav::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  header nav::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 3px;
   }
 
   header nav ul {
     width: max-content;
     gap: 1rem !important;
     padding-bottom: 0.25rem;
+    padding-right: 1.5rem;
   }
 
   header nav ul li {
     margin-left: 0;
     flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  header nav ul li a,
+  header nav ul li button {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    white-space: nowrap;
   }
 
   .admin-form-grid--two,
