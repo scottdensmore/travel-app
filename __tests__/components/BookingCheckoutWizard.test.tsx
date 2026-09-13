@@ -798,6 +798,8 @@ describe('BookingCheckoutWizard', () => {
         });
         const confirmationHeading = await screen.findByRole('heading', { name: 'Booking Confirmed!' });
         await waitFor(() => expect(confirmationHeading).toHaveFocus());
+        expect(confirmationHeading).toHaveStyle({ scrollMarginTop: '120px' });
+        expect(parseFloat(confirmationHeading.style.scrollMarginTop)).toBeGreaterThanOrEqual(100);
     });
 
     it('uses booking-specific copy for an unknown submission failure', async () => {

@@ -292,6 +292,28 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
                                         onClick={() => selectCity(city.city)}
                                     >
                                         {/*
+                                          * Enlarged transparent hit target (WCAG 2.5.8) to ensure
+                                          * tap targets are sufficiently large at mobile viewport widths
+                                          * without altering the visible dot size.
+                                          */}
+                                        <circle
+                                            r={14}
+                                            fill="transparent"
+                                            pointerEvents="all"
+                                            aria-hidden="true"
+                                            style={{ cursor: 'pointer' }}
+                                            className="guide-marker-hit-target"
+                                            data-city={city.city}
+                                            data-testid="marker-hit-target"
+                                            onClick={() => selectCity(city.city)}
+                                            onKeyDown={(event) => {
+                                                if (event.key === 'Enter' || event.key === ' ') {
+                                                    event.preventDefault();
+                                                    selectCity(city.city);
+                                                }
+                                            }}
+                                        />
+                                        {/*
                                           * Focusable and operable by keyboard. A marker that
                                           * answered only to a mouse made the map a decoration
                                           * for anyone not using one.
@@ -306,6 +328,8 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
                                             aria-label={`Show the guide for ${city.city}, ${city.country}`}
                                             aria-pressed={isSelected}
                                             className="guide-marker"
+                                            style={{ cursor: 'pointer' }}
+                                            onClick={() => selectCity(city.city)}
                                             onKeyDown={(event) => {
                                                 if (event.key === 'Enter' || event.key === ' ') {
                                                     event.preventDefault();

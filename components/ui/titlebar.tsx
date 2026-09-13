@@ -34,6 +34,70 @@ const TitleBar: React.FC = () => {
     const drawerRef = useRef<HTMLLIElement>(null);
     const bellRef = useRef<HTMLButtonElement>(null);
     const panelRef = useRef<HTMLDivElement | null>(null);
+    const navRef = useRef<HTMLElement>(null);
+    const [scrollAffordance, setScrollAffordance] = useState<{
+        canScrollLeft: boolean;
+        canScrollRight: boolean;
+    } | null>(null);
+
+    const updateNavScroll = useCallback(() => {
+        const nav = navRef.current;
+        if (!nav) return;
+        const { scrollLeft, scrollWidth, clientWidth } = nav;
+        if (clientWidth === 0) return;
+        const maxScroll = scrollWidth - clientWidth;
+        const isOverflowing = maxScroll > 1;
+        setScrollAffordance({
+            canScrollLeft: isOverflowing && scrollLeft > 1,
+            canScrollRight: isOverflowing && scrollLeft < maxScroll - 1,
+        });
+    }, []);
+
+    const handleNavFocus = (event: React.FocusEvent<HTMLElement>) => {
+        const target = event.target as HTMLElement;
+        if (target && typeof target.scrollIntoView === 'function') {
+            target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        }
+        updateNavScroll();
+    };
+
+    useBeforePaint(() => {
+        updateNavScroll();
+    }, [updateNavScroll, pathname, session]);
+
+    useEffect(() => {
+        const nav = navRef.current;
+        if (!nav) return;
+
+        updateNavScroll();
+
+        const onScroll = () => {
+            updateNavScroll();
+        };
+        nav.addEventListener('scroll', onScroll, { passive: true });
+
+        let observer: ResizeObserver | null = null;
+        if (typeof ResizeObserver !== 'undefined') {
+            observer = new ResizeObserver(updateNavScroll);
+            observer.observe(nav);
+        }
+        window.addEventListener('resize', updateNavScroll);
+
+        return () => {
+            nav.removeEventListener('scroll', onScroll);
+            observer?.disconnect();
+            window.removeEventListener('resize', updateNavScroll);
+        };
+    }, [updateNavScroll, pathname, session]);
+
+    useEffect(() => {
+        const nav = navRef.current;
+        if (!nav) return;
+        const selected = nav.querySelector('li.selected');
+        if (selected && typeof selected.scrollIntoView === 'function') {
+            selected.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        }
+    }, [pathname]);
     /**
      * Where the drawer sits, measured from the bell each time it opens.
      *
@@ -247,7 +311,15 @@ const TitleBar: React.FC = () => {
                 </Link>
                 <span>{pageTitle}</span>
             </div>
-            <nav>
+            <nav
+                ref={navRef}
+                aria-label="Main navigation"
+                data-overflowing={scrollAffordance ? (scrollAffordance.canScrollLeft || scrollAffordance.canScrollRight) : undefined}
+                data-scroll-left={scrollAffordance ? scrollAffordance.canScrollLeft : undefined}
+                data-scroll-right={scrollAffordance ? scrollAffordance.canScrollRight : undefined}
+                onScroll={updateNavScroll}
+                onFocusCapture={handleNavFocus}
+            >
                 <ul style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
                     {!pathname?.startsWith('/admin') && (
                         <>

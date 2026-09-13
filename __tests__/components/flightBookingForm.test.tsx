@@ -1369,4 +1369,91 @@ describe('FlightBookingForm', () => {
         expect(options.some(text => /_/.test(text))).toBe(false);
     });
 
+    describe('focus indicators and date input consistency (Issues #204 & #206)', () => {
+        it('provides clear focus-visible styling on all form controls and select dropdowns (#204)', async () => {
+            renderForm();
+
+            const fromSelect = screen.getByLabelText('From');
+            const toSelect = screen.getByLabelText('To');
+            const departInput = screen.getByLabelText('Depart');
+            const returnInput = screen.getByLabelText('Return');
+            const classSelect = screen.getByLabelText(/Cabin class/i);
+
+            const formControls = [fromSelect, toSelect, departInput, returnInput, classSelect];
+            for (const control of formControls) {
+                expect(control).toHaveClass(
+                    'focus-visible:outline-2',
+                    'focus-visible:outline-violet-500',
+                    'focus-visible:outline-offset-2',
+                );
+            }
+
+            // Perform search to reveal sortBy control
+            fireEvent.click(screen.getByText('Find your trip'));
+            await waitFor(() => expect(screen.getByLabelText(/Sort:/i)).toBeInTheDocument());
+
+            const sortBySelect = screen.getByLabelText(/Sort:/i);
+            expect(sortBySelect).toHaveClass(
+                'focus-visible:outline-2',
+                'focus-visible:outline-violet-500',
+                'focus-visible:outline-offset-2',
+            );
+            // Ensure outline: none is not in the inline style
+            expect(sortBySelect.style.outline).not.toBe('none');
+        });
+
+        it('ensures date inputs have consistent styling without asymmetric clipping (#206)', () => {
+            renderForm();
+
+            const departInput = screen.getByLabelText('Depart') as HTMLInputElement;
+            const returnInput = screen.getByLabelText('Return') as HTMLInputElement;
+
+            // Both date inputs should have consistent classes
+            expect(returnInput.className).toBe(departInput.className);
+
+            // Return date must not carry asymmetric padding, border, or text-lg that clips the year
+            expect(returnInput).not.toHaveClass('p-2');
+            expect(returnInput).not.toHaveClass('border-gray-300');
+            expect(returnInput).not.toHaveClass('text-lg');
+
+            // Return date container must not have asymmetric margin-left
+            const departContainer = departInput.closest('div');
+            const returnContainer = returnInput.closest('div');
+            expect(returnContainer?.style.marginLeft).not.toBe('12px');
+            expect(returnContainer?.style.marginLeft).toBe(departContainer?.style.marginLeft ?? '');
+        });
+
+        it('allows full date string to be rendered in depart and return inputs (#206)', () => {
+            renderForm();
+
+            const departInput = screen.getByLabelText('Depart') as HTMLInputElement;
+            const returnInput = screen.getByLabelText('Return') as HTMLInputElement;
+
+            fireEvent.change(departInput, { target: { value: '2026-08-17' } });
+            fireEvent.change(returnInput, { target: { value: '2026-08-24' } });
+
+            expect(departInput.value).toBe('2026-08-17');
+            expect(returnInput.value).toBe('2026-08-24');
+
+            // Neither input should have styling that forces overflow or truncates text
+            expect(departInput.classList.contains('text-lg')).toBe(false);
+            expect(returnInput.classList.contains('text-lg')).toBe(false);
+        });
+
+        it('renders focus-visible stylesheet rules for accessible outlines (#204)', () => {
+            const { container } = renderForm();
+            const styleTags = container.querySelectorAll('style');
+            const styleContent = Array.from(styleTags).map(tag => tag.textContent).join('\n');
+
+            expect(styleContent).toContain('#from:focus-visible');
+            expect(styleContent).toContain('#to:focus-visible');
+            expect(styleContent).toContain('#class:focus-visible');
+            expect(styleContent).toContain('#sortBy:focus-visible');
+            expect(styleContent).toContain('#depart:focus-visible');
+            expect(styleContent).toContain('#returnDate:focus-visible');
+            expect(styleContent).toContain('outline: 2px solid #8b5cf6');
+            expect(styleContent).toContain('outline-offset: 2px');
+        });
+    });
+
 });

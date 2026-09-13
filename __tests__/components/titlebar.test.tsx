@@ -419,3 +419,136 @@ describe('the notification drawer is reachable, not just visible', () => {
     });
 });
 
+describe('titlebar navigation, scroll affordance, and accessibility', () => {
+    let scrollIntoViewMock: jest.SpyInstance;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (usePathname as jest.Mock).mockReturnValue('/');
+        (require('next-auth/react').useSession as jest.Mock).mockReturnValue({ data: null });
+        mockGetUserNotifications.mockReturnValue(new Promise(() => { }));
+        scrollIntoViewMock = jest.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => { });
+    });
+
+    afterEach(() => {
+        scrollIntoViewMock.mockRestore();
+    });
+
+    it('renders an accessible navigation landmark with links for visitors', () => {
+        render(<TitleBar />);
+
+        const nav = screen.getByRole('navigation', { name: /main navigation/i });
+        expect(nav).toBeInTheDocument();
+
+        expect(screen.getByRole('link', { name: 'Book Flight' })).toHaveAttribute('href', '/book');
+        expect(screen.getByRole('link', { name: 'Travel Guide' })).toHaveAttribute('href', '/travelguide');
+        expect(screen.getByRole('link', { name: 'Flight Status' })).toHaveAttribute('href', '/flights');
+        expect(screen.getByRole('link', { name: 'Sign In' })).toHaveAttribute('href', '/login');
+        expect(screen.getByRole('link', { name: 'Sign Up' })).toHaveAttribute('href', '/signup');
+    });
+
+    it('renders authenticated navigation links including check in and account controls', () => {
+        (require('next-auth/react').useSession as jest.Mock).mockReturnValue({
+            data: { user: { id: 'u1', name: 'Alice', role: 'USER' } },
+        });
+
+        render(<TitleBar />);
+
+        const nav = screen.getByRole('navigation', { name: /main navigation/i });
+        expect(nav).toBeInTheDocument();
+
+        expect(screen.getByRole('link', { name: 'Check In' })).toHaveAttribute('href', '/checkin');
+        expect(screen.getByRole('button', { name: /toggle notifications/i })).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'Profile' })).toHaveAttribute('href', '/profile');
+        expect(screen.getByRole('button', { name: 'Sign Out' })).toBeInTheDocument();
+    });
+
+    it('renders admin navigation when staff MFA is verified', () => {
+        (usePathname as jest.Mock).mockReturnValue('/admin');
+        (require('next-auth/react').useSession as jest.Mock).mockReturnValue({
+            data: { user: { id: 'admin1', name: 'Staff', role: 'ADMIN', staffMfaVerified: true } },
+        });
+
+        render(<TitleBar />);
+
+        expect(screen.getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/admin');
+        expect(screen.queryByRole('link', { name: 'Book Flight' })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Sign Out' })).toBeInTheDocument();
+    });
+
+    it('scrolls focused navigation elements cleanly into view', () => {
+        render(<TitleBar />);
+
+        const flightStatusLink = screen.getByRole('link', { name: 'Flight Status' });
+        fireEvent.focus(flightStatusLink);
+
+        expect(scrollIntoViewMock).toHaveBeenCalledWith(
+            expect.objectContaining({ block: 'nearest', inline: 'nearest' }),
+        );
+    });
+
+    it('scrolls the selected route navigation link into view on route change', () => {
+        (usePathname as jest.Mock).mockReturnValue('/flights');
+
+        render(<TitleBar />);
+
+        const selectedItem = screen.getByRole('link', { name: 'Flight Status' }).closest('li');
+        expect(selectedItem).toHaveClass('selected');
+        expect(scrollIntoViewMock).toHaveBeenCalledWith(
+            expect.objectContaining({ block: 'nearest', inline: 'nearest' }),
+        );
+    });
+
+    it('manages scroll affordance state and data attributes as the user scrolls', () => {
+        render(<TitleBar />);
+
+        const nav = screen.getByRole('navigation', { name: /main navigation/i });
+
+        // Simulate a phone viewport where navigation overflows:
+        // container width 320px, content width 500px, initially at start
+        Object.defineProperty(nav, 'clientWidth', { configurable: true, value: 320 });
+        Object.defineProperty(nav, 'scrollWidth', { configurable: true, value: 500 });
+        Object.defineProperty(nav, 'scrollLeft', { configurable: true, value: 0 });
+
+        fireEvent.scroll(nav);
+
+        expect(nav).toHaveAttribute('data-overflowing', 'true');
+        expect(nav).toHaveAttribute('data-scroll-left', 'false');
+        expect(nav).toHaveAttribute('data-scroll-right', 'true');
+
+        // User scrolls into middle of nav strip
+        Object.defineProperty(nav, 'scrollLeft', { configurable: true, value: 80 });
+        fireEvent.scroll(nav);
+
+        expect(nav).toHaveAttribute('data-overflowing', 'true');
+        expect(nav).toHaveAttribute('data-scroll-left', 'true');
+        expect(nav).toHaveAttribute('data-scroll-right', 'true');
+
+        // User scrolls all the way to the end (500 - 320 = 180)
+        Object.defineProperty(nav, 'scrollLeft', { configurable: true, value: 180 });
+        fireEvent.scroll(nav);
+
+        expect(nav).toHaveAttribute('data-overflowing', 'true');
+        expect(nav).toHaveAttribute('data-scroll-left', 'true');
+        expect(nav).toHaveAttribute('data-scroll-right', 'false');
+    });
+
+    it('indicates when navigation does not overflow', () => {
+        render(<TitleBar />);
+
+        const nav = screen.getByRole('navigation', { name: /main navigation/i });
+
+        // Wide container where all items fit without overflowing
+        Object.defineProperty(nav, 'clientWidth', { configurable: true, value: 800 });
+        Object.defineProperty(nav, 'scrollWidth', { configurable: true, value: 400 });
+        Object.defineProperty(nav, 'scrollLeft', { configurable: true, value: 0 });
+
+        fireEvent.scroll(nav);
+
+        expect(nav).toHaveAttribute('data-overflowing', 'false');
+        expect(nav).toHaveAttribute('data-scroll-left', 'false');
+        expect(nav).toHaveAttribute('data-scroll-right', 'false');
+    });
+});
+
+
