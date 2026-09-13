@@ -701,7 +701,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
 
     const renderSearchForm = () => {
         return (
-            <form onSubmit={handleSearch} aria-busy={isSearching}>
+            <form id="flight-search-form" onSubmit={handleSearch} aria-busy={isSearching}>
                 <div className="trip">
                     <nav>
                         <ul>
@@ -801,7 +801,12 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                             max={bookingWindow.latestDate}
                             value={departureDate}
                             onChange={(e) => {
-                                setDepartureDate(e.target.value);
+                                const nextDepart = e.target.value;
+                                setDepartureDate(nextDepart);
+                                if (!isOneWay) {
+                                    setReturnDate(defaultReturnDate(nextDepart, isOneWay, latestBookingDateRef.current));
+                                }
+                                previousReturnDefaultsRef.current = { departureDate: nextDepart, isOneWay };
                                 clearEmptySearchState();
                             }}
                         />
@@ -1064,6 +1069,25 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                     <span style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.5)', marginLeft: '12px' }}>
                                         ({filteredAndSortedResults.length} {filteredAndSortedResults.length === 1 ? 'flight' : 'flights'} found)
                                     </span>
+                                    <a
+                                        href="#flight-search-form"
+                                        className="modify-search-link text-sm text-purple-300 hover:text-white underline focus-visible:outline-2 focus-visible:outline-violet-500"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            const firstField = document.getElementById('from');
+                                            firstField?.focus();
+                                            firstField?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                        }}
+                                        style={{
+                                            marginLeft: '1rem',
+                                            fontSize: '0.85rem',
+                                            color: '#c084fc',
+                                            textDecoration: 'underline',
+                                            cursor: 'pointer',
+                                        }}
+                                    >
+                                        Modify search
+                                    </a>
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <label htmlFor="sortBy" style={{ fontSize: '0.85rem', color: '#a78bfa', fontWeight: 'bold', textTransform: 'uppercase' }}>Sort:</label>

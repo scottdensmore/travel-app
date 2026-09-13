@@ -12,6 +12,7 @@
  */
 
 import type { Flight } from '@prisma/client';
+import { prisma } from './prisma';
 import { airportCodeFor } from './airports';
 
 /**
@@ -83,3 +84,29 @@ export function flightRouteWhere(from: string, to: string): { fromAirportCode: s
 
     return { fromAirportCode, toAirportCode };
 }
+
+/**
+ * Resolves route endpoints from the database Airport table, falling back to
+ * static AirportData if the database is unavailable or mocked.
+ */
+export async function resolveFlightRouteWhere(
+    from: string,
+    to: string,
+    client: { airport: { findMany: typeof prisma.airport.findMany } } = prisma,
+): Promise<{ fromAirportCode: string; toAirportCode: string } | null> {
+    try {
+        const airports = await client.airport.findMany({
+            where: { label: { in: [from, to] } },
+            select: { label: true, iataCode: true },
+        });
+        const fromAirport = airports.find((a) => a.label === from);
+        const toAirport = airports.find((a) => a.label === to);
+        if (fromAirport && toAirport) {
+            return { fromAirportCode: fromAirport.iataCode, toAirportCode: toAirport.iataCode };
+        }
+    } catch {
+        // Fall back to static lookup if database is unavailable or mocked
+    }
+    return flightRouteWhere(from, to);
+}
+
