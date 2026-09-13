@@ -97,12 +97,20 @@ const FlightResultTiming: React.FC<{ flight: SearchResultFlight }> = ({ flight }
         : flightArrival({ ...flight, durationMinutes });
 
     return (
-        <div className="flight-result-route">
+        <div
+            className="flight-result-route"
+            aria-label={`Route: from ${flight.from} to ${flight.to}`}
+        >
             <div className="flight-result-stop">
                 <span style={{ fontSize: '1rem', fontWeight: 'bold', color: '#fff' }}>
                     Departs {departure.readableDate} at {departure.time} {departure.zoneLabel}
                 </span>
-                <span style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.from}</span>
+                <span
+                    aria-label={`From ${flight.from}`}
+                    style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}
+                >
+                    {flight.from}
+                </span>
             </div>
             <span className="flight-result-arrow">
                 <span aria-hidden="true">------&gt;</span>
@@ -115,7 +123,12 @@ const FlightResultTiming: React.FC<{ flight: SearchResultFlight }> = ({ flight }
                         {arrivalDayLabel(arrival.dayOffset)}
                     </span>
                 )}
-                <span style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.to}</span>
+                <span
+                    aria-label={`To ${flight.to}`}
+                    style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}
+                >
+                    {flight.to}
+                </span>
             </div>
         </div>
     );

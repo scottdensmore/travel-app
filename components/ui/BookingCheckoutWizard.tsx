@@ -1882,7 +1882,7 @@ export default function BookingCheckoutWizard({
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', background: 'rgba(0,0,0,0.3)', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                                         <div>
                                             <div style={{ fontSize: '0.65rem', color: 'rgba(255, 255, 255, 0.75)' }}>ROUTE</div>
-                                            <div style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>{legFlight.from.split(',')[0]} to {legFlight.to.split(',')[0]}</div>
+                                            <div style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>{legFlight.from} to {legFlight.to}</div>
                                         </div>
                                         {/* Fake barcode block */}
                                         <div style={{ display: 'flex', gap: '2px', background: '#fff', padding: '4px', borderRadius: '2px', height: '24px' }}>

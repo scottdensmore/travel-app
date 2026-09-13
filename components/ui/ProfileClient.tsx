@@ -764,14 +764,16 @@ export default function ProfileClient({
                                     const isRetryingRefund = activeRefundBookingId === booking.id;
                                     return (
                                         <tbody key={booking.id} data-testid={`booking-row-${booking.id}`} className="border-b">
-                                            {legRows.map((leg, index) => (
+                                            {legRows.map((leg, index) => {
+                                                const direction = legs.length > 1 ? legDirectionLabel(index, legs.length) : null;
+                                                return (
                                                 <tr
                                                     key={leg?.flight?.id ?? index}
                                                     data-testid={`booking-leg-${booking.id}-${index}`}
                                                     data-continues-booking={index > 0 ? '' : undefined}
                                                 >
-                                                    <td className="py-2" data-label="Flight">
-                                                        <CellLabel>Flight</CellLabel>
+                                                    <td className="py-2" data-label={direction ? `${direction}` : 'Flight'}>
+                                                        <CellLabel>{direction ? `${direction}` : 'Flight'}</CellLabel>
                                                         {index === 0 && (
                                                             <>
                                                                 <div style={{ fontSize: '0.7rem', color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -860,7 +862,7 @@ export default function ProfileClient({
                                                                                 onClick={() => setSelectedBooking(booking)}
                                                                                 disabled={isPending}
                                                                                 style={{
-                                                                                    backgroundColor: '#8b5cf6', color: 'white', borderRadius: '4px',
+                                                                                    background: '#6d28d9', backgroundImage: 'none', color: 'white', borderRadius: '4px',
                                                                                     height: 'auto', width: 'auto', cursor: 'pointer', whiteSpace: 'nowrap'
                                                                                 }}
                                                                             >
@@ -873,7 +875,7 @@ export default function ProfileClient({
                                                                                     onClick={() => handleCancelBooking(booking.id, cancelledLeg?.flight?.flightNumber || '', isDisrupted)}
                                                                                     disabled={isPending}
                                                                                     style={{
-                                                                                        backgroundColor: '#ef4444', color: 'white', borderRadius: '4px',
+                                                                                        background: '#dc2626', backgroundImage: 'none', color: '#ffffff', borderRadius: '4px',
                                                                                         height: 'auto', width: 'auto', cursor: 'pointer'
                                                                                     }}
                                                                                 >
@@ -887,7 +889,7 @@ export default function ProfileClient({
                                                                                 disabled={isPending || isRetryingRefund}
                                                                                 aria-busy={isRetryingRefund}
                                                                                 style={{
-                                                                                    backgroundColor: '#d97706', color: 'white', borderRadius: '4px',
+                                                                                    background: '#d97706', backgroundImage: 'none', color: 'white', borderRadius: '4px',
                                                                                     height: 'auto', width: 'auto', cursor: 'pointer', whiteSpace: 'nowrap'
                                                                                 }}
                                                                             >
@@ -911,7 +913,8 @@ export default function ProfileClient({
                                                         </>
                                                     )}
                                                 </tr>
-                                            ))}
+                                                );
+                                            })}
                                             {isDisrupted && replacementOptions[booking.id]?.length > 0 && (
                                                 <tr className="replacement-flight-row">
                                                     <td colSpan={7} data-label="Replacement flights">
