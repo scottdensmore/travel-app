@@ -9,6 +9,7 @@ jest.mock('@/lib/authTokens', () => ({ pruneExpiredAuthTokens: jest.fn() }));
 jest.mock('@/lib/passengerDataRetention', () => ({ purgeExpiredPassengerData: jest.fn() }));
 jest.mock('@/lib/passengerDataRotation', () => ({ rotatePassengerDataEncryptionBatch: jest.fn() }));
 
+import '@/lib/env';
 import { register } from '@/instrumentation';
 import { pruneExpiredAuthTokens } from '@/lib/authTokens';
 import { purgeExpiredPassengerData } from '@/lib/passengerDataRetention';

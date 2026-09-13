@@ -9,7 +9,7 @@
     "dev": "next dev",
     "build": "next build && node scripts/sanitize-standalone.mjs",
     "start": "next start",
-    "lint": "eslint app components lib",
+    "lint": "eslint app components lib e2e __tests__",
     "test": "npm run test:unit && npm run test:database",
     "test:unit": "npx jest --selectProjects unit",
     "test:database": "npx jest --selectProjects database --runInBand",

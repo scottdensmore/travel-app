@@ -115,7 +115,6 @@ test.describe('Multi-Passenger Booking Journey', () => {
     await seat11A.click();
 
     // Verify both seats are assigned in the left-hand passenger cards
-    const passengerCards = page.locator('div:has-text("Class: ")');
     await expect(page.locator('text=Seat: 11A')).toBeVisible();
     await expect(page.locator('text=Seat: 11B')).toBeVisible();
 
