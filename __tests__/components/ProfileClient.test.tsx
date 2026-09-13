@@ -202,6 +202,38 @@ describe('ProfileClient interactive dashboard', () => {
         expect(completion).toHaveFocus();
     });
 
+    it('gives the cancel button destructive background styling and clears the global gradient', () => {
+        render(
+            <ProfileClient
+                userName="Jane Doe"
+                userAvatar="avatar.png"
+                accountTimeZone="UTC"
+                accountTimeZoneChoices={['UTC', 'America/Los_Angeles']}
+                currentStatus="Gold"
+                currentPoints={4200}
+                bookings={sampleBookings}
+                favorites={[]}
+                reviews={[]}
+                activityData={[]}
+                monthlyHistory={[]}
+                renderedAt={new Date('2026-06-01T00:00:00Z').getTime()}
+            />
+        );
+
+        const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
+        expect(cancelBtn).toHaveStyle({
+            backgroundColor: '#dc2626',
+            backgroundImage: 'none',
+            color: '#ffffff',
+        });
+
+        const changeSeatsBtn = screen.getByRole('button', { name: 'Change Seats' });
+        expect(changeSeatsBtn).toHaveStyle({
+            backgroundColor: '#6d28d9',
+            backgroundImage: 'none',
+        });
+    });
+
     it('handles removing a favorite', async () => {
         mockToggleFavorite.mockResolvedValue({ isFavorite: false });
         render(
@@ -636,6 +668,31 @@ describe('ProfileClient interactive dashboard', () => {
             expect(screen.getByTestId('booking-row-101')).toHaveTextContent(/one way/i);
         });
 
+        it('renders directional labels on leg cell labels for a round-trip booking', () => {
+            renderBookings([roundTripBooking]);
+
+            const leg0 = screen.getByTestId('booking-leg-202-0');
+            const leg1 = screen.getByTestId('booking-leg-202-1');
+
+            const leg0Cell = within(leg0).getByText('Departing');
+            expect(leg0Cell).toHaveClass('cell-label');
+            expect(leg0Cell).toHaveAttribute('aria-hidden', 'true');
+            expect(leg0Cell.closest('td')).toHaveAttribute('data-label', 'Departing');
+
+            const leg1Cell = within(leg1).getByText('Returning');
+            expect(leg1Cell).toHaveClass('cell-label');
+            expect(leg1Cell).toHaveAttribute('aria-hidden', 'true');
+            expect(leg1Cell.closest('td')).toHaveAttribute('data-label', 'Returning');
+
+            // Contrast with single-leg trip which retains 'Flight'
+            cleanup();
+            renderBookings([sampleBookings[0]]);
+            const singleLeg = screen.getByTestId('booking-leg-101-0');
+            const singleLegCell = within(singleLeg).getByText('Flight');
+            expect(singleLegCell).toHaveClass('cell-label');
+            expect(singleLegCell.closest('td')).toHaveAttribute('data-label', 'Flight');
+        });
+
         it('names the cabin in the seat modal the way the ticket does', async () => {
             // The modal read the cabin off the seat assignment and printed it
             // raw, so a customer's own booking showed "(PREMIUM_ECONOMY)" — the
@@ -991,7 +1048,7 @@ describe('ProfileClient interactive dashboard', () => {
                 .filter(cell => cell.textContent?.trim());
 
             expect(withContent.map(cell => cell.getAttribute('data-label'))).toEqual(
-                expect.arrayContaining(['Flight', 'Route', 'Departure', 'Price', 'Status']),
+                expect.arrayContaining(['Departing', 'Returning', 'Route', 'Departure', 'Price', 'Status']),
             );
 
             // The actions cell is the one deliberate exception: its content is

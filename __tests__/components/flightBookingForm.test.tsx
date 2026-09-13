@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import FlightBookingForm from '@/components/ui/flightBookingForm';
 import { bookFlightAction, searchFlightsAction } from '@/app/actions';
@@ -1019,9 +1019,12 @@ describe('FlightBookingForm', () => {
         fireEvent.click(screen.getByText('Find your trip'));
 
         await waitFor(() => expect(screen.getByText('CA101')).toBeInTheDocument());
-        const card = screen.getByText('CA101').closest('.flight-result-card')!;
+        const card = screen.getByText('CA101').closest<HTMLElement>('.flight-result-card')!;
         expect(card).toHaveTextContent('Seattle, USA');
         expect(card).toHaveTextContent('Detroit, USA');
+        expect(within(card).getByLabelText('Route: from Seattle, USA to Detroit, USA')).toBeInTheDocument();
+        expect(within(card).getByLabelText('From Seattle, USA')).toBeInTheDocument();
+        expect(within(card).getByLabelText('To Detroit, USA')).toBeInTheDocument();
         expect(card).not.toHaveTextContent('One Way');
         expect(card).not.toHaveTextContent(new Date('2026-05-22T12:00:00Z').toLocaleDateString());
     });
@@ -1052,16 +1055,55 @@ describe('FlightBookingForm', () => {
 
         fireEvent.click(screen.getByText('Find your trip'));
 
-        const outbound = (await screen.findByText('GA801')).closest('.flight-result-card')!;
+        const outbound = (await screen.findByText('GA801')).closest<HTMLElement>('.flight-result-card')!;
+        expect(within(outbound).getByLabelText('Route: from New York, USA to London, UK')).toBeInTheDocument();
+        expect(within(outbound).getByLabelText('From New York, USA')).toBeInTheDocument();
+        expect(within(outbound).getByLabelText('To London, UK')).toBeInTheDocument();
         expect(outbound).toHaveTextContent('Departs Aug 17, 2026 at 19:30 EDT');
         expect(outbound).toHaveTextContent('Arrives Aug 18, 2026 at 07:30 GMT+1 (next day)');
         expect(outbound).toHaveTextContent('7h 00m');
 
-        const inbound = screen.getByText('GA802').closest('.flight-result-card')!;
+        const inbound = screen.getByText('GA802').closest<HTMLElement>('.flight-result-card')!;
+        expect(within(inbound).getByLabelText('Route: from London, UK to New York, USA')).toBeInTheDocument();
+        expect(within(inbound).getByLabelText('From London, UK')).toBeInTheDocument();
+        expect(within(inbound).getByLabelText('To New York, USA')).toBeInTheDocument();
         expect(inbound).toHaveTextContent('Departs Aug 25, 2026 at 14:00 GMT+1');
         expect(inbound).toHaveTextContent('Arrives Aug 25, 2026 at 17:00 EDT');
         expect(inbound).toHaveTextContent('8h 00m');
         expect(inbound).not.toHaveTextContent(/next day|previous day/);
+    });
+
+    it('provides accessible route labels indicating origin and destination on search result cards (#202)', async () => {
+        mockSearch.mockResolvedValue({
+            flights: [{
+                ...mockFlights[0],
+                id: 91,
+                flightNumber: 'GA901',
+                from: 'Seattle, USA',
+                to: 'Detroit, USA',
+            }],
+            nearbyDates: [],
+            inbound: inboundOk([{
+                ...mockFlights[0],
+                id: 92,
+                flightNumber: 'GA902',
+                from: 'Detroit, USA',
+                to: 'Seattle, USA',
+            }]),
+        });
+        renderForm();
+
+        fireEvent.click(screen.getByText('Find your trip'));
+
+        const outbound = (await screen.findByText('GA901')).closest<HTMLElement>('.flight-result-card')!;
+        expect(within(outbound).getByLabelText('Route: from Seattle, USA to Detroit, USA')).toBeInTheDocument();
+        expect(within(outbound).getByLabelText('From Seattle, USA')).toBeInTheDocument();
+        expect(within(outbound).getByLabelText('To Detroit, USA')).toBeInTheDocument();
+
+        const inbound = screen.getByText('GA902').closest<HTMLElement>('.flight-result-card')!;
+        expect(within(inbound).getByLabelText('Route: from Detroit, USA to Seattle, USA')).toBeInTheDocument();
+        expect(within(inbound).getByLabelText('From Detroit, USA')).toBeInTheDocument();
+        expect(within(inbound).getByLabelText('To Seattle, USA')).toBeInTheDocument();
     });
 
     it('does not invent an arrival when a flight has no trusted duration', async () => {

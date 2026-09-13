@@ -536,6 +536,7 @@ describe('BookingCheckoutWizard', () => {
         expect(screen.getByText('GA404')).toBeInTheDocument();
         expect(screen.getByText('11C')).toBeInTheDocument();
         expect(screen.getByText('Economy')).toBeInTheDocument();
+        expect(screen.getByTestId('boarding-pass')).toHaveTextContent('Seattle, USA to Detroit, USA');
         expect(screen.getByTestId('boarding-pass')).toHaveTextContent('Departs Jun 30, 2026 at 03:00 PDT');
         expect(screen.getByTestId('boarding-pass')).not.toHaveTextContent('Arrives');
         expect(screen.getByTestId('boarding-pass')).not.toHaveTextContent(/\d+h \d{2}m/);
@@ -1642,6 +1643,8 @@ describe('BookingCheckoutWizard', () => {
                 expect(within(boardingPass).getByText('June 30, 2026 at 5:30 PM PDT'))
                     .toHaveAttribute('datetime', '2026-07-01T00:30:00.000Z');
             }
+            expect(within(outboundPass).getByText('Seattle, USA to Detroit, USA')).toBeInTheDocument();
+            expect(within(inboundPass).getByText('Detroit, USA to Seattle, USA')).toBeInTheDocument();
             expect(outboundPass).toHaveTextContent('Departs Jun 30, 2026 at 03:00 PDT');
             expect(outboundPass).toHaveTextContent('Arrives Jun 30, 2026 at 13:00 EDT');
             expect(outboundPass).toHaveTextContent('7h 00m');
@@ -1684,6 +1687,62 @@ describe('BookingCheckoutWizard', () => {
 
             expect(screen.getAllByText('Premium Economy')).toHaveLength(2);
             expect(screen.queryByText(/PREMIUM_ECONOMY/)).not.toBeInTheDocument();
+        });
+
+        it('renders the full route on boarding passes without dropping country or state (#194)', async () => {
+            mockBookFlightAction.mockResolvedValue({
+                id: 902,
+                reference: 'MA-FULLROUTE123456789',
+                createdAt: new Date('2026-07-01T00:30:00.000Z'),
+                totalPriceCents: 25000,
+                passengers: [{
+                    firstName: 'Ada',
+                    lastName: 'Lovelace',
+                    seatNumbers: ['11A', '12C'],
+                    cabinClass: 'ECONOMY',
+                }],
+            });
+
+            const tokyoOutbound = {
+                ...sampleFlight,
+                from: 'Seattle, USA',
+                to: 'Tokyo, Japan',
+                durationMinutes: 600,
+            };
+            const tokyoInbound = {
+                ...sampleFlight,
+                id: 43,
+                flightNumber: 'GA405',
+                from: 'Tokyo, Japan',
+                to: 'Seattle, USA',
+                departureDate: '2026-07-07T23:30:00Z',
+                durationMinutes: 580,
+                priceCents: 15000,
+            };
+
+            const { container } = renderRoundTrip(
+                [[], []],
+                [tokyoOutbound, tokyoInbound],
+                'America/Los_Angeles',
+            );
+            fillTraveler(container);
+            fireEvent.click(screen.getByText('Select Seats →'));
+            fireEvent.click(screen.getByTitle('Select Seat 11A'));
+            fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
+            fireEvent.click(screen.getByTitle('Select Seat 12C'));
+            fireEvent.click(screen.getByText('Review Booking →'));
+            await screen.findByText('Review Booking');
+            fireEvent.click(await preparePayment('$250'));
+
+            await waitFor(() => {
+                expect(screen.getByText('Booking Confirmed!')).toBeInTheDocument();
+            });
+
+            const [outboundPass, inboundPass] = screen.getAllByTestId('boarding-pass');
+            expect(within(outboundPass).getByText('Seattle, USA to Tokyo, Japan')).toBeInTheDocument();
+            expect(within(inboundPass).getByText('Tokyo, Japan to Seattle, USA')).toBeInTheDocument();
+            expect(screen.queryByText('Seattle to Tokyo')).not.toBeInTheDocument();
+            expect(screen.queryByText('Tokyo to Seattle')).not.toBeInTheDocument();
         });
 
         it('clears every leg when the cabin changes, not just the visible one', () => {
