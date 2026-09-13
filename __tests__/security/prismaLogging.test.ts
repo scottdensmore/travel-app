@@ -159,6 +159,48 @@ describe('prisma log redaction', () => {
             fields: null,
         });
     });
+
+    it('redacts relation and constraint to null for class 22 data exceptions with planted strings', () => {
+        const record = redactPrismaLogEvent('error', {
+            timestamp: new Date('2026-08-05T10:00:00Z'),
+            message:
+                'Raw query failed. Code: `22P02`. Message: `ERROR: invalid input syntax for type integer: ' +
+                '"new row for relation \\"VICTIM\\" violates check constraint \\"TOKEN_9f3a\\""`',
+            target: '$queryRaw',
+        });
+
+        expect(record.code).toBe('22P02');
+        expect(record.relation).toBeNull();
+        expect(record.constraint).toBeNull();
+    });
+
+    it('redacts relation and constraint to null for class 22 errors even when names match known schema objects', () => {
+        const record = redactPrismaLogEvent('error', {
+            timestamp: new Date('2026-08-05T10:00:00Z'),
+            message:
+                'Raw query failed. Code: `22001`. Message: `ERROR: value too long for type character varying(255): ' +
+                '"new row for relation \\"User\\" violates check constraint \\"User_email_canonical_check\\""`',
+            target: '$executeRaw',
+        });
+
+        expect(record.code).toBe('22001');
+        expect(record.relation).toBeNull();
+        expect(record.constraint).toBeNull();
+    });
+
+    it('rejects unknown or planted relation and constraint names for other error codes', () => {
+        const record = redactPrismaLogEvent('error', {
+            timestamp: new Date('2026-08-05T10:00:00Z'),
+            message:
+                'Raw query failed. Code: `23505`. Message: `ERROR: duplicate key value: ' +
+                'relation \\"VICTIM\\" constraint \\"TOKEN_9f3a\\"`',
+            target: '$queryRaw',
+        });
+
+        expect(record.code).toBe('23505');
+        expect(record.relation).toBeNull();
+        expect(record.constraint).toBeNull();
+    });
 });
 
 describe('prisma client logging configuration', () => {
@@ -266,3 +308,100 @@ describe('prisma client logging configuration', () => {
         expect(handlers.size).toBe(0);
     });
 });
+
+describe('prisma error message sanitization', () => {
+    const { sanitizePrismaErrorMessage } = require('@/lib/prisma') as typeof import('@/lib/prisma');
+
+    it.each([
+        [
+            'Failing row contains',
+            'ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \\"User\\" violates check constraint \\"User_email_canonical_check\\"", severity: "ERROR", detail: Some("Failing row contains (cmscbchtn0006sizjhse9nkks, Mixed Case, customer@example.com, null, null, not-used, USER, 0, null, null, null)") }) })',
+            'customer@example.com',
+        ],
+        [
+            'DETAIL:',
+            'Raw query failed. Code: `23505`. Message: `ERROR: duplicate key value violates unique constraint "User_email_key"\nDETAIL:  Key (email)=(victim@example.com) already exists.`',
+            'victim@example.com',
+        ],
+        [
+            'detail: Some(',
+            'ConnectorError(PostgresError { code: "23503", message: "insert or update on table \\"Review\\" violates foreign key", detail: Some("Key (userId)=(secret-uuid-1234) is not present in table \\"User\\".") })',
+            'secret-uuid-1234',
+        ],
+        [
+            'Key (',
+            'Raw query failed. Code: `23505`. Message: `ERROR: duplicate key value violates unique constraint "User_email_key"\nKey (email)=(private-email@example.com) already exists.`',
+            'private-email@example.com',
+        ],
+    ])('strips row data after %s and appends [ROW DATA REDACTED]', (markerName, fullMessage, sensitiveData) => {
+        const error = new Error(fullMessage);
+        sanitizePrismaErrorMessage(error);
+
+        expect(error.message).toContain('[ROW DATA REDACTED]');
+        expect(error.message).not.toContain(sensitiveData);
+        expect(error.message).not.toContain(markerName);
+    });
+
+    it('leaves errors without row data markers untouched', () => {
+        const message = 'Invalid `prisma.user.findUnique()` invocation: error connecting to database';
+        const error = new Error(message);
+        sanitizePrismaErrorMessage(error);
+
+        expect(error.message).toBe(message);
+        expect(error.message).not.toContain('[ROW DATA REDACTED]');
+    });
+
+    it('handles non-Error and malformed inputs gracefully without throwing', () => {
+        expect(() => sanitizePrismaErrorMessage(null)).not.toThrow();
+        expect(() => sanitizePrismaErrorMessage(undefined)).not.toThrow();
+        expect(() => sanitizePrismaErrorMessage('string error')).not.toThrow();
+        expect(() => sanitizePrismaErrorMessage(12345)).not.toThrow();
+        expect(() => sanitizePrismaErrorMessage({})).not.toThrow();
+        expect(() => sanitizePrismaErrorMessage({ message: 42 })).not.toThrow();
+    });
+
+    it('sanitizes a thrown Prisma error object so it contains no sensitive customer data', async () => {
+        const { PrismaClient, Prisma } = require('@prisma/client') as typeof import('@prisma/client');
+        const prismaClient = new PrismaClient();
+
+        // Simulate internal Prisma engine throwing a row-leaking error on query execution
+        (prismaClient as unknown as { _executeRequest: () => Promise<never> })._executeRequest = async () => {
+            throw new Prisma.PrismaClientKnownRequestError(
+                'ConnectorError: user_facing_error: None, kind: QueryError(PostgresError { ' +
+                'code: "23505", message: "duplicate key", ' +
+                'detail: Some("Key (email)=(confidential@example.com) already exists.") })',
+                {
+                    code: 'P2002',
+                    clientVersion: '5.10.2',
+                },
+            );
+        };
+
+        const extendedClient = prismaClient.$extends({
+            query: {
+                $allModels: {
+                    async $allOperations({ query, args }) {
+                        try {
+                            return await query(args);
+                        } catch (error) {
+                            sanitizePrismaErrorMessage(error);
+                            throw error;
+                        }
+                    },
+                },
+            },
+        });
+
+        await expect(extendedClient.user.findFirst()).rejects.toThrow();
+
+        try {
+            await extendedClient.user.findFirst();
+        } catch (err: unknown) {
+            const error = err as Error;
+            expect(error.message).toContain('[ROW DATA REDACTED]');
+            expect(error.message).not.toContain('confidential@example.com');
+            expect(error.message).not.toContain('detail: Some(');
+        }
+    });
+});
+

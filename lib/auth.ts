@@ -166,4 +166,16 @@ export const authOptions: NextAuthOptions = {
             return session;
         },
     },
+    logger: {
+        error(code, metadata) {
+            if (code === 'CLIENT_FETCH_ERROR') {
+                const err = (metadata as { error?: Error })?.error;
+                const msg = (err?.message || (metadata as { message?: string })?.message || '');
+                if (/failed to fetch|networkerror|load failed|aborted/i.test(msg)) {
+                    return;
+                }
+            }
+            console.error(`[next-auth][error][${code}]`, metadata);
+        },
+    },
 };

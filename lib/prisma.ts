@@ -1,5 +1,60 @@
-import type { Prisma } from '@prisma/client';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
+
+export function sanitizePrismaErrorMessage(error: unknown): void {
+    if (error && typeof error === 'object' && 'message' in error && typeof (error as { message: unknown }).message === 'string') {
+        const err = error as { message: string };
+        const safePrefix = beforeRowData(err.message);
+        if (safePrefix.length < err.message.length) {
+            err.message = `${safePrefix.trimEnd()} [ROW DATA REDACTED]`;
+        }
+    }
+}
+
+function extendClient(client: PrismaClient): PrismaClient {
+    if (typeof client.$extends === 'function') {
+        return client.$extends({
+            query: {
+                $allModels: {
+                    async $allOperations({ query, args }) {
+                        try {
+                            return await query(args);
+                        } catch (error) {
+                            sanitizePrismaErrorMessage(error);
+                            throw error;
+                        }
+                    },
+                },
+            },
+        }) as unknown as PrismaClient;
+    }
+    return client;
+}
+
+function createPrismaClient(): PrismaClient {
+    if (isDevelopment) {
+        const developmentLog: Prisma.LogLevel[] = ['query', 'warn', 'error'];
+        const client = new PrismaClient({ log: developmentLog });
+        return extendClient(client);
+    }
+
+    const client = new PrismaClient({
+        log: [
+            { emit: 'event', level: 'warn' },
+            { emit: 'event', level: 'error' },
+        ],
+    });
+
+    if (typeof client.$on === 'function') {
+        client.$on('warn', (event) => {
+            console.warn(redactPrismaLogEvent('warn', event));
+        });
+        client.$on('error', (event) => {
+            console.error(redactPrismaLogEvent('error', event));
+        });
+    }
+
+    return extendClient(client);
+}
 
 const globalForPrisma = globalThis as unknown as {
     prisma: PrismaClient | undefined;
@@ -55,6 +110,162 @@ function beforeRowData(message: string): string {
         if (index !== -1 && index < end) end = index;
     }
     return message.slice(0, end);
+}
+
+const STATIC_MODELS: readonly string[] = [
+    'Account',
+    'Session',
+    'User',
+    'VerificationToken',
+    'AuthRateLimit',
+    'CityGuide',
+    'PaymentAttempt',
+    'PaymentWebhookEvent',
+    'Booking',
+    'BookingStatusChange',
+    'BookingRebooking',
+    'BookingRebookingLeg',
+    'PaymentRefund',
+    'PaymentRefundAttempt',
+    'Passenger',
+    'Flight',
+    'UserFavorite',
+    'Review',
+    'FlightSchedule',
+    'FlightScheduleTermsChange',
+    'FlightScheduleDeletion',
+    'Notification',
+    'Airport',
+    'ItineraryLeg',
+    'SeatHold',
+    'SeatAssignment',
+];
+
+function getKnownModels(): Set<string> {
+    const models = new Set<string>(STATIC_MODELS);
+    try {
+        if (typeof Prisma !== 'undefined' && Prisma?.dmmf?.datamodel?.models) {
+            for (const model of Prisma.dmmf.datamodel.models) {
+                models.add(model.name);
+                if (model.dbName) models.add(model.dbName);
+            }
+        }
+    } catch {
+        // Fall back to STATIC_MODELS if Prisma is mocked without dmmf
+    }
+    return models;
+}
+
+const KNOWN_MIGRATION_CONSTRAINTS: readonly string[] = [
+    'Account_pkey',
+    'Account_userId_fkey',
+    'Airport_pkey',
+    'AuthRateLimit_pkey',
+    'BookingRebookingLeg_different_legs',
+    'BookingRebookingLeg_fromLegId_fkey',
+    'BookingRebookingLeg_pkey',
+    'BookingRebookingLeg_rebookingId_fkey',
+    'BookingRebookingLeg_toLegId_fkey',
+    'BookingRebooking_bookingId_fkey',
+    'BookingRebooking_bookingStatusChangeId_fkey',
+    'BookingRebooking_pkey',
+    'BookingStatusChange_actorUserId_fkey',
+    'BookingStatusChange_bookingId_fkey',
+    'BookingStatusChange_pkey',
+    'Booking_flightId_fkey',
+    'Booking_nonempty_payment_intent',
+    'Booking_pkey',
+    'Booking_reference_format',
+    'Booking_totalPriceCents_non_negative_check',
+    'Booking_userId_fkey',
+    'CityGuide_pkey',
+    'FlightScheduleDeletion_actorUserId_fkey',
+    'FlightScheduleDeletion_counts_valid',
+    'FlightScheduleDeletion_duration_positive',
+    'FlightScheduleDeletion_pkey',
+    'FlightScheduleDeletion_price_nonnegative',
+    'FlightScheduleDeletion_request_nonempty',
+    'FlightScheduleDeletion_schedule_positive',
+    'FlightScheduleTermsChange_actorUserId_fkey',
+    'FlightScheduleTermsChange_counts_nonnegative',
+    'FlightScheduleTermsChange_duration_positive',
+    'FlightScheduleTermsChange_flightScheduleId_fkey',
+    'FlightScheduleTermsChange_pkey',
+    'FlightScheduleTermsChange_price_nonnegative',
+    'FlightScheduleTermsChange_request_nonempty',
+    'FlightSchedule_durationMinutes_positive',
+    'FlightSchedule_pkey',
+    'FlightSchedule_priceCents_check',
+    'Flight_durationMinutes_positive',
+    'Flight_flightScheduleId_fkey',
+    'Flight_fromAirportCode_fkey',
+    'Flight_pkey',
+    'Flight_priceCents_check',
+    'Flight_toAirportCode_fkey',
+    'ItineraryLeg_bookingId_fkey',
+    'ItineraryLeg_flightId_fkey',
+    'ItineraryLeg_pkey',
+    'ItineraryLeg_sequence_positive_check',
+    'Notification_pkey',
+    'Notification_userId_fkey',
+    'Passenger_bookingId_fkey',
+    'Passenger_flightId_fkey',
+    'Passenger_pkey',
+    'Passenger_sensitive_data_state_check',
+    'PaymentAttempt_captured_has_time',
+    'PaymentAttempt_iso_currency',
+    'PaymentAttempt_pkey',
+    'PaymentAttempt_positive_amount',
+    'PaymentAttempt_sha256_fingerprint',
+    'PaymentAttempt_userId_fkey',
+    'PaymentRefundAttempt_nonempty_id',
+    'PaymentRefundAttempt_nonempty_provider_refund',
+    'PaymentRefundAttempt_paymentRefundId_fkey',
+    'PaymentRefundAttempt_pkey',
+    'PaymentRefund_bookingStatusChangeId_fkey',
+    'PaymentRefund_currency_format',
+    'PaymentRefund_nonempty_provider_intent',
+    'PaymentRefund_pkey',
+    'PaymentRefund_positive_amount',
+    'PaymentWebhookEvent_nonempty_event_type',
+    'PaymentWebhookEvent_nonempty_provider_intent',
+    'PaymentWebhookEvent_paymentAttemptId_fkey',
+    'PaymentWebhookEvent_pkey',
+    'Review_cityGuideId_fkey',
+    'Review_pkey',
+    'Review_userId_fkey',
+    'SeatAssignment_flightId_fkey',
+    'SeatAssignment_legId_flightId_fkey',
+    'SeatAssignment_passengerId_fkey',
+    'SeatAssignment_pkey',
+    'SeatHold_expires_after_it_is_made',
+    'SeatHold_flightId_fkey',
+    'SeatHold_pkey',
+    'Session_pkey',
+    'Session_userId_fkey',
+    'UserFavorite_cityGuideId_fkey',
+    'UserFavorite_pkey',
+    'UserFavorite_userId_fkey',
+    'User_email_canonical_check',
+    'User_pkey',
+    'User_staff_mfa_state_check',
+    'User_timeZone_well_formed',
+];
+
+const KNOWN_CONSTRAINTS = new Set<string>(KNOWN_MIGRATION_CONSTRAINTS);
+
+function isValidConstraint(constraint: string, knownModels: Set<string>): boolean {
+    if (KNOWN_CONSTRAINTS.has(constraint)) {
+        return true;
+    }
+    const match = /^([A-Za-z0-9]+)_(?:.*_)?(pkey|fkey|key|check)$/.exec(constraint);
+    if (match) {
+        const [, modelName] = match;
+        if (knownModels.has(modelName)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**
@@ -142,56 +353,44 @@ export function redactPrismaLogEvent(
     const safe = beforeRowData(event.message);
     const fields = identifiers(firstMatch(UNIQUE_FIELDS, safe));
 
+    const code =
+        firstMatch(CODE, safe)
+        ?? firstMatch(PRISMA_CODE, safe)
+        ?? (fields ? 'P2002' : null)
+        ?? (FOREIGN_KEY.test(safe) ? 'P2003' : null);
+
+    let relation = firstMatch(RELATION, safe);
+    let constraint = firstMatch(CONSTRAINT, safe) ?? firstMatch(FOREIGN_KEY, safe);
+
+    if (code?.startsWith('22')) {
+        relation = null;
+        constraint = null;
+    } else {
+        const knownModels = getKnownModels();
+        const isSchemaDriftRelation = code === '42P01' || code === '42P07' || code === '42704';
+        const isSchemaDriftConstraint = code === '42704';
+
+        if (relation && !isSchemaDriftRelation && !knownModels.has(relation)) {
+            relation = null;
+        }
+
+        if (constraint && !isSchemaDriftConstraint && !isValidConstraint(constraint, knownModels)) {
+            constraint = null;
+        }
+    }
+
     return {
         level,
         timestamp: event.timestamp,
         target: event.target,
-        // Prisma states the code in its own vocabulary for the two forms that
-        // carry no SQLSTATE, so those are read from the wording it controls.
-        code:
-            firstMatch(CODE, safe)
-            ?? firstMatch(PRISMA_CODE, safe)
-            ?? (fields ? 'P2002' : null)
-            ?? (FOREIGN_KEY.test(safe) ? 'P2003' : null),
-        relation: firstMatch(RELATION, safe),
-        constraint: firstMatch(CONSTRAINT, safe) ?? firstMatch(FOREIGN_KEY, safe),
+        code,
+        relation,
+        constraint,
         fields,
     };
-}
-
-/**
- * Prisma's `query` log writes each statement's bind parameters, which include
- * customer email addresses and token digests. Keep it for local development,
- * where the visibility is useful and the data is seeded, and keep it out of
- * every other environment.
- *
- * Warnings and errors are always reported, but never by Prisma itself outside
- * development: it is handed an event emitter so the payload passes through
- * `redactPrismaLogEvent` before anything is written.
- */
-function createPrismaClient(): PrismaClient {
-    if (isDevelopment) {
-        const developmentLog: Prisma.LogLevel[] = ['query', 'warn', 'error'];
-        return new PrismaClient({ log: developmentLog });
-    }
-
-    const client = new PrismaClient({
-        log: [
-            { emit: 'event', level: 'warn' },
-            { emit: 'event', level: 'error' },
-        ],
-    });
-
-    client.$on('warn', (event) => {
-        console.warn(redactPrismaLogEvent('warn', event));
-    });
-    client.$on('error', (event) => {
-        console.error(redactPrismaLogEvent('error', event));
-    });
-
-    return client;
 }
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+
