@@ -21,6 +21,18 @@ export default defineConfig([
             'react-hooks/set-state-in-effect': 'off',
         },
     },
+    {
+        files: ['__tests__/**'],
+        rules: {
+            '@typescript-eslint/no-explicit-any': 'off',
+            '@typescript-eslint/no-require-imports': 'off',
+            'react/display-name': 'off',
+            '@typescript-eslint/no-unused-vars': 'off',
+        },
+        linterOptions: {
+            reportUnusedDisableDirectives: 'off',
+        },
+    },
     globalIgnores([
         '.next/**',
         'coverage/**',

@@ -14,6 +14,7 @@ const customJestConfig = {
     '^@/(.*)$': '<rootDir>/$1',
   },
   testPathIgnorePatterns: ['<rootDir>/.next/', '<rootDir>/node_modules/', '<rootDir>/e2e/'],
+  transformIgnorePatterns: ['node_modules/(?!(d3-.*|internmap)/)'],
 }
 
 // Matches the extensions Jest's default testMatch would pick up, so a
@@ -40,8 +41,8 @@ const DATABASE_TESTS = '\\.database\\.test\\.[jt]sx?$'
  * createJestConfig is called this way to ensure next/jest can load the Next.js
  * config, which is async.
  */
-module.exports = async () => ({
-  projects: [
+module.exports = async () => {
+  const projects = [
     await createJestConfig({
       ...customJestConfig,
       displayName: 'unit',
@@ -54,5 +55,16 @@ module.exports = async () => ({
       // Refuses the run rather than letting it interfere quietly (#215).
       globalSetup: '<rootDir>/jest.database-setup.js',
     })(),
-  ],
-})
+  ]
+
+  return {
+    projects: projects.map((project) => ({
+      ...project,
+      transformIgnorePatterns: [
+        ...customJestConfig.transformIgnorePatterns,
+        '^.+\\.module\\.(css|sass|scss)$',
+      ],
+    })),
+  }
+}
+
