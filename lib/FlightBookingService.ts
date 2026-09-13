@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { CabinClass } from '@prisma/client';
 import { heldSeats } from '@/lib/seatOccupancy';
-import { activeItineraryLegWhere, bookingFlights } from '@/lib/bookingItinerary';
+import { activeItineraryLegWhere, bookingFlights, legFlightClause } from '@/lib/bookingItinerary';
 import { prisma } from '@/lib/prisma';
 import { assertSeatAvailableForCabin } from '@/lib/seatLayout';
 import { lockFlightForUpdate } from '@/lib/flightLock';
@@ -243,7 +243,9 @@ export default class FlightBookingService {
             // cannot be inserted or taken over between this delete and commit.
             for (const claim of requestedClaims) {
                 if (!await consumeSeatHold(tx, claim)) {
-                    throw new SeatHoldUnavailableError(claim);
+                    const legIndex = flights.findIndex(f => f.id === claim.flightId);
+                    const clause = legFlightClause(legIndex, flights.length);
+                    throw new SeatHoldUnavailableError(claim, clause);
                 }
             }
 

@@ -287,4 +287,42 @@ describe('AdminFlightsTable', () => {
         fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
         expect(footerCloseButton).toHaveFocus();
     });
+
+    it('applies responsiveness styles to the table, wrapper, and route column', () => {
+        render(<AdminFlightsTable initialFlights={mockFlights} />);
+
+        const table = screen.getByRole('table');
+        expect(table).toHaveStyle({ minWidth: '800px' });
+
+        const wrapper = table.parentElement;
+        expect(wrapper).toHaveStyle({ overflowX: 'auto' });
+
+        const routeHeader = screen.getByRole('columnheader', { name: 'Route' });
+        expect(routeHeader).toHaveStyle({ minWidth: '160px', whiteSpace: 'nowrap' });
+
+        const routeCell1 = screen.getByText('JFK → LAX');
+        expect(routeCell1).toHaveStyle({ minWidth: '160px', whiteSpace: 'nowrap' });
+
+        const routeCell2 = screen.getByText('SFO → SEA');
+        expect(routeCell2).toHaveStyle({ minWidth: '160px', whiteSpace: 'nowrap' });
+    });
+
+    it('applies sizing overrides to manifest close button and header container to prevent stretching', () => {
+        render(<AdminFlightsTable initialFlights={mockFlights} />);
+
+        const manifestButtons = screen.getAllByRole('button', { name: 'Manifest' });
+        fireEvent.click(manifestButtons[0]);
+
+        const closeButton = screen.getByRole('button', { name: 'Close passenger manifest' });
+        expect(closeButton).toHaveStyle({
+            width: 'auto',
+            minWidth: 'unset',
+            flexShrink: 0,
+            padding: '4px 8px',
+        });
+
+        const headerTitle = screen.getByRole('heading', { name: 'Passenger Manifest' });
+        expect(headerTitle.parentElement).toHaveStyle({ minWidth: 0 });
+    });
 });
+

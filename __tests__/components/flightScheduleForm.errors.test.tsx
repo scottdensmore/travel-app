@@ -87,4 +87,17 @@ describe('flight schedule form field errors', () => {
         // The other field is still wrong and still says so.
         expect(screen.getByLabelText(/To \(Destination\)/i)).toHaveAttribute('aria-invalid', 'true');
     });
+
+    it('focuses the first error field again on a subsequent failed submit', async () => {
+        render(<FlightScheduleForm />);
+        fill();
+        fireEvent.click(screen.getByRole('button', { name: /Create Schedule/i }));
+        await waitFor(() => expect(screen.getByLabelText(/From \(Origin\)/i)).toHaveFocus());
+
+        screen.getByLabelText(/Price/i).focus();
+        expect(screen.getByLabelText(/Price/i)).toHaveFocus();
+
+        fireEvent.click(screen.getByRole('button', { name: /Create Schedule/i }));
+        await waitFor(() => expect(screen.getByLabelText(/From \(Origin\)/i)).toHaveFocus());
+    });
 });

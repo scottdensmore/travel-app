@@ -1007,9 +1007,48 @@ describe('bookFlightAction', () => {
                 cabinClass: 'ECONOMY',
             }],
             idempotencyKey,
-        })).resolves.toMatchObject({
+        })).resolves.toEqual({
             ok: false,
-            error: { fields: { 'passengers.1.seatNumbers.1': expect.any(Array) } },
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'Seat 22B on the return flight is no longer held for this checkout. Please choose a seat again.',
+                fields: {
+                    'passengers.1.seatNumbers.1': [
+                        'Seat 22B on the return flight is no longer held for this checkout. Please choose a seat again.',
+                    ],
+                },
+            },
+        });
+    });
+
+    it('includes departing leg clause when outbound hold is lost on round-trip booking', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        const idempotencyKey = '8ea59a65-9251-45b3-95d0-3920c49f5735';
+        mockBookFlight.mockRejectedValue(new SeatHoldUnavailableError({
+            flightId: 42,
+            seatNumber: '11A',
+            holderKey: checkoutHolderKey('user-123', idempotencyKey),
+        }));
+
+        await expect(bookFlightAction({
+            flightIds: [42, 43],
+            passengers: [{
+                firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
+                passportNumber: 'AB123456', gender: 'Female', seatNumbers: ['11A', '11B'],
+                cabinClass: 'ECONOMY',
+            }],
+            idempotencyKey,
+        })).resolves.toEqual({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'Seat 11A on the departing flight is no longer held for this checkout. Please choose a seat again.',
+                fields: {
+                    'passengers.0.seatNumbers.0': [
+                        'Seat 11A on the departing flight is no longer held for this checkout. Please choose a seat again.',
+                    ],
+                },
+            },
         });
     });
 
@@ -1233,10 +1272,10 @@ describe('startCheckoutPaymentAction', () => {
             ok: false,
             error: {
                 code: 'VALIDATION_ERROR',
-                message: 'Seat 2B is no longer held for this checkout. Please choose a seat again.',
+                message: 'Seat 2B on the return flight is no longer held for this checkout. Please choose a seat again.',
                 fields: {
                     'passengers.1.seatNumbers.1': [
-                        'Seat 2B is no longer held for this checkout. Please choose a seat again.',
+                        'Seat 2B on the return flight is no longer held for this checkout. Please choose a seat again.',
                     ],
                 },
             },

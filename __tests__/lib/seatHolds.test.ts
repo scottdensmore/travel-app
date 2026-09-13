@@ -6,6 +6,7 @@ import {
     releaseHold,
     releaseHoldsExcept,
     SeatHoldCheckoutLimitError,
+    SeatHoldUnavailableError,
 } from '@/lib/seatHolds';
 import { prisma } from '@/lib/prisma';
 
@@ -153,5 +154,35 @@ describe('multi-seat hold transaction', () => {
         await releaseHoldsExcept([9, 5, 9], 'holder', []);
 
         expect(events).toEqual(['lock:5', 'lock:9', 'release']);
+    });
+});
+
+describe('SeatHoldUnavailableError', () => {
+    const claim = { flightId: 5, seatNumber: '12A', holderKey: 'holder' };
+
+    it('formats error without leg clause when none is provided', () => {
+        const error = new SeatHoldUnavailableError(claim);
+        expect(error.message).toBe('Seat 12A is no longer held for this checkout. Please choose a seat again.');
+        expect(error.claim).toBe(claim);
+        expect(error.legClause).toBe('');
+        expect(error.name).toBe('SeatHoldUnavailableError');
+    });
+
+    it('formats error with direction string', () => {
+        const error = new SeatHoldUnavailableError(claim, 'departing');
+        expect(error.message).toBe('Seat 12A on the departing flight is no longer held for this checkout. Please choose a seat again.');
+        expect(error.legClause).toBe(' on the departing flight');
+    });
+
+    it('formats error with full leg clause phrase', () => {
+        const error = new SeatHoldUnavailableError(claim, ' on the return flight');
+        expect(error.message).toBe('Seat 12A on the return flight is no longer held for this checkout. Please choose a seat again.');
+        expect(error.legClause).toBe(' on the return flight');
+    });
+
+    it('formats error with numbered leg clause phrase', () => {
+        const error = new SeatHoldUnavailableError(claim, ' on leg 2');
+        expect(error.message).toBe('Seat 12A on leg 2 is no longer held for this checkout. Please choose a seat again.');
+        expect(error.legClause).toBe(' on leg 2');
     });
 });

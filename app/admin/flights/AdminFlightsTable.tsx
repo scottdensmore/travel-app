@@ -111,12 +111,12 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                 <h2 style={{ fontSize: '1.5rem', margin: '0 0 1rem 0', color: '#c084fc', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '8px' }}>
                     Active occurrences (Next 7 Days)
                 </h2>
-                <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                    <table style={{ width: '100%', minWidth: '800px', borderCollapse: 'collapse', textAlign: 'left' }}>
                         <thead>
                             <tr style={{ borderBottom: '2px solid rgba(255, 255, 255, 0.08)' }}>
                                 <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Flight</th>
-                                <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Route</th>
+                                <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase', minWidth: '160px', whiteSpace: 'nowrap' }}>Route</th>
                                 <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Departure Date</th>
                                 <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Price</th>
                                 <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Bookings (Active/Cancelled)</th>
@@ -141,7 +141,7 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                                             <div style={{ fontWeight: 'bold', color: '#fff' }}>{flight.airline}</div>
                                             <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.flightNumber}</div>
                                         </td>
-                                        <td style={{ padding: '12px', fontSize: '0.9rem', color: '#fff' }}>
+                                        <td style={{ padding: '12px', fontSize: '0.9rem', color: '#fff', minWidth: '160px', whiteSpace: 'nowrap' }}>
                                             {flight.from} → {flight.to}
                                         </td>
                                         <td style={{ padding: '12px', fontSize: '0.9rem', color: '#fff' }}>
@@ -238,7 +238,7 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                     }}>
                         {/* Header */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '12px' }}>
-                            <div>
+                            <div style={{ minWidth: 0, flex: 1 }}>
                                 <h2 id="passenger-manifest-title" style={{ fontSize: '1.5rem', color: '#c084fc', margin: 0, fontWeight: 'bold' }}>
                                     Passenger Manifest
                                 </h2>
@@ -250,7 +250,17 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                                 ref={closeButtonRef}
                                 onClick={closeManifest}
                                 aria-label="Close passenger manifest"
-                                style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: '1.5rem', cursor: 'pointer' }}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: 'rgba(255,255,255,0.6)',
+                                    fontSize: '1.5rem',
+                                    cursor: 'pointer',
+                                    width: 'auto',
+                                    minWidth: 'unset',
+                                    flexShrink: 0,
+                                    padding: '4px 8px'
+                                }}
                             >
                                 ✕
                             </button>

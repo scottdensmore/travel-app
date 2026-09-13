@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { PaymentAttempt } from '@prisma/client';
 import { calculateItineraryTotal, flightFareCents } from '@/lib/bookingPricing';
+import { legFlightClause } from '@/lib/bookingItinerary';
 import { lockFlightForUpdate } from '@/lib/flightLock';
 import { prisma } from '@/lib/prisma';
 import { lockPaymentIntentForUpdate } from '@/lib/paymentIntentLock';
@@ -145,7 +146,9 @@ export class CheckoutPaymentService {
             if (!linkedBooking) {
                 for (const claim of claims) {
                     if (!await hasLiveSeatHold(tx, claim)) {
-                        throw new SeatHoldUnavailableError(claim);
+                        const legIndex = flights.findIndex(f => f.id === claim.flightId);
+                        const clause = legFlightClause(legIndex, flights.length);
+                        throw new SeatHoldUnavailableError(claim, clause);
                     }
                 }
             }
