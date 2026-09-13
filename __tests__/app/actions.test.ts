@@ -25,6 +25,7 @@ import {
     updateFlightScheduleTermsAction,
     setFlightScheduleActiveAction,
     updateAccountTimeZoneAction,
+    resendBoardingPassAction,
 } from '@/app/actions';
 import { getServerSession } from 'next-auth';
 import TravelGuideService from '@/lib/TravelGuideService';
@@ -56,12 +57,14 @@ import {
 } from '@/lib/flightScheduleDeletionService';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { sendTravelDocumentsEmail } from '@/lib/travelDocumentEmail';
 
 // Keep these heavy/server-only modules out of the unit test.
 jest.mock('next-auth', () => ({ getServerSession: jest.fn() }));
 jest.mock('next/cache', () => ({ revalidatePath: jest.fn() }));
 jest.mock('next/navigation', () => ({ redirect: jest.fn() }));
 jest.mock('@/lib/auth', () => ({ authOptions: {} }));
+jest.mock('@/lib/travelDocumentEmail', () => ({ sendTravelDocumentsEmail: jest.fn() }));
 
 jest.mock('@/lib/FlightBookingService', () => {
     const bookFlight = jest.fn();
@@ -207,6 +210,7 @@ jest.mock('@/lib/prisma', () => ({
         user: { update: jest.fn() },
         booking: { findUnique: jest.fn(), delete: jest.fn(), update: jest.fn(), findMany: jest.fn() },
         seatAssignment: { findMany: jest.fn() },
+        itineraryLeg: { findFirst: jest.fn() },
         $executeRaw: jest.fn(),
         $queryRaw: jest.fn().mockResolvedValue([]),
         notification: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), createMany: jest.fn() },
@@ -268,6 +272,8 @@ const mockedNotificationUpdate = (prisma as any).notification.update as jest.Moc
 const mockedNotificationUpdateMany = (prisma as any).notification.updateMany as jest.Mock;
 const mockedNotificationFindUnique = (prisma as any).notification.findUnique as jest.Mock;
 const mockedNotificationCreateMany = (prisma as any).notification.createMany as jest.Mock;
+const mockedItineraryLegFindFirst = (prisma as any).itineraryLeg.findFirst as jest.Mock;
+const mockedSendTravelDocumentsEmail = sendTravelDocumentsEmail as jest.Mock;
 
 const sampleGuide: any = {
     city: 'Paris',
@@ -3304,3 +3310,191 @@ describe('holdChosenSeatsAction input boundary', () => {
         })).rejects.toBe(storageError);
     });
 });
+
+describe('resendBoardingPassAction', () => {
+    const sampleLeg = {
+        id: 10,
+        bookingId: 1,
+        booking: {
+            id: 1,
+            reference: 'MNA-1234',
+            userId: 'user-1',
+            status: 'CONFIRMED',
+            passengers: [
+                { id: 'pass-1', firstName: 'Ada', lastName: 'Lovelace' },
+                { id: 'pass-2', firstName: 'Grace', lastName: 'Hopper' },
+            ],
+        },
+        flight: {
+            id: 20,
+            flightNumber: 'MO-101',
+            airline: 'Mona Airways',
+            status: 'ON_TIME',
+            departureDate: new Date('2026-10-15T10:00:00Z'),
+            durationMinutes: 120,
+            fromAirport: { label: 'Seattle, USA' },
+            toAirport: { label: 'Detroit, USA' },
+        },
+        seatAssignments: [
+            {
+                id: 101,
+                passengerId: 'pass-1',
+                seatNumber: '11A',
+                cabinClass: 'ECONOMY',
+                checkedInAt: new Date('2026-10-14T09:00:00Z'),
+                releasedAt: null,
+            },
+            {
+                id: 102,
+                passengerId: 'pass-2',
+                seatNumber: '11B',
+                cabinClass: 'ECONOMY',
+                checkedInAt: new Date('2026-10-14T09:00:00Z'),
+                releasedAt: null,
+            },
+        ],
+    };
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    it('throws or returns error if unauthenticated', async () => {
+        mockedGetServerSession.mockResolvedValue(null);
+
+        await expect(resendBoardingPassAction(1, 10)).rejects.toThrow('Unauthorized');
+        expect(mockedItineraryLegFindFirst).not.toHaveBeenCalled();
+        expect(mockedSendTravelDocumentsEmail).not.toHaveBeenCalled();
+    });
+
+    it('throws or returns error if user session has no email', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-1' } });
+
+        await expect(resendBoardingPassAction(1, 10)).rejects.toThrow('Unauthorized');
+        expect(mockedItineraryLegFindFirst).not.toHaveBeenCalled();
+        expect(mockedSendTravelDocumentsEmail).not.toHaveBeenCalled();
+    });
+
+    it('refuses request if booking does not belong to the user', async () => {
+        mockedGetServerSession.mockResolvedValue({
+            user: { id: 'user-intruder', email: 'intruder@example.com' },
+        });
+        mockedItineraryLegFindFirst.mockResolvedValue(sampleLeg);
+
+        await expect(resendBoardingPassAction(1, 10)).rejects.toThrow('Unauthorized');
+        expect(mockedSendTravelDocumentsEmail).not.toHaveBeenCalled();
+    });
+
+    it('refuses request if leg is not checked in', async () => {
+        mockedGetServerSession.mockResolvedValue({
+            user: { id: 'user-1', email: 'ada@example.com' },
+        });
+        mockedItineraryLegFindFirst.mockResolvedValue({
+            ...sampleLeg,
+            seatAssignments: [
+                {
+                    id: 101,
+                    passengerId: 'pass-1',
+                    seatNumber: '11A',
+                    cabinClass: 'ECONOMY',
+                    checkedInAt: null,
+                    releasedAt: null,
+                },
+            ],
+        });
+
+        const result = await resendBoardingPassAction(1, 10);
+        expect(result).toMatchObject({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: expect.stringContaining('Travel documents are only available after checking in'),
+            },
+        });
+        expect(mockedSendTravelDocumentsEmail).not.toHaveBeenCalled();
+    });
+
+    it('refuses request if booking is cancelled', async () => {
+        mockedGetServerSession.mockResolvedValue({
+            user: { id: 'user-1', email: 'ada@example.com' },
+        });
+        mockedItineraryLegFindFirst.mockResolvedValue({
+            ...sampleLeg,
+            booking: {
+                ...sampleLeg.booking,
+                status: 'CANCELLED',
+            },
+        });
+
+        const result = await resendBoardingPassAction(1, 10);
+        expect(result).toMatchObject({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+            },
+        });
+        expect(mockedSendTravelDocumentsEmail).not.toHaveBeenCalled();
+    });
+
+    it('refuses request if flight is cancelled', async () => {
+        mockedGetServerSession.mockResolvedValue({
+            user: { id: 'user-1', email: 'ada@example.com' },
+        });
+        mockedItineraryLegFindFirst.mockResolvedValue({
+            ...sampleLeg,
+            flight: {
+                ...sampleLeg.flight,
+                status: 'CANCELLED',
+            },
+        });
+
+        const result = await resendBoardingPassAction(1, 10);
+        expect(result).toMatchObject({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+            },
+        });
+        expect(mockedSendTravelDocumentsEmail).not.toHaveBeenCalled();
+    });
+
+    it('successfully dispatches email when checked in and returns { ok: true, data: { sentTo: email } }', async () => {
+        mockedGetServerSession.mockResolvedValue({
+            user: { id: 'user-1', email: 'ada@example.com' },
+        });
+        mockedItineraryLegFindFirst.mockResolvedValue(sampleLeg);
+        mockedSendTravelDocumentsEmail.mockResolvedValue(undefined);
+
+        const result = await resendBoardingPassAction(1, 10);
+
+        expect(result).toEqual({
+            ok: true,
+            data: {
+                sentTo: 'ada@example.com',
+            },
+        });
+        expect(mockedSendTravelDocumentsEmail).toHaveBeenCalledWith(
+            expect.objectContaining({
+                to: 'ada@example.com',
+                bookingReference: 'MNA-1234',
+                airline: 'Mona Airways',
+                flightNumber: 'MO-101',
+                from: 'Seattle, USA',
+                toDestination: 'Detroit, USA',
+                passengers: [
+                    {
+                        name: 'Ada Lovelace',
+                        seat: '11A',
+                        cabin: 'Economy',
+                    },
+                    {
+                        name: 'Grace Hopper',
+                        seat: '11B',
+                        cabin: 'Economy',
+                    },
+                ],
+            }),
+        );
+    });
+});
+

@@ -44,7 +44,7 @@ import { assertSeatAvailableForCabin, validateSeatingLayout } from '@/lib/seatLa
 import { lockBookingsOnFlightForUpdate, lockFlightForUpdate } from '@/lib/flightLock';
 import { withFlightScheduleGenerationLock } from '@/lib/flightScheduleGenerationLock';
 import { updateFlightSeatingLayout } from '@/lib/FlightSeatLayoutService';
-import { actionValidationFailure, actionValidationFailures } from '@/lib/actionResult';
+import { actionValidationFailure, actionValidationFailures, type ActionValidationFailure } from '@/lib/actionResult';
 import {
     bookingTotalCents,
     calculatePassengerFareCents,
@@ -55,6 +55,7 @@ import {
 import {
     activeItineraryLegWhere,
     bookingFlights,
+    cabinLabel,
     outboundFlight,
 } from '@/lib/bookingItinerary';
 import { cancellableBooking, cancellationNote, cancellationOutcome } from '@/lib/cancellationPolicy';
@@ -65,9 +66,15 @@ import {
 } from '@/lib/checkInPolicy';
 import { buildFlightRoutes, findNearbyOperatingDates } from '@/lib/flightSearch';
 import { airportCodeFor, airportCodesForRoute, airportTimeZoneFor } from '@/lib/airports';
-import { airportDayBounds, airportLocalInstant } from '@/lib/flightTime';
+import { airportDayBounds, airportLocalInstant, flightDeparture } from '@/lib/flightTime';
 import { flightRouteInclude, flightRouteWhere, withRouteLabels } from '@/lib/flightRoute';
 import type { RoutedFlight } from '@/lib/flightRoute';
+import {
+    sendTravelDocumentsEmail,
+    type TravelDocumentPassenger,
+} from '@/lib/travelDocumentEmail';
+
+export type ActionResult<T> = { ok: true; data: T } | ActionValidationFailure;
 import { bookingWindowIsoDates } from '@/lib/dates';
 import {
     bookingRequestSchema,
@@ -831,6 +838,100 @@ export async function checkInLegAction(input: {
 
     revalidatePath('/checkin');
     revalidatePath('/profile');
+}
+
+export async function resendBoardingPassAction(
+    bookingId: number,
+    legId: number,
+): Promise<ActionResult<{ sentTo: string }>> {
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.id;
+    const userEmail = session?.user?.email?.trim();
+    if (!userId || !userEmail) throw new Error("Unauthorized");
+
+    const parsedBooking = parseActionInput(numericIdSchema, bookingId);
+    if (!parsedBooking.ok) return parsedBooking;
+    const parsedLeg = parseActionInput(numericIdSchema, legId);
+    if (!parsedLeg.ok) return parsedLeg;
+    bookingId = parsedBooking.data;
+    legId = parsedLeg.data;
+
+    const leg = await prisma.itineraryLeg.findFirst({
+        where: {
+            id: legId,
+            bookingId,
+            ...activeItineraryLegWhere,
+        },
+        include: {
+            booking: {
+                include: {
+                    passengers: true,
+                },
+            },
+            flight: {
+                include: flightRouteInclude,
+            },
+            seatAssignments: {
+                where: heldSeats(),
+                orderBy: {
+                    seatNumber: 'asc',
+                },
+            },
+        },
+    });
+
+    if (!leg || !leg.booking) throw new Error("Itinerary leg not found");
+    if (leg.booking.userId !== userId) throw new Error("Unauthorized");
+
+    if (leg.booking.status === 'CANCELLED') {
+        return actionValidationFailure(checkInNextStep('BOOKING_CANCELLED'));
+    }
+
+    if (!leg.flight) throw new Error("Flight not found");
+    if (leg.flight.status === 'CANCELLED') {
+        return actionValidationFailure(checkInNextStep('FLIGHT_CANCELLED'));
+    }
+
+    const checkedInSeats = leg.seatAssignments.filter(
+        (seat) => seat.checkedInAt !== null,
+    );
+    if (checkedInSeats.length === 0) {
+        return actionValidationFailure('Travel documents are only available after checking in.');
+    }
+
+    const routedFlight = withRouteLabels(leg.flight);
+    const departure = flightDeparture(routedFlight);
+    const departureReadable = `${departure.readableDate} at ${departure.time} ${departure.zoneLabel}`;
+
+    const passengers: TravelDocumentPassenger[] = checkedInSeats.map((seat) => {
+        const passenger = leg.booking.passengers.find((p) => p.id === seat.passengerId);
+        const name = passenger
+            ? `${passenger.firstName} ${passenger.lastName}`.trim()
+            : 'Traveller';
+        return {
+            name,
+            seat: seat.seatNumber,
+            cabin: cabinLabel(seat.cabinClass),
+        };
+    });
+
+    await sendTravelDocumentsEmail({
+        to: userEmail,
+        bookingReference: leg.booking.reference,
+        airline: routedFlight.airline,
+        flightNumber: routedFlight.flightNumber,
+        from: routedFlight.from,
+        toDestination: routedFlight.to,
+        departureReadable,
+        passengers,
+    });
+
+    return {
+        ok: true,
+        data: {
+            sentTo: userEmail,
+        },
+    };
 }
 
 export async function cancelBookingAction(bookingId: number) {

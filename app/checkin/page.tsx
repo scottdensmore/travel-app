@@ -18,6 +18,7 @@ import {
 import { departureInOriginZone, flightDeparture } from '@/lib/flightTime';
 import { airportTimeZoneFor } from '@/lib/airports';
 import { checkInNextStep, legCheckInEligibility } from '@/lib/checkInPolicy';
+import { DEFAULT_SEATING_LAYOUT } from '@/lib/seatLayout';
 import CheckInPanel, { type CheckInLegView } from '@/components/ui/CheckInPanel';
 
 export const metadata: Metadata = {
@@ -146,10 +147,16 @@ export default async function CheckInPage() {
             },
             flight: {
                 select: {
+                    id: true,
                     airline: true,
                     flightNumber: true,
                     departureDate: true,
                     status: true,
+                    firstClassRows: true,
+                    businessRows: true,
+                    premiumEconomyRows: true,
+                    economyRows: true,
+                    seatPattern: true,
                     ...flightRouteInclude,
                 },
             },
@@ -208,6 +215,8 @@ export default async function CheckInPage() {
                 name: `${traveller.firstName} ${traveller.lastName}`,
                 seat: seatLabel(traveller),
                 cabin: cabinLabel(traveller.cabinClass),
+                cabinClass: traveller.cabinClass,
+                seatNumber: traveller.seatNumber,
                 checkedIn: leg.seatAssignments.some(
                     seat => seat.passengerId === traveller.id && seat.checkedInAt !== null,
                 ),
@@ -242,6 +251,14 @@ export default async function CheckInPage() {
             statusLabel: STATUS_LABELS[eligibility.reason],
             nextStep: checkInNextStep(eligibility.reason),
             awaiting: eligibility.awaiting,
+            flight: {
+                id: leg.flight.id,
+                firstClassRows: leg.flight.firstClassRows ?? DEFAULT_SEATING_LAYOUT.firstClassRows,
+                businessRows: leg.flight.businessRows ?? DEFAULT_SEATING_LAYOUT.businessRows,
+                premiumEconomyRows: leg.flight.premiumEconomyRows ?? DEFAULT_SEATING_LAYOUT.premiumEconomyRows,
+                economyRows: leg.flight.economyRows ?? DEFAULT_SEATING_LAYOUT.economyRows,
+                seatPattern: leg.flight.seatPattern ?? DEFAULT_SEATING_LAYOUT.seatPattern,
+            },
             travellers,
         };
     });

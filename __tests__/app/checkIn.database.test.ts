@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import { getServerSession } from 'next-auth';
 import { airportCodesForRoute } from '@/lib/airports';
-import { changeBookingSeatsAction, checkInLegAction } from '@/app/actions';
+import { changeBookingSeatsAction, checkInLegAction, resendBoardingPassAction } from '@/app/actions';
 import { CHECK_IN_OPENS_HOURS } from '@/lib/checkInPolicy';
 import { prisma } from '@/lib/prisma';
 import FlightBookingService from '@/lib/FlightBookingService';
@@ -11,11 +11,13 @@ import { bookHeldFlight } from '@/e2e/helpers/holdBookingSeats';
 import { isActionValidationFailure } from '@/lib/actionResult';
 import { lockFlightForUpdate } from '@/lib/flightLock';
 import { ItineraryRebookingService } from '@/lib/itineraryRebookingService';
+import { sendTravelDocumentsEmail } from '@/lib/travelDocumentEmail';
 
 // Only the session and cache boundaries are stubbed. The database is real,
 // because what is under test is which rows a check-in stamps and which it must
 // refuse to reach.
 jest.mock('next-auth', () => ({ getServerSession: jest.fn() }));
+jest.mock('@/lib/travelDocumentEmail', () => ({ sendTravelDocumentsEmail: jest.fn() }));
 // The real lock, wrapped so the call can be asserted. Deleting the
 // `lockFlightForUpdate` line from the action left all of this file green
 // otherwise: nothing here is concurrent, so the one line carrying the strongest
@@ -29,6 +31,7 @@ jest.mock('next/cache', () => ({ revalidatePath: jest.fn() }));
 jest.mock('@/lib/auth', () => ({ authOptions: {} }));
 
 const mockedSession = getServerSession as jest.Mock;
+const mockedSendTravelDocumentsEmail = sendTravelDocumentsEmail as jest.Mock;
 
 const created = { flightIds: [] as number[], bookingIds: [] as number[], userIds: [] as string[] };
 
@@ -696,3 +699,67 @@ describe('checkInLegAction', () => {
         expect(isActionValidationFailure(result)).toBe(true);
     });
 });
+
+describe('resendBoardingPassAction database integration', () => {
+    it('resends travel documents for a checked-in leg', async () => {
+        const suffix = `R${Date.now()}`;
+        const flight = await createFlight(`F${suffix}`, 4);
+        const user = await createUser(suffix);
+        const booking = await bookSeats([flight.id], user.id, [
+            { firstName: 'Ada', seatNumbers: ['11A'] },
+            { firstName: 'Grace', seatNumbers: ['11B'] },
+        ]);
+
+        const [leg] = await legsOf(booking.id);
+        mockedSession.mockResolvedValue({ user: { id: user.id, email: user.email } });
+
+        // Before check-in, resendBoardingPassAction should refuse
+        const beforeCheckIn = await resendBoardingPassAction(booking.id, leg.id);
+        expect(isActionValidationFailure(beforeCheckIn)).toBe(true);
+        if (isActionValidationFailure(beforeCheckIn)) {
+            expect(beforeCheckIn.error.message).toContain('Travel documents are only available after checking in');
+        }
+
+        // Check in the leg
+        const checkInResult = await checkInLegAction({
+            bookingId: booking.id,
+            legId: leg.id,
+            documentsConfirmed: true,
+        });
+        expect(isActionValidationFailure(checkInResult)).toBe(false);
+
+        // Resend boarding pass
+        mockedSendTravelDocumentsEmail.mockClear();
+        const resendResult = await resendBoardingPassAction(booking.id, leg.id);
+        expect(resendResult).toEqual({
+            ok: true,
+            data: { sentTo: user.email },
+        });
+
+        expect(mockedSendTravelDocumentsEmail).toHaveBeenCalledTimes(1);
+        expect(mockedSendTravelDocumentsEmail).toHaveBeenCalledWith(
+            expect.objectContaining({
+                to: user.email,
+                bookingReference: booking.reference,
+                airline: flight.airline,
+                flightNumber: flight.flightNumber,
+                from: 'Seattle, USA',
+                toDestination: 'Detroit, USA',
+                departureReadable: expect.stringMatching(/at \d{2}:\d{2}/),
+                passengers: expect.arrayContaining([
+                    expect.objectContaining({
+                        name: 'Ada Traveller',
+                        seat: '11A',
+                        cabin: 'Economy',
+                    }),
+                    expect.objectContaining({
+                        name: 'Grace Traveller',
+                        seat: '11B',
+                        cabin: 'Economy',
+                    }),
+                ]),
+            }),
+        );
+    });
+});
+

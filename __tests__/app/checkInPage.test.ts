@@ -38,6 +38,12 @@ const seat = (overrides: {
 
 const leg = (overrides: {
     id?: number;
+    flightId?: number;
+    firstClassRows?: number;
+    businessRows?: number;
+    premiumEconomyRows?: number;
+    economyRows?: number;
+    seatPattern?: string;
     sequence?: number;
     hoursFromNow?: number;
     flightStatus?: 'ON_TIME' | 'DELAYED' | 'CANCELLED';
@@ -69,10 +75,16 @@ const leg = (overrides: {
             legs: overrides.positions ?? [{ id, sequence: overrides.sequence ?? 0 }],
         },
         flight: {
+            id: overrides.flightId ?? 101,
             airline: 'Mona Airways',
             flightNumber: 'MA-100',
             departureDate: new Date(renderedAt + (overrides.hoursFromNow ?? 5) * HOUR),
             status: overrides.flightStatus ?? 'ON_TIME',
+            firstClassRows: overrides.firstClassRows ?? 3,
+            businessRows: overrides.businessRows ?? 3,
+            premiumEconomyRows: overrides.premiumEconomyRows ?? 4,
+            economyRows: overrides.economyRows ?? 20,
+            seatPattern: overrides.seatPattern ?? 'ABC-DEF',
             fromAirport: { label: 'Seattle, USA' },
             toAirport: { label: 'Tokyo, Japan' },
         },
@@ -307,6 +319,44 @@ describe('check-in page', () => {
             expect(view.statusLabel).toBe(expected);
             expect(view.nextStep.length).toBeGreaterThan(0);
         }
+    });
+
+    it('selects flight seat layout columns to allow seat selection during check-in', async () => {
+        await CheckInPage();
+
+        const { select } = findMany.mock.calls[0][0];
+        const flightSelect = select.flight.select;
+
+        expect(flightSelect.id).toBe(true);
+        expect(flightSelect.firstClassRows).toBe(true);
+        expect(flightSelect.businessRows).toBe(true);
+        expect(flightSelect.premiumEconomyRows).toBe(true);
+        expect(flightSelect.economyRows).toBe(true);
+        expect(flightSelect.seatPattern).toBe(true);
+    });
+
+    it('includes flight seat layout fields and traveller cabinClass on views passed to the panel', async () => {
+        findMany.mockResolvedValue([leg({
+            flightId: 55,
+            firstClassRows: 2,
+            businessRows: 4,
+            premiumEconomyRows: 6,
+            economyRows: 18,
+            seatPattern: 'AB-CD',
+        })]);
+
+        const [view] = await legsPassedToPanel();
+
+        expect(view.flight).toEqual({
+            id: 55,
+            firstClassRows: 2,
+            businessRows: 4,
+            premiumEconomyRows: 6,
+            economyRows: 18,
+            seatPattern: 'AB-CD',
+        });
+        expect(view.travellers[0].cabinClass).toBe('ECONOMY');
+        expect(view.travellers[0].seatNumber).toBe('11A');
     });
 });
 

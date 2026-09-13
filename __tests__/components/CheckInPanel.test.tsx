@@ -2,14 +2,27 @@ import React from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import CheckInPanel, { type CheckInLegView } from '@/components/ui/CheckInPanel';
-import { checkInLegAction } from '@/app/actions';
+import {
+    changeBookingSeatsAction,
+    checkInLegAction,
+    getOccupiedSeatsAction,
+    resendBoardingPassAction,
+} from '@/app/actions';
 
-jest.mock('@/app/actions', () => ({ checkInLegAction: jest.fn() }));
+jest.mock('@/app/actions', () => ({
+    checkInLegAction: jest.fn(),
+    getOccupiedSeatsAction: jest.fn(),
+    changeBookingSeatsAction: jest.fn(),
+    resendBoardingPassAction: jest.fn(),
+}));
 
 const refresh = jest.fn();
 jest.mock('next/navigation', () => ({ useRouter: () => ({ refresh }) }));
 
 const mockedCheckIn = checkInLegAction as jest.Mock;
+const mockedGetOccupiedSeats = getOccupiedSeatsAction as jest.Mock;
+const mockedChangeBookingSeats = changeBookingSeatsAction as jest.Mock;
+const mockedResendBoardingPass = resendBoardingPassAction as jest.Mock;
 
 const leg = (overrides: Partial<CheckInLegView> = {}): CheckInLegView => ({
     bookingId: 7,
@@ -32,6 +45,14 @@ const leg = (overrides: Partial<CheckInLegView> = {}): CheckInLegView => ({
     // Already on file by default, so the existing tests stay about check-in
     // rather than about the attestation. The attestation has its own block below.
     documentsConfirmed: true,
+    flight: {
+        id: 10,
+        firstClassRows: 3,
+        businessRows: 3,
+        premiumEconomyRows: 4,
+        economyRows: 20,
+        seatPattern: 'ABC-DEF',
+    },
     travellers: [
         { id: 'p1', name: 'Ada Lovelace', seat: 'Seat 11A', cabin: 'Economy', checkedIn: false },
     ],
@@ -40,8 +61,14 @@ const leg = (overrides: Partial<CheckInLegView> = {}): CheckInLegView => ({
 
 beforeEach(() => {
     mockedCheckIn.mockReset();
+    mockedGetOccupiedSeats.mockReset();
+    mockedChangeBookingSeats.mockReset();
+    mockedResendBoardingPass.mockReset();
     refresh.mockReset();
     mockedCheckIn.mockResolvedValue(undefined);
+    mockedGetOccupiedSeats.mockResolvedValue([]);
+    mockedChangeBookingSeats.mockResolvedValue(undefined);
+    mockedResendBoardingPass.mockResolvedValue({ ok: true, data: { sentTo: 'test@example.com' } });
 });
 
 describe('the check-in page', () => {
@@ -565,5 +592,260 @@ describe('confirming traveller and document details', () => {
         expect(label).toHaveTextContent('passport details');
         expect(label).toHaveTextContent('date of birth');
         expect(screen.queryByText(/\d{2}\/\d{2}\/\d{4}/)).not.toBeInTheDocument();
+    });
+});
+
+describe('seat confirmation and seat change during check-in', () => {
+    it('renders "Change seat" button for un-checked-in travellers on open legs', () => {
+        render(<CheckInPanel legs={[leg({
+            allowed: true,
+            travellers: [
+                { id: 'p1', name: 'Ada Lovelace', seat: 'Seat 11A', cabin: 'Economy', checkedIn: false },
+            ],
+        })]} />);
+
+        expect(screen.getByRole('button', { name: 'Change seat for Ada Lovelace' })).toBeInTheDocument();
+    });
+
+    it('does not render "Change seat" button for checked-in travellers and shows seat as confirmed', () => {
+        render(<CheckInPanel legs={[leg({
+            allowed: true,
+            travellers: [
+                { id: 'p1', name: 'Ada Lovelace', seat: 'Seat 11A', cabin: 'Economy', checkedIn: true },
+            ],
+        })]} />);
+
+        expect(screen.queryByRole('button', { name: 'Change seat for Ada Lovelace' })).not.toBeInTheDocument();
+        expect(screen.getByText('Seat 11A · Confirmed')).toBeInTheDocument();
+    });
+
+    it('does not render "Change seat" button when the leg is not allowed', () => {
+        render(<CheckInPanel legs={[leg({
+            allowed: false,
+            reason: 'NOT_YET_OPEN',
+            statusLabel: 'Check-in not open yet',
+            travellers: [
+                { id: 'p1', name: 'Ada Lovelace', seat: 'Seat 11A', cabin: 'Economy', checkedIn: false },
+            ],
+        })]} />);
+
+        expect(screen.queryByRole('button', { name: 'Change seat for Ada Lovelace' })).not.toBeInTheDocument();
+        expect(screen.getByText('Seat 11A · Economy')).toBeInTheDocument();
+    });
+
+    it('opens seat change modal, fetches occupied seats, selects a seat, and submits seat change', async () => {
+        mockedGetOccupiedSeats.mockResolvedValue(['11B', '12A']);
+        mockedChangeBookingSeats.mockResolvedValue(undefined);
+
+        render(<CheckInPanel legs={[leg({
+            allowed: true,
+            bookingId: 7,
+            legId: 11,
+            flight: {
+                id: 42,
+                firstClassRows: 3,
+                businessRows: 3,
+                premiumEconomyRows: 4,
+                economyRows: 20,
+                seatPattern: 'ABC-DEF',
+            },
+            travellers: [
+                { id: 'p1', name: 'Ada Lovelace', seat: 'Seat 11A', cabin: 'Economy', checkedIn: false },
+            ],
+        })]} />);
+
+        const changeSeatButton = screen.getByRole('button', { name: 'Change seat for Ada Lovelace' });
+        await act(async () => {
+            fireEvent.click(changeSeatButton);
+        });
+
+        expect(mockedGetOccupiedSeats).toHaveBeenCalledWith(42);
+
+        // Modal dialog is open
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(screen.getByText(/Change Seat for Ada Lovelace/)).toBeInTheDocument();
+
+        // 12A should be occupied (disabled)
+        const seat12A = screen.getByRole('button', { name: /Seat 12A Occupied/i });
+        expect(seat12A).toBeDisabled();
+
+        // 12B should be available
+        const seat12B = screen.getByRole('button', { name: /Seat 12B$/i });
+        expect(seat12B).not.toBeDisabled();
+
+        // Select 12B
+        await act(async () => {
+            fireEvent.click(seat12B);
+        });
+
+        // Confirm Seat
+        const confirmButton = screen.getByRole('button', { name: 'Confirm Seat' });
+        await act(async () => {
+            fireEvent.click(confirmButton);
+        });
+
+        expect(mockedChangeBookingSeats).toHaveBeenCalledWith(7, [
+            { passengerId: 'p1', legId: 11, seatNumber: '12B' },
+        ]);
+
+        // Modal should close
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+        // Positive feedback is displayed
+        const status = await screen.findByRole('status');
+        expect(status).toHaveTextContent(/Seat updated to 12B/);
+        expect(refresh).toHaveBeenCalled();
+    });
+
+    it('handles occupancy fetch failure and allows retry', async () => {
+        mockedGetOccupiedSeats.mockRejectedValueOnce(new Error('Network error'));
+
+        render(<CheckInPanel legs={[leg()]} />);
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Change seat for/ }));
+        });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(/Unable to load current seat occupancy/);
+        expect(screen.getByRole('button', { name: 'Confirm Seat' })).toBeDisabled();
+
+        mockedGetOccupiedSeats.mockResolvedValueOnce([]);
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        });
+
+        expect(screen.queryByText(/Unable to load current seat occupancy/)).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Seat 11A/i })).toBeInTheDocument();
+    });
+
+    it('displays error in modal when changeBookingSeatsAction fails', async () => {
+        mockedGetOccupiedSeats.mockResolvedValue([]);
+        mockedChangeBookingSeats.mockResolvedValue({
+            ok: false,
+            error: { code: 'VALIDATION_ERROR', message: 'Seat already assigned to another passenger.' },
+        });
+
+        render(<CheckInPanel legs={[leg()]} />);
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Change seat for/ }));
+        });
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Seat 11B/i }));
+        });
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Confirm Seat' }));
+        });
+
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(screen.getByRole('alert')).toHaveTextContent('Seat already assigned to another passenger.');
+        expect(refresh).not.toHaveBeenCalled();
+    });
+
+    it('can close the modal via Cancel button', async () => {
+        render(<CheckInPanel legs={[leg()]} />);
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Change seat for/ }));
+        });
+
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        });
+
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    describe('travel document delivery', () => {
+        it('renders Email boarding pass button for checked-in travelers', () => {
+            render(<CheckInPanel legs={[leg({
+                travellers: [
+                    { id: 'p1', name: 'Ada Lovelace', seat: 'Seat 11A', cabin: 'Economy', checkedIn: true },
+                ],
+            })]} />);
+
+            expect(screen.getByRole('button', { name: /Email boarding pass/i })).toBeInTheDocument();
+        });
+
+        it('does not render Email boarding pass button when no travelers are checked in', () => {
+            render(<CheckInPanel legs={[leg({
+                travellers: [
+                    { id: 'p1', name: 'Ada Lovelace', seat: 'Seat 11A', cabin: 'Economy', checkedIn: false },
+                ],
+            })]} />);
+
+            expect(screen.queryByRole('button', { name: /Email boarding pass/i })).not.toBeInTheDocument();
+        });
+
+        it('sends boarding pass and displays success message upon clicking Email boarding pass', async () => {
+            mockedResendBoardingPass.mockResolvedValue({
+                ok: true,
+                data: { sentTo: 'ada@example.com' },
+            });
+
+            render(<CheckInPanel legs={[leg({
+                bookingId: 42,
+                legId: 99,
+                travellers: [
+                    { id: 'p1', name: 'Ada Lovelace', seat: 'Seat 11A', cabin: 'Economy', checkedIn: true },
+                ],
+            })]} />);
+
+            const button = screen.getByRole('button', { name: /Email boarding pass/i });
+            await act(async () => {
+                fireEvent.click(button);
+            });
+
+            expect(mockedResendBoardingPass).toHaveBeenCalledWith(42, 99);
+            const status = await screen.findByRole('status');
+            expect(status).toHaveTextContent('Boarding pass sent to ada@example.com.');
+        });
+
+        it('displays error alert when resendBoardingPassAction returns validation failure', async () => {
+            mockedResendBoardingPass.mockResolvedValue({
+                ok: false,
+                error: { code: 'VALIDATION_ERROR', message: 'Travel documents are only available after checking in.' },
+            });
+
+            render(<CheckInPanel legs={[leg({
+                bookingId: 42,
+                legId: 99,
+                travellers: [
+                    { id: 'p1', name: 'Ada Lovelace', seat: 'Seat 11A', cabin: 'Economy', checkedIn: true },
+                ],
+            })]} />);
+
+            const button = screen.getByRole('button', { name: /Email boarding pass/i });
+            await act(async () => {
+                fireEvent.click(button);
+            });
+
+            const alert = await screen.findByRole('alert');
+            expect(alert).toHaveTextContent('Travel documents are only available after checking in.');
+        });
+
+        it('displays error alert when resendBoardingPassAction throws an error', async () => {
+            mockedResendBoardingPass.mockRejectedValue(new Error('Network failure'));
+
+            render(<CheckInPanel legs={[leg({
+                bookingId: 42,
+                legId: 99,
+                travellers: [
+                    { id: 'p1', name: 'Ada Lovelace', seat: 'Seat 11A', cabin: 'Economy', checkedIn: true },
+                ],
+            })]} />);
+
+            const button = screen.getByRole('button', { name: /Email boarding pass/i });
+            await act(async () => {
+                fireEvent.click(button);
+            });
+
+            const alert = await screen.findByRole('alert');
+            expect(alert).toHaveTextContent('Could not send boarding pass. Please try again.');
+        });
     });
 });

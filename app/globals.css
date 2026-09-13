@@ -2335,6 +2335,45 @@ footer a:hover {
   overflow-wrap: anywhere;
 }
 
+.checkin-document-actions {
+  margin-top: 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.checkin-resend-email {
+  min-height: 40px;
+  padding: 0.5rem 1.25rem;
+  border: 1px solid rgba(167, 139, 250, 0.5);
+  border-radius: 0.6rem;
+  background: rgba(139, 92, 246, 0.15);
+  color: #f5d0fe;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.checkin-resend-email:hover:not(:disabled) {
+  background: rgba(139, 92, 246, 0.3);
+  border-color: rgba(192, 132, 252, 0.8);
+  color: #fff;
+}
+
+.checkin-resend-email:focus-visible {
+  outline: 3px solid #f5d0fe;
+  outline-offset: 2px;
+}
+
+.checkin-resend-email:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .checkin-next-step {
   margin: 1.25rem 0 0;
   color: #e5e7eb;
