@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { airportCodesForRoute } from '@/lib/airports';
 import { heldSeats } from '@/lib/seatOccupancy';
-import { updateFlightStatusAction } from '@/app/actions';
+import { cancelBookingAction, updateFlightStatusAction } from '@/app/actions';
 import { getServerSession } from 'next-auth';
 
 jest.mock('next-auth', () => ({ getServerSession: jest.fn() }));
@@ -102,6 +102,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+    await prisma.notification.deleteMany({ where: { userId: { in: created.userIds } } });
     await prisma.booking.deleteMany({ where: { userId: { in: created.userIds } } });
     await prisma.flight.deleteMany({ where: { id: { in: created.flightIds } } });
     await prisma.user.deleteMany({ where: { id: { in: created.userIds } } });
@@ -263,3 +264,76 @@ describe('two legs of one itinerary changing status at once', () => {
         }
     });
 });
+
+describe('durable in-app notifications', () => {
+    it('writes durable in-app notifications to prisma.notification for affected users when updating flight status', async () => {
+        const flight = await aFlight();
+        const booking = await aBookingOn([flight.id]);
+
+        await updateFlightStatusAction(flight.id, 'CANCELLED');
+
+        const notifications = await prisma.notification.findMany({
+            where: { userId: booking.userId!, type: 'FLIGHT_STATUS' },
+        });
+        expect(notifications).toHaveLength(1);
+        expect(notifications[0]).toMatchObject({
+            userId: booking.userId,
+            title: `Flight Update: ${flight.airline} ${flight.flightNumber}`,
+            type: 'FLIGHT_STATUS',
+            isRead: false,
+        });
+        expect(notifications[0].message).toContain(
+            `Your flight ${flight.flightNumber} from Seattle, USA to Detroit, USA has been cancelled by the airline. Your seat is held while you decide; cancel the booking from your profile for a full refund.`
+        );
+    });
+
+    it('writes durable in-app notifications for delays even when booking status is unchanged', async () => {
+        const flight = await aFlight();
+        const booking = await aBookingOn([flight.id]);
+
+        await updateFlightStatusAction(flight.id, 'DELAYED');
+
+        const notifications = await prisma.notification.findMany({
+            where: { userId: booking.userId!, type: 'FLIGHT_STATUS' },
+        });
+        expect(notifications).toHaveLength(1);
+        expect(notifications[0]).toMatchObject({
+            userId: booking.userId,
+            title: `Flight Update: ${flight.airline} ${flight.flightNumber}`,
+            type: 'FLIGHT_STATUS',
+            isRead: false,
+        });
+        expect(notifications[0].message).toContain(
+            `Your upcoming flight ${flight.flightNumber} from Seattle, USA to Detroit, USA is now DELAYED.`
+        );
+        expect(await statusOf(booking.id)).toBe('CONFIRMED');
+    });
+
+    it('writes a durable in-app notification to prisma.notification when cancelBookingAction is called', async () => {
+        const flight = await aFlight();
+        const booking = await aBookingOn([flight.id]);
+
+        mockedGetServerSession.mockResolvedValue({
+            user: { id: booking.userId!, role: 'USER' },
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any);
+
+        await cancelBookingAction(booking.id);
+
+        const notifications = await prisma.notification.findMany({
+            where: { userId: booking.userId!, type: 'POINTS' },
+        });
+        expect(notifications).toHaveLength(1);
+        expect(notifications[0]).toMatchObject({
+            userId: booking.userId,
+            title: `Booking Cancelled: ${flight.airline} ${flight.flightNumber}`,
+            type: 'POINTS',
+            isRead: false,
+        });
+        expect(notifications[0].message).toContain(
+            `Booking for flight ${flight.flightNumber} has been cancelled. Deducted -350 status points.`
+        );
+        expect(await statusOf(booking.id)).toBe('CANCELLED');
+    });
+});
+
