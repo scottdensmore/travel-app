@@ -440,7 +440,7 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
                                             {/* Reviewer avatars can originate from arbitrary OAuth providers. */}
                                             {/* eslint-disable-next-line @next/next/no-img-element */}
                                             <img
-                                                src={r.user?.image || "https://i.pravatar.cc/150"}
+                                                src={r.user?.image || "/img/my-profile-photo.jpg"}
                                                 alt=""
                                                 width="24"
                                                 height="24"

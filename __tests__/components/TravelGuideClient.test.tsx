@@ -242,6 +242,15 @@ describe('TravelGuideClient', () => {
         expect(screen.getByText('Great music history!')).toBeInTheDocument();
     });
 
+    it('uses the local static profile photo when a reviewer has no avatar image', async () => {
+        render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
+        await screen.findByTestId('geography');
+
+        const detroitReview = screen.getByText('Great music history!');
+        const avatarImg = detroitReview.closest('li')?.querySelector('img');
+        expect(avatarImg).toHaveAttribute('src', '/img/my-profile-photo.jpg');
+    });
+
     it('shows one guide at a time, for the city that is selected', async () => {
         render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
         await screen.findByTestId('geography');
