@@ -18,27 +18,32 @@ test.describe('Authentication Journey', () => {
   });
 
   test('Authentication and recovery remain usable at phone, tablet, and desktop widths', async ({ page }) => {
-    for (const width of [320, 768, 1280]) {
-      await page.setViewportSize({ width, height: 800 });
-      for (const path of [
-        '/login',
-        '/signup',
-        '/forgot-password',
-        '/resend-verification',
-        `/reset-password#token=${'a'.repeat(43)}`,
-      ]) {
-        await page.goto(path);
-        const form = page.locator('form');
-        await expect(form).toBeVisible();
+    for (const path of [
+      '/login',
+      '/signup',
+      '/forgot-password',
+      '/resend-verification',
+      `/reset-password#token=${'a'.repeat(43)}`,
+    ]) {
+      await page.setViewportSize({ width: 320, height: 800 });
+      await page.goto(path);
+      const form = page.locator('form');
+      await expect(form).toBeVisible();
+      for (const width of [320, 768, 1280]) {
+        await page.setViewportSize({ width, height: 800 });
         const box = await form.boundingBox();
         expect(box).not.toBeNull();
         expect(box!.x).toBeGreaterThanOrEqual(0);
         expect(box!.x + box!.width).toBeLessThanOrEqual(width);
       }
+    }
 
-      await page.goto(`/verify-email#token=${'a'.repeat(43)}`);
-      const verificationPanel = page.getByRole('region', { name: 'Confirm your email' });
-      await expect(verificationPanel).toBeVisible();
+    await page.setViewportSize({ width: 320, height: 800 });
+    await page.goto(`/verify-email#token=${'a'.repeat(43)}`);
+    const verificationPanel = page.getByRole('region', { name: 'Confirm your email' });
+    await expect(verificationPanel).toBeVisible();
+    for (const width of [320, 768, 1280]) {
+      await page.setViewportSize({ width, height: 800 });
       const verificationBox = await verificationPanel.boundingBox();
       expect(verificationBox).not.toBeNull();
       expect(verificationBox!.x).toBeGreaterThanOrEqual(0);
