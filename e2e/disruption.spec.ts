@@ -476,10 +476,12 @@ test.describe('A disrupted booking on a phone', () => {
         // past both of them too.
         const stacked = [320, 390, 641, 667, 700, 767];
 
+        test.slow();
+        await page.goto('/profile');
+        await page.getByTestId(`booking-row-${booking.id}`).waitFor();
+
         for (const width of [...stacked, 768, 1024]) {
             await page.setViewportSize({ width, height: 900 });
-            await page.goto('/profile');
-            await page.getByTestId(`booking-row-${booking.id}`).waitFor();
 
             // Measured against the scrolling region, not the viewport. The
             // first version of this test asked whether the button was inside

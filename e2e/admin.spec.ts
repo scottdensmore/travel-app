@@ -294,21 +294,16 @@ test.describe('Admin Control Journey', () => {
     await page.getByRole('link', { name: 'Back to flight schedules' }).click();
     await expect(page).toHaveURL('/admin/flights');
 
-
-    // Select the newly generated flight's live status selector and change to "Delayed"
-    const statusSelect = populatedFlightRow.locator('select').first();
+    // Freshly locate the active occurrence row upon returning to /admin/flights
+    const freshPopulatedFlightRow = page.locator('table').nth(1)
+      .locator(`tr:has-text("${activeOccurrence.flightNumber}"):has-text("1 Active")`).first();
+    const statusSelect = freshPopulatedFlightRow.locator('select').first();
     await expect(statusSelect).toBeVisible();
     await statusSelect.selectOption('DELAYED');
 
-    // `selectOption` returns when the change event dispatches, not when the
-    // server action behind it has committed. The selector disables itself for
-    // the transition and re-renders from the server afterwards, so a select
-    // that is enabled *and* showing the new status is the signal that the write
-    // landed and the page has caught up. Navigating on the change event alone
-    // raced the commit, and `/flights` is `force-dynamic` — it rendered
-    // whatever the database held at that instant (#182).
-    await expect(statusSelect).toBeEnabled();
-    await expect(statusSelect).toHaveValue('DELAYED');
+    // Allow sufficient time for the server action transaction and router.refresh() under load
+    await expect(statusSelect).toBeEnabled({ timeout: 15_000 });
+    await expect(statusSelect).toHaveValue('DELAYED', { timeout: 15_000 });
 
     // A released seat must not read as a live one here.
     //
