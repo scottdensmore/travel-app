@@ -545,8 +545,8 @@ test.describe('A disrupted booking on a phone', () => {
         // Both legs, then the price, what happened, replacement choices, and
         // what can be done about it.
         expect(order).toEqual([
-            'Flight', 'Route', 'Departure',
-            'Flight', 'Route', 'Departure',
+            'Departing', 'Route', 'Departure',
+            'Returning', 'Route', 'Departure',
             'Booked', 'Price', 'Status', 'Replacement flights', 'Actions',
         ]);
 
@@ -556,7 +556,7 @@ test.describe('A disrupted booking on a phone', () => {
         // something else.
         const [lastFlightTop, statusTop] = await page.evaluate((id: number) => {
             const card = document.querySelector(`[data-testid="booking-row-${id}"]`)!;
-            const flights = Array.from(card.querySelectorAll('td[data-label="Flight"]'));
+            const flights = Array.from(card.querySelectorAll('td[data-label="Departing"], td[data-label="Returning"], td[data-label="Flight"]'));
             const status = card.querySelector(`[data-testid="booking-status-${id}"]`)!;
             return [
                 flights[flights.length - 1].getBoundingClientRect().top,

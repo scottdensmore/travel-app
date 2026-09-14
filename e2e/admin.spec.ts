@@ -124,8 +124,8 @@ test.describe('Admin Control Journey', () => {
 
     await page.fill('#flightNumber', 'E2E606');
     await page.fill('#airline', 'Playwright Air');
-    await page.fill('#from', 'Seattle, USA');
-    await page.fill('#to', 'Detroit, USA');
+    await page.selectOption('#from', 'Seattle, USA');
+    await page.selectOption('#to', 'Detroit, USA');
     await page.fill('#departureTime', '10:00');
     // A schedule states how long its flight takes; the arrival is derived from
     // it rather than from two local clocks (#84).
