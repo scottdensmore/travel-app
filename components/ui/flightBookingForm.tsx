@@ -337,12 +337,16 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     };
 
     const updateLeg = (index: number, field: keyof MultiCityLegFormState, value: string) => {
-        setMultiCityLegs((prev) =>
-            prev.map((leg, i) => {
+        setMultiCityLegs((prev) => {
+            const next = prev.map((leg, i) => {
                 if (i !== index) return leg;
                 return { ...leg, [field]: value };
-            })
-        );
+            });
+            if (field === 'to' && next[index + 1]) {
+                next[index + 1] = { ...next[index + 1], from: value };
+            }
+            return next;
+        });
         clearEmptySearchState();
     };
 
@@ -1069,6 +1073,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                     <select
                                         id={`leg-${index}-from`}
                                         name={`leg-${index}-from`}
+                                        data-testid={`leg-${index}-from`}
                                         aria-label={`Flight ${index + 1} From`}
                                         value={leg.from}
                                         className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
@@ -1085,6 +1090,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                     <select
                                         id={`leg-${index}-to`}
                                         name={`leg-${index}-to`}
+                                        data-testid={`leg-${index}-to`}
                                         aria-label={`Flight ${index + 1} To`}
                                         value={leg.to}
                                         className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
@@ -1102,6 +1108,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                         type="date"
                                         id={`leg-${index}-depart`}
                                         name={`leg-${index}-depart`}
+                                        data-testid={`leg-${index}-depart`}
                                         aria-label={`Flight ${index + 1} Departure Date`}
                                         className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
                                         min={index === 0 ? bookingWindow.earliestDate : (multiCityLegs[index - 1].departureDate || bookingWindow.earliestDate)}
@@ -1918,6 +1925,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                                                 {!flight.cabinAvailable && <CabinUnavailableNote cabin={cabinClass} />}
                                                                 <button
                                                                     type="button"
+                                                                    data-testid="select-flight-btn"
                                                                     aria-label={`Select flight ${flight.flightNumber}`}
                                                                     aria-pressed={isSelected}
                                                                     onClick={() => handleSelectMultiCityFlight(flight)}
