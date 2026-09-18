@@ -1812,13 +1812,14 @@ describe('Multi-city step-by-step selection flow', () => {
         // Advances to Step 2 of 2
         expect(screen.getByText(/step 2 of 2/i)).toBeInTheDocument();
         expect(screen.getByText('MA102')).toBeInTheDocument();
-        expect(screen.getByText(/\$300/)).toBeInTheDocument(); // Running total
+        expect(screen.getByTestId('itinerary-total')).toHaveTextContent('Itinerary Total: $300'); // Running total
+        expect(screen.getByText(/selected:\s*ma101\s*\(\$300\)/i)).toBeInTheDocument(); // Chip with price
 
         // Select Leg 2 flight
         fireEvent.click(screen.getByRole('button', { name: /select flight ma102/i }));
 
         // Both selected: shows total $500 and Review & Book Itinerary button
-        expect(screen.getByText(/\$500/)).toBeInTheDocument();
+        expect(screen.getByTestId('itinerary-total')).toHaveTextContent('Itinerary Total: $500');
         const bookBtn = screen.getByRole('link', { name: /review & book itinerary/i });
         expect(bookBtn).toHaveAttribute('href', expect.stringContaining('/checkout?flights=101,102'));
     });
@@ -1858,7 +1859,7 @@ describe('Multi-city step-by-step selection flow', () => {
 
         // Select Leg 2 flight MA102 ($200) -> total $500
         fireEvent.click(screen.getByRole('button', { name: /select flight ma102/i }));
-        expect(screen.getByText(/\$500/)).toBeInTheDocument();
+        expect(screen.getByTestId('itinerary-total')).toHaveTextContent('Itinerary Total: $500');
 
         // Click Edit on Leg 1
         const editLeg1Btn = screen.getByRole('button', { name: /edit flight 1/i });
@@ -1872,7 +1873,7 @@ describe('Multi-city step-by-step selection flow', () => {
         fireEvent.click(screen.getByRole('button', { name: /select flight ma103/i }));
 
         // Total should update to $550 ($350 + $200)
-        expect(screen.getByText(/\$550/)).toBeInTheDocument();
+        expect(screen.getByTestId('itinerary-total')).toHaveTextContent('Itinerary Total: $550');
         const bookBtn = screen.getByRole('link', { name: /review & book itinerary/i });
         expect(bookBtn).toHaveAttribute('href', expect.stringContaining('/checkout?flights=103,102'));
     });
@@ -1896,6 +1897,20 @@ describe('Multi-city step-by-step selection flow', () => {
 
         expect(screen.queryByText(/flight 3/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/step 1 of/i)).not.toBeInTheDocument();
+    });
+
+    it('preserves multi-city search results when editing a leg input field before submitting', () => {
+        render(<FlightBookingForm routes={routes} initialMultiCityResults={multiSearchResponse} />);
+
+        expect(screen.getByText(/step 1 of 2/i)).toBeInTheDocument();
+
+        // Change departure date of Flight 1
+        const dateInput = screen.getByLabelText('Flight 1 Departure Date');
+        fireEvent.change(dateInput, { target: { value: '2026-07-02' } });
+
+        // Search results and progress header should still be visible
+        expect(screen.getByText(/step 1 of 2/i)).toBeInTheDocument();
+        expect(screen.getByText('MA101')).toBeInTheDocument();
     });
 
     it('renders accessible labels and fieldset for each multi-city leg', () => {

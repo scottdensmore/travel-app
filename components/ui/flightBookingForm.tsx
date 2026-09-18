@@ -380,9 +380,6 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         setSearchResults((currentResults) => (
             currentResults?.length === 0 ? null : currentResults
         ));
-        setMultiCityResults(null);
-        setSelectedMultiCityFlights([]);
-        setActiveLegStepIndex(0);
         setBookingState((currentState) => (
             currentState.status === 'error' && currentState.retryCriteria
                 ? { status: 'idle' }
@@ -1717,7 +1714,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                         </div>
 
                         {/* RIGHT COLUMN: Interactive Itinerary Progress Header & Active Leg Selection */}
-                        <div style={{ flex: 1, minWidth: '320px', maxWidth: '800px', display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
+                        <div style={{ flex: 1, minWidth: 0, maxWidth: '800px', display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
                             {/* Interactive Itinerary Progress Header */}
                             <div
                                 className="itinerary-progress-header"
@@ -1838,7 +1835,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                                 </div>
                                                 {chosenFlight ? (
                                                     <div style={{ fontSize: '0.8rem', color: '#34d399' }}>
-                                                        <span>Selected: {chosenFlight.flightNumber}</span>
+                                                        <span>Selected: {chosenFlight.flightNumber} ({formatPrice(chosenFlight.priceCents)})</span>
                                                     </div>
                                                 ) : (
                                                     <div style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>
@@ -1867,7 +1864,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                     >
                                         Step {activeLegStepIndex + 1} of {multiCityResults.legs.length}: Select Flight from {multiCityResults.legs[activeLegStepIndex]?.from} to {multiCityResults.legs[activeLegStepIndex]?.to}
                                     </div>
-                                    <div style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#fff' }}>
+                                    <div data-testid="itinerary-total" style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#fff' }}>
                                         Itinerary Total: <span style={{ color: '#34d399' }}>{formatPrice(multiCityRunningTotalCents)}</span>
                                     </div>
                                 </div>
