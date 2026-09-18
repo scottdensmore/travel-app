@@ -11,7 +11,9 @@ import {
     flightBookingServiceSchema,
     flightStatusSchema,
     InputValidationError,
+    MAX_ITINERARY_LEGS,
     MAX_MUTATION_BYTES,
+    multiCityLegSchema,
     occurrenceRequestSchema,
     parseInput,
     passengerSchema,
@@ -33,6 +35,8 @@ import {
     notificationPreferenceItemSchema,
     updateNotificationPreferencesSchema,
     adminNotificationDeliveriesQuerySchema,
+    searchMultiCityFlightsSchema,
+    MAX_ITINERARY_LEGS
 } from '@/lib/validation';
 
 describe('account timezone validation', () => {
@@ -91,6 +95,9 @@ describe('customer rebooking request integrity', () => {
             replacements: [
                 { fromLegId: 501, replacementFlightId: 901, seats },
                 { fromLegId: 502, replacementFlightId: 902, seats },
+                { fromLegId: 503, replacementFlightId: 903, seats },
+                { fromLegId: 504, replacementFlightId: 904, seats },
+                { fromLegId: 505, replacementFlightId: 905, seats },
             ],
         };
         expect(rebookItineraryRequestSchema.safeParse(atLimit).success).toBe(true);
@@ -104,8 +111,8 @@ describe('customer rebooking request integrity', () => {
         expect(rebookItineraryRequestSchema.safeParse({
             ...atLimit,
             replacements: [...atLimit.replacements, {
-                fromLegId: 503,
-                replacementFlightId: 903,
+                fromLegId: 506,
+                replacementFlightId: 906,
                 seats,
             }],
         }).success).toBe(false);
@@ -668,15 +675,15 @@ describe('shared server validation schemas', () => {
         }).success).toBe(false);
 
         // A full booking changing every seat on every leg: 9 travellers on each
-        // of 2 legs is the largest legitimate request.
-        const seatChanges = [1, 2].flatMap(legId =>
+        // of 5 legs is the largest legitimate request.
+        const seatChanges = [1, 2, 3, 4, 5].flatMap(legId =>
             Array.from({ length: 9 }, (_, index) => ({
                 passengerId: `p${index}`,
                 legId,
                 seatNumber: `${index + 1}A`,
             }))
         );
-        expect(seatChanges).toHaveLength(18);
+        expect(seatChanges).toHaveLength(45);
         expect(seatChangesSchema.safeParse({ bookingId: 1, seatChanges }).success).toBe(true);
         expect(seatChangesSchema.safeParse({
             bookingId: 1,
@@ -1184,4 +1191,69 @@ describe('notification validation schemas', () => {
     });
 });
 
+describe('multi-city itinerary validation', () => {
+    it('sets MAX_ITINERARY_LEGS to 5', () => {
+        expect(MAX_ITINERARY_LEGS).toBe(5);
+    });
 
+    it('accepts a valid 3-leg multi-city search with ordered dates', () => {
+        const payload = {
+            legs: [
+                { from: 'Seattle, USA', to: 'Detroit, USA', departureDate: '2026-07-01' },
+                { from: 'Detroit, USA', to: 'New York, USA', departureDate: '2026-07-05' },
+                { from: 'New York, USA', to: 'Seattle, USA', departureDate: '2026-07-10' },
+            ],
+            cabinClass: 'ECONOMY',
+        };
+        const parsed = searchMultiCityFlightsSchema.safeParse(payload);
+        expect(parsed.success).toBe(true);
+    });
+
+    it('refuses multi-city search with fewer than 2 legs', () => {
+        const payload = {
+            legs: [
+                { from: 'Seattle, USA', to: 'Detroit, USA', departureDate: '2026-07-01' },
+            ],
+        };
+        const parsed = searchMultiCityFlightsSchema.safeParse(payload);
+        expect(parsed.success).toBe(false);
+        expect(JSON.stringify(parsed.error?.issues)).toMatch(/at least 2 legs/i);
+    });
+
+    it('refuses multi-city search with more than 5 legs', () => {
+        const payload = {
+            legs: Array.from({ length: 6 }, (_, i) => ({
+                from: `City ${i}`,
+                to: `City ${i + 1}`,
+                departureDate: '2026-07-01',
+            })),
+        };
+        const parsed = searchMultiCityFlightsSchema.safeParse(payload);
+        expect(parsed.success).toBe(false);
+        expect(JSON.stringify(parsed.error?.issues)).toMatch(/at most 5 legs/i);
+    });
+
+    it('refuses a leg where origin and destination are identical', () => {
+        const payload = {
+            legs: [
+                { from: 'Seattle, USA', to: 'Seattle, USA', departureDate: '2026-07-01' },
+                { from: 'Seattle, USA', to: 'Detroit, USA', departureDate: '2026-07-05' },
+            ],
+        };
+        const parsed = searchMultiCityFlightsSchema.safeParse(payload);
+        expect(parsed.success).toBe(false);
+        expect(JSON.stringify(parsed.error?.issues)).toMatch(/origin and destination must be different/i);
+    });
+
+    it('refuses non-sequential departure dates where a later leg departs earlier than an earlier leg', () => {
+        const payload = {
+            legs: [
+                { from: 'Seattle, USA', to: 'Detroit, USA', departureDate: '2026-07-10' },
+                { from: 'Detroit, USA', to: 'New York, USA', departureDate: '2026-07-05' },
+            ],
+        };
+        const parsed = searchMultiCityFlightsSchema.safeParse(payload);
+        expect(parsed.success).toBe(false);
+        expect(JSON.stringify(parsed.error?.issues)).toMatch(/cannot be earlier than/i);
+    });
+});

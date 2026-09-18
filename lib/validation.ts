@@ -15,8 +15,8 @@ import { isManagedGuideImagePath } from '@/lib/guideImageStorage';
 export const MAX_MUTATION_BYTES = 1_000_000;
 export const MAX_REGISTRATION_BYTES = 16_384;
 export const MAX_PASSENGERS_PER_BOOKING = 9;
-/// Outbound and inbound. Multi-city itineraries raise this once P1.3 lands.
-export const MAX_ITINERARY_LEGS = 2;
+/// Multi-city itineraries support up to 5 customer-chosen stopover legs (#131).
+export const MAX_ITINERARY_LEGS = 5;
 
 const requiredText = (label: string, max: number) => z.string()
     .trim()
@@ -466,6 +466,32 @@ export const checkoutPaymentRequestSchema = z.object({
 
 export const checkoutPaymentServiceSchema = checkoutPaymentRequestSchema.extend({
     userId: requiredText('User ID', 128),
+});
+
+export const multiCityLegSchema = z.object({
+    from: requiredText('Origin', 128),
+    to: requiredText('Destination', 128),
+    departureDate: dateOnlySchema,
+}).refine(leg => leg.from.trim().toLowerCase() !== leg.to.trim().toLowerCase(), {
+    message: 'Origin and destination must be different.',
+    path: ['to'],
+});
+
+export const searchMultiCityFlightsSchema = z.object({
+    legs: z.array(multiCityLegSchema, { error: 'At least 2 legs are required for a multi-city search.' })
+        .min(2, 'At least 2 legs are required for a multi-city search.')
+        .max(MAX_ITINERARY_LEGS, `At most ${MAX_ITINERARY_LEGS} legs are allowed.`),
+    cabinClass: z.enum(['ECONOMY', 'PREMIUM_ECONOMY', 'BUSINESS', 'FIRST']).optional(),
+}).superRefine(({ legs }, context) => {
+    for (let i = 1; i < legs.length; i++) {
+        if (legs[i].departureDate < legs[i - 1].departureDate) {
+            context.addIssue({
+                code: 'custom',
+                path: ['legs', i, 'departureDate'],
+                message: `Flight ${i + 1} departure date cannot be earlier than Flight ${i} departure date.`,
+            });
+        }
+    }
 });
 
 export const bookingRequestSchema = z.object({
