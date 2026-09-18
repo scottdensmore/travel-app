@@ -305,7 +305,7 @@ export interface MultiCitySearchResponse {
 
 export async function searchMultiCityFlightsAction(
     input: unknown
-): Promise<ActionValidationFailure | MultiCitySearchResponse> {
+): Promise<(ActionValidationFailure & { validation?: ActionValidationFailure['error'] }) | MultiCitySearchResponse> {
     const parsed = parseActionInput(searchMultiCityFlightsSchema, input);
     if (!parsed.ok) {
         return {
