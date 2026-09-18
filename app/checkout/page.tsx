@@ -22,6 +22,7 @@ export const dynamic = 'force-dynamic';
 
 interface PageProps {
     searchParams: Promise<{
+        flights?: string | string[];
         outbound?: string | string[];
         inbound?: string | string[];
         cabin?: string | string[];
@@ -30,6 +31,23 @@ interface PageProps {
 
 const CABINS = ['ECONOMY', 'PREMIUM_ECONOMY', 'BUSINESS', 'FIRST'] as const;
 type Cabin = (typeof CABINS)[number];
+
+function parseFlightIds(param: string | string[] | undefined): number[] | null {
+    if (!param) return null;
+    const rawTokens = Array.isArray(param)
+        ? param.flatMap(p => p.split(','))
+        : param.split(',');
+
+    const ids: number[] = [];
+    for (const token of rawTokens) {
+        const trimmed = token.trim();
+        if (!trimmed) continue;
+        const id = Number(trimmed);
+        if (!Number.isInteger(id) || id <= 0) return null;
+        ids.push(id);
+    }
+    return ids.length > 0 ? ids : null;
+}
 
 /** A single positive integer id, or null for anything else including a repeat. */
 function flightIdParam(value: string | string[] | undefined): number | null {
@@ -48,30 +66,46 @@ export default async function CheckoutPage({ searchParams }: PageProps) {
         redirect('/login');
     }
 
-    const { outbound, inbound, cabin } = await searchParams;
+    const { flights: flightsParam, outbound, inbound, cabin } = await searchParams;
     // An unrecognised cabin is ignored rather than rejected: the itinerary is
     // still valid, and the wizard falls back to what the legs actually offer.
     const searchedCabin = typeof cabin === 'string' && CABINS.includes(cabin as Cabin)
         ? (cabin as Cabin)
         : undefined;
-    const outboundId = flightIdParam(outbound);
-    if (!outboundId) {
-        notFound();
-    }
 
-    // An inbound that was asked for but cannot be read is a broken link, not a
-    // one-way trip. Falling back would quietly book half of what was intended.
-    const inboundId = inbound === undefined ? null : flightIdParam(inbound);
-    if (inbound !== undefined && inboundId === null) {
-        notFound();
-    }
-    if (inboundId !== null && inboundId === outboundId) {
-        notFound();
-    }
+    let flightIds: number[];
 
-    const flightIds = inboundId === null ? [outboundId] : [outboundId, inboundId];
-    if (flightIds.length > MAX_ITINERARY_LEGS) {
+    const parsedMulti = parseFlightIds(flightsParam);
+    if (parsedMulti !== null) {
+        if (parsedMulti.length > MAX_ITINERARY_LEGS) {
+            notFound();
+        }
+        if (new Set(parsedMulti).size !== parsedMulti.length) {
+            notFound();
+        }
+        flightIds = parsedMulti;
+    } else if (flightsParam !== undefined) {
         notFound();
+    } else {
+        const outboundId = flightIdParam(outbound);
+        if (!outboundId) {
+            notFound();
+        }
+
+        // An inbound that was asked for but cannot be read is a broken link, not a
+        // one-way trip. Falling back would quietly book half of what was intended.
+        const inboundId = inbound === undefined ? null : flightIdParam(inbound);
+        if (inbound !== undefined && inboundId === null) {
+            notFound();
+        }
+        if (inboundId !== null && inboundId === outboundId) {
+            notFound();
+        }
+
+        flightIds = inboundId === null ? [outboundId] : [outboundId, inboundId];
+        if (flightIds.length > MAX_ITINERARY_LEGS) {
+            notFound();
+        }
     }
 
     const [found, account] = await Promise.all([
