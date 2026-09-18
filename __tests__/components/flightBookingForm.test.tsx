@@ -1947,6 +1947,59 @@ describe('Multi-city step-by-step selection flow', () => {
         const bookBtn = screen.getByRole('link', { name: /review & book itinerary/i });
         expect(bookBtn).toHaveAttribute('href', expect.stringContaining('cabin=BUSINESS'));
     });
+
+    it('clears active multi-city search results when submitting a round-trip search', async () => {
+        mockSearch.mockResolvedValue(searchSuccess(mockFlights));
+
+        render(<FlightBookingForm routes={routes} initialMultiCityResults={multiSearchResponse} />);
+
+        // Verify multi-city search results are active initially
+        expect(screen.getByText(/step 1 of 2/i)).toBeInTheDocument();
+        expect(screen.getByText('MA101')).toBeInTheDocument();
+
+        // Switch to round-trip
+        fireEvent.click(screen.getByLabelText(/round trip/i));
+
+        // Submit the search
+        fireEvent.click(screen.getByRole('button', { name: /find your trip/i }));
+
+        // Standard results should appear and multi-city results should be cleared
+        await waitFor(() => {
+            expect(screen.getByText('Available Flights')).toBeInTheDocument();
+        });
+        expect(screen.queryByText(/step 1 of 2/i)).not.toBeInTheDocument();
+        expect(screen.queryByText('Multi-City Itinerary')).not.toBeInTheDocument();
+    });
+
+    it('activates leg step via keyboard navigation (Enter and Space) on itinerary progress chips', () => {
+        render(<FlightBookingForm routes={routes} initialMultiCityResults={multiSearchResponse} />);
+
+        // Initially on Step 1
+        expect(screen.getByText(/step 1 of 2/i)).toBeInTheDocument();
+        expect(screen.getByText('MA101')).toBeInTheDocument();
+
+        // Locate chip for Flight 2
+        const flight2Chip = screen.getByRole('button', {
+            name: 'Jump to flight 2: Detroit, USA to New York, USA',
+        });
+        expect(flight2Chip).toHaveAttribute('tabIndex', '0');
+
+        // Press Enter to activate Leg 2
+        fireEvent.keyDown(flight2Chip, { key: 'Enter' });
+        expect(screen.getByText(/step 2 of 2/i)).toBeInTheDocument();
+        expect(screen.getByText('MA102')).toBeInTheDocument();
+
+        // Locate chip for Flight 1
+        const flight1Chip = screen.getByRole('button', {
+            name: 'Jump to flight 1: Seattle, USA to Detroit, USA',
+        });
+        expect(flight1Chip).toHaveAttribute('tabIndex', '0');
+
+        // Press Space to activate Leg 1
+        fireEvent.keyDown(flight1Chip, { key: ' ' });
+        expect(screen.getByText(/step 1 of 2/i)).toBeInTheDocument();
+        expect(screen.getByText('MA101')).toBeInTheDocument();
+    });
 });
 
 
