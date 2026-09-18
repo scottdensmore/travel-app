@@ -152,23 +152,34 @@ test.describe('Multi-City Itinerary User Journey', () => {
         // 11. Verify Confirmation & Profile
         await expect(page.locator('h2:has-text("Booking Confirmed!")')).toBeVisible({ timeout: 15_000 });
         await page.goto('/profile');
-        await expect(page.locator('[data-testid^="booking-row-"]')).toBeVisible();
+        const bookingRow = page.locator('[data-testid^="booking-row-"]').first();
+        await expect(bookingRow).toBeVisible();
+        await expect(bookingRow).toContainText('Seattle, USA → Detroit, USA');
+        await expect(bookingRow).toContainText('Detroit, USA → New York, USA');
+        await expect(bookingRow).toContainText('New York, USA → Seattle, USA');
+        await expect(bookingRow).toContainText('Alice (Seat 11A)');
+        await expect(bookingRow).toContainText('Alice (Seat 11B)');
+        await expect(bookingRow).toContainText('Alice (Seat 11C)');
+        await expect(bookingRow).toContainText('MA101');
+        await expect(bookingRow).toContainText('Mona Airways');
     });
 
-    test('Multi-city controls remain responsive at 320px, 390px, and 1280px widths', async ({ page }) => {
-        await page.setViewportSize({ width: 320, height: 800 });
+    test('Multi-city controls remain responsive at 320px, 390px, 768px, and 1280px widths', async ({ page }) => {
         await page.goto('/');
         await page.click('label:has-text("Multi-city")');
 
-        const formBox = await page.locator('#flight-search-form').boundingBox();
-        expect(formBox).not.toBeNull();
-        expect(formBox!.x).toBeGreaterThanOrEqual(0);
-        expect(formBox!.x + formBox!.width).toBeLessThanOrEqual(320);
-
-        for (const width of [390, 1280]) {
+        for (const width of [320, 390, 768, 1280]) {
             await page.setViewportSize({ width, height: 800 });
+
             const box = await page.locator('#flight-search-form').boundingBox();
+            expect(box).not.toBeNull();
+            expect(box!.x).toBeGreaterThanOrEqual(0);
             expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+
+            await expect.poll(() => page.evaluate(() => ({
+                clientWidth: document.documentElement.clientWidth,
+                scrollWidth: document.documentElement.scrollWidth,
+            }))).toEqual({ clientWidth: width, scrollWidth: width });
         }
     });
 });
