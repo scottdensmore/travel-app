@@ -2,7 +2,7 @@ import React from 'react';
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import FlightBookingForm from '@/components/ui/flightBookingForm';
-import { bookFlightAction, searchFlightsAction } from '@/app/actions';
+import { bookFlightAction, searchFlightsAction, searchMultiCityFlightsAction } from '@/app/actions';
 import type { FlightSearchCriteria } from '@/lib/flightSearchUrl';
 import { addDaysToIsoDate } from '@/lib/dates';
 
@@ -10,10 +10,12 @@ import { addDaysToIsoDate } from '@/lib/dates';
 jest.mock('@/app/actions', () => ({
     bookFlightAction: jest.fn(),
     searchFlightsAction: jest.fn(),
+    searchMultiCityFlightsAction: jest.fn(),
 }));
 
 const mockSearch = searchFlightsAction as jest.Mock;
 const mockBook = bookFlightAction as jest.Mock;
+const mockMultiCitySearch = searchMultiCityFlightsAction as jest.Mock;
 
 const searchSuccess = (flights: unknown[], nearbyDates: string[] = []) => ({
     flights,
@@ -1606,4 +1608,165 @@ describe('FlightBookingForm', () => {
     });
 
 });
+
+describe('Multi-city trip type search form', () => {
+    beforeEach(() => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-07-14T12:00:00.000Z'));
+        jest.clearAllMocks();
+    });
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
+    it('renders Multi-city radio option and switches to multi-city mode', () => {
+        render(<FlightBookingForm routes={routes} />);
+        const multiCityRadio = screen.getByLabelText(/multi-city/i);
+        expect(multiCityRadio).toBeInTheDocument();
+
+        fireEvent.click(multiCityRadio);
+        expect(screen.getByText(/flight 1/i)).toBeInTheDocument();
+        expect(screen.getByText(/flight 2/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /add flight/i })).toBeInTheDocument();
+    });
+
+    it('allows adding a 3rd leg, defaulting origin to previous destination', () => {
+        render(<FlightBookingForm routes={routes} />);
+        fireEvent.click(screen.getByLabelText(/multi-city/i));
+
+        const addBtn = screen.getByRole('button', { name: /add flight/i });
+        fireEvent.click(addBtn);
+
+        expect(screen.getByText(/flight 3/i)).toBeInTheDocument();
+        // Can add up to 5 legs
+        fireEvent.click(addBtn); // 4
+        fireEvent.click(addBtn); // 5
+        expect(screen.queryByRole('button', { name: /add flight/i })).toBeNull();
+    });
+
+    it('allows removing legs down to minimum of 2', () => {
+        render(<FlightBookingForm routes={routes} />);
+        fireEvent.click(screen.getByLabelText(/multi-city/i));
+
+        const addBtn = screen.getByRole('button', { name: /add flight/i });
+        fireEvent.click(addBtn); // 3 legs
+        expect(screen.getByText(/flight 3/i)).toBeInTheDocument();
+
+        const removeBtn = screen.getByLabelText(/remove flight 3/i);
+        fireEvent.click(removeBtn);
+
+        expect(screen.queryByText(/flight 3/i)).toBeNull();
+        // Remove button is hidden when only 2 legs remain
+        expect(screen.queryByLabelText(/remove flight/i)).toBeNull();
+    });
+
+    it('pre-fills added leg origin with previous destination and departure date with previous date', () => {
+        const { container } = render(<FlightBookingForm routes={routes} />);
+        fireEvent.click(screen.getByLabelText(/multi-city/i));
+
+        const leg2To = container.querySelector('#leg-1-to') as HTMLSelectElement;
+        const leg2Depart = container.querySelector('#leg-1-depart') as HTMLInputElement;
+
+        fireEvent.change(leg2To, { target: { value: 'Tokyo, Japan' } });
+        fireEvent.change(leg2Depart, { target: { value: '2026-07-20' } });
+
+        const addBtn = screen.getByRole('button', { name: /add flight/i });
+        fireEvent.click(addBtn);
+
+        const leg3From = container.querySelector('#leg-2-from') as HTMLSelectElement;
+        const leg3Depart = container.querySelector('#leg-2-depart') as HTMLInputElement;
+
+        expect(leg3From.value).toBe('Tokyo, Japan');
+        expect(leg3Depart.value).toBe('2026-07-20');
+    });
+
+    it('enforces sequential departure dates (Date(Leg N) >= Date(Leg N-1))', async () => {
+        const { container } = render(<FlightBookingForm routes={routes} />);
+        fireEvent.click(screen.getByLabelText(/multi-city/i));
+
+        const leg1Depart = container.querySelector('#leg-0-depart') as HTMLInputElement;
+        const leg2Depart = container.querySelector('#leg-1-depart') as HTMLInputElement;
+
+        fireEvent.change(leg1Depart, { target: { value: '2026-07-25' } });
+        fireEvent.change(leg2Depart, { target: { value: '2026-07-20' } });
+
+        const form = container.querySelector('#flight-search-form');
+        fireEvent.submit(form!);
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Flight 2 departure date cannot be earlier than Flight 1 departure date.'
+        );
+        expect(mockMultiCitySearch).not.toHaveBeenCalled();
+    });
+
+    it('enforces distinct origin and destination on legs (from !== to)', async () => {
+        const { container } = render(<FlightBookingForm routes={routes} />);
+        fireEvent.click(screen.getByLabelText(/multi-city/i));
+
+        const leg1From = container.querySelector('#leg-0-from') as HTMLSelectElement;
+        const leg1To = container.querySelector('#leg-0-to') as HTMLSelectElement;
+
+        fireEvent.change(leg1From, { target: { value: 'Detroit, USA' } });
+        fireEvent.change(leg1To, { target: { value: 'Detroit, USA' } });
+
+        fireEvent.click(screen.getByRole('button', { name: /find your trip/i }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Origin and destination must be different.'
+        );
+        expect(mockMultiCitySearch).not.toHaveBeenCalled();
+    });
+
+    it('submits multi-city search to searchMultiCityFlightsAction', async () => {
+        mockMultiCitySearch.mockResolvedValue({
+            legs: [
+                { status: 'ok', from: 'Seattle, USA', to: 'Detroit, USA', departureDate: '2026-07-15', flights: [], nearbyDates: [] },
+                { status: 'ok', from: 'Detroit, USA', to: 'Tokyo, Japan', departureDate: '2026-07-18', flights: [], nearbyDates: [] },
+            ],
+            cabinClass: 'ECONOMY',
+        });
+
+        const { container } = render(<FlightBookingForm routes={routes} />);
+        fireEvent.click(screen.getByLabelText(/multi-city/i));
+
+        const leg2Depart = container.querySelector('#leg-1-depart') as HTMLInputElement;
+        fireEvent.change(leg2Depart, { target: { value: '2026-07-18' } });
+
+        fireEvent.click(screen.getByRole('button', { name: /find your trip/i }));
+
+        await waitFor(() => {
+            expect(mockMultiCitySearch).toHaveBeenCalledWith({
+                legs: [
+                    { from: 'Seattle, USA', to: 'Detroit, USA', departureDate: '2026-07-15' },
+                    expect.objectContaining({ from: 'Detroit, USA', departureDate: '2026-07-18' }),
+                ],
+                cabinClass: 'ECONOMY',
+            });
+        });
+    });
+
+    it('handles server action error on multi-city search', async () => {
+        mockMultiCitySearch.mockRejectedValue(new Error('Network error'));
+
+        render(<FlightBookingForm routes={routes} />);
+        fireEvent.click(screen.getByLabelText(/multi-city/i));
+
+        fireEvent.click(screen.getByRole('button', { name: /find your trip/i }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Unable to search for flights right now.');
+    });
+
+    it('switches back to round-trip and restores standard fields', () => {
+        render(<FlightBookingForm routes={routes} />);
+        fireEvent.click(screen.getByLabelText(/multi-city/i));
+        expect(screen.getByText(/flight 1/i)).toBeInTheDocument();
+
+        fireEvent.click(screen.getByLabelText(/round trip/i));
+        expect(screen.queryByText(/flight 1/i)).toBeNull();
+        expect(screen.getByLabelText('From', { exact: true })).toBeInTheDocument();
+        expect(screen.getByLabelText('To', { exact: true })).toBeInTheDocument();
+        expect(screen.getByLabelText('Depart', { exact: true })).toBeInTheDocument();
+        expect(screen.getByLabelText('Return', { exact: true })).toBeInTheDocument();
+    });
+});
+
 

@@ -4,12 +4,13 @@ import * as React from 'react'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { cabinLabel } from '@/lib/bookingItinerary'
-import { searchFlightsAction } from '@/app/actions'
+import { searchFlightsAction, searchMultiCityFlightsAction } from '@/app/actions'
 import { Flight } from '@prisma/client'
-import type { SearchResultFlight } from '@/app/actions'
+import type { SearchResultFlight, MultiCitySearchResponse } from '@/app/actions'
 import { isActionValidationFailure } from '@/lib/actionResult'
 import type { FlightRoute } from '@/lib/flightSearch'
 import { airportTimeZoneFor } from '@/lib/airports'
+import AirportData from '@/lib/data/AirportData'
 import { flightFareCents, formatPrice } from '@/lib/bookingPricing'
 import {
     buildFlightSearchUrl,
@@ -28,6 +29,15 @@ import {
 } from '@/lib/dates'
 import { durationLabel, flightArrival, flightDeparture } from '@/lib/flightTime'
 
+export type TripType = 'round-trip' | 'one-way' | 'multi-city';
+
+export interface MultiCityLegFormState {
+    id: string;
+    from: string;
+    to: string;
+    departureDate: string;
+}
+
 interface FlightBookingFormProps {
     routes?: FlightRoute[];
     minimumDepartureDate?: string;
@@ -42,6 +52,7 @@ interface FlightBookingFormProps {
      * to tell (#73).
      */
     unusableLink?: boolean;
+    initialMultiCityResults?: MultiCitySearchResponse;
 }
 
 type BookingState = {
@@ -178,6 +189,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     maximumDepartureDate = latestBookableDateIso(),
     initialSearch,
     unusableLink = false,
+    initialMultiCityResults,
 }) => {
     const [bookingWindow, setBookingWindow] = useState({
         earliestDate: minimumDepartureDate,
@@ -224,9 +236,82 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     const [cabinClass, setCabinClass] = useState<SearchCabin>(
         initialSearch?.cabinClass ?? 'ECONOMY'
     );
-    const [isOneWay, setIsOneWay] = useState(
-        initialSearch?.tripType === 'one-way'
+    const [tripType, setTripType] = useState<TripType>(
+        initialMultiCityResults
+            ? 'multi-city'
+            : initialSearch?.tripType === 'one-way'
+            ? 'one-way'
+            : 'round-trip'
     );
+    const isOneWay = tripType === 'one-way';
+
+    const allAirports = useMemo(() => {
+        const list = Array.from(new Set(routes.flatMap((r) => [r.from, r.to])));
+        return list.length > 0 ? list : AirportData.map((a) => a.label);
+    }, [routes]);
+
+    const legCounterRef = useRef(3);
+    const [multiCityLegs, setMultiCityLegs] = useState<MultiCityLegFormState[]>(() => {
+        const leg1From = initialSearch?.from ?? origins[0] ?? '';
+        const leg1Dests = routes.filter((r) => r.from === leg1From).map((r) => r.to);
+        const leg1To = initialSearch?.to ?? leg1Dests[0] ?? (allAirports.find((a) => a !== leg1From) ?? '');
+        const leg1Date = initialSearch?.departureDate
+            ?? routes.find(({ from, to }) => from === leg1From && to === leg1To)?.nextOperatingDate
+            ?? minimumDepartureDate;
+
+        const leg2From = leg1To || (origins[1] ?? origins[0] ?? '');
+        const leg2Dests = routes.filter((r) => r.from === leg2From).map((r) => r.to);
+        const leg2To = leg2Dests.find((d) => d !== leg2From)
+            ?? allAirports.find((a) => a !== leg2From && a !== leg1From)
+            ?? allAirports.find((a) => a !== leg2From)
+            ?? '';
+        const leg2Date = leg1Date;
+
+        return [
+            { id: 'leg-1', from: leg1From, to: leg1To, departureDate: leg1Date },
+            { id: 'leg-2', from: leg2From, to: leg2To, departureDate: leg2Date },
+        ];
+    });
+    const [_multiCityResults, setMultiCityResults] = useState<MultiCitySearchResponse | null>(
+        initialMultiCityResults ?? null
+    );
+
+    const addLeg = () => {
+        if (multiCityLegs.length >= 5) return;
+        const prevLeg = multiCityLegs[multiCityLegs.length - 1];
+        const newFrom = prevLeg ? prevLeg.to : (origins[0] ?? '');
+        const candidateTo = routes.find((r) => r.from === newFrom)?.to
+            ?? allAirports.find((a) => a !== newFrom)
+            ?? '';
+        const newDate = prevLeg ? prevLeg.departureDate : (departureDate || minimumDepartureDate);
+        const newId = `leg-${legCounterRef.current++}`;
+
+        setMultiCityLegs((prev) => [
+            ...prev,
+            {
+                id: newId,
+                from: newFrom,
+                to: candidateTo,
+                departureDate: newDate,
+            },
+        ]);
+    };
+
+    const removeLeg = (indexToRemove: number) => {
+        if (multiCityLegs.length <= 2) return;
+        setMultiCityLegs((prev) => prev.filter((_, index) => index !== indexToRemove));
+    };
+
+    const updateLeg = (index: number, field: keyof MultiCityLegFormState, value: string) => {
+        setMultiCityLegs((prev) =>
+            prev.map((leg, i) => {
+                if (i !== index) return leg;
+                return { ...leg, [field]: value };
+            })
+        );
+        clearEmptySearchState();
+    };
+
     const previousRouteDefaultsRef = useRef({ fromLocation, toLocation });
     const previousReturnDefaultsRef = useRef({ departureDate, isOneWay });
     const [isSearching, setIsSearching] = useState(false);
@@ -261,6 +346,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         setSearchResults((currentResults) => (
             currentResults?.length === 0 ? null : currentResults
         ));
+        setMultiCityResults(null);
         setBookingState((currentState) => (
             currentState.status === 'error' && currentState.retryCriteria
                 ? { status: 'idle' }
@@ -279,6 +365,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         setIsSearching(false);
         setNearbyDates([]);
         setSearchResults(null);
+        setMultiCityResults(null);
         setInboundResults(null);
         setInboundUnavailable(false);
         setSelectedOutboundId(null);
@@ -289,19 +376,46 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
 
     const handleTripTypeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         clearEmptySearchState();
-        const isChangingToOneWay = e.target.value === 'one-way';
-        setIsOneWay(isChangingToOneWay);
+        const nextTripType = e.target.value as TripType;
+        setTripType(nextTripType);
+        const isChangingToOneWay = nextTripType === 'one-way';
         // Clear only validation that depends on a return date, which no longer
         // applies once one-way is selected. Other errors remain valid.
         setBookingState((prev) => (
             prev.status === 'error' && prev.retryCriteria
                 ? { status: 'idle' }
-                : isChangingToOneWay && prev.status === 'error' && prev.clearOnOneWay
+                : (isChangingToOneWay || nextTripType === 'multi-city') && prev.status === 'error' && prev.clearOnOneWay
                 ? { status: 'idle' }
                 : prev
         ));
         if (isChangingToOneWay) {
             setReturnDate(''); // Clear return date when switching to one-way
+        } else if (nextTripType === 'round-trip') {
+            if (departureDate) {
+                setReturnDate(defaultReturnDate(departureDate, false, latestBookingDateRef.current));
+            }
+        } else if (nextTripType === 'multi-city') {
+            setMultiCityLegs((prev) => {
+                const leg1From = fromLocation || prev[0]?.from || origins[0] || '';
+                const leg1To = toLocation || prev[0]?.to || destinations[0] || (allAirports.find((a) => a !== leg1From) ?? '');
+                const leg1Date = departureDate || prev[0]?.departureDate || initialDepartureDate || minimumDepartureDate;
+                const leg2From = leg1To || prev[1]?.from || '';
+                const leg2To = prev[1]?.to && prev[1].to !== leg2From
+                    ? prev[1].to
+                    : (routes.find((r) => r.from === leg2From)?.to
+                        ?? allAirports.find((a) => a !== leg2From && a !== leg1From)
+                        ?? allAirports.find((a) => a !== leg2From)
+                        ?? '');
+                const leg2Date = prev[1]?.departureDate && prev[1].departureDate >= leg1Date
+                    ? prev[1].departureDate
+                    : leg1Date;
+
+                return [
+                    { id: prev[0]?.id ?? 'leg-1', from: leg1From, to: leg1To, departureDate: leg1Date },
+                    { id: prev[1]?.id ?? 'leg-2', from: leg2From, to: leg2To, departureDate: leg2Date },
+                    ...prev.slice(2),
+                ];
+            });
         }
     };
 
@@ -386,6 +500,101 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         setSelectedOutboundId(null);
         setSelectedInboundId(null);
         setBookingState({ status: 'idle' });
+
+        if (tripType === 'multi-city') {
+            if (multiCityLegs.length < 2) {
+                setBookingState({
+                    status: 'error',
+                    message: 'At least 2 legs are required for a multi-city search.',
+                });
+                return;
+            }
+            if (multiCityLegs.length > 5) {
+                setBookingState({
+                    status: 'error',
+                    message: 'At most 5 legs are allowed.',
+                });
+                return;
+            }
+
+            for (let i = 0; i < multiCityLegs.length; i++) {
+                const leg = multiCityLegs[i];
+                if (!leg.from || !leg.to) {
+                    setBookingState({
+                        status: 'error',
+                        message: 'Origin and destination are required for all flights.',
+                    });
+                    return;
+                }
+                if (leg.from.trim().toLowerCase() === leg.to.trim().toLowerCase()) {
+                    setBookingState({
+                        status: 'error',
+                        message: 'Origin and destination must be different.',
+                    });
+                    return;
+                }
+            }
+
+            for (let i = 0; i < multiCityLegs.length; i++) {
+                const leg = multiCityLegs[i];
+                if (!leg.departureDate) {
+                    setBookingState({
+                        status: 'error',
+                        message: 'Departure date is required for all flights.',
+                    });
+                    return;
+                }
+                if (leg.departureDate < bookingWindow.earliestDate) {
+                    setBookingState({
+                        status: 'error',
+                        message: 'Departure date cannot be in the past.',
+                    });
+                    return;
+                }
+                if (leg.departureDate > bookingWindow.latestDate) {
+                    setBookingState({
+                        status: 'error',
+                        message: DEPARTURE_AFTER_BOOKING_WINDOW_MESSAGE,
+                    });
+                    return;
+                }
+                if (i > 0 && leg.departureDate < multiCityLegs[i - 1].departureDate) {
+                    setBookingState({
+                        status: 'error',
+                        message: `Flight ${i + 1} departure date cannot be earlier than Flight ${i} departure date.`,
+                    });
+                    return;
+                }
+            }
+
+            setIsSearching(true);
+            try {
+                const results = await searchMultiCityFlightsAction({
+                    legs: multiCityLegs.map((l) => ({
+                        from: l.from,
+                        to: l.to,
+                        departureDate: l.departureDate,
+                    })),
+                    cabinClass,
+                });
+                if (isActionValidationFailure(results)) {
+                    setBookingState({
+                        status: 'error',
+                        message: results.error.message,
+                    });
+                    return;
+                }
+                setMultiCityResults(results);
+            } catch {
+                setBookingState({
+                    status: 'error',
+                    message: 'Unable to search for flights right now.',
+                });
+            } finally {
+                setIsSearching(false);
+            }
+            return;
+        }
 
         if (departureDate && departureDate < bookingWindow.earliestDate) {
             setBookingState({
@@ -705,13 +914,13 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                 <div className="trip">
                     <nav>
                         <ul>
-                            <li className={!isOneWay ? 'selected' : ''}>
+                            <li className={tripType === 'round-trip' ? 'selected' : ''}>
                                 <label>
                                     <input
                                         type="radio"
                                         name="tripType"
                                         value="round-trip"
-                                        checked={!isOneWay}
+                                        checked={tripType === 'round-trip'}
                                         onChange={handleTripTypeChange}
                                         className="oneway"
                                     />
@@ -719,13 +928,13 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                 </label>
                             </li>
 
-                            <li className={isOneWay ? 'selected' : ''}>
+                            <li className={tripType === 'one-way' ? 'selected' : ''}>
                                 <label>
                                     <input
                                         type="radio"
                                         name="tripType"
                                         value="one-way"
-                                        checked={isOneWay}
+                                        checked={tripType === 'one-way'}
                                         onChange={handleTripTypeChange}
                                         className="oneway"
                                     />
@@ -733,6 +942,19 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                 </label>
                             </li>
 
+                            <li className={tripType === 'multi-city' ? 'selected' : ''}>
+                                <label>
+                                    <input
+                                        type="radio"
+                                        name="tripType"
+                                        value="multi-city"
+                                        checked={tripType === 'multi-city'}
+                                        onChange={handleTripTypeChange}
+                                        className="oneway"
+                                    />
+                                    Multi-city
+                                </label>
+                            </li>
                         </ul>
                     </nav>
                 </div>
@@ -753,84 +975,201 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                     </div>
                 )}
 
-                <div className="fields-container">
-                    <label htmlFor="from">From</label>
-                    <select
-                        id="from"
-                        name="from"
-                        value={fromLocation}
-                        className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
-                        onChange={(e) => {
-                            setFromLocation(e.target.value);
-                            clearEmptySearchState();
-                        }}
-                    >
-                        {origins.map((loc) => (
-                            <option key={loc} value={loc}>{loc}</option>
-                        ))}
-                    </select>
-                </div>
+                {tripType === 'multi-city' ? (
+                    <div className="multi-city-legs" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem', width: '100%' }}>
+                        {multiCityLegs.map((leg, index) => (
+                            <div
+                                key={leg.id}
+                                className="multi-city-leg-row"
+                                style={{
+                                    background: 'rgba(255, 255, 255, 0.03)',
+                                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                                    borderRadius: '12px',
+                                    padding: '1rem',
+                                    position: 'relative',
+                                    boxSizing: 'border-box',
+                                    width: '100%',
+                                }}
+                            >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                    <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: '#c084fc' }}>
+                                        Flight {index + 1}
+                                    </h4>
+                                    {index >= 2 && (
+                                        <button
+                                            type="button"
+                                            aria-label={`Remove Flight ${index + 1}`}
+                                            onClick={() => removeLeg(index)}
+                                            style={{
+                                                background: 'transparent',
+                                                border: '1px solid rgba(239, 68, 68, 0.4)',
+                                                color: '#f87171',
+                                                borderRadius: '6px',
+                                                padding: '4px 8px',
+                                                fontSize: '0.8rem',
+                                                cursor: 'pointer',
+                                            }}
+                                        >
+                                            ✕ Remove
+                                        </button>
+                                    )}
+                                </div>
 
-                <div className="fields-container">
-                    <label htmlFor="to">To</label>
-                    <select
-                        id="to"
-                        name="to"
-                        value={toLocation}
-                        className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
-                        onChange={(e) => {
-                            setToLocation(e.target.value);
-                            clearEmptySearchState();
-                        }}
-                    >
-                        {destinations.map((loc) => (
-                            <option key={loc} value={loc}>{loc}</option>
-                        ))}
-                    </select>
-                </div>
+                                <div className="fields-container" style={{ marginTop: '0.5rem' }}>
+                                    <label htmlFor={`leg-${index}-from`}>From</label>
+                                    <select
+                                        id={`leg-${index}-from`}
+                                        name={`leg-${index}-from`}
+                                        value={leg.from}
+                                        className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
+                                        onChange={(e) => updateLeg(index, 'from', e.target.value)}
+                                    >
+                                        {allAirports.map((loc) => (
+                                            <option key={loc} value={loc}>{loc}</option>
+                                        ))}
+                                    </select>
+                                </div>
 
-                <div className="date-container">
-                    <div>
-                        <label htmlFor="depart">Depart</label>
-                        <input
-                            type="date"
-                            id="depart"
-                            name="depart"
-                            className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
-                            min={bookingWindow.earliestDate}
-                            max={bookingWindow.latestDate}
-                            value={departureDate}
-                            onChange={(e) => {
-                                const nextDepart = e.target.value;
-                                setDepartureDate(nextDepart);
-                                if (!isOneWay) {
-                                    setReturnDate(defaultReturnDate(nextDepart, isOneWay, latestBookingDateRef.current));
-                                }
-                                previousReturnDefaultsRef.current = { departureDate: nextDepart, isOneWay };
-                                clearEmptySearchState();
-                            }}
-                        />
+                                <div className="fields-container" style={{ marginTop: '0.75rem' }}>
+                                    <label htmlFor={`leg-${index}-to`}>To</label>
+                                    <select
+                                        id={`leg-${index}-to`}
+                                        name={`leg-${index}-to`}
+                                        value={leg.to}
+                                        className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
+                                        onChange={(e) => updateLeg(index, 'to', e.target.value)}
+                                    >
+                                        {allAirports.map((loc) => (
+                                            <option key={loc} value={loc}>{loc}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="fields-container" style={{ marginTop: '0.75rem' }}>
+                                    <label htmlFor={`leg-${index}-depart`}>Departure Date</label>
+                                    <input
+                                        type="date"
+                                        id={`leg-${index}-depart`}
+                                        name={`leg-${index}-depart`}
+                                        className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
+                                        min={index === 0 ? bookingWindow.earliestDate : (multiCityLegs[index - 1].departureDate || bookingWindow.earliestDate)}
+                                        max={bookingWindow.latestDate}
+                                        value={leg.departureDate}
+                                        onChange={(e) => updateLeg(index, 'departureDate', e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                        ))}
+
+                        {multiCityLegs.length < 5 && (
+                            <button
+                                type="button"
+                                onClick={addLeg}
+                                className="add-flight-button"
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '8px',
+                                    background: 'rgba(139, 92, 246, 0.1)',
+                                    border: '1px dashed rgba(139, 92, 246, 0.5)',
+                                    color: '#c084fc',
+                                    borderRadius: '10px',
+                                    padding: '12px',
+                                    cursor: 'pointer',
+                                    fontWeight: 600,
+                                    fontSize: '0.95rem',
+                                    width: '100%',
+                                    marginTop: '0.25rem',
+                                    boxSizing: 'border-box',
+                                }}
+                            >
+                                + Add flight
+                            </button>
+                        )}
                     </div>
-                    <div
-                        className={isOneWay ? 'date-disabled' : ''}
-                    >
-                        <label htmlFor="returnDate">Return</label>
-                        <input
-                            type="date"
-                            id="returnDate"
-                            name="returnDate"
-                            className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
-                            min={departureDate || bookingWindow.earliestDate}
-                            max={bookingWindow.latestDate}
-                            value={returnDate}
-                            onChange={(e) => {
-                                setReturnDate(e.target.value);
-                                clearEmptySearchState();
-                            }}
-                            disabled={isOneWay}
-                        />
-                    </div>
-                </div>
+                ) : (
+                    <>
+                        <div className="fields-container">
+                            <label htmlFor="from">From</label>
+                            <select
+                                id="from"
+                                name="from"
+                                value={fromLocation}
+                                className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
+                                onChange={(e) => {
+                                    setFromLocation(e.target.value);
+                                    clearEmptySearchState();
+                                }}
+                            >
+                                {origins.map((loc) => (
+                                    <option key={loc} value={loc}>{loc}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="fields-container">
+                            <label htmlFor="to">To</label>
+                            <select
+                                id="to"
+                                name="to"
+                                value={toLocation}
+                                className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
+                                onChange={(e) => {
+                                    setToLocation(e.target.value);
+                                    clearEmptySearchState();
+                                }}
+                            >
+                                {destinations.map((loc) => (
+                                    <option key={loc} value={loc}>{loc}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="date-container">
+                            <div>
+                                <label htmlFor="depart">Depart</label>
+                                <input
+                                    type="date"
+                                    id="depart"
+                                    name="depart"
+                                    className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
+                                    min={bookingWindow.earliestDate}
+                                    max={bookingWindow.latestDate}
+                                    value={departureDate}
+                                    onChange={(e) => {
+                                        const nextDepart = e.target.value;
+                                        setDepartureDate(nextDepart);
+                                        if (!isOneWay) {
+                                            setReturnDate(defaultReturnDate(nextDepart, isOneWay, latestBookingDateRef.current));
+                                        }
+                                        previousReturnDefaultsRef.current = { departureDate: nextDepart, isOneWay };
+                                        clearEmptySearchState();
+                                    }}
+                                />
+                            </div>
+                            <div
+                                className={isOneWay ? 'date-disabled' : ''}
+                            >
+                                <label htmlFor="returnDate">Return</label>
+                                <input
+                                    type="date"
+                                    id="returnDate"
+                                    name="returnDate"
+                                    className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
+                                    min={departureDate || bookingWindow.earliestDate}
+                                    max={bookingWindow.latestDate}
+                                    value={returnDate}
+                                    onChange={(e) => {
+                                        setReturnDate(e.target.value);
+                                        clearEmptySearchState();
+                                    }}
+                                    disabled={isOneWay}
+                                />
+                            </div>
+                        </div>
+                    </>
+                )}
 
                 <div className="fields-container">
                     <label htmlFor="class">Cabin class</label>
@@ -876,6 +1215,20 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                 }
                 .date-container input[type="date"] {
                     min-width: 0;
+                }
+                .fields-container input[type="date"] {
+                    background: transparent;
+                    color: #fff;
+                    border: 0;
+                    width: 100%;
+                    font-size: 1rem;
+                    outline: none;
+                    min-width: 0;
+                }
+                .multi-city-leg-row select:focus-visible,
+                .multi-city-leg-row input:focus-visible {
+                    outline: 2px solid #8b5cf6;
+                    outline-offset: 2px;
                 }
             `}</style>
             <div className="content" style={{
