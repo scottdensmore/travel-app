@@ -465,6 +465,9 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         const requestId = searchRequestIdRef.current + 1;
         searchRequestIdRef.current = requestId;
         setSearchResults(null);
+        setMultiCityResults(null);
+        setSelectedMultiCityFlights([]);
+        setActiveLegStepIndex(0);
         setNearbyDates([]);
         setInboundResults(null);
         setInboundUnavailable(false);
@@ -539,6 +542,12 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         setSelectedOutboundId(null);
         setSelectedInboundId(null);
         setBookingState({ status: 'idle' });
+
+        if (tripType !== 'multi-city') {
+            setMultiCityResults(null);
+            setSelectedMultiCityFlights([]);
+            setActiveLegStepIndex(0);
+        }
 
         if (tripType === 'multi-city') {
             if (multiCityLegs.length < 2) {
@@ -623,6 +632,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                     });
                     return;
                 }
+                setSearchResults(null);
                 setMultiCityResults(results);
                 setSelectedMultiCityFlights(new Array(results.legs.length).fill(null));
                 setActiveLegStepIndex(0);
@@ -1793,7 +1803,17 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                             <div
                                                 key={index}
                                                 className={`leg-progress-chip ${isCurrent ? 'active' : ''}`}
+                                                role="button"
+                                                tabIndex={0}
+                                                aria-label={`Jump to flight ${index + 1}: ${leg.from} to ${leg.to}`}
                                                 onClick={() => setActiveLegStepIndex(index)}
+                                                onKeyDown={(e) => {
+                                                    if (e.target !== e.currentTarget) return;
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
+                                                        setActiveLegStepIndex(index);
+                                                    }
+                                                }}
                                                 style={{
                                                     display: 'flex',
                                                     flexDirection: 'column',
