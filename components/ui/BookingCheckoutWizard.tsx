@@ -1578,6 +1578,11 @@ export default function BookingCheckoutWizard({
                                         >
                                             <span style={{ display: 'block', fontWeight: 'bold', fontSize: '0.9rem' }}>
                                                 {legDirectionLabel(legIndex, flights.length)}
+                                                {flights.length > 2 && (
+                                                    <span style={{ fontWeight: 'normal', color: 'rgba(255,255,255,0.7)', marginLeft: '6px' }}>
+                                                        (Flight {legIndex + 1})
+                                                    </span>
+                                                )}
                                             </span>
                                             <span style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
                                                 {leg.from} → {leg.to}{unseated ? ' · seat needed' : ''}
