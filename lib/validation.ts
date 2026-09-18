@@ -471,7 +471,7 @@ export const checkoutPaymentServiceSchema = checkoutPaymentRequestSchema.extend(
 export const multiCityLegSchema = z.object({
     from: requiredText('Origin', 128),
     to: requiredText('Destination', 128),
-    departureDate: dateOnlySchema,
+    departureDate: isoDateSchema,
 }).refine(leg => leg.from.trim().toLowerCase() !== leg.to.trim().toLowerCase(), {
     message: 'Origin and destination must be different.',
     path: ['to'],
@@ -481,7 +481,7 @@ export const searchMultiCityFlightsSchema = z.object({
     legs: z.array(multiCityLegSchema, { error: 'At least 2 legs are required for a multi-city search.' })
         .min(2, 'At least 2 legs are required for a multi-city search.')
         .max(MAX_ITINERARY_LEGS, `At most ${MAX_ITINERARY_LEGS} legs are allowed.`),
-    cabinClass: z.enum(['ECONOMY', 'PREMIUM_ECONOMY', 'BUSINESS', 'FIRST']).optional(),
+    cabinClass: cabinClassSchema.optional(),
 }).superRefine(({ legs }, context) => {
     for (let i = 1; i < legs.length; i++) {
         if (legs[i].departureDate < legs[i - 1].departureDate) {
