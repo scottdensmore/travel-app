@@ -9,9 +9,10 @@ import { Flight } from '@prisma/client'
 import type { SearchResultFlight, MultiCitySearchResponse } from '@/app/actions'
 import { isActionValidationFailure } from '@/lib/actionResult'
 import type { FlightRoute } from '@/lib/flightSearch'
-import { airportTimeZoneFor } from '@/lib/airports'
+import { airportTimeZoneFor, airportCodeFor } from '@/lib/airports'
 import AirportData from '@/lib/data/AirportData'
 import { flightFareCents, formatPrice } from '@/lib/bookingPricing'
+import { MAX_ITINERARY_LEGS } from '@/lib/validation'
 import {
     buildFlightSearchUrl,
     SEARCH_CABINS,
@@ -272,12 +273,42 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
             { id: 'leg-2', from: leg2From, to: leg2To, departureDate: leg2Date },
         ];
     });
-    const [_multiCityResults, setMultiCityResults] = useState<MultiCitySearchResponse | null>(
+    const [multiCityResults, setMultiCityResults] = useState<MultiCitySearchResponse | null>(
         initialMultiCityResults ?? null
     );
+    const [activeLegStepIndex, setActiveLegStepIndex] = useState<number>(0);
+    const [selectedMultiCityFlights, setSelectedMultiCityFlights] = useState<Array<SearchResultFlight | null>>(
+        () => initialMultiCityResults ? new Array(initialMultiCityResults.legs.length).fill(null) : []
+    );
+
+    const multiCityRunningTotalCents = useMemo(() => {
+        return selectedMultiCityFlights.reduce(
+            (sum, flight) => sum + (flight?.priceCents ?? 0),
+            0
+        );
+    }, [selectedMultiCityFlights]);
+
+    const handleSelectMultiCityFlight = (flight: SearchResultFlight) => {
+        const totalLegs = multiCityResults?.legs.length ?? 0;
+        const next = [...selectedMultiCityFlights];
+        while (next.length < totalLegs) {
+            next.push(null);
+        }
+        next[activeLegStepIndex] = flight;
+        setSelectedMultiCityFlights(next);
+
+        // Advance to the next unselected leg step index
+        const nextUnselected = next.findIndex((f) => f === null);
+        if (nextUnselected !== -1) {
+            setActiveLegStepIndex(nextUnselected);
+        }
+    };
 
     const addLeg = () => {
-        if (multiCityLegs.length >= 5) return;
+        if (multiCityLegs.length >= MAX_ITINERARY_LEGS) return;
+        setMultiCityResults(null);
+        setSelectedMultiCityFlights([]);
+        setActiveLegStepIndex(0);
         const prevLeg = multiCityLegs[multiCityLegs.length - 1];
         const newFrom = prevLeg ? prevLeg.to : (origins[0] ?? '');
         const candidateTo = routes.find((r) => r.from === newFrom)?.to
@@ -299,6 +330,9 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
 
     const removeLeg = (indexToRemove: number) => {
         if (multiCityLegs.length <= 2) return;
+        setMultiCityResults(null);
+        setSelectedMultiCityFlights([]);
+        setActiveLegStepIndex(0);
         setMultiCityLegs((prev) => prev.filter((_, index) => index !== indexToRemove));
     };
 
@@ -347,6 +381,8 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
             currentResults?.length === 0 ? null : currentResults
         ));
         setMultiCityResults(null);
+        setSelectedMultiCityFlights([]);
+        setActiveLegStepIndex(0);
         setBookingState((currentState) => (
             currentState.status === 'error' && currentState.retryCriteria
                 ? { status: 'idle' }
@@ -366,6 +402,8 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         setNearbyDates([]);
         setSearchResults(null);
         setMultiCityResults(null);
+        setSelectedMultiCityFlights([]);
+        setActiveLegStepIndex(0);
         setInboundResults(null);
         setInboundUnavailable(false);
         setSelectedOutboundId(null);
@@ -509,10 +547,10 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                 });
                 return;
             }
-            if (multiCityLegs.length > 5) {
+            if (multiCityLegs.length > MAX_ITINERARY_LEGS) {
                 setBookingState({
                     status: 'error',
-                    message: 'At most 5 legs are allowed.',
+                    message: `At most ${MAX_ITINERARY_LEGS} legs are allowed.`,
                 });
                 return;
             }
@@ -585,6 +623,8 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                     return;
                 }
                 setMultiCityResults(results);
+                setSelectedMultiCityFlights(new Array(results.legs.length).fill(null));
+                setActiveLegStepIndex(0);
             } catch {
                 setBookingState({
                     status: 'error',
@@ -760,20 +800,21 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     }, [departureDate, isOneWay]);
 
     useEffect(() => {
-        if (!initialSearch || restoredSearchStartedRef.current) return;
+        if (!initialSearch || restoredSearchStartedRef.current || initialMultiCityResults) return;
+        if ((initialSearch.tripType as string) === 'multi-city') return;
         restoredSearchStartedRef.current = true;
         void performSearch(initialSearch, false);
-    }, [initialSearch, performSearch]);
+    }, [initialSearch, initialMultiCityResults, performSearch]);
 
     useEffect(() => {
         setIsSearchReady(true);
     }, []);
 
     useEffect(() => {
-        if (searchResults && searchResults.length > 0) {
+        if ((searchResults && searchResults.length > 0) || (multiCityResults && multiCityResults.legs.length > 0)) {
             resultsHeadingRef.current?.focus();
         }
-    }, [searchResults]);
+    }, [searchResults, multiCityResults]);
 
     // Helper to parse price string to number safely (handles $ and commas)
     /**
@@ -978,7 +1019,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                 {tripType === 'multi-city' ? (
                     <div className="multi-city-legs" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem', width: '100%' }}>
                         {multiCityLegs.map((leg, index) => (
-                            <div
+                            <fieldset
                                 key={leg.id}
                                 className="multi-city-leg-row"
                                 style={{
@@ -989,12 +1030,22 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                     position: 'relative',
                                     boxSizing: 'border-box',
                                     width: '100%',
+                                    margin: 0,
                                 }}
                             >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                    <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: '#c084fc' }}>
-                                        Flight {index + 1}
-                                    </h4>
+                                <legend style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    width: '100%',
+                                    margin: 0,
+                                    marginBottom: '0.5rem',
+                                    padding: 0,
+                                    fontSize: '0.95rem',
+                                    fontWeight: 600,
+                                    color: '#c084fc',
+                                }}>
+                                    <span>Flight {index + 1}</span>
                                     {index >= 2 && (
                                         <button
                                             type="button"
@@ -1008,18 +1059,20 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                                 padding: '4px 8px',
                                                 fontSize: '0.8rem',
                                                 cursor: 'pointer',
+                                                fontWeight: 'normal',
                                             }}
                                         >
                                             ✕ Remove
                                         </button>
                                     )}
-                                </div>
+                                </legend>
 
                                 <div className="fields-container" style={{ marginTop: '0.5rem' }}>
                                     <label htmlFor={`leg-${index}-from`}>From</label>
                                     <select
                                         id={`leg-${index}-from`}
                                         name={`leg-${index}-from`}
+                                        aria-label={`Flight ${index + 1} From`}
                                         value={leg.from}
                                         className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
                                         onChange={(e) => updateLeg(index, 'from', e.target.value)}
@@ -1035,6 +1088,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                     <select
                                         id={`leg-${index}-to`}
                                         name={`leg-${index}-to`}
+                                        aria-label={`Flight ${index + 1} To`}
                                         value={leg.to}
                                         className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
                                         onChange={(e) => updateLeg(index, 'to', e.target.value)}
@@ -1051,6 +1105,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                         type="date"
                                         id={`leg-${index}-depart`}
                                         name={`leg-${index}-depart`}
+                                        aria-label={`Flight ${index + 1} Departure Date`}
                                         className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
                                         min={index === 0 ? bookingWindow.earliestDate : (multiCityLegs[index - 1].departureDate || bookingWindow.earliestDate)}
                                         max={bookingWindow.latestDate}
@@ -1058,10 +1113,10 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                         onChange={(e) => updateLeg(index, 'departureDate', e.target.value)}
                                     />
                                 </div>
-                            </div>
+                            </fieldset>
                         ))}
 
-                        {multiCityLegs.length < 5 && (
+                        {multiCityLegs.length < MAX_ITINERARY_LEGS && (
                             <button
                                 type="button"
                                 onClick={addLeg}
@@ -1238,13 +1293,13 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                 maxWidth: '1200px',
                 gap: '2.5rem',
                 zIndex: 10,
-                alignItems: (searchResults && searchResults.length > 0) ? 'flex-start' : 'center',
+                alignItems: ((searchResults && searchResults.length > 0) || multiCityResults) ? 'flex-start' : 'center',
                 flexDirection: 'row',
                 flexWrap: 'wrap',
                 justifyContent: 'center'
             }}>
                 {/* INITIAL STATE or EMPTY SEARCH RESULTS STATE */}
-                {(!searchResults || searchResults.length === 0) && (
+                {(!searchResults || searchResults.length === 0) && !multiCityResults && (
                     <>
                         <div className="hero-text">
                             <h1>Where Your Journey Takes Flight</h1>
@@ -1642,6 +1697,287 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                             Book round trip
                                         </button>
                                     )}
+                                </div>
+                            )}
+                        </div>
+                    </>
+                )}
+
+                {/* MULTI-CITY SEARCH RESULTS STATE: Two-Column Portal Dashboard */}
+                {multiCityResults && (
+                    <>
+                        {/* LEFT COLUMN: Modify Search */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%', maxWidth: '360px', flexShrink: 0 }}>
+                            <div className="search-trip" style={{ padding: '1.5rem', maxWidth: 'none', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
+                                <h3 style={{ fontSize: '1.1rem', color: '#c084fc', margin: '0 0 1rem 0', fontWeight: 'bold' }}>Modify Search</h3>
+                                <div className="form">
+                                    {renderSearchForm()}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* RIGHT COLUMN: Interactive Itinerary Progress Header & Active Leg Selection */}
+                        <div style={{ flex: 1, minWidth: '320px', maxWidth: '800px', display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
+                            {/* Interactive Itinerary Progress Header */}
+                            <div
+                                className="itinerary-progress-header"
+                                style={{
+                                    background: 'rgba(255, 255, 255, 0.03)',
+                                    backdropFilter: 'blur(20px)',
+                                    WebkitBackdropFilter: 'blur(20px)',
+                                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                                    borderRadius: '16px',
+                                    padding: '20px 24px',
+                                    boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '1rem',
+                                    color: '#fff',
+                                }}
+                            >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                    <div>
+                                        <h2
+                                            ref={resultsHeadingRef}
+                                            tabIndex={-1}
+                                            style={{ fontSize: '1.25rem', color: '#c084fc', margin: 0, fontWeight: 'bold', display: 'inline-block' }}
+                                        >
+                                            Multi-City Itinerary
+                                        </h2>
+                                        <span style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.5)', marginLeft: '12px' }}>
+                                            ({multiCityResults.legs.length} {multiCityResults.legs.length === 1 ? 'flight' : 'flights'})
+                                        </span>
+                                        <a
+                                            href="#flight-search-form"
+                                            className="modify-search-link text-sm text-purple-300 hover:text-white underline focus-visible:outline-2 focus-visible:outline-violet-500"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                const firstField = document.getElementById('leg-0-from') || document.getElementById('from');
+                                                firstField?.focus();
+                                                firstField?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                            }}
+                                            style={{
+                                                marginLeft: '1rem',
+                                                fontSize: '0.85rem',
+                                                color: '#c084fc',
+                                                textDecoration: 'underline',
+                                                cursor: 'pointer',
+                                            }}
+                                        >
+                                            Modify search
+                                        </a>
+                                    </div>
+                                </div>
+
+                                {/* Summary route chain with chips for each leg */}
+                                <div
+                                    className="route-chain-chips"
+                                    style={{
+                                        display: 'grid',
+                                        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                                        gap: '0.75rem',
+                                        width: '100%',
+                                    }}
+                                >
+                                    {multiCityResults.legs.map((leg, index) => {
+                                        const isCurrent = index === activeLegStepIndex;
+                                        const chosenFlight = selectedMultiCityFlights[index];
+                                        const fromCode = airportCodeFor(leg.from) ?? leg.from;
+                                        const toCode = airportCodeFor(leg.to) ?? leg.to;
+
+                                        return (
+                                            <div
+                                                key={index}
+                                                className={`leg-progress-chip ${isCurrent ? 'active' : ''}`}
+                                                onClick={() => setActiveLegStepIndex(index)}
+                                                style={{
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    gap: '4px',
+                                                    padding: '10px 14px',
+                                                    borderRadius: '10px',
+                                                    background: isCurrent
+                                                        ? 'rgba(192, 132, 252, 0.15)'
+                                                        : chosenFlight
+                                                        ? 'rgba(16, 185, 129, 0.1)'
+                                                        : 'rgba(255, 255, 255, 0.04)',
+                                                    border: isCurrent
+                                                        ? '2px solid #c084fc'
+                                                        : chosenFlight
+                                                        ? '1px solid #10b981'
+                                                        : '1px solid rgba(255, 255, 255, 0.1)',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.2s ease',
+                                                }}
+                                            >
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                                                    <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: isCurrent ? '#c084fc' : '#fff' }}>
+                                                        Flight {index + 1}: {fromCode} → {toCode}
+                                                    </span>
+                                                    {chosenFlight && (
+                                                        <button
+                                                            type="button"
+                                                            aria-label={`Edit Flight ${index + 1}`}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setActiveLegStepIndex(index);
+                                                            }}
+                                                            style={{
+                                                                background: 'transparent',
+                                                                border: 'none',
+                                                                color: '#c084fc',
+                                                                fontSize: '0.8rem',
+                                                                textDecoration: 'underline',
+                                                                cursor: 'pointer',
+                                                                padding: 0,
+                                                            }}
+                                                        >
+                                                            Edit
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                {chosenFlight ? (
+                                                    <div style={{ fontSize: '0.8rem', color: '#34d399' }}>
+                                                        <span>Selected: {chosenFlight.flightNumber}</span>
+                                                    </div>
+                                                ) : (
+                                                    <div style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>
+                                                        {isCurrent ? 'Selecting now' : 'Not selected'}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Live text announcing current step and running total price */}
+                                <div style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    flexWrap: 'wrap',
+                                    gap: '0.75rem',
+                                    paddingTop: '0.75rem',
+                                    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                                }}>
+                                    <div
+                                        role="status"
+                                        aria-live="polite"
+                                        style={{ fontSize: '0.95rem', fontWeight: 600, color: '#e9d5ff' }}
+                                    >
+                                        Step {activeLegStepIndex + 1} of {multiCityResults.legs.length}: Select Flight from {multiCityResults.legs[activeLegStepIndex]?.from} to {multiCityResults.legs[activeLegStepIndex]?.to}
+                                    </div>
+                                    <div style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#fff' }}>
+                                        Itinerary Total: <span style={{ color: '#34d399' }}>{formatPrice(multiCityRunningTotalCents)}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Active Leg Flight List */}
+                            {multiCityResults.legs[activeLegStepIndex] && (() => {
+                                const activeLeg = multiCityResults.legs[activeLegStepIndex];
+                                const activeFlights = (activeLeg.flights || []).filter(f => f.status !== 'CANCELLED');
+
+                                return (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#fff', margin: 0 }}>
+                                                Available Flights: {activeLeg.from} → {activeLeg.to}
+                                            </h3>
+                                            <span style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.6)' }}>
+                                                {activeLeg.departureDate}
+                                            </span>
+                                        </div>
+
+                                        {activeLeg.status === 'unavailable' ? (
+                                            <div className="search-degraded" role="status">
+                                                <h3>Flights unavailable</h3>
+                                                <p>We could not load flights for this leg just now.</p>
+                                            </div>
+                                        ) : activeFlights.length === 0 ? (
+                                            <div style={{
+                                                background: 'rgba(255, 255, 255, 0.03)',
+                                                borderRadius: '16px',
+                                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                                padding: '32px',
+                                                textAlign: 'center',
+                                                color: 'rgba(255, 255, 255, 0.6)',
+                                            }}>
+                                                No flights found for this leg.
+                                            </div>
+                                        ) : (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                                {activeFlights.map((flight) => {
+                                                    const isSelected = selectedMultiCityFlights[activeLegStepIndex]?.id === flight.id;
+                                                    return (
+                                                        <div key={flight.id} className="flight-result-card hover:bg-white/5 transition-colors">
+                                                            <div className="flight-result-airline">
+                                                                <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#c084fc' }}>{flight.airline}</span>
+                                                                <span style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.flightNumber}</span>
+                                                            </div>
+                                                            <FlightResultTiming flight={flight} />
+                                                            <div className="flight-result-fare">
+                                                                <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>{fareLabel(flight)}</span>
+                                                                {!flight.cabinAvailable && <CabinUnavailableNote cabin={cabinClass} />}
+                                                                <button
+                                                                    type="button"
+                                                                    aria-label={`Select flight ${flight.flightNumber}`}
+                                                                    aria-pressed={isSelected}
+                                                                    onClick={() => handleSelectMultiCityFlight(flight)}
+                                                                    className="flight-result-book"
+                                                                    style={{
+                                                                        background: isSelected ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : undefined,
+                                                                        border: isSelected ? '2px solid #34d399' : '2px solid transparent',
+                                                                    }}
+                                                                >
+                                                                    {isSelected ? '✓ Selected' : `Select flight ${flight.flightNumber}`}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
+                            {/* Completion State & Checkout Handoff */}
+                            {multiCityResults.legs.length > 0 &&
+                                selectedMultiCityFlights.length === multiCityResults.legs.length &&
+                                selectedMultiCityFlights.every(f => f !== null) && (
+                                <div
+                                    className="multi-city-checkout-bar"
+                                    style={{
+                                        marginTop: '1rem',
+                                        padding: '1.5rem',
+                                        borderRadius: '16px',
+                                        background: 'rgba(255, 255, 255, 0.03)',
+                                        border: '1px solid rgba(192, 132, 252, 0.4)',
+                                        backdropFilter: 'blur(20px)',
+                                        WebkitBackdropFilter: 'blur(20px)',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        gap: '1rem',
+                                        textAlign: 'center',
+                                    }}
+                                >
+                                    <p style={{ margin: 0, fontSize: '1.1rem', color: '#fff' }}>
+                                        All {multiCityResults.legs.length} flights selected. Ready to book your itinerary!
+                                    </p>
+                                    <Link
+                                        href={`/checkout?flights=${selectedMultiCityFlights.map(f => f!.id).join(',')}${cabinClass && cabinClass !== 'ECONOMY' ? `&cabin=${cabinClass}` : ''}`}
+                                        className="flight-result-book"
+                                        style={{
+                                            fontSize: '1.05rem',
+                                            padding: '12px 28px',
+                                            textDecoration: 'none',
+                                            display: 'inline-block',
+                                        }}
+                                    >
+                                        Review &amp; Book Itinerary →
+                                    </Link>
                                 </div>
                             )}
                         </div>
