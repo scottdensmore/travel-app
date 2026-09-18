@@ -797,7 +797,7 @@ export default function ProfileClient({
                                                     <td className="py-2 whitespace-nowrap" data-label="Departure"><CellLabel>Departure</CellLabel>{leg?.flight ? flightDeparture(leg.flight).readableDate : '\u2014'}</td>
                                                     {index === 0 && (
                                                         <>
-                                                            <td className="py-2 whitespace-nowrap align-top" data-label="Booked" rowSpan={legRows.length}>
+                                                            <td className="py-2 align-top md:whitespace-nowrap" data-label="Booked" rowSpan={legRows.length}>
                                                                 <CellLabel>{`Booked (${accountTimeZone})`}</CellLabel>
                                                                 <time dateTime={new Date(booking.createdAt).toISOString()}>
                                                                     {formatAccountDateTime(booking.createdAt, accountTimeZone)}

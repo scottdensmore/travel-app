@@ -24,7 +24,11 @@ test.describe('Travel Guide Journey', () => {
   test('User can select a city, write a review, and toggle favorite', async ({ page }) => {
     const renderingErrors: string[] = [];
     page.on('console', message => {
-      if (message.type() === 'error') renderingErrors.push(message.text());
+      if (message.type() === 'error') {
+        const location = message.location();
+        const locStr = location.url ? ` (${location.url}:${location.lineNumber}:${location.columnNumber})` : '';
+        renderingErrors.push(`${message.text()}${locStr}`);
+      }
     });
     page.on('pageerror', error => renderingErrors.push(error.message));
 

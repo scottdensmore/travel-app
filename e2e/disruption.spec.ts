@@ -476,10 +476,12 @@ test.describe('A disrupted booking on a phone', () => {
         // past both of them too.
         const stacked = [320, 390, 641, 667, 700, 767];
 
+        test.slow();
+        await page.goto('/profile');
+        await page.getByTestId(`booking-row-${booking.id}`).waitFor();
+
         for (const width of [...stacked, 768, 1024]) {
             await page.setViewportSize({ width, height: 900 });
-            await page.goto('/profile');
-            await page.getByTestId(`booking-row-${booking.id}`).waitFor();
 
             // Measured against the scrolling region, not the viewport. The
             // first version of this test asked whether the button was inside
@@ -543,8 +545,8 @@ test.describe('A disrupted booking on a phone', () => {
         // Both legs, then the price, what happened, replacement choices, and
         // what can be done about it.
         expect(order).toEqual([
-            'Flight', 'Route', 'Departure',
-            'Flight', 'Route', 'Departure',
+            'Departing', 'Route', 'Departure',
+            'Returning', 'Route', 'Departure',
             'Booked', 'Price', 'Status', 'Replacement flights', 'Actions',
         ]);
 
@@ -554,7 +556,7 @@ test.describe('A disrupted booking on a phone', () => {
         // something else.
         const [lastFlightTop, statusTop] = await page.evaluate((id: number) => {
             const card = document.querySelector(`[data-testid="booking-row-${id}"]`)!;
-            const flights = Array.from(card.querySelectorAll('td[data-label="Flight"]'));
+            const flights = Array.from(card.querySelectorAll('td[data-label="Departing"], td[data-label="Returning"], td[data-label="Flight"]'));
             const status = card.querySelector(`[data-testid="booking-status-${id}"]`)!;
             return [
                 flights[flights.length - 1].getBoundingClientRect().top,

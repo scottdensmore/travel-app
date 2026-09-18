@@ -35,7 +35,7 @@ export default async function ProfilePage() {
   const user = session.user;
   const userId = user.id;
   const userName = user.name || "Traveler";
-  const userAvatar = user.image || "https://i.pravatar.cc/150?u=" + userId;
+  const userAvatar = user.image || "/img/my-profile-photo.jpg";
   const account = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
     select: { timeZone: true },

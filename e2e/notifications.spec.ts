@@ -56,7 +56,7 @@ test.describe('User Notifications & Alerts Journey', () => {
 
   test('User receives points credit/debit alerts in the header notification drawer', async ({ page }) => {
     // 1. Initial State: bell is present, clicking it shows empty state
-    const bellBtn = page.locator('button[aria-label="Toggle notifications"]');
+    const bellBtn = page.locator('button[aria-label^="Toggle notifications"]');
     await expect(bellBtn).toBeVisible();
     
     // No unread badge initially
@@ -165,7 +165,7 @@ test.describe('User Notifications & Alerts Journey', () => {
       await page.setViewportSize({ width: 320, height: 700 });
       await page.goto('/');
 
-      await page.locator('button[aria-label="Toggle notifications"]').click();
+      await page.locator('button[aria-label^="Toggle notifications"]').click();
       const drawer = page.getByRole('dialog', { name: /notifications/i });
       await expect(drawer).toBeVisible();
 

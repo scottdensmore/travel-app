@@ -42,6 +42,7 @@ test.describe('Authentication abuse protection', () => {
     await prisma.authRateLimit.deleteMany({
       where: { key: { in: rateLimitKeys } }
     });
+    await new Promise(resolve => setTimeout(resolve, 500));
   });
 
   test('normalizes case variants, keeps immediate responses generic, and rate limits abuse', async ({ page, request }) => {
@@ -62,8 +63,8 @@ test.describe('Authentication abuse protection', () => {
     expect(blockedRegistration.status()).toBe(429);
     expect(await prisma.user.count({ where: { email: normalizedEmail } })).toBe(1);
 
+    await page.goto('/login');
     const attemptLogin = async (candidateEmail: string) => {
-      await page.goto('/login');
       await page.fill('#email', candidateEmail);
       await page.fill('#password', 'DefinitelyWrong123!');
       await page.click('button:has-text("Sign In with Email")');
