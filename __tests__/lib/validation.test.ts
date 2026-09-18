@@ -747,4 +747,59 @@ describe('multi-city itinerary validation', () => {
         expect(parsed.success).toBe(false);
         expect(JSON.stringify(parsed.error?.issues)).toMatch(/cannot be earlier than/i);
     });
+
+    it('accepts future flight dates in subsequent years', () => {
+        const payload = {
+            legs: [
+                { from: 'Seattle, USA', to: 'Detroit, USA', departureDate: '2027-03-01' },
+                { from: 'Detroit, USA', to: 'New York, USA', departureDate: '2027-03-05' },
+            ],
+            cabinClass: 'BUSINESS',
+        };
+        const parsed = searchMultiCityFlightsSchema.safeParse(payload);
+        expect(parsed.success).toBe(true);
+    });
+
+    it('accepts same-day departure dates across consecutive legs', () => {
+        const payload = {
+            legs: [
+                { from: 'Seattle, USA', to: 'Detroit, USA', departureDate: '2027-04-10' },
+                { from: 'Detroit, USA', to: 'New York, USA', departureDate: '2027-04-10' },
+            ],
+        };
+        const parsed = searchMultiCityFlightsSchema.safeParse(payload);
+        expect(parsed.success).toBe(true);
+    });
+
+    it('accepts exactly 2 legs at the lower boundary', () => {
+        const payload = {
+            legs: [
+                { from: 'Seattle, USA', to: 'Detroit, USA', departureDate: '2027-05-01' },
+                { from: 'Detroit, USA', to: 'New York, USA', departureDate: '2027-05-03' },
+            ],
+        };
+        const parsed = searchMultiCityFlightsSchema.safeParse(payload);
+        expect(parsed.success).toBe(true);
+    });
+
+    it('accepts exactly 5 legs at the upper boundary (MAX_ITINERARY_LEGS)', () => {
+        const payload = {
+            legs: [
+                { from: 'Seattle, USA', to: 'Detroit, USA', departureDate: '2027-06-01' },
+                { from: 'Detroit, USA', to: 'Chicago, USA', departureDate: '2027-06-03' },
+                { from: 'Chicago, USA', to: 'Denver, USA', departureDate: '2027-06-05' },
+                { from: 'Denver, USA', to: 'San Francisco, USA', departureDate: '2027-06-07' },
+                { from: 'San Francisco, USA', to: 'Seattle, USA', departureDate: '2027-06-10' },
+            ],
+            cabinClass: 'PREMIUM_ECONOMY',
+        };
+        const parsed = searchMultiCityFlightsSchema.safeParse(payload);
+        expect(parsed.success).toBe(true);
+    });
+
+    it('validates a single multi-city leg with valid future date and differing endpoints', () => {
+        const leg = { from: 'Seattle, USA', to: 'Detroit, USA', departureDate: '2027-08-15' };
+        const parsed = multiCityLegSchema.safeParse(leg);
+        expect(parsed.success).toBe(true);
+    });
 });
