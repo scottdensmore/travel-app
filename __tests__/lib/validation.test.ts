@@ -21,7 +21,9 @@ import {
     scheduleSchema,
     flightScheduleTermsSchema,
     searchFlightsSchema,
-    seatChangesSchema
+    seatChangesSchema,
+    airportIataCodeSchema,
+    flightStatusSearchSchema,
 } from '@/lib/validation';
 
 describe('account timezone validation', () => {
@@ -718,6 +720,97 @@ describe('passenger ancillaries validation', () => {
             '0': ['CHECKED_BAG_2'],
         };
         expect(bookingAncillariesMapSchema.safeParse(invalidMap).success).toBe(false);
+    });
+});
+
+describe('flightStatusSearchSchema', () => {
+    it('validates search by flight number', () => {
+        const parsed = flightStatusSearchSchema.safeParse({
+            mode: 'flightNumber',
+            flightNumber: 'MA101',
+            date: '2026-07-15',
+        });
+        expect(parsed.success).toBe(true);
+    });
+
+    it('validates search by flight number without date', () => {
+        const parsed = flightStatusSearchSchema.safeParse({
+            mode: 'flightNumber',
+            flightNumber: 'MA101',
+        });
+        expect(parsed.success).toBe(true);
+    });
+
+    it('rejects flight number shorter than 2 characters or longer than 10 characters', () => {
+        const tooShort = flightStatusSearchSchema.safeParse({
+            mode: 'flightNumber',
+            flightNumber: 'M',
+        });
+        expect(tooShort.success).toBe(false);
+
+        const tooLong = flightStatusSearchSchema.safeParse({
+            mode: 'flightNumber',
+            flightNumber: 'MA123456789',
+        });
+        expect(tooLong.success).toBe(false);
+    });
+
+    it('validates search by route', () => {
+        const parsed = flightStatusSearchSchema.safeParse({
+            mode: 'route',
+            from: 'SEA',
+            to: 'DTW',
+            date: '2026-07-15',
+        });
+        expect(parsed.success).toBe(true);
+    });
+
+    it('validates search by route without date', () => {
+        const parsed = flightStatusSearchSchema.safeParse({
+            mode: 'route',
+            from: 'SEA',
+            to: 'DTW',
+        });
+        expect(parsed.success).toBe(true);
+    });
+
+    it('rejects identical origin and destination airports', () => {
+        const parsed = flightStatusSearchSchema.safeParse({
+            mode: 'route',
+            from: 'SEA',
+            to: 'SEA',
+        });
+        expect(parsed.success).toBe(false);
+        if (!parsed.success) {
+            expect(parsed.error.issues[0].message).toBe('Origin and destination must be different.');
+        }
+    });
+
+    it('rejects identical origin and destination airports ignoring case', () => {
+        const parsed = flightStatusSearchSchema.safeParse({
+            mode: 'route',
+            from: 'sea',
+            to: 'SEA',
+        });
+        expect(parsed.success).toBe(false);
+    });
+
+    it('rejects invalid airport codes', () => {
+        const parsed = flightStatusSearchSchema.safeParse({
+            mode: 'route',
+            from: 'SE',
+            to: 'DTW1',
+        });
+        expect(parsed.success).toBe(false);
+    });
+
+    it('rejects invalid date format', () => {
+        const parsed = flightStatusSearchSchema.safeParse({
+            mode: 'flightNumber',
+            flightNumber: 'MA101',
+            date: '2026/07/15',
+        });
+        expect(parsed.success).toBe(false);
     });
 });
 

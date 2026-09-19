@@ -75,8 +75,18 @@ import {
     sendTravelDocumentsEmail,
     type TravelDocumentPassenger,
 } from '@/lib/travelDocumentEmail';
+import { serverRenderTime } from '@/lib/serverClock';
+import { FlightStatusService, type FlightStatusResult } from '@/lib/flightStatusService';
 
-export type ActionResult<T> = { ok: true; data: T } | ActionValidationFailure;
+export type ActionServerError = {
+    ok: false;
+    error: {
+        code: 'SERVER_ERROR';
+        message: string;
+    };
+};
+
+export type ActionResult<T, E = ActionValidationFailure> = { ok: true; data: T } | E;
 import { bookingWindowIsoDates } from '@/lib/dates';
 import {
     bookingAncillariesMapSchema,
@@ -89,6 +99,7 @@ import {
     flightScheduleDeletionSchema,
     flightScheduleTermsSchema,
     flightStatusSchema,
+    flightStatusSearchSchema,
     numericIdSchema,
     occurrenceRequestSchema,
     parseActionInput,
@@ -2071,3 +2082,21 @@ export async function markAllNotificationsAsReadAction() {
     revalidatePath('/profile');
     return updated;
 }
+
+export async function searchFlightStatusAction(
+    input: unknown
+): Promise<ActionResult<FlightStatusResult[], ActionValidationFailure | ActionServerError>> {
+    const parseResult = flightStatusSearchSchema.safeParse(input);
+    if (!parseResult.success) {
+        return actionValidationFailure(parseResult.error.issues[0]?.message || 'Invalid search parameters.');
+    }
+    const renderedAt = await serverRenderTime();
+    try {
+        const results = await FlightStatusService.searchFlightStatus(parseResult.data, renderedAt);
+        return { ok: true, data: results };
+    } catch (error) {
+        console.error('searchFlightStatusAction error:', error);
+        return { ok: false, error: { code: 'SERVER_ERROR', message: 'Unable to retrieve flight status.' } };
+    }
+}
+
