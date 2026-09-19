@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { redirect, RedirectType } from 'next/navigation';
+import { permanentRedirect } from 'next/navigation';
 
 export const metadata: Metadata = {
     title: 'Flight status',
@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function FlightsPage() {
-    redirect('/flight-status', RedirectType.replace);
+    permanentRedirect('/flight-status');
 }

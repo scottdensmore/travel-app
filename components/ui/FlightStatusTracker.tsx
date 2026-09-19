@@ -363,6 +363,7 @@ export default function FlightStatusTracker({
                     <div
                         role="tabpanel"
                         id="panel-flight-number"
+                        aria-labelledby="tab-flight-number"
                     >
                         <form
                             onSubmit={handleSearchByFlightNumber}
@@ -464,6 +465,7 @@ export default function FlightStatusTracker({
                     <div
                         role="tabpanel"
                         id="panel-route"
+                        aria-labelledby="tab-route"
                     >
                         <form
                             onSubmit={handleSearchByRoute}
@@ -987,7 +989,7 @@ export default function FlightStatusTracker({
                         );
                     })}
                 </div>
-            ) : hasSearched ? (
+            ) : hasSearched && !error ? (
                 <div
                     style={{
                         padding: '3rem 1.5rem',

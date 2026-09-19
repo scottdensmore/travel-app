@@ -1,11 +1,10 @@
 /** @jest-environment node */
 
-import { redirect, RedirectType } from 'next/navigation';
+import { permanentRedirect } from 'next/navigation';
 import FlightsPage from '@/app/flights/page';
 
 jest.mock('next/navigation', () => ({
-    redirect: jest.fn(),
-    RedirectType: { replace: 'replace', push: 'push' },
+    permanentRedirect: jest.fn(),
 }));
 
 describe('FlightsPage', () => {
@@ -13,8 +12,8 @@ describe('FlightsPage', () => {
         jest.clearAllMocks();
     });
 
-    it('redirects permanently/replace to /flight-status', () => {
+    it('permanently redirects to /flight-status', () => {
         FlightsPage();
-        expect(redirect).toHaveBeenCalledWith('/flight-status', RedirectType.replace);
+        expect(permanentRedirect).toHaveBeenCalledWith('/flight-status');
     });
 });

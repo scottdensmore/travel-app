@@ -11,6 +11,7 @@ jest.mock('@/lib/auth', () => ({ authOptions: {} }));
 jest.mock('next/navigation', () => ({
     notFound: () => { throw new Error('notFound'); },
     redirect: () => { throw new Error('redirect'); },
+    permanentRedirect: () => { throw new Error('permanentRedirect'); },
     RedirectType: { replace: 'replace', push: 'push' },
 }));
 

@@ -55,11 +55,13 @@ describe('FlightStatusTracker', () => {
         expect(flightNumberTab).toHaveAttribute('aria-selected', 'true');
         expect(routeTab).toHaveAttribute('aria-selected', 'false');
 
-        expect(screen.getByLabelText(/flight number/i)).toBeInTheDocument();
+        expect(screen.getByRole('tabpanel', { name: /by flight number/i })).toHaveAttribute('id', 'panel-flight-number');
+        expect(screen.getByRole('textbox', { name: /flight number/i })).toBeInTheDocument();
 
         fireEvent.click(routeTab);
         expect(routeTab).toHaveAttribute('aria-selected', 'true');
         expect(flightNumberTab).toHaveAttribute('aria-selected', 'false');
+        expect(screen.getByRole('tabpanel', { name: /by route/i })).toHaveAttribute('id', 'panel-route');
         expect(screen.getByLabelText(/origin airport/i)).toBeInTheDocument();
         expect(screen.getByLabelText(/destination airport/i)).toBeInTheDocument();
     });
@@ -110,7 +112,7 @@ describe('FlightStatusTracker', () => {
 
         render(<FlightStatusTracker initialFlights={[]} initialSearch={null} coverage="today" />);
 
-        const flightInput = screen.getByLabelText(/flight number/i);
+        const flightInput = screen.getByRole('textbox', { name: /flight number/i });
         fireEvent.change(flightInput, { target: { value: 'MA101' } });
 
         const searchButton = screen.getByRole('button', { name: /search/i });
@@ -177,7 +179,7 @@ describe('FlightStatusTracker', () => {
         pushStateSpy.mockRestore();
     });
 
-    it('displays error message when search returns error', async () => {
+    it('displays error message when search returns error without showing empty state', async () => {
         (searchFlightStatusAction as jest.Mock).mockResolvedValue({
             ok: false,
             error: { code: 'SERVER_ERROR', message: 'Flight not found.' },
@@ -185,15 +187,16 @@ describe('FlightStatusTracker', () => {
 
         render(<FlightStatusTracker initialFlights={[]} initialSearch={null} coverage="today" />);
 
-        const flightInput = screen.getByLabelText(/flight number/i);
+        const flightInput = screen.getByRole('textbox', { name: /flight number/i });
         fireEvent.change(flightInput, { target: { value: 'UNKNOWN' } });
 
         const searchButton = screen.getByRole('button', { name: /search/i });
         fireEvent.click(searchButton);
 
         await waitFor(() => {
-            expect(screen.getByText(/Flight not found/i)).toBeInTheDocument();
+            expect(screen.getByRole('alert')).toHaveTextContent('Flight not found.');
         });
+        expect(screen.queryByText(/No flights found/i)).not.toBeInTheDocument();
     });
 
     it('displays empty state when search finds no flights', async () => {
@@ -204,7 +207,7 @@ describe('FlightStatusTracker', () => {
 
         render(<FlightStatusTracker initialFlights={[]} initialSearch={null} coverage="today" />);
 
-        const flightInput = screen.getByLabelText(/flight number/i);
+        const flightInput = screen.getByRole('textbox', { name: /flight number/i });
         fireEvent.change(flightInput, { target: { value: 'MA999' } });
 
         const searchButton = screen.getByRole('button', { name: /search/i });
