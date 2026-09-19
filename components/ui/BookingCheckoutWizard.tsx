@@ -8,9 +8,10 @@ import Link from 'next/link';
 // browser. SWC elides this today because the binding is only used as a type —
 // this makes that a guarantee rather than an optimisation.
 import type { PassengerInput } from '@/lib/FlightBookingService';
+import type { AncillaryType } from '@prisma/client';
 import { bookFlightAction, holdChosenSeatsAction, startCheckoutPaymentAction } from '@/app/actions';
 import { isActionValidationFailure, type ActionValidationFailure } from '@/lib/actionResult';
-import { CABIN_FARE_PERCENT, calculatePassengerFareCents, flightFareCents, formatPrice } from '@/lib/bookingPricing';
+import { CABIN_FARE_PERCENT, calculateBookingAncillariesTotalCents, calculatePassengerFareCents, flightFareCents, formatPrice, getAncillaryPriceCents } from '@/lib/bookingPricing';
 import { BRAND } from '@/lib/brand';
 import { cabinLabel, legDirectionLabel, legFlightClause } from '@/lib/bookingItinerary';
 import { durationLabel, flightArrival, flightDeparture } from '@/lib/flightTime';
@@ -213,7 +214,10 @@ export default function BookingCheckoutWizard({
     // ignoring it means a re-render with fresher occupancy is discarded, which
     // matters now that another checkout's hold can change it between renders.
     useEffect(() => setOccupiedSeatsByLeg(initialOccupiedSeats), [initialOccupiedSeats]);
-    const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+    const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+    const [ancillariesByPassenger, setAncillariesByPassenger] = useState<Record<number, AncillaryType[]>>({
+        0: ['CARRY_ON']
+    });
     const [passengers, setPassengers] = useState<PassengerFormState[]>([
         {
             firstName: '',
@@ -260,7 +264,40 @@ export default function BookingCheckoutWizard({
     const totalPriceCents = passengers.reduce((sum, p) => sum + calculatePassengerPrice(p.cabinClass), 0);
     const totalPriceDisplay = formatPrice(totalPriceCents);
 
+    const ancillariesTotalCents = calculateBookingAncillariesTotalCents(
+        passengers.map((passenger, index) => ({
+            cabin: passenger.cabinClass,
+            ancillaries: ancillariesByPassenger[index] || ['CARRY_ON'],
+        }))
+    );
+    const grandTotalPriceCents = totalPriceCents + ancillariesTotalCents;
+    const grandTotalPriceDisplay = formatPrice(grandTotalPriceCents);
+
+    const handleToggleAncillary = (passengerIndex: number, type: AncillaryType) => {
+        if (type === 'CARRY_ON') return;
+
+        setAncillariesByPassenger(prev => {
+            const current = prev[passengerIndex] || ['CARRY_ON'];
+            const exists = current.includes(type);
+            let next: AncillaryType[];
+            if (exists) {
+                if (type === 'CHECKED_BAG_1') {
+                    next = current.filter(t => t !== 'CHECKED_BAG_1' && t !== 'CHECKED_BAG_2');
+                } else {
+                    next = current.filter(t => t !== type);
+                }
+            } else {
+                if (type === 'CHECKED_BAG_2' && !current.includes('CHECKED_BAG_1')) {
+                    return prev;
+                }
+                next = [...current, type];
+            }
+            return { ...prev, [passengerIndex]: next };
+        });
+    };
+
     const handleAddPassenger = () => {
+        const nextIdx = passengers.length;
         setPassengers([
             ...passengers,
             {
@@ -273,12 +310,26 @@ export default function BookingCheckoutWizard({
                 seatNumbers: flights.map(() => '')
             }
         ]);
+        setAncillariesByPassenger(prev => ({
+            ...prev,
+            [nextIdx]: ['CARRY_ON']
+        }));
     };
 
     const handleRemovePassenger = (index: number) => {
         if (passengers.length === 1) return;
         const updated = passengers.filter((_, i) => i !== index);
         setPassengers(updated);
+        setAncillariesByPassenger(prev => {
+            const next: Record<number, AncillaryType[]> = {};
+            let nextIdx = 0;
+            for (let i = 0; i < passengers.length; i++) {
+                if (i === index) continue;
+                next[nextIdx] = prev[i] || ['CARRY_ON'];
+                nextIdx++;
+            }
+            return next;
+        });
         setActivePassengerIndex(Math.max(0, index - 1));
     };
 
@@ -491,19 +542,19 @@ export default function BookingCheckoutWizard({
     }, [activeLegIndex, activePassengerIndex, passengers, serverFieldErrors, step]);
 
     useEffect(() => {
-        if (step === 4 && bookingResult) {
+        if (step === 5 && bookingResult) {
             confirmationHeadingRef.current?.focus();
         }
     }, [bookingResult, step]);
 
     useEffect(() => {
-        if (step === 3 && paymentSession) {
+        if (step === 4 && paymentSession) {
             paymentHeadingRef.current?.focus();
         }
     }, [paymentSession, step]);
 
     useEffect(() => {
-        if (step !== 3 || holdDeadline === null) return;
+        if ((step !== 3 && step !== 4) || holdDeadline === null) return;
 
         const reconcileWithDeadline = () => {
             const seconds = Math.max(0, Math.ceil((holdDeadline - Date.now()) / 1000));
@@ -526,7 +577,7 @@ export default function BookingCheckoutWizard({
 
     useEffect(() => {
         if (
-            step !== 3
+            (step !== 3 && step !== 4)
             || holdDeadline === null
             || holdSecondsRemaining !== 0
             || bookingSecured
@@ -552,19 +603,26 @@ export default function BookingCheckoutWizard({
 
     const handleNextStep = async () => {
         if (step === 1 && validateStep1()) { setStep(2); return; }
-        if (step !== 2 || holdingSeats || !validateStep2()) return;
-
-        setHoldingSeats(true);
-        try {
-            if (await holdChosenSeats()) setStep(3);
-        } finally {
-            setHoldingSeats(false);
+        if (step === 2) {
+            if (holdingSeats || !validateStep2()) return;
+            setHoldingSeats(true);
+            try {
+                if (await holdChosenSeats()) setStep(3);
+            } finally {
+                setHoldingSeats(false);
+            }
+            return;
+        }
+        if (step === 3) {
+            setStep(4);
+            return;
         }
     };
 
     const handlePrevStep = () => {
         if (step === 2) setStep(1);
         else if (step === 3) setStep(2);
+        else if (step === 4) setStep(3);
     };
 
     // Seat Map Definitions
@@ -885,6 +943,7 @@ export default function BookingCheckoutWizard({
             seatNumbers: passenger.seatNumbers,
             cabinClass: passenger.cabinClass,
         })),
+        ancillariesByPassenger,
     });
 
     const handlePreparePayment = async () => {
@@ -964,7 +1023,8 @@ export default function BookingCheckoutWizard({
             const result = await bookFlightAction({
                 flightIds: flights.map(leg => leg.id),
                 passengers: formattedPassengers,
-                idempotencyKey: idempotencyKeyRef.current
+                idempotencyKey: idempotencyKeyRef.current,
+                ancillariesByPassenger,
             });
 
             if (isActionValidationFailure(result)) {
@@ -994,7 +1054,7 @@ export default function BookingCheckoutWizard({
                     cabinClass: passenger.cabinClass,
                 }))
             });
-            setStep(4);
+            setStep(5);
         } catch {
             showFocusedError('We couldn’t confirm your booking. Please try again.');
         } finally {
@@ -1010,8 +1070,9 @@ export default function BookingCheckoutWizard({
                 {[
                     { s: 1, label: 'Travelers' },
                     { s: 2, label: 'Seats' },
-                    { s: 3, label: 'Review' },
-                    { s: 4, label: 'E-Ticket' }
+                    { s: 3, label: 'Bags & Extras' },
+                    { s: 4, label: 'Review & Payment' },
+                    { s: 5, label: 'Confirmation' }
                 ].map((item) => (
                     <div key={item.s} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, flex: 1 }}>
                         <div style={{
@@ -1028,8 +1089,8 @@ export default function BookingCheckoutWizard({
                         }}>
                             {step > item.s ? '✓' : item.s}
                         </div>
-                        <span style={{ fontSize: '0.8rem', marginTop: '6px', color: step >= item.s ? '#fff' : 'rgba(255,255,255,0.4)', fontWeight: step === item.s ? 'bold' : 'normal' }}>
-                            {item.label}
+                        <span style={{ fontSize: '0.8rem', marginTop: '6px', color: step >= item.s ? '#fff' : 'rgba(255,255,255,0.4)', fontWeight: step === item.s ? 'bold' : 'normal', textAlign: 'center' }}>
+                            {item.s}: {item.label}
                         </span>
                     </div>
                 ))}
@@ -1060,6 +1121,9 @@ export default function BookingCheckoutWizard({
                 {/* STEP 1: PASSENGERS FORM */}
                 {step === 1 && (
                     <div>
+                        <span style={{ fontSize: '0.85rem', color: '#a78bfa', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.25rem' }}>
+                            Step 1 of 5
+                        </span>
                         <h2 style={{ fontSize: '1.8rem', color: '#c084fc', marginBottom: '0.5rem', fontWeight: 'bold' }}>Traveler Information</h2>
                         <p style={{ color: 'rgba(255,255,255,0.5)', marginBottom: '2rem' }}>Please enter details exactly as they appear on passenger passports.</p>
 
@@ -1189,6 +1253,9 @@ export default function BookingCheckoutWizard({
                 {/* STEP 2: SEAT SELECTION */}
                 {step === 2 && (
                     <div>
+                        <span style={{ fontSize: '0.85rem', color: '#a78bfa', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.25rem' }}>
+                            Step 2 of 5
+                        </span>
                         <h2 style={{ fontSize: '1.8rem', color: '#c084fc', marginBottom: '0.5rem', fontWeight: 'bold' }}>Select Your Seats</h2>
                         <p style={{ color: 'rgba(255,255,255,0.5)', marginBottom: '2rem' }}>Choose seats for each traveler. Highlighted rows correspond to each passenger&apos;s cabin class.</p>
 
@@ -1557,15 +1624,311 @@ export default function BookingCheckoutWizard({
                                 disabled={holdingSeats}
                                 aria-busy={holdingSeats}
                                 style={{ backgroundColor: holdingSeats ? '#6d28d9' : '#8b5cf6', color: '#fff', border: 'none', padding: '10px 28px', borderRadius: '8px', cursor: holdingSeats ? 'progress' : 'pointer', fontWeight: 'bold' }}>
-                                {holdingSeats ? 'Holding your seats…' : 'Review Booking →'}
+                                {holdingSeats ? 'Holding your seats…' : 'Continue to Bags & Extras →'}
                             </button>
                         </div>
                     </div>
                 )}
 
-                {/* STEP 3: BOOKING REVIEW */}
+                {/* STEP 3: BAGS & EXTRAS */}
                 {step === 3 && (
                     <div>
+                        <span style={{ fontSize: '0.85rem', color: '#a78bfa', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.25rem' }}>
+                            Step 3 of 5
+                        </span>
+                        <h2 style={{ fontSize: '1.8rem', color: '#c084fc', marginBottom: '0.5rem', fontWeight: 'bold' }}>Bags &amp; Travel Extras</h2>
+                        <p style={{ color: 'rgba(255,255,255,0.5)', marginBottom: '1.5rem' }}>Select baggage allowance and optional priority boarding for your trip.</p>
+
+                        {holdDeadline !== null && (
+                            <p
+                                id="seat-hold-timer"
+                                role={bookingSecured ? 'status' : 'timer'}
+                                aria-live={bookingSecured ? 'polite' : 'off'}
+                                style={{
+                                    margin: '0 0 1.25rem',
+                                    padding: '0.85rem 1rem',
+                                    border: '1px solid rgba(52, 211, 153, 0.35)',
+                                    borderRadius: '10px',
+                                    background: 'rgba(16, 185, 129, 0.1)',
+                                    color: '#a7f3d0',
+                                    fontWeight: 600,
+                                }}
+                            >
+                                {bookingSecured
+                                    ? 'Your booking and seats are secured while payment capture finishes.'
+                                    : `Seat hold expires in ${formatHoldTime(holdSecondsRemaining)}. Confirm before the timer reaches 00:00.`}
+                            </p>
+                        )}
+
+                        {/* Running Total Callout */}
+                        <div style={{
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            padding: '1rem 1.25rem',
+                            borderRadius: '12px',
+                            background: 'rgba(139, 92, 246, 0.12)',
+                            border: '1px solid rgba(139, 92, 246, 0.3)',
+                            marginBottom: '1.75rem',
+                        }}>
+                            <div>
+                                <span style={{ fontWeight: 'bold', fontSize: '1rem', color: '#f3f0ff', display: 'block' }}>
+                                    Selected Travel Extras
+                                </span>
+                                <span style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.6)' }}>
+                                    Prices apply to your complete itinerary
+                                </span>
+                            </div>
+                            <span style={{ fontWeight: 'bold', fontSize: '1.2rem', color: '#34d399' }}>
+                                Extras total: {formatPrice(ancillariesTotalCents)}
+                            </span>
+                        </div>
+
+                        {/* Passenger Extras Cards */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginBottom: '2rem' }}>
+                            {passengers.map((passenger, pIdx) => {
+                                const selected = ancillariesByPassenger[pIdx] || ['CARRY_ON'];
+                                const hasBag1 = selected.includes('CHECKED_BAG_1');
+                                const hasBag2 = selected.includes('CHECKED_BAG_2');
+                                const hasPriority = selected.includes('PRIORITY_BOARDING');
+                                const hasAssistance = selected.includes('SPECIAL_ASSISTANCE');
+
+                                const bag1Price = getAncillaryPriceCents('CHECKED_BAG_1', passenger.cabinClass);
+                                const bag2Price = getAncillaryPriceCents('CHECKED_BAG_2', passenger.cabinClass);
+                                const priorityPrice = getAncillaryPriceCents('PRIORITY_BOARDING', passenger.cabinClass);
+
+                                const bag1Label = bag1Price === 0 ? 'Included with your cabin ($0)' : '$35';
+                                const bag2Label = bag2Price === 0 ? 'Included with your cabin ($0)' : '$45';
+                                const priorityLabel = priorityPrice === 0 ? 'Included with your cabin ($0)' : '$15';
+
+                                return (
+                                    <div
+                                        key={pIdx}
+                                        style={{
+                                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                                            borderRadius: '16px',
+                                            padding: '1.5rem',
+                                            background: 'rgba(0, 0, 0, 0.2)',
+                                        }}
+                                    >
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem', borderBottom: '1px solid rgba(255, 255, 255, 0.06)', paddingBottom: '0.75rem' }}>
+                                            <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#a78bfa' }}>
+                                                {passenger.firstName || passenger.lastName ? `${passenger.firstName} ${passenger.lastName}` : `Passenger #${pIdx + 1}`}
+                                            </h3>
+                                            <span style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.6)', background: 'rgba(255, 255, 255, 0.05)', padding: '3px 8px', borderRadius: '6px' }}>
+                                                Class: {cabinLabel(passenger.cabinClass)}
+                                            </span>
+                                        </div>
+
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                            {/* Carry-on */}
+                                            <div style={{
+                                                display: 'flex',
+                                                flexWrap: 'wrap',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center',
+                                                gap: '0.75rem',
+                                                padding: '0.85rem 1rem',
+                                                borderRadius: '10px',
+                                                background: 'rgba(255, 255, 255, 0.02)',
+                                                border: '1px solid rgba(255, 255, 255, 0.06)',
+                                            }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: '1 1 200px' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        id={`passenger-${pIdx}-carryon`}
+                                                        checked={true}
+                                                        disabled={true}
+                                                        readOnly
+                                                        style={{ width: '18px', height: '18px', accentColor: '#10b981', cursor: 'not-allowed' }}
+                                                    />
+                                                    <label htmlFor={`passenger-${pIdx}-carryon`} style={{ cursor: 'default', userSelect: 'none' }}>
+                                                        <span style={{ display: 'block', fontWeight: 600, fontSize: '0.95rem', color: '#fff' }}>
+                                                            Carry-on bag
+                                                        </span>
+                                                        <span style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>
+                                                            1 overhead bag + 1 personal item included
+                                                        </span>
+                                                    </label>
+                                                </div>
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#34d399', whiteSpace: 'nowrap' }}>
+                                                    Included · $0
+                                                </span>
+                                            </div>
+
+                                            {/* 1st Checked Bag */}
+                                            <div style={{
+                                                display: 'flex',
+                                                flexWrap: 'wrap',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center',
+                                                gap: '0.75rem',
+                                                padding: '0.85rem 1rem',
+                                                borderRadius: '10px',
+                                                background: hasBag1 ? 'rgba(139, 92, 246, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+                                                border: hasBag1 ? '1px solid #8b5cf6' : '1px solid rgba(255, 255, 255, 0.06)',
+                                                transition: 'all 0.2s',
+                                            }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: '1 1 200px' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        id={`passenger-${pIdx}-bag1`}
+                                                        checked={hasBag1}
+                                                        onChange={() => handleToggleAncillary(pIdx, 'CHECKED_BAG_1')}
+                                                        style={{ width: '18px', height: '18px', accentColor: '#8b5cf6', cursor: 'pointer' }}
+                                                    />
+                                                    <label htmlFor={`passenger-${pIdx}-bag1`} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                                        <span style={{ display: 'block', fontWeight: 600, fontSize: '0.95rem', color: '#fff' }}>
+                                                            First checked bag
+                                                        </span>
+                                                        <span style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>
+                                                            Standard bag up to 50 lbs (23 kg)
+                                                        </span>
+                                                    </label>
+                                                </div>
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: bag1Price === 0 ? '#34d399' : '#c084fc', whiteSpace: 'nowrap' }}>
+                                                    {bag1Label}
+                                                </span>
+                                            </div>
+
+                                            {/* 2nd Checked Bag */}
+                                            <div style={{
+                                                display: 'flex',
+                                                flexWrap: 'wrap',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center',
+                                                gap: '0.75rem',
+                                                padding: '0.85rem 1rem',
+                                                borderRadius: '10px',
+                                                background: hasBag2 ? 'rgba(139, 92, 246, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+                                                border: hasBag2 ? '1px solid #8b5cf6' : '1px solid rgba(255, 255, 255, 0.06)',
+                                                opacity: hasBag1 ? 1 : 0.5,
+                                                transition: 'all 0.2s',
+                                            }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: '1 1 200px' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        id={`passenger-${pIdx}-bag2`}
+                                                        checked={hasBag2}
+                                                        disabled={!hasBag1}
+                                                        onChange={() => handleToggleAncillary(pIdx, 'CHECKED_BAG_2')}
+                                                        style={{ width: '18px', height: '18px', accentColor: '#8b5cf6', cursor: hasBag1 ? 'pointer' : 'not-allowed' }}
+                                                    />
+                                                    <label htmlFor={`passenger-${pIdx}-bag2`} style={{ cursor: hasBag1 ? 'pointer' : 'not-allowed', userSelect: 'none' }}>
+                                                        <span style={{ display: 'block', fontWeight: 600, fontSize: '0.95rem', color: '#fff' }}>
+                                                            Second checked bag
+                                                        </span>
+                                                        <span style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>
+                                                            {hasBag1 ? 'Standard bag up to 50 lbs (23 kg)' : 'Requires 1st checked bag'}
+                                                        </span>
+                                                    </label>
+                                                </div>
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: bag2Price === 0 ? '#34d399' : '#c084fc', whiteSpace: 'nowrap' }}>
+                                                    {bag2Label}
+                                                </span>
+                                            </div>
+
+                                            {/* Priority Boarding */}
+                                            <div style={{
+                                                display: 'flex',
+                                                flexWrap: 'wrap',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center',
+                                                gap: '0.75rem',
+                                                padding: '0.85rem 1rem',
+                                                borderRadius: '10px',
+                                                background: hasPriority ? 'rgba(139, 92, 246, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+                                                border: hasPriority ? '1px solid #8b5cf6' : '1px solid rgba(255, 255, 255, 0.06)',
+                                                transition: 'all 0.2s',
+                                            }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: '1 1 200px' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        id={`passenger-${pIdx}-priority`}
+                                                        checked={hasPriority}
+                                                        onChange={() => handleToggleAncillary(pIdx, 'PRIORITY_BOARDING')}
+                                                        style={{ width: '18px', height: '18px', accentColor: '#8b5cf6', cursor: 'pointer' }}
+                                                    />
+                                                    <label htmlFor={`passenger-${pIdx}-priority`} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                                        <span style={{ display: 'block', fontWeight: 600, fontSize: '0.95rem', color: '#fff' }}>
+                                                            Priority boarding
+                                                        </span>
+                                                        <span style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>
+                                                            Board in Group 1 with dedicated overhead bin access
+                                                        </span>
+                                                    </label>
+                                                </div>
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: priorityPrice === 0 ? '#34d399' : '#c084fc', whiteSpace: 'nowrap' }}>
+                                                    {priorityLabel}
+                                                </span>
+                                            </div>
+
+                                            {/* Special Assistance */}
+                                            <div style={{
+                                                display: 'flex',
+                                                flexWrap: 'wrap',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center',
+                                                gap: '0.75rem',
+                                                padding: '0.85rem 1rem',
+                                                borderRadius: '10px',
+                                                background: hasAssistance ? 'rgba(139, 92, 246, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+                                                border: hasAssistance ? '1px solid #8b5cf6' : '1px solid rgba(255, 255, 255, 0.06)',
+                                                transition: 'all 0.2s',
+                                            }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: '1 1 200px' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        id={`passenger-${pIdx}-assistance`}
+                                                        checked={hasAssistance}
+                                                        onChange={() => handleToggleAncillary(pIdx, 'SPECIAL_ASSISTANCE')}
+                                                        style={{ width: '18px', height: '18px', accentColor: '#8b5cf6', cursor: 'pointer' }}
+                                                    />
+                                                    <label htmlFor={`passenger-${pIdx}-assistance`} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                                        <span style={{ display: 'block', fontWeight: 600, fontSize: '0.95rem', color: '#fff' }}>
+                                                            Special assistance
+                                                        </span>
+                                                        <span style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>
+                                                            Wheelchair or boarding mobility assistance
+                                                        </span>
+                                                    </label>
+                                                </div>
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#34d399', whiteSpace: 'nowrap' }}>
+                                                    Free ($0)
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* Navigation Actions */}
+                        <div className="booking-wizard-actions booking-extras-actions" style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                            <button
+                                type="button"
+                                onClick={handlePrevStep}
+                                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
+                                ← Back to Seats
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleNextStep}
+                                style={{ backgroundColor: '#8b5cf6', color: '#fff', border: 'none', padding: '10px 28px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
+                                Continue to Review &amp; Payment →
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* STEP 4: BOOKING REVIEW & PAYMENT */}
+                {step === 4 && (
+                    <div>
+                        <span style={{ fontSize: '0.85rem', color: '#a78bfa', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.25rem' }}>
+                            Step 4 of 5
+                        </span>
                         <h2 style={{ fontSize: '1.8rem', color: '#c084fc', marginBottom: '0.5rem', fontWeight: 'bold' }}>Review Booking</h2>
                         <p style={{ color: 'rgba(255,255,255,0.5)', marginBottom: '2rem' }}>Verify the itinerary and traveler details before confirming.</p>
 
@@ -1687,9 +2050,14 @@ export default function BookingCheckoutWizard({
                                     </div>
                                 )}
 
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'rgba(255,255,255,0.75)', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                                    <span>Bags &amp; travel extras</span>
+                                    <span>Extras total: {formatPrice(ancillariesTotalCents)}</span>
+                                </div>
+
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: 'bold', borderTop: '1px solid rgba(255,255,255,0.08)', marginTop: '1.25rem', paddingTop: '1rem', color: '#34d399' }}>
                                     <span>Estimated Total</span>
-                                    <span>{totalPriceDisplay}</span>
+                                    <span>{grandTotalPriceDisplay}</span>
                                 </div>
                             </div>
                             <p role="note" style={{ color: 'rgba(255,255,255,0.65)', margin: '1rem 0 0', fontSize: '0.9rem' }}>
@@ -1728,7 +2096,7 @@ export default function BookingCheckoutWizard({
                                     onClick={handlePrevStep}
                                     disabled={isPreparingPayment}
                                     style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
-                                    ← Back
+                                    ← Back to Bags & Extras
                                 </button>
                                 <button
                                     type="button"
@@ -1744,8 +2112,8 @@ export default function BookingCheckoutWizard({
                     </div>
                 )}
 
-                {/* STEP 4: SUCCESS / E-TICKET BOARDING PASS */}
-                {step === 4 && bookingResult && (
+                {/* STEP 5: SUCCESS / E-TICKET BOARDING PASS */}
+                {step === 5 && bookingResult && (
                     <div style={{ textAlign: 'center', scrollMarginTop: '120px' }}>
                         <div style={{
                             width: '64px',
@@ -1762,6 +2130,9 @@ export default function BookingCheckoutWizard({
                         }}>
                             ✓
                         </div>
+                        <span style={{ fontSize: '0.85rem', color: '#a78bfa', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.25rem' }}>
+                            Step 5 of 5
+                        </span>
                         <h2
                             ref={confirmationHeadingRef}
                             tabIndex={-1}
@@ -1773,7 +2144,7 @@ export default function BookingCheckoutWizard({
                         <p style={{ color: '#f3f0ff', marginBottom: '0.5rem', fontWeight: 600, overflowWrap: 'anywhere' }}>
                             Confirmation {bookingResult.reference}
                         </p>
-                        <p style={{ color: '#34d399', marginBottom: '2rem', fontWeight: 'bold' }}>Confirmed total: {bookingResult.totalPriceCents !== null ? formatPrice(bookingResult.totalPriceCents) : totalPriceDisplay}</p>
+                        <p style={{ color: '#34d399', marginBottom: '2rem', fontWeight: 'bold' }}>Confirmed total: {bookingResult.totalPriceCents !== null ? formatPrice(bookingResult.totalPriceCents) : grandTotalPriceDisplay}</p>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', alignItems: 'center', marginBottom: '2.5rem' }}>
                             {/*

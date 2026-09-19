@@ -3,6 +3,7 @@ import { act, render, screen, fireEvent, waitFor, within } from '@testing-librar
 import '@testing-library/jest-dom';
 import BookingCheckoutWizard from '@/components/ui/BookingCheckoutWizard';
 import { bookFlightAction, holdChosenSeatsAction, startCheckoutPaymentAction } from '@/app/actions';
+import { calculateBookingAncillariesTotalCents } from '@/lib/bookingPricing';
 
 // Mock the server actions
 jest.mock('@/app/actions', () => ({
@@ -63,6 +64,13 @@ async function preparePayment(amount: string) {
     return screen.findByRole('button', { name: `Authorize ${amount} and confirm booking` });
 }
 
+async function advanceFromSeatsToReview() {
+    fireEvent.click(screen.getByText('Continue to Bags & Extras →'));
+    await screen.findByText(/bags & travel extras/i);
+    fireEvent.click(screen.getByRole('button', { name: /continue to review & payment/i }));
+    await screen.findByText('Review Booking');
+}
+
 describe('BookingCheckoutWizard', () => {
     beforeEach(() => {
         jest.clearAllMocks();
@@ -78,13 +86,22 @@ describe('BookingCheckoutWizard', () => {
             holdExpiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
             holdExpiresInMilliseconds: 10 * 60_000,
         });
-        mockStartCheckoutPaymentAction.mockImplementation(async ({ flightIds }) => ({
-            amountCents: flightIds.length === 2 ? 25_000 : 10_000,
-            currency: 'USD',
-            clientSecret: 'pi_secret_for_elements',
-            publishableKey: 'pk_test_public',
-            status: 'AUTHORIZED',
-        }));
+        mockStartCheckoutPaymentAction.mockImplementation(async ({ flightIds, passengers, ancillariesByPassenger }) => {
+            const baseCents = flightIds.length === 2 ? 25_000 : 10_000;
+            const extrasCents = calculateBookingAncillariesTotalCents(
+                (passengers || []).map((passenger: any, index: number) => ({
+                    cabin: passenger.cabinClass,
+                    ancillaries: ancillariesByPassenger?.[index] || ['CARRY_ON'],
+                }))
+            );
+            return {
+                amountCents: baseCents + extrasCents,
+                currency: 'USD',
+                clientSecret: 'pi_secret_for_elements',
+                publishableKey: 'pk_test_public',
+                status: 'AUTHORIZED',
+            };
+        });
     });
 
     it('renders Step 1 (Travelers) and calculates prices correctly based on cabin class and additions', async () => {
@@ -193,11 +210,8 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.click(seat4A);
         expect(screen.getByText(/Seat:/).textContent).toContain('4A');
 
-        // Proceed to Step 3
-        fireEvent.click(screen.getByText('Review Booking →'));
-        // Advancing now awaits the seat hold (#74), so step 3 arrives
-        // after the click rather than during it.
-        await screen.findByText('Review Booking');
+        // Proceed to Step 4 (via Step 3)
+        await advanceFromSeatsToReview();
         expect(screen.getByText('Review Booking')).toBeInTheDocument();
     });
 
@@ -215,9 +229,9 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US1234567' } });
         fireEvent.click(screen.getByText('Select Seats →'));
         fireEvent.click(screen.getByTitle('Select Seat 11A'));
-        fireEvent.click(screen.getByText('Review Booking →'));
+        fireEvent.click(screen.getByText('Continue to Bags & Extras →'));
 
-        await screen.findByText('Review Booking');
+        await screen.findByText(/bags & travel extras/i);
         expect(mockHoldChosenSeatsAction).toHaveBeenCalledWith({
             checkoutId: expect.stringMatching(/^[0-9a-f-]{36}$/i),
             claims: [{ flightId: sampleFlight.id, seatNumber: '11A' }],
@@ -265,7 +279,7 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByText(/Auto-Assign Adjacent Seats/i));
             fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
             fireEvent.click(screen.getByText(/Auto-Assign Adjacent Seats/i));
-            fireEvent.click(screen.getByText('Review Booking →'));
+            fireEvent.click(screen.getByText('Continue to Bags & Extras →'));
 
             await act(async () => {});
             expect(screen.getByRole('timer')).toHaveTextContent('Seat hold expires in 00:55');
@@ -323,7 +337,9 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US1234567' } });
             fireEvent.click(screen.getByText('Select Seats →'));
             fireEvent.click(screen.getByTitle('Select Seat 11A'));
-            fireEvent.click(screen.getByText('Review Booking →'));
+            fireEvent.click(screen.getByText('Continue to Bags & Extras →'));
+            await act(async () => {});
+            fireEvent.click(screen.getByRole('button', { name: /continue to review & payment/i }));
             await act(async () => {});
 
             jest.setSystemTime(new Date('2026-08-14T12:01:01.000Z'));
@@ -351,7 +367,7 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US1234567' } });
         fireEvent.click(screen.getByText('Select Seats →'));
         fireEvent.click(screen.getByTitle('Select Seat 11A'));
-        fireEvent.click(screen.getByText('Review Booking →'));
+        fireEvent.click(screen.getByText('Continue to Bags & Extras →'));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(/could not hold those seats/i);
         expect(screen.getByText('Select Your Seats')).toBeInTheDocument();
@@ -377,7 +393,7 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US1234567' } });
         fireEvent.click(screen.getByText('Select Seats →'));
         fireEvent.click(screen.getByTitle('Select Seat 11A'));
-        fireEvent.click(screen.getByText('Review Booking →'));
+        fireEvent.click(screen.getByText('Continue to Bags & Extras →'));
 
         const alert = await screen.findByRole('alert');
         expect(scrollIntoView).toHaveBeenCalled();
@@ -403,7 +419,7 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US1234567' } });
         fireEvent.click(screen.getByText('Select Seats →'));
         fireEvent.click(screen.getByTitle('Select Seat 11A'));
-        fireEvent.click(screen.getByText('Review Booking →'));
+        fireEvent.click(screen.getByText('Continue to Bags & Extras →'));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             /Seat 11A is being held in another checkout/i,
@@ -429,7 +445,7 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US1234567' } });
         fireEvent.click(screen.getByText('Select Seats →'));
         fireEvent.click(screen.getByTitle('Select Seat 11A'));
-        fireEvent.click(screen.getByText('Review Booking →'));
+        fireEvent.click(screen.getByText('Continue to Bags & Extras →'));
 
         await screen.findByRole('alert');
         expect(screen.queryByTitle('Select Seat 11A')).not.toBeInTheDocument();
@@ -482,10 +498,7 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.click(seat11C);
         
         // Proceed to Billing
-        fireEvent.click(screen.getByText('Review Booking →'));
-        // Advancing now awaits the seat hold (#74), so step 3 arrives
-        // after the click rather than during it.
-        await screen.findByText('Review Booking');
+        await advanceFromSeatsToReview();
 
         // Verify summary details are correct. The seat is read off the leg it
         // is held on, and the fare breakdown carries the cabin (#152).
@@ -519,7 +532,8 @@ describe('BookingCheckoutWizard', () => {
                     seatNumbers: ['11C'],
                     cabinClass: 'ECONOMY'
                 }],
-                idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/i)
+                idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/i),
+                ancillariesByPassenger: { 0: ['CARRY_ON'] },
             });
         });
 
@@ -528,6 +542,7 @@ describe('BookingCheckoutWizard', () => {
             checkoutId,
             flightIds: [42],
             passengers: [{ seatNumbers: ['11C'], cabinClass: 'ECONOMY' }],
+            ancillariesByPassenger: { 0: ['CARRY_ON'] },
         });
 
         // Verify Boarding Pass renders details
@@ -566,8 +581,7 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US5550000' } });
         fireEvent.click(screen.getByText('Select Seats →'));
         fireEvent.click(screen.getByTitle('Select Seat 11A'));
-        fireEvent.click(screen.getByText('Review Booking →'));
-        await screen.findByText('Review Booking');
+        await advanceFromSeatsToReview();
 
         fireEvent.click(await preparePayment('$100'));
 
@@ -595,8 +609,7 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US5550000' } });
         fireEvent.click(screen.getByText('Select Seats →'));
         fireEvent.click(screen.getByTitle('Select Seat 11A'));
-        fireEvent.click(screen.getByText('Review Booking →'));
-        await screen.findByText('Review Booking');
+        await advanceFromSeatsToReview();
 
         fireEvent.click(await preparePayment('$100'));
 
@@ -650,8 +663,7 @@ describe('BookingCheckoutWizard', () => {
         });
         fireEvent.click(screen.getByText('Select Seats →'));
         fireEvent.click(screen.getByTitle('Select Seat 11A'));
-        fireEvent.click(screen.getByText('Review Booking →'));
-        await screen.findByText('Review Booking');
+        await advanceFromSeatsToReview();
         const paymentButton = await preparePayment('$100');
 
         fireEvent.click(paymentButton);
@@ -684,8 +696,7 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US5550000' } });
         fireEvent.click(screen.getByText('Select Seats →'));
         fireEvent.click(screen.getByTitle('Select Seat 11A'));
-        fireEvent.click(screen.getByText('Review Booking →'));
-        await screen.findByText('Review Booking');
+        await advanceFromSeatsToReview();
 
         fireEvent.click(screen.getByRole('button', { name: 'Continue to secure payment' }));
 
@@ -712,8 +723,7 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US5550000' } });
         fireEvent.click(screen.getByText('Select Seats →'));
         fireEvent.click(screen.getByTitle('Select Seat 11A'));
-        fireEvent.click(screen.getByText('Review Booking →'));
-        await screen.findByText('Review Booking');
+        await advanceFromSeatsToReview();
 
         fireEvent.click(screen.getByRole('button', { name: 'Continue to secure payment' }));
 
@@ -742,10 +752,7 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.click(screen.getByTitle('Select Seat 11D'));
 
         // Review Step
-        fireEvent.click(screen.getByText('Review Booking →'));
-        // Advancing now awaits the seat hold (#74), so step 3 arrives
-        // after the click rather than during it.
-        await screen.findByText('Review Booking');
+        await advanceFromSeatsToReview();
 
         // Submit Booking
         fireEvent.click(await preparePayment('$100'));
@@ -774,10 +781,7 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US9876543' } });
         fireEvent.click(screen.getByText('Select Seats →'));
         fireEvent.click(screen.getByTitle('Select Seat 11C'));
-        fireEvent.click(screen.getByText('Review Booking →'));
-        // Advancing now awaits the seat hold (#74), so step 3 arrives
-        // after the click rather than during it.
-        await screen.findByText('Review Booking');
+        await advanceFromSeatsToReview();
 
         fireEvent.click(await preparePayment('$100'));
 
@@ -813,10 +817,7 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US9876543' } });
         fireEvent.click(screen.getByText('Select Seats →'));
         fireEvent.click(screen.getByTitle('Select Seat 11C'));
-        fireEvent.click(screen.getByText('Review Booking →'));
-        // Advancing now awaits the seat hold (#74), so step 3 arrives
-        // after the click rather than during it.
-        await screen.findByText('Review Booking');
+        await advanceFromSeatsToReview();
         fireEvent.click(await preparePayment('$100'));
 
         await waitFor(() => {
@@ -842,10 +843,7 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US9876543' } });
         fireEvent.click(screen.getByText('Select Seats →'));
         fireEvent.click(screen.getByTitle('Select Seat 11C'));
-        fireEvent.click(screen.getByText('Review Booking →'));
-        // Advancing now awaits the seat hold (#74), so step 3 arrives
-        // after the click rather than during it.
-        await screen.findByText('Review Booking');
+        await advanceFromSeatsToReview();
         fireEvent.click(await preparePayment('$100'));
 
         await waitFor(() => expect(screen.getByText('Traveler Information')).toBeInTheDocument());
@@ -874,10 +872,7 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US9876543' } });
         fireEvent.click(screen.getByText('Select Seats →'));
         fireEvent.click(screen.getByTitle('Select Seat 11C'));
-        fireEvent.click(screen.getByText('Review Booking →'));
-        // Advancing now awaits the seat hold (#74), so step 3 arrives
-        // after the click rather than during it.
-        await screen.findByText('Review Booking');
+        await advanceFromSeatsToReview();
         fireEvent.click(await preparePayment('$100'));
 
         await waitFor(() => expect(screen.getByText('Select Your Seats')).toBeInTheDocument());
@@ -908,8 +903,7 @@ describe('BookingCheckoutWizard', () => {
         fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US9876543' } });
         fireEvent.click(screen.getByText('Select Seats →'));
         fireEvent.click(screen.getByTitle('Select Seat 11C'));
-        fireEvent.click(screen.getByText('Review Booking →'));
-        await screen.findByText('Review Booking');
+        await advanceFromSeatsToReview();
         fireEvent.click(await preparePayment('$100'));
 
         await screen.findByText('Select Your Seats');
@@ -1169,18 +1163,15 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByTitle('Select Seat 11A'));
             fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
             fireEvent.click(screen.getByTitle('Select Seat 12C'));
-            fireEvent.click(screen.getByText('Review Booking →'));
-        // Advancing now awaits the seat hold (#74), so step 3 arrives
-        // after the click rather than during it.
-        await screen.findByText('Review Booking');
+            await advanceFromSeatsToReview();
 
             // Go back to the departing leg so the error has a leg to correct.
-            fireEvent.click(screen.getByText('← Back'));
+            fireEvent.click(screen.getByText('← Back to Bags & Extras'));
+            await screen.findByText(/bags & travel extras/i);
+            fireEvent.click(screen.getByText('← Back to Seats'));
+            await screen.findByText('Select Your Seats');
             fireEvent.click(screen.getByRole('tab', { name: /Departing/ }));
-            fireEvent.click(screen.getByText('Review Booking →'));
-        // Advancing now awaits the seat hold (#74), so step 3 arrives
-        // after the click rather than during it.
-        await screen.findByText('Review Booking');
+            await advanceFromSeatsToReview();
             fireEvent.click(await preparePayment('$250'));
 
             // The error names leg 1, so the returning map must be the one shown.
@@ -1217,9 +1208,8 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByTitle('Select Seat 11A'));
             fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
             fireEvent.click(await screen.findByTitle('Select Seat 12B'));
-            fireEvent.click(screen.getByText('Review Booking →'));
+            await advanceFromSeatsToReview();
 
-            await screen.findByText('Review Booking');
             expect(mockHoldChosenSeatsAction).toHaveBeenCalledWith({
                 checkoutId: expect.stringMatching(/^[0-9a-f-]{36}$/i),
                 claims: [
@@ -1246,7 +1236,7 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByTitle('Select Seat 11A'));
             fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
             fireEvent.click(await screen.findByTitle('Select Seat 11A'));
-            fireEvent.click(screen.getByText('Review Booking →'));
+            fireEvent.click(screen.getByText('Continue to Bags & Extras →'));
 
             expect(await screen.findByRole('alert')).toHaveTextContent(
                 /Seat 11A on the returning flight is being held in another checkout/i,
@@ -1283,13 +1273,13 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
             // The map re-renders for the new leg before 11A is selectable again.
             fireEvent.click(await screen.findByTitle('Select Seat 11A'));
-            fireEvent.click(screen.getByText('Review Booking →'));
+            fireEvent.click(screen.getByText('Continue to Bags & Extras →'));
 
             await screen.findByRole('alert');
 
             // Advancing again now stops on the missing seat rather than
             // silently asking for the dead one a second time.
-            fireEvent.click(screen.getByText('Review Booking →'));
+            fireEvent.click(screen.getByText('Continue to Bags & Extras →'));
             expect(await screen.findByRole('alert')).toHaveTextContent(/seat on the return flight for Passenger 1/i);
         });
 
@@ -1300,7 +1290,7 @@ describe('BookingCheckoutWizard', () => {
 
             // Seat the outbound only, then try to move on.
             fireEvent.click(screen.getByTitle('Select Seat 11A'));
-            fireEvent.click(screen.getByText('Review Booking →'));
+            fireEvent.click(screen.getByText('Continue to Bags & Extras →'));
 
             expect(screen.getByText('Select Your Seats')).toBeInTheDocument();
             expect(screen.getByRole('alert')).toHaveTextContent(/seat on the return flight for Passenger 1/i);
@@ -1310,10 +1300,7 @@ describe('BookingCheckoutWizard', () => {
 
             // Seating the return unblocks the step.
             fireEvent.click(screen.getByTitle('Select Seat 12C'));
-            fireEvent.click(screen.getByText('Review Booking →'));
-        // Advancing now awaits the seat hold (#74), so step 3 arrives
-        // after the click rather than during it.
-        await screen.findByText('Review Booking');
+            await advanceFromSeatsToReview();
             expect(screen.getByRole('heading', { name: 'Review Booking' })).toBeInTheDocument();
         });
 
@@ -1328,10 +1315,7 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByTitle('Select Seat 11A'));
             fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
             fireEvent.click(screen.getByTitle('Select Seat 12C'));
-            fireEvent.click(screen.getByText('Review Booking →'));
-        // Advancing now awaits the seat hold (#74), so step 3 arrives
-        // after the click rather than during it.
-        await screen.findByText('Review Booking');
+            await advanceFromSeatsToReview();
 
             const legs = screen.getAllByTestId('review-leg');
             expect(legs).toHaveLength(2);
@@ -1372,8 +1356,7 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByTitle('Select Seat 11A'));
             fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
             fireEvent.click(screen.getByTitle('Select Seat 12C'));
-            fireEvent.click(screen.getByText('Review Booking →'));
-            await screen.findByText('Review Booking');
+            await advanceFromSeatsToReview();
 
             const [previous, later] = screen.getAllByTestId('review-leg');
             expect(previous).toHaveTextContent('Arrives Aug 16, 2026 at 18:05 PDT (previous day)');
@@ -1391,10 +1374,7 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByTitle('Select Seat 11A'));
             fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
             fireEvent.click(screen.getByTitle('Select Seat 12C'));
-            fireEvent.click(screen.getByText('Review Booking →'));
-        // Advancing now awaits the seat hold (#74), so step 3 arrives
-        // after the click rather than during it.
-        await screen.findByText('Review Booking');
+            await advanceFromSeatsToReview();
 
             const [departing, returning] = screen.getAllByTestId('review-leg');
             expect(departing).toHaveTextContent('Ada Lovelace');
@@ -1413,10 +1393,7 @@ describe('BookingCheckoutWizard', () => {
             fillTraveler(container);
             fireEvent.click(screen.getByText('Select Seats →'));
             fireEvent.click(screen.getByTitle('Select Seat 11A'));
-            fireEvent.click(screen.getByText('Review Booking →'));
-        // Advancing now awaits the seat hold (#74), so step 3 arrives
-        // after the click rather than during it.
-        await screen.findByText('Review Booking');
+            await advanceFromSeatsToReview();
 
             const legs = screen.getAllByTestId('review-leg');
             expect(legs).toHaveLength(1);
@@ -1440,10 +1417,7 @@ describe('BookingCheckoutWizard', () => {
             fillTraveler(container);
             fireEvent.click(screen.getByText('Select Seats →'));
             fireEvent.click(screen.getByTitle('Select Seat 11A'));
-            fireEvent.click(screen.getByText('Review Booking →'));
-        // Advancing now awaits the seat hold (#74), so step 3 arrives
-        // after the click rather than during it.
-        await screen.findByText('Review Booking');
+            await advanceFromSeatsToReview();
 
             expect(screen.queryByText('Fare breakdown')).not.toBeInTheDocument();
             expect(screen.getAllByText('Ada Lovelace')).toHaveLength(1);
@@ -1467,10 +1441,7 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByText(/Auto-Assign Adjacent Seats/i));
             fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
             fireEvent.click(screen.getByText(/Auto-Assign Adjacent Seats/i));
-            fireEvent.click(screen.getByText('Review Booking →'));
-        // Advancing now awaits the seat hold (#74), so step 3 arrives
-        // after the click rather than during it.
-        await screen.findByText('Review Booking');
+            await advanceFromSeatsToReview();
 
             expect(screen.getByText('Fare breakdown')).toBeInTheDocument();
             // Named once per leg above, then once more against their fare.
@@ -1542,11 +1513,8 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByTitle('Select Seat 11A'));
             fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
             fireEvent.click(screen.getByTitle('Select Seat 12C'));
+            await advanceFromSeatsToReview();
 
-            fireEvent.click(screen.getByText('Review Booking →'));
-        // Advancing now awaits the seat hold (#74), so step 3 arrives
-        // after the click rather than during it.
-        await screen.findByText('Review Booking');
             // Each seat sits under its own leg rather than in one pooled list.
             const [departing, returning] = screen.getAllByTestId('review-leg');
             expect(departing).toHaveTextContent('Seat 11A');
@@ -1569,7 +1537,8 @@ describe('BookingCheckoutWizard', () => {
                     }],
                     // One checkout owns both the temporary claims and the
                     // idempotent booking that will eventually consume them.
-                    idempotencyKey: checkoutId
+                    idempotencyKey: checkoutId,
+                    ancillariesByPassenger: { 0: ['CARRY_ON'] },
                 });
             });
         });
@@ -1603,11 +1572,8 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByTitle('Select Seat 11A'));
             fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
             fireEvent.click(screen.getByTitle('Select Seat 12C'));
+            await advanceFromSeatsToReview();
 
-            fireEvent.click(screen.getByText('Review Booking →'));
-        // Advancing now awaits the seat hold (#74), so step 3 arrives
-        // after the click rather than during it.
-        await screen.findByText('Review Booking');
             fireEvent.click(await preparePayment('$250'));
 
             await waitFor(() => {
@@ -1675,10 +1641,8 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByTitle('Select Seat 11A'));
             fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
             fireEvent.click(screen.getByTitle('Select Seat 12C'));
-            fireEvent.click(screen.getByText('Review Booking →'));
-        // Advancing now awaits the seat hold (#74), so step 3 arrives
-        // after the click rather than during it.
-        await screen.findByText('Review Booking');
+            await advanceFromSeatsToReview();
+
             fireEvent.click(await preparePayment('$250'));
 
             await waitFor(() => {
@@ -1730,8 +1694,7 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByTitle('Select Seat 11A'));
             fireEvent.click(screen.getByRole('tab', { name: /Returning/ }));
             fireEvent.click(screen.getByTitle('Select Seat 12C'));
-            fireEvent.click(screen.getByText('Review Booking →'));
-            await screen.findByText('Review Booking');
+            await advanceFromSeatsToReview();
             fireEvent.click(await preparePayment('$250'));
 
             await waitFor(() => {
@@ -1764,4 +1727,137 @@ describe('BookingCheckoutWizard', () => {
             expect(screen.getAllByRole('tab')[1]).toHaveTextContent('seat needed');
         });
     });
+
+    describe('BookingCheckoutWizard step 3: Bags & Extras', () => {
+        const renderWizard = (cabinClass: 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST' = 'ECONOMY') => {
+            const utils = render(<BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} cabinClass={cabinClass} />);
+            return utils;
+        };
+
+        const fillValidPassengerInfo = (container: HTMLElement) => {
+            fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Alice' } });
+            fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Smith' } });
+            fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1995-05-15' } });
+            fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US1234567' } });
+        };
+
+        const selectSeat = (seatId = '11A') => {
+            fireEvent.click(screen.getByTitle(`Select Seat ${seatId}`));
+        };
+
+        const goToStep3 = async () => {
+            const { container } = renderWizard();
+            fillValidPassengerInfo(container);
+            fireEvent.click(screen.getByRole('button', { name: /select seats/i }));
+            selectSeat('11A');
+            fireEvent.click(screen.getByRole('button', { name: /continue to bags & extras/i }));
+            await screen.findByText(/bags & travel extras/i);
+            return { container };
+        };
+
+        it('navigates from Seats (Step 2) to Bags & Extras (Step 3) and displays options', async () => {
+            const { container } = renderWizard();
+            fillValidPassengerInfo(container);
+            fireEvent.click(screen.getByRole('button', { name: /select seats/i }));
+
+            selectSeat('11A');
+            fireEvent.click(screen.getByRole('button', { name: /continue to bags & extras/i }));
+
+            expect(await screen.findByText(/step 3 of 5/i)).toBeInTheDocument();
+            expect(screen.getByText(/bags & travel extras/i)).toBeInTheDocument();
+            expect(screen.getByLabelText(/first checked bag/i)).toBeInTheDocument();
+            expect(screen.getByLabelText(/priority boarding/i)).toBeInTheDocument();
+        });
+
+        it('toggles checked bags and updates running total', async () => {
+            await goToStep3();
+
+            const bag1Checkbox = screen.getByLabelText(/first checked bag/i);
+            fireEvent.click(bag1Checkbox);
+
+            // Subtotal shows $35
+            expect(screen.getByText(/extras total: \$35/i)).toBeInTheDocument();
+
+            // 2nd bag is now enabled
+            const bag2Checkbox = screen.getByLabelText(/second checked bag/i);
+            expect(bag2Checkbox).not.toBeDisabled();
+            fireEvent.click(bag2Checkbox);
+
+            // Subtotal shows $80 ($35 + $45)
+            expect(screen.getByText(/extras total: \$80/i)).toBeInTheDocument();
+        });
+
+        it('unchecking first bag automatically unchecks and disables second bag', async () => {
+            await goToStep3();
+
+            const bag1Checkbox = screen.getByLabelText(/first checked bag/i);
+            fireEvent.click(bag1Checkbox);
+
+            const bag2Checkbox = screen.getByLabelText(/second checked bag/i);
+            fireEvent.click(bag2Checkbox);
+            expect(screen.getByText(/extras total: \$80/i)).toBeInTheDocument();
+
+            // Uncheck bag 1
+            fireEvent.click(bag1Checkbox);
+            expect(bag1Checkbox).not.toBeChecked();
+            expect(bag2Checkbox).not.toBeChecked();
+            expect(bag2Checkbox).toBeDisabled();
+            expect(screen.getByText(/extras total: \$0/i)).toBeInTheDocument();
+        });
+
+        it('navigates backward to Step 2 and forward to Step 4', async () => {
+            await goToStep3();
+
+            // Back to seats
+            fireEvent.click(screen.getByRole('button', { name: /back to seats/i }));
+            expect(screen.getByText(/step 2 of 5/i)).toBeInTheDocument();
+
+            // Forward back to extras and then to payment
+            fireEvent.click(screen.getByRole('button', { name: /continue to bags & extras/i }));
+            await screen.findByText(/bags & travel extras/i);
+            fireEvent.click(screen.getByRole('button', { name: /continue to review & payment/i }));
+            expect(screen.getByText(/step 4 of 5/i)).toBeInTheDocument();
+        });
+
+        it('displays cabin inclusions for business class', async () => {
+            const { container } = renderWizard('BUSINESS');
+            fillValidPassengerInfo(container);
+            fireEvent.click(screen.getByRole('button', { name: /select seats/i }));
+            selectSeat('4A');
+            fireEvent.click(screen.getByRole('button', { name: /continue to bags & extras/i }));
+
+            await screen.findByText(/bags & travel extras/i);
+            expect(screen.getAllByText(/included with your cabin/i).length).toBeGreaterThan(0);
+        });
+
+        it('passes selected ancillaries to payment and booking actions', async () => {
+            await goToStep3();
+            fireEvent.click(screen.getByLabelText(/first checked bag/i));
+            fireEvent.click(screen.getByLabelText(/priority boarding/i));
+            fireEvent.click(screen.getByRole('button', { name: /continue to review & payment/i }));
+
+            expect(screen.getByText(/step 4 of 5/i)).toBeInTheDocument();
+            expect(screen.getByText(/extras total: \$50/i)).toBeInTheDocument();
+
+            fireEvent.click(await preparePayment('$150'));
+            expect(mockStartCheckoutPaymentAction).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    ancillariesByPassenger: expect.objectContaining({
+                        0: expect.arrayContaining(['CHECKED_BAG_1', 'PRIORITY_BOARDING'])
+                    })
+                })
+            );
+
+            await waitFor(() => {
+                expect(mockBookFlightAction).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        ancillariesByPassenger: expect.objectContaining({
+                            0: expect.arrayContaining(['CHECKED_BAG_1', 'PRIORITY_BOARDING'])
+                        })
+                    })
+                );
+            });
+        });
+    });
 });
+
