@@ -119,7 +119,7 @@ const TitleBar: React.FC = () => {
         '/book': 'Book Flight',
         '/travelguide': 'Travel Guide',
         '/profile': 'Profile',
-        '/flights': 'Flight Status',
+        '/flight-status': 'Flight Status',
         '/admin': 'Admin Dashboard',
         '/admin/travelguide': 'Manage City Guides',
     };
@@ -346,8 +346,8 @@ const TitleBar: React.FC = () => {
                             <li className={pathname === '/travelguide' ? 'selected' : ''}>
                                 <Link href="/travelguide">Travel Guide</Link>
                             </li>
-                            <li className={pathname === '/flights' ? 'selected' : ''}>
-                                <Link href="/flights">Flight Status</Link>
+                            <li className={pathname === '/flight-status' ? 'selected' : ''}>
+                                <Link href="/flight-status">Flight Status</Link>
                             </li>
                             {/* Signed in only. Check-in needs a booking, so an
                                 anonymous visitor following it reaches a page

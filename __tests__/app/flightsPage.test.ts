@@ -1,173 +1,20 @@
 /** @jest-environment node */
 
-jest.mock('@/lib/prisma', () => ({
-    prisma: { flight: { findMany: jest.fn() } },
+import { redirect, RedirectType } from 'next/navigation';
+import FlightsPage from '@/app/flights/page';
+
+jest.mock('next/navigation', () => ({
+    redirect: jest.fn(),
+    RedirectType: { replace: 'replace', push: 'push' },
 }));
-jest.mock('@/lib/serverClock', () => ({ serverRenderTime: jest.fn() }));
 
-import { prisma } from '@/lib/prisma';
-import FlightsPage, { metadata } from '@/app/flights/page';
-import { serverRenderTime } from '@/lib/serverClock';
-
-const findMany = prisma.flight.findMany as unknown as jest.Mock;
-const mockedServerRenderTime = serverRenderTime as unknown as jest.Mock;
-const renderedAt = Date.parse('2026-08-17T12:00:00.000Z');
-
-/**
- * The status board asked for every flight ever scheduled and serialized the lot
- * into the RSC payload on every request — 1420 rows against the current seed,
- * spanning a year either side of today, on a page that answers "is my flight on
- * time" (#153).
- */
-describe('flight status board page', () => {
+describe('FlightsPage', () => {
     beforeEach(() => {
-        findMany.mockReset();
-        findMany.mockResolvedValue([]);
-        mockedServerRenderTime.mockReset();
-        mockedServerRenderTime.mockResolvedValue(renderedAt);
+        jest.clearAllMocks();
     });
 
-    const queryArgs = async () => {
-        await FlightsPage();
-        expect(findMany).toHaveBeenCalledTimes(1);
-        return findMany.mock.calls[0][0];
-    };
-
-    it('describes a scheduled phase rather than promising live on-time data', () => {
-        expect(metadata.description)
-            .toBe('Check a Mona Airways flight\'s scheduled phase or airline-set status.');
-        expect(metadata.description).not.toMatch(/on time|live/i);
-    });
-
-    it('asks for a window around now rather than the whole table', async () => {
-        const { where } = await queryArgs();
-
-        const { gte, lte } = where.departureDate;
-        expect(gte).toBeInstanceOf(Date);
-        expect(lte).toBeInstanceOf(Date);
-
-        // Opens in the past, so a flight that has just left is still answerable,
-        // and closes in the future.
-        expect(gte.getTime()).toBeLessThan(renderedAt);
-        expect(lte.getTime()).toBeGreaterThan(renderedAt);
-
-        // Bounded on both sides: a window measured in days, not the 15 months
-        // the seeded table spans.
-        const spanDays = (lte.getTime() - gte.getTime()) / 86_400_000;
-        expect(spanDays).toBeLessThanOrEqual(10);
-    });
-
-    it('gives the board the same server clock that bounded its query', async () => {
-        const board = await FlightsPage();
-
-        expect(mockedServerRenderTime).toHaveBeenCalledTimes(1);
-        expect(board.props.renderedAt).toBe(renderedAt);
-        const { gte, lte } = findMany.mock.calls[0][0].where.departureDate;
-        expect(gte.toISOString()).toBe('2026-08-17T10:00:00.000Z');
-        expect(lte.toISOString()).toBe('2026-08-24T12:00:00.000Z');
-    });
-
-    it('caps how many rows it will serialize even inside that window', async () => {
-        // The window bounds the query against today's data; `take` is what
-        // keeps a denser schedule from reintroducing the same defect.
-        const { take } = await queryArgs();
-
-        expect(take).toBeGreaterThan(0);
-        expect(take).toBeLessThanOrEqual(200);
-    });
-
-    it('reads the soonest departures first, so the cap drops the furthest away', async () => {
-        const { orderBy } = await queryArgs();
-
-        expect(orderBy).toEqual({ departureDate: 'asc' });
-    });
-
-    it('asks only for the columns the board renders', async () => {
-        const { select } = await queryArgs();
-
-        expect(Object.keys(select).sort()).toEqual([
-            'airline', 'departureDate', 'durationMinutes', 'flightNumber', 'fromAirport', 'id',
-            'priceCents', 'status', 'toAirport',
-        ]);
-        // Pinning the list catches a column arriving that nothing reads. It
-        // does not catch the opposite -- the board growing a field the select
-        // never adds -- which is how the arrival line shipped rendering
-        // nothing at all (#84). `renders every field it asks for` below is the
-        // half that watches that direction.
-        // The route comes from the airports the flight references, not from the
-        // prose columns beside them (#73).
-        expect(select.fromAirport).toEqual({ select: { label: true } });
-        expect(select.toAirport).toEqual({ select: { label: true } });
-        // The cabin row counts and seat pattern are a third of what remains
-        // once the window has done its work, and nothing here reads them.
-        for (const unused of ['seatPattern', 'economyRows', 'businessRows', 'firstClassRows', 'premiumEconomyRows']) {
-            expect(select).not.toHaveProperty(unused);
-        }
-    });
-
-    it('selects everything the board needs to render a departure and an arrival', async () => {
-        // The direction the list above cannot see. A component test hands the
-        // board props directly, so a page that stops selecting a field it reads
-        // produces a silently emptier row and nothing fails.
-        const { select } = await queryArgs();
-
-        for (const needed of ['departureDate', 'durationMinutes', 'fromAirport', 'toAirport']) {
-            expect(select).toHaveProperty(needed);
-        }
-    });
-
-    it('gives the board the route its airports name, not the columns beside them', async () => {
-        findMany.mockResolvedValue([{
-            id: 1,
-            fromAirport: { label: 'Seattle, USA' },
-            toAirport: { label: 'Detroit, USA' },
-        }]);
-
-        const { flights } = (await FlightsPage()).props;
-
-        // Also that the relation itself does not travel: it would ride into
-        // the RSC payload as two objects the board never reads.
-        expect(flights).toEqual([{ id: 1, from: 'Seattle, USA', to: 'Detroit, USA' }]);
-    });
-
-
-    describe('the range it tells the board it covers', () => {
-        const rows = (count: number) => Array.from({ length: count }, (_, i) => ({
-            id: i,
-            fromAirport: { label: 'Seattle, USA' },
-            toAirport: { label: 'Detroit, USA' },
-        }));
-
-        it('describes the whole window when everything fits', async () => {
-            findMany.mockResolvedValue(rows(3));
-
-            const { coverage } = (await FlightsPage()).props;
-
-            expect(coverage).toBe('the last 2 hours and the next 7 days');
-        });
-
-        it('counts departures instead of days when the cap truncates', async () => {
-            // Otherwise the board promises a week it does not hold, and a
-            // search for a day-six flight fails against a line saying day seven
-            // is covered — the defect this copy exists to prevent, moved.
-            findMany.mockResolvedValue(rows(200));
-
-            const { coverage } = (await FlightsPage()).props;
-
-            expect(coverage).toBe('the last 2 hours and the next 200 flights');
-            expect(coverage).not.toContain('days');
-        });
-
-        it('states a duration rather than dates, which the rows would contradict', async () => {
-            // The rows format themselves in the viewer's timezone, so an
-            // absolute range stated here sat above rows dated a day either side
-            // of it. Displaying flight times correctly is #84.
-            findMany.mockResolvedValue(rows(3));
-
-            const { coverage } = (await FlightsPage()).props;
-
-            expect(coverage).not.toMatch(/\d{4}/);
-            expect(coverage).toMatch(/^the last /);
-        });
+    it('redirects permanently/replace to /flight-status', () => {
+        FlightsPage();
+        expect(redirect).toHaveBeenCalledWith('/flight-status', RedirectType.replace);
     });
 });

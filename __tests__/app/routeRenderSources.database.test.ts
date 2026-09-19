@@ -11,13 +11,14 @@ jest.mock('@/lib/auth', () => ({ authOptions: {} }));
 jest.mock('next/navigation', () => ({
     notFound: () => { throw new Error('notFound'); },
     redirect: () => { throw new Error('redirect'); },
+    RedirectType: { replace: 'replace', push: 'push' },
 }));
 
 import CheckoutPage from '@/app/checkout/page';
 import ProfilePage from '@/app/profile/page';
 import AdminPage from '@/app/admin/page';
 import AdminFlightsPage from '@/app/admin/flights/page';
-import FlightsPage from '@/app/flights/page';
+import FlightStatusPage from '@/app/flight-status/page';
 
 /**
  * Every page renders the route from the airports the flight references (#73).
@@ -49,7 +50,7 @@ let userId: string;
 beforeAll(async () => {
     const flight = await prisma.flight.create({
         data: {
-            flightNumber: `RTE-${randomUUID().slice(0, 8)}`,
+            flightNumber: `RTE-${randomUUID().slice(0, 6)}`,
             airline: 'Mona Airways',
             ...airportCodesForRoute(ORIGIN, DESTINATION),
             // Inside the seven-day window /admin/flights renders. Outside it,
@@ -237,7 +238,11 @@ describe('the route a page renders', () => {
         // The only converted read whose other coverage mocks Prisma, and the
         // one asking for the relation inside a `select` rather than an
         // `include` -- so this is where that shape meets a real database.
-        expect(await routeHandedOver(() => FlightsPage())).toMatchObject({ from: ORIGIN, to: DESTINATION });
+        const fixtureFlight = await prisma.flight.findUnique({ where: { id: flightId } });
+        const date = fixtureFlight?.departureDate.toISOString().slice(0, 10);
+        expect(await routeHandedOver(() => FlightStatusPage({
+            searchParams: Promise.resolve({ flight: flightNumber, date }),
+        }))).toMatchObject({ from: ORIGIN, to: DESTINATION });
     });
 
     it('comes from the airports on the admin flights table', async () => {
