@@ -68,6 +68,7 @@ model User {
   notifications           Notification[]
   flightScheduleTermsChanges FlightScheduleTermsChange[]
   flightScheduleDeletions    FlightScheduleDeletion[]
+  notesWritten               BookingNote[]
 }
 
 model VerificationToken {
@@ -204,6 +205,7 @@ model Booking {
   legs          ItineraryLeg[]
   statusChanges BookingStatusChange[]
   rebookings    BookingRebooking[]
+  notes         BookingNote[]
 
   @@unique([userId, idempotencyKey])
 }
@@ -687,4 +689,16 @@ model SeatAssignment {
   /// unconditional form here would recreate exactly the constraint that
   /// migration removes.
   @@index([flightId, releasedAt])
+}
+
+model BookingNote {
+  id          String   @id @default(cuid())
+  bookingId   Int
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  actorUserId String
+  actor       User     @relation(fields: [actorUserId], references: [id])
+  text        String
+  createdAt   DateTime @default(now())
+
+  @@index([bookingId, createdAt])
 }
