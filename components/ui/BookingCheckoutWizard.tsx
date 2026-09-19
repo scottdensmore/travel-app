@@ -11,7 +11,7 @@ import type { PassengerInput } from '@/lib/FlightBookingService';
 import type { AncillaryType, CabinClass } from '@prisma/client';
 import { bookFlightAction, holdChosenSeatsAction, startCheckoutPaymentAction } from '@/app/actions';
 import { isActionValidationFailure, type ActionValidationFailure } from '@/lib/actionResult';
-import { CABIN_FARE_PERCENT, calculateBookingAncillariesTotalCents, calculatePassengerFareCents, flightFareCents, formatPrice, getAncillaryPriceCents } from '@/lib/bookingPricing';
+import { CABIN_FARE_PERCENT, calculateBookingAncillariesTotalCents, calculatePassengerFareCents, flightFareCents, formatPrice, getAncillaryPriceCents, calculateFareBreakdown, calculatePassengerAncillaries } from '@/lib/bookingPricing';
 import { BRAND } from '@/lib/brand';
 import { cabinLabel, legDirectionLabel, legFlightClause } from '@/lib/bookingItinerary';
 import { durationLabel, flightArrival, flightDeparture } from '@/lib/flightTime';
@@ -2077,6 +2077,48 @@ export default function BookingCheckoutWizard({
                                     <span>Extras total: {formatPrice(ancillariesTotalCents)}</span>
                                 </div>
 
+
+                                {/* Taxes, Fees & Charges Breakdown */}
+                                <details style={{ marginTop: '1rem', background: 'rgba(255,255,255,0.02)', padding: '0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                    <summary style={{ fontSize: '0.9rem', cursor: 'pointer', fontWeight: 'bold', color: '#a78bfa', userSelect: 'none' }}>Taxes, Fees &amp; Charges Breakdown</summary>
+                                    <div style={{ marginTop: '0.75rem', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                        {passengers.map((p, i) => {
+                                            const { totalCents: pAncillaryCents } = calculatePassengerAncillaries(p.cabinClass, ancillariesByPassenger[i] || []);
+                                            return (
+                                                <div key={i} style={{ borderBottom: i < passengers.length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none', paddingBottom: i < passengers.length - 1 ? '0.75rem' : '0' }}>
+                                                    <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>Traveler {i + 1}: {p.firstName} {p.lastName}</div>
+                                                    {flights.map((leg) => {
+                                                        const legFare = calculatePassengerFareCents(flightFareCents(leg), p.cabinClass as CabinClass);
+                                                        const breakdown = calculateFareBreakdown(legFare);
+                                                        return (
+                                                            <div key={leg.id} style={{ marginLeft: '0.5rem', marginBottom: '0.5rem' }}>
+                                                                <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.8rem', marginBottom: '0.25rem' }}>{leg.from} → {leg.to}</div>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                    <span>Base Airfare</span><span>{formatPrice(breakdown.baseAirfareCents)}</span>
+                                                                </div>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                    <span>Government Tax (7.5%)</span><span>{formatPrice(breakdown.governmentTaxCents)}</span>
+                                                                </div>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                    <span>Passenger Facility Charge (PFC)</span><span>{formatPrice(breakdown.pfcCents)}</span>
+                                                                </div>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                    <span>Security Service Fee</span><span>{formatPrice(breakdown.securityFeeCents)}</span>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    {pAncillaryCents > 0 && (
+                                                        <div style={{ marginLeft: '0.5rem', display: 'flex', justifyContent: 'space-between', color: '#a78bfa' }}>
+                                                            <span>Baggage &amp; Extras</span><span>{formatPrice(pAncillaryCents)}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </details>
+
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: 'bold', borderTop: '1px solid rgba(255,255,255,0.08)', marginTop: '1.25rem', paddingTop: '1rem', color: '#34d399' }}>
                                     <span>Estimated Total</span>
                                     <span>{grandTotalPriceDisplay}</span>
@@ -2196,6 +2238,48 @@ export default function BookingCheckoutWizard({
                                 <span>Bags &amp; Extras</span>
                                 <span>{formatPrice(ancillariesTotalCents)}</span>
                             </div>
+
+                            {/* Taxes, Fees & Charges Breakdown */}
+                            <details style={{ marginTop: '1rem', background: 'rgba(255,255,255,0.02)', padding: '0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)', textAlign: 'left' }}>
+                                <summary style={{ fontSize: '0.9rem', cursor: 'pointer', fontWeight: 'bold', color: '#a78bfa', userSelect: 'none' }}>Taxes, Fees &amp; Charges Breakdown</summary>
+                                <div style={{ marginTop: '0.75rem', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                    {bookingResult.passengers.map((p, i) => {
+                                        const { totalCents: pAncillaryCents } = calculatePassengerAncillaries(p.cabinClass as CabinClass, (p.ancillaries ? p.ancillaries.map(a => a.type) : ancillariesByPassenger[i] || []) as import('@prisma/client').AncillaryType[]);
+                                        return (
+                                            <div key={i} style={{ borderBottom: i < bookingResult.passengers.length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none', paddingBottom: i < bookingResult.passengers.length - 1 ? '0.75rem' : '0' }}>
+                                                <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>Traveler {i + 1}: {p.firstName} {p.lastName}</div>
+                                                {flights.map((leg) => {
+                                                    const legFare = calculatePassengerFareCents(flightFareCents(leg), p.cabinClass as CabinClass);
+                                                    const breakdown = calculateFareBreakdown(legFare);
+                                                    return (
+                                                        <div key={leg.id} style={{ marginLeft: '0.5rem', marginBottom: '0.5rem' }}>
+                                                            <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.8rem', marginBottom: '0.25rem' }}>{leg.from} → {leg.to}</div>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                <span>Base Airfare</span><span>{formatPrice(breakdown.baseAirfareCents)}</span>
+                                                            </div>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                <span>Government Tax (7.5%)</span><span>{formatPrice(breakdown.governmentTaxCents)}</span>
+                                                            </div>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                <span>Passenger Facility Charge (PFC)</span><span>{formatPrice(breakdown.pfcCents)}</span>
+                                                            </div>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                <span>Security Service Fee</span><span>{formatPrice(breakdown.securityFeeCents)}</span>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                                {pAncillaryCents > 0 && (
+                                                    <div style={{ marginLeft: '0.5rem', display: 'flex', justifyContent: 'space-between', color: '#a78bfa' }}>
+                                                        <span>Baggage &amp; Extras</span><span>{formatPrice(pAncillaryCents)}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </details>
+
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.1rem', fontWeight: 'bold', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '0.75rem', marginTop: '0.5rem', color: '#34d399' }}>
                                 <span>Confirmed total</span>
                                 <span>{bookingResult.totalPriceCents !== null ? formatPrice(bookingResult.totalPriceCents) : grandTotalPriceDisplay}</span>

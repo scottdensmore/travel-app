@@ -51,6 +51,34 @@ describe('travel document email delivery', () => {
         expect(text).toContain('Economy');
     });
 
+    it('formats plain-text email with fare breakdown details', () => {
+        const text = formatTravelDocumentsEmailText({
+            ...sampleInput,
+            passengers: [
+                {
+                    name: 'Ada Lovelace',
+                    seat: '11A',
+                    cabin: 'Economy',
+                    fareBreakdown: {
+                        baseAirfareCents: 15000,
+                        governmentTaxCents: 1125,
+                        pfcCents: 450,
+                        securityFeeCents: 560,
+                        totalCents: 17135
+                    },
+                    ancillaryTotalCents: 3500
+                }
+            ]
+        });
+        
+        expect(text).toContain('--- Fare Breakdown ---');
+        expect(text).toContain('Base Airfare: $150.00');
+        expect(text).toContain('Government Tax (7.5%): $11.25');
+        expect(text).toContain('Passenger Facility Charge: $4.50');
+        expect(text).toContain('Security Service Fee: $5.60');
+        expect(text).toContain('Baggage & Extras: $35.00');
+    });
+
     it('formats plain-text email with baggage count and priority boarding details', () => {
         const text = formatTravelDocumentsEmailText({
             ...sampleInput,
@@ -98,6 +126,8 @@ describe('travel document email delivery', () => {
         expect(payload.TextBody).toContain('BOOKING-123');
         expect(payload.TextBody).toContain('Seattle, USA to Detroit, USA');
         expect(payload.TextBody).toContain('11A');
+        expect(payload.HtmlBody).toContain('11A');
+        expect(payload.HtmlBody).toContain('Seattle, USA to Detroit, USA');
         expect(payload.TextBody).toContain('11B');
     });
 
@@ -123,6 +153,7 @@ describe('travel document email delivery', () => {
         expect(payload.Text).toContain('MO-456');
         expect(payload.Text).toContain('Seattle, USA to Detroit, USA');
         expect(payload.Text).toContain('11A');
+        expect(payload.HTML).toContain('11A');
         expect(payload.Text).toContain('BOOKING-123');
     });
 

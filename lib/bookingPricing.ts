@@ -147,3 +147,31 @@ export function calculateBookingAncillariesTotalCents(
     }, 0);
 }
 
+export interface FareBreakdown {
+    baseAirfareCents: number;
+    pfcCents: number;
+    securityFeeCents: number;
+    governmentTaxCents: number;
+    totalCents: number;
+}
+
+export function calculateFareBreakdown(passengerFareCents: number): FareBreakdown {
+    let pfcCents = 450;
+    let securityFeeCents = 560;
+    let remaining = passengerFareCents - pfcCents - securityFeeCents;
+    if (remaining < 0) {
+        pfcCents = Math.floor(passengerFareCents * (450 / 1010));
+        securityFeeCents = passengerFareCents - pfcCents;
+        remaining = 0;
+    }
+    const baseAirfareCents = Math.round(remaining / 1.075);
+    const governmentTaxCents = remaining - baseAirfareCents;
+    return {
+        baseAirfareCents,
+        pfcCents,
+        securityFeeCents,
+        governmentTaxCents,
+        totalCents: passengerFareCents
+    };
+}
+

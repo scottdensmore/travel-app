@@ -5,6 +5,7 @@ import {
     calculatePassengerAncillaries,
     flightFareCents,
     getAncillaryPriceCents,
+    calculateFareBreakdown
 } from '@/lib/bookingPricing';
 import { calculateBookingTotal, calculateItineraryTotal, parsePriceToCents } from '@/lib/bookingPricing';
 
@@ -145,5 +146,38 @@ describe('ancillary pricing and cabin allowances', () => {
         expect(getAncillaryPriceCents('CHECKED_BAG_1', 'FIRST')).toBe(0);
         expect(getAncillaryPriceCents('CHECKED_BAG_2', 'FIRST')).toBe(0);
         expect(getAncillaryPriceCents('PRIORITY_BOARDING', 'FIRST')).toBe(0);
+    });
+});
+
+describe('calculateFareBreakdown', () => {
+    it('breaks down passenger fare into base, tax, PFC, and security', () => {
+        // passengerFareCents = 15000 ($150)
+        // PFC = 450, Security = 560
+        // Remaining = 15000 - 450 - 560 = 13990
+        // Base = Math.round(13990 / 1.075) = Math.round(13013.953) = 13014
+        // Tax = 13990 - 13014 = 976
+        const result = calculateFareBreakdown(15000);
+        expect(result.pfcCents).toBe(450);
+        expect(result.securityFeeCents).toBe(560);
+        expect(result.baseAirfareCents).toBe(13014);
+        expect(result.governmentTaxCents).toBe(976);
+        expect(result.totalCents).toBe(15000);
+        
+        // Invariant check
+        expect(result.baseAirfareCents + result.pfcCents + result.securityFeeCents + result.governmentTaxCents).toBe(15000);
+    });
+
+    it('maintains the invariant perfectly for a range of prices without cent drift', () => {
+        for (let price = 2000; price <= 100000; price += 137) {
+            const result = calculateFareBreakdown(price);
+            expect(result.baseAirfareCents + result.pfcCents + result.securityFeeCents + result.governmentTaxCents).toBe(price);
+            expect(result.totalCents).toBe(price);
+        }
+    });
+
+    it('handles fares smaller than the fixed fees gracefully by capping them', () => {
+        const result = calculateFareBreakdown(900); // 900 < 450 + 560
+        expect(result.baseAirfareCents + result.pfcCents + result.securityFeeCents + result.governmentTaxCents).toBe(900);
+        expect(result.totalCents).toBe(900);
     });
 });
