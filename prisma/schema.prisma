@@ -407,6 +407,16 @@ model Flight {
   priceCents      Int
   status          FlightStatus @default(ON_TIME)
 
+  departureTerminal  String?
+  departureGate      String?
+  arrivalTerminal    String?
+  arrivalGate        String?
+  delayReason        String?
+  estimatedDeparture DateTime?    @db.Timestamptz(3)
+  actualDeparture    DateTime?    @db.Timestamptz(3)
+  estimatedArrival   DateTime?    @db.Timestamptz(3)
+  actualArrival      DateTime?    @db.Timestamptz(3)
+
   /// The repeating template that generated this occurrence. Null is honest for
   /// manually authored flights and historical rows whose provenance cannot be
   /// established unambiguously (#237).
