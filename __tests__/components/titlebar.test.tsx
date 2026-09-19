@@ -225,8 +225,8 @@ describe('TitleBar', () => {
         }
     });
 
-    it('renders the correct title and nav link when pathname is /flights', () => {
-        (usePathname as jest.Mock).mockReturnValue('/flights');
+    it('renders the correct title and nav link when pathname is /flight-status', () => {
+        (usePathname as jest.Mock).mockReturnValue('/flight-status');
 
         render(<TitleBar />);
 
@@ -483,7 +483,7 @@ describe('titlebar navigation, scroll affordance, and accessibility', () => {
 
         expect(screen.getByRole('link', { name: 'Book Flight' })).toHaveAttribute('href', '/book');
         expect(screen.getByRole('link', { name: 'Travel Guide' })).toHaveAttribute('href', '/travelguide');
-        expect(screen.getByRole('link', { name: 'Flight Status' })).toHaveAttribute('href', '/flights');
+        expect(screen.getByRole('link', { name: 'Flight Status' })).toHaveAttribute('href', '/flight-status');
         expect(screen.getByRole('link', { name: 'Sign In' })).toHaveAttribute('href', '/login');
         expect(screen.getByRole('link', { name: 'Sign Up' })).toHaveAttribute('href', '/signup');
     });
@@ -529,7 +529,7 @@ describe('titlebar navigation, scroll affordance, and accessibility', () => {
     });
 
     it('scrolls the selected route navigation link into view on route change', () => {
-        (usePathname as jest.Mock).mockReturnValue('/flights');
+        (usePathname as jest.Mock).mockReturnValue('/flight-status');
 
         render(<TitleBar />);
 

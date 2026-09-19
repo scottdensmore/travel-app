@@ -27,7 +27,10 @@ import {
     setFlightScheduleActiveAction,
     updateAccountTimeZoneAction,
     resendBoardingPassAction,
+    searchFlightStatusAction,
 } from '@/app/actions';
+import { FlightStatusService } from '@/lib/flightStatusService';
+import { serverRenderTime } from '@/lib/serverClock';
 import { getServerSession } from 'next-auth';
 import TravelGuideService from '@/lib/TravelGuideService';
 import FlightBookingService from '@/lib/FlightBookingService';
@@ -66,6 +69,14 @@ jest.mock('next/cache', () => ({ revalidatePath: jest.fn() }));
 jest.mock('next/navigation', () => ({ redirect: jest.fn() }));
 jest.mock('@/lib/auth', () => ({ authOptions: {} }));
 jest.mock('@/lib/travelDocumentEmail', () => ({ sendTravelDocumentsEmail: jest.fn() }));
+jest.mock('@/lib/serverClock', () => ({
+    serverRenderTime: jest.fn().mockResolvedValue(1754827200000),
+}));
+jest.mock('@/lib/flightStatusService', () => ({
+    FlightStatusService: {
+        searchFlightStatus: jest.fn(),
+    },
+}));
 
 jest.mock('@/lib/FlightBookingService', () => {
     const bookFlight = jest.fn();
@@ -3888,6 +3899,124 @@ describe('resendBoardingPassAction', () => {
                 ],
             }),
         );
+    });
+});
+
+describe('searchFlightStatusAction', () => {
+    const mockFlightResult = {
+        id: 1,
+        flightNumber: 'MA101',
+        airline: 'Mona Airways',
+        from: 'Seattle, USA',
+        to: 'Detroit, USA',
+        fromAirportCode: 'SEA',
+        toAirportCode: 'DTW',
+        departureDate: '2026-08-10T15:00:00.000Z',
+        durationMinutes: 240,
+        durationFormatted: '4h 00m',
+        status: 'ON_TIME',
+        phase: 'UPCOMING',
+        delayReason: null,
+        estimatedDeparture: null,
+        actualDeparture: null,
+        estimatedArrival: null,
+        actualArrival: null,
+        departure: {
+            date: '2026-08-10',
+            time: '08:00',
+            readableDate: 'Aug 10, 2026',
+            zoneLabel: 'PDT',
+        },
+        arrival: {
+            date: '2026-08-10',
+            time: '15:00',
+            readableDate: 'Aug 10, 2026',
+            zoneLabel: 'EDT',
+            dayOffset: 0,
+        },
+        gates: {
+            departureTerminal: 'Main',
+            departureGate: 'A1',
+            arrivalTerminal: 'Evans',
+            arrivalGate: 'B2',
+        },
+    };
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    it('validates and executes search by flight number', async () => {
+        (FlightStatusService.searchFlightStatus as jest.Mock).mockResolvedValue([mockFlightResult]);
+
+        const result = await searchFlightStatusAction({
+            mode: 'flightNumber',
+            flightNumber: 'MA101',
+            date: '2026-08-10',
+        });
+
+        expect(result).toEqual({
+            ok: true,
+            data: [mockFlightResult],
+        });
+        expect(FlightStatusService.searchFlightStatus).toHaveBeenCalledWith(
+            { mode: 'flightNumber', flightNumber: 'MA101', date: '2026-08-10' },
+            1754827200000,
+        );
+    });
+
+    it('validates and executes search by route', async () => {
+        (FlightStatusService.searchFlightStatus as jest.Mock).mockResolvedValue([mockFlightResult]);
+
+        const result = await searchFlightStatusAction({
+            mode: 'route',
+            from: 'SEA',
+            to: 'DTW',
+            date: '2026-08-10',
+        });
+
+        expect(result).toEqual({
+            ok: true,
+            data: [mockFlightResult],
+        });
+        expect(FlightStatusService.searchFlightStatus).toHaveBeenCalledWith(
+            { mode: 'route', from: 'SEA', to: 'DTW', date: '2026-08-10' },
+            1754827200000,
+        );
+    });
+
+    it('returns validation failure for invalid parameters', async () => {
+        const result = await searchFlightStatusAction({
+            mode: 'route',
+            from: 'SEA',
+            to: 'SEA',
+        });
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+            expect(result.error.code).toBe('VALIDATION_ERROR');
+            expect(result.error.message).toBe('Origin and destination must be different.');
+        }
+        expect(FlightStatusService.searchFlightStatus).not.toHaveBeenCalled();
+    });
+
+    it('returns server error when FlightStatusService throws', async () => {
+        const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+        (FlightStatusService.searchFlightStatus as jest.Mock).mockRejectedValue(new Error('DB failure'));
+
+        const result = await searchFlightStatusAction({
+            mode: 'flightNumber',
+            flightNumber: 'MA101',
+        });
+
+        expect(result).toEqual({
+            ok: false,
+            error: {
+                code: 'SERVER_ERROR',
+                message: 'Unable to retrieve flight status.',
+            },
+        });
+        consoleSpy.mockRestore();
     });
 });
 

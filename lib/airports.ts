@@ -25,6 +25,7 @@ export function airportLocalDate(timeZone: string, instant: Date = new Date()): 
 }
 
 const timeZonesByLabel = new Map(AirportData.map(({ label, timeZone }) => [label, timeZone]));
+const timeZonesByCode = new Map(AirportData.map(({ iataCode, timeZone }) => [iataCode, timeZone]));
 
 /**
  * The timezone of a place, or null when it has no airport record.
@@ -37,8 +38,8 @@ const timeZonesByLabel = new Map(AirportData.map(({ label, timeZone }) => [label
  *
  * Callers fall back to UTC on null rather than failing a customer search.
  */
-export function airportTimeZoneFor(label: string): string | null {
-    return timeZonesByLabel.get(label) ?? null;
+export function airportTimeZoneFor(labelOrCode: string): string | null {
+    return timeZonesByLabel.get(labelOrCode) ?? timeZonesByCode.get(labelOrCode) ?? timeZonesByCode.get(labelOrCode.toUpperCase()) ?? null;
 }
 
 const codesByLabel = new Map(AirportData.map((airport) => [airport.label, airport.iataCode]));
