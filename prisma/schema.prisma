@@ -344,8 +344,29 @@ model Passenger {
   /// Where this traveller sits: one per leg. A traveller is a person; a seat
   /// belongs to a flight, so the two are separate records (#137).
   seatAssignments SeatAssignment[]
+  ancillaries     PassengerAncillary[]
 
   @@index([sensitiveDataExpiresAt])
+}
+
+enum AncillaryType {
+  CARRY_ON
+  CHECKED_BAG_1
+  CHECKED_BAG_2
+  PRIORITY_BOARDING
+  SPECIAL_ASSISTANCE
+}
+
+model PassengerAncillary {
+  id          String        @id @default(cuid())
+  passengerId String
+  passenger   Passenger     @relation(fields: [passengerId], references: [id], onDelete: Cascade)
+  type        AncillaryType
+  priceCents  Int
+  createdAt   DateTime      @default(now())
+
+  @@unique([passengerId, type])
+  @@index([passengerId])
 }
 
 /// Whether a flight is running.
