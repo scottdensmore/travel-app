@@ -2154,6 +2154,14 @@ export default function BookingCheckoutWizard({
                         <p style={{ color: '#34d399', marginBottom: '2rem', fontWeight: 'bold' }}>Confirmed total: {bookingResult.totalPriceCents !== null ? formatPrice(bookingResult.totalPriceCents) : grandTotalPriceDisplay}</p>
 
                         {/* Payment receipt breakdown */}
+                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginBottom: '2rem' }}>
+                            <a href={`/api/documents/e-ticket/${bookingResult.id}`} target="_blank" rel="noreferrer" style={{ padding: '0.5rem 1rem', background: '#34d399', color: '#000', borderRadius: '4px', textDecoration: 'none', fontWeight: 'bold' }}>
+                                Download E-Ticket (PDF)
+                            </a>
+                            <a href={`/api/documents/invoice/${bookingResult.id}`} target="_blank" rel="noreferrer" style={{ padding: '0.5rem 1rem', background: '#a78bfa', color: '#000', borderRadius: '4px', textDecoration: 'none', fontWeight: 'bold' }}>
+                                Download Receipt (PDF)
+                            </a>
+                        </div>
                         <div style={{
                             width: '100%',
                             maxWidth: '600px',
