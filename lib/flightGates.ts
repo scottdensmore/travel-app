@@ -21,7 +21,7 @@ function hashString(str: string): number {
         hash = (hash << 5) - hash + str.charCodeAt(i);
         hash |= 0;
     }
-    return Math.abs(hash);
+    return hash >>> 0;
 }
 
 const AIRPORT_TERMINAL_CONFIG: Record<string, { terminals: string[]; concourses: string[] }> = {
@@ -36,7 +36,7 @@ const AIRPORT_TERMINAL_CONFIG: Record<string, { terminals: string[]; concourses:
 };
 
 function fallbackGate(flightNumber: string, airportCode: string): { terminal: string; gate: string } {
-    const normalizedCode = airportCode.toUpperCase();
+    const normalizedCode = airportCode.trim().toUpperCase();
     const config = AIRPORT_TERMINAL_CONFIG[normalizedCode] || {
         terminals: ['Terminal 1', 'Terminal 2'],
         concourses: ['A', 'B', 'C'],
@@ -44,8 +44,8 @@ function fallbackGate(flightNumber: string, airportCode: string): { terminal: st
 
     const hash = hashString(`${flightNumber}-${normalizedCode}`);
     const terminal = config.terminals[hash % config.terminals.length];
-    const concourse = config.concourses[(hash >> 2) % config.concourses.length];
-    const gateNumber = ((hash >> 4) % 24) + 1;
+    const concourse = config.concourses[(hash >>> 2) % config.concourses.length];
+    const gateNumber = ((hash >>> 4) % 24) + 1;
 
     return {
         terminal,

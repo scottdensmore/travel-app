@@ -3,7 +3,7 @@ import { prisma } from '../lib/prisma';
 import { airportCodesForRoute } from '../lib/airports';
 
 test.describe('Public Flight Status Tracker', () => {
-    const flightNumber = `FS-${Date.now().toString().slice(-6)}`;
+    const flightNumber = `FS-${Date.now().toString().slice(-3)}${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
 
     test.beforeAll(async () => {
         const route = airportCodesForRoute('Seattle, USA', 'Detroit, USA');
