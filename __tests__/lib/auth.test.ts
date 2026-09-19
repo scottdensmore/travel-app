@@ -242,6 +242,23 @@ describe('authOptions jwt/session callbacks', () => {
         expect(stale).toMatchObject({ invalidated: true });
     });
 
+    it('jwt callback refreshes name and picture from current user', async () => {
+        mockedPrisma.user.findUnique.mockResolvedValueOnce({
+            name: 'David Miller',
+            image: '/avatars/david.jpg',
+            role: 'USER',
+            authVersion: 1,
+            emailVerified: new Date(),
+        });
+        const current = await jwt({
+            token: { id: 'user-1', role: 'USER', authVersion: 1 }
+        });
+        expect(current).toMatchObject({
+            name: 'David Miller',
+            picture: '/avatars/david.jpg',
+        });
+    });
+
     it('invalidates verified staff proof after eight hours', async () => {
         mockedPrisma.user.findUnique.mockResolvedValue({
             role: 'ADMIN',

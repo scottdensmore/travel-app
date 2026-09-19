@@ -554,6 +554,21 @@ export default function BookingCheckoutWizard({
         }
     }, [paymentSession, step]);
 
+    const isFirstRender = useRef(true);
+    useEffect(() => {
+        if (isFirstRender.current) {
+            isFirstRender.current = false;
+            return;
+        }
+        try {
+            if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        } catch {
+            // Ignore in environments without window.scrollTo implementation (e.g., JSDOM)
+        }
+    }, [step]);
+
     useEffect(() => {
         if ((step !== 3 && step !== 4) || holdDeadline === null) return;
 

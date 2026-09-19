@@ -117,4 +117,23 @@ describe('dashboard responsive layout rules', () => {
             + '}',
         );
     });
+
+    it('prevents checkout wizard buttons from squishing, wrapping and overflowing on desktop', () => {
+        expect(css).toContain('.booking-wizard-actions button {\n  width: auto;\n  height: auto;\n  min-height: 48px;\n  white-space: nowrap;');
+        expect(css).toContain(
+            '.booking-traveler-primary-actions {\n'
+            + '  display: flex;\n'
+            + '  align-items: center;\n'
+            + '  gap: 1.5rem;\n'
+            + '  flex-shrink: 0;\n'
+            + '  white-space: nowrap;\n'
+            + '  margin-left: auto;\n'
+            + '}',
+        );
+    });
+
+    it('stacks checkout wizard actions and expands buttons to full width on mobile', () => {
+        expect(css).toMatch(/@media \(max-width: 480px\) \{[\s\S]*?\.booking-wizard-actions,\s*\.booking-traveler-primary-actions,\s*\.booking-success-actions \{\s*align-items: stretch;\s*flex-direction: column;/);
+        expect(css).toMatch(/@media \(max-width: 480px\) \{[\s\S]*?\.booking-wizard-actions button,\s*\.booking-success-actions > a \{\s*box-sizing: border-box;\s*width: 100%;/);
+    });
 });
