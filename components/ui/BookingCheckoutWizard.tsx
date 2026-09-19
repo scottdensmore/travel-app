@@ -1788,7 +1788,7 @@ export default function BookingCheckoutWizard({
                                                     />
                                                     <label htmlFor={`passenger-${pIdx}-bag1`} style={{ cursor: 'pointer', userSelect: 'none' }}>
                                                         <span style={{ display: 'block', fontWeight: 600, fontSize: '0.95rem', color: '#fff' }}>
-                                                            First checked bag
+                                                            1st Checked Bag (First checked bag)
                                                         </span>
                                                         <span style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>
                                                             Standard bag up to 50 lbs (23 kg)
@@ -1825,7 +1825,7 @@ export default function BookingCheckoutWizard({
                                                     />
                                                     <label htmlFor={`passenger-${pIdx}-bag2`} style={{ cursor: hasBag1 ? 'pointer' : 'not-allowed', userSelect: 'none' }}>
                                                         <span style={{ display: 'block', fontWeight: 600, fontSize: '0.95rem', color: '#fff' }}>
-                                                            Second checked bag
+                                                            2nd Checked Bag (Second checked bag)
                                                         </span>
                                                         <span style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>
                                                             {hasBag1 ? 'Standard bag up to 50 lbs (23 kg)' : 'Requires 1st checked bag'}
@@ -2058,7 +2058,7 @@ export default function BookingCheckoutWizard({
                                 )}
 
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'rgba(255,255,255,0.75)', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                                    <span>Bags &amp; travel extras</span>
+                                    <span>Bags &amp; Extras</span>
                                     <span>Extras total: {formatPrice(ancillariesTotalCents)}</span>
                                 </div>
 
@@ -2170,7 +2170,7 @@ export default function BookingCheckoutWizard({
                                 <span>{totalPriceDisplay}</span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'rgba(255,255,255,0.75)', marginBottom: '0.5rem' }}>
-                                <span>Bags &amp; extras</span>
+                                <span>Bags &amp; Extras</span>
                                 <span>{formatPrice(ancillariesTotalCents)}</span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.1rem', fontWeight: 'bold', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '0.75rem', marginTop: '0.5rem', color: '#34d399' }}>
@@ -2293,7 +2293,7 @@ export default function BookingCheckoutWizard({
                                             <div style={{ padding: '0 1.5rem 1rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                                                 {pBagCount > 0 && (
                                                     <span style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.1)', color: '#e5e7eb', padding: '3px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                                        🧳 {pBagCount} Checked Bag(s)
+                                                        🧳 {pBagCount} Checked Bag{pBagCount > 1 ? 's' : ''}
                                                     </span>
                                                 )}
                                                 {pHasPriority && (

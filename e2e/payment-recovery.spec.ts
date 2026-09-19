@@ -49,7 +49,9 @@ test.describe('Staff payment recovery', () => {
         await page.getByPlaceholder('A00000000').fill('OPS-RECOVERY-1');
         await page.getByRole('button', { name: 'Select Seats →' }).click();
         await page.locator('button[title^="Select Seat"]').first().click();
-        await page.getByRole('button', { name: 'Review Booking →' }).click();
+        await page.getByRole('button', { name: 'Continue to Bags & Extras →' }).click();
+        await expect(page.locator('text=Step 3 of 5')).toBeVisible();
+        await page.getByRole('button', { name: 'Continue to Review & Payment →' }).click();
         await openCheckoutPayment(page);
 
         const attempt = await prisma.paymentAttempt.findFirstOrThrow({
