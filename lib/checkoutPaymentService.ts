@@ -69,21 +69,23 @@ export class PaymentCancellationIncompleteError extends Error {
 
 
 function requestFingerprint(input: Omit<CheckoutPaymentInput, 'userId'>): string {
-    const sortedAncillaries = input.ancillariesByPassenger
-        ? Object.entries(input.ancillariesByPassenger)
+    const rawAncillaries = input.ancillariesByPassenger;
+    const sortedAncillaries = rawAncillaries
+        ? Object.entries(rawAncillaries)
+            .filter(([, types]) => types && types.length > 0)
             .sort(([a], [b]) => Number(a) - Number(b))
             .map(([idx, types]) => ({
                 passengerIndex: Number(idx),
                 types: [...types].sort(),
             }))
-        : undefined;
+        : [];
 
     const payload: unknown[] = [
         input.checkoutId,
         input.flightIds,
         input.passengers.map(passenger => [passenger.seatNumbers, passenger.cabinClass]),
     ];
-    if (sortedAncillaries !== undefined) {
+    if (sortedAncillaries.length > 0) {
         payload.push(sortedAncillaries);
     }
     return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
