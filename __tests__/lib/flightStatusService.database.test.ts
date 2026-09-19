@@ -87,4 +87,20 @@ describe('FlightStatusService', () => {
         expect(results).toHaveLength(1);
         expect(results[0].phase).toBe('BOARDING');
     });
+
+    it('finds flight status by route without date using origin airport local date', async () => {
+        // At 20:00 PDT on 2026-08-10, UTC is 2026-08-11T03:00:00.000Z.
+        // Origin SEA is America/Los_Angeles, so the local calendar day is 2026-08-10.
+        const renderedAt = Date.parse('2026-08-11T03:00:00.000Z');
+        const results = await FlightStatusService.searchFlightStatus({
+            mode: 'route',
+            from: 'SEA',
+            to: 'DTW',
+        }, renderedAt);
+
+        const match = results.find(r => r.flightNumber === flightNumber);
+        expect(match).toBeDefined();
+        expect(match?.flightNumber).toBe(flightNumber);
+    });
 });
+

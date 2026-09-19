@@ -3,7 +3,7 @@ import { flightRouteInclude, withRouteLabels } from '@/lib/flightRoute';
 import { flightPhaseAt, type FlightPhase } from '@/lib/flightPhase';
 import { getEffectiveFlightGates, type EffectiveFlightGates } from '@/lib/flightGates';
 import { airportDayBounds, durationLabel, flightArrival, flightDeparture, type LocalArrival, type LocalDeparture } from '@/lib/flightTime';
-import { airportTimeZoneFor } from '@/lib/airports';
+import { airportLocalDate, airportTimeZoneFor } from '@/lib/airports';
 import type { FlightStatusSearchInput } from '@/lib/validation';
 import type { FlightStatus, Prisma } from '@prisma/client';
 
@@ -52,7 +52,7 @@ export class FlightStatusService {
                 });
                 const zone = (candidate ? airportTimeZoneFor(candidate.fromAirportCode) : null) ?? 'UTC';
                 const { start, end } = airportDayBounds(input.date, zone);
-                whereClause.departureDate = { gte: start, lte: end };
+                whereClause.departureDate = { gte: start, lt: end };
             } else {
                 whereClause.departureDate = {
                     gte: new Date(renderedAt - 24 * 60 * 60 * 1000),
@@ -64,9 +64,9 @@ export class FlightStatusService {
             whereClause.toAirportCode = input.to.toUpperCase();
 
             const zone = airportTimeZoneFor(input.from) ?? 'UTC';
-            const dateStr = input.date || new Date(renderedAt).toISOString().slice(0, 10);
+            const dateStr = input.date || airportLocalDate(zone, new Date(renderedAt));
             const { start, end } = airportDayBounds(dateStr, zone);
-            whereClause.departureDate = { gte: start, lte: end };
+            whereClause.departureDate = { gte: start, lt: end };
         }
 
         const flights = await prisma.flight.findMany({
