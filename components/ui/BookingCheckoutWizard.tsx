@@ -1788,7 +1788,7 @@ export default function BookingCheckoutWizard({
                                                     />
                                                     <label htmlFor={`passenger-${pIdx}-bag1`} style={{ cursor: 'pointer', userSelect: 'none' }}>
                                                         <span style={{ display: 'block', fontWeight: 600, fontSize: '0.95rem', color: '#fff' }}>
-                                                            1st Checked Bag (First checked bag)
+                                                            1st Checked Bag
                                                         </span>
                                                         <span style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>
                                                             Standard bag up to 50 lbs (23 kg)
@@ -1825,7 +1825,7 @@ export default function BookingCheckoutWizard({
                                                     />
                                                     <label htmlFor={`passenger-${pIdx}-bag2`} style={{ cursor: hasBag1 ? 'pointer' : 'not-allowed', userSelect: 'none' }}>
                                                         <span style={{ display: 'block', fontWeight: 600, fontSize: '0.95rem', color: '#fff' }}>
-                                                            2nd Checked Bag (Second checked bag)
+                                                            2nd Checked Bag
                                                         </span>
                                                         <span style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>
                                                             {hasBag1 ? 'Standard bag up to 50 lbs (23 kg)' : 'Requires 1st checked bag'}

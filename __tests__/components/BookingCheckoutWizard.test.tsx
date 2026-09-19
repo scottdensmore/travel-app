@@ -1765,21 +1765,21 @@ describe('BookingCheckoutWizard', () => {
 
             expect(await screen.findByText(/step 3 of 5/i)).toBeInTheDocument();
             expect(screen.getByText(/bags & travel extras/i)).toBeInTheDocument();
-            expect(screen.getByLabelText(/first checked bag/i)).toBeInTheDocument();
+            expect(screen.getByLabelText(/^1st checked bag/i)).toBeInTheDocument();
             expect(screen.getByLabelText(/priority boarding/i)).toBeInTheDocument();
         });
 
         it('toggles checked bags and updates running total', async () => {
             await goToStep3();
 
-            const bag1Checkbox = screen.getByLabelText(/first checked bag/i);
+            const bag1Checkbox = screen.getByLabelText(/^1st checked bag/i);
             fireEvent.click(bag1Checkbox);
 
             // Subtotal shows $35
             expect(screen.getByText(/extras total: \$35/i)).toBeInTheDocument();
 
             // 2nd bag is now enabled
-            const bag2Checkbox = screen.getByLabelText(/second checked bag/i);
+            const bag2Checkbox = screen.getByLabelText(/^2nd checked bag/i);
             expect(bag2Checkbox).not.toBeDisabled();
             fireEvent.click(bag2Checkbox);
 
@@ -1790,10 +1790,10 @@ describe('BookingCheckoutWizard', () => {
         it('unchecking first bag automatically unchecks and disables second bag', async () => {
             await goToStep3();
 
-            const bag1Checkbox = screen.getByLabelText(/first checked bag/i);
+            const bag1Checkbox = screen.getByLabelText(/^1st checked bag/i);
             fireEvent.click(bag1Checkbox);
 
-            const bag2Checkbox = screen.getByLabelText(/second checked bag/i);
+            const bag2Checkbox = screen.getByLabelText(/^2nd checked bag/i);
             fireEvent.click(bag2Checkbox);
             expect(screen.getByText(/extras total: \$80/i)).toBeInTheDocument();
 
@@ -1832,7 +1832,7 @@ describe('BookingCheckoutWizard', () => {
 
         it('passes selected ancillaries to payment and booking actions', async () => {
             await goToStep3();
-            fireEvent.click(screen.getByLabelText(/first checked bag/i));
+            fireEvent.click(screen.getByLabelText(/^1st checked bag/i));
             fireEvent.click(screen.getByLabelText(/priority boarding/i));
             fireEvent.click(screen.getByRole('button', { name: /continue to review & payment/i }));
 
@@ -1878,7 +1878,7 @@ describe('BookingCheckoutWizard', () => {
             });
 
             await goToStep3();
-            fireEvent.click(screen.getByLabelText(/first checked bag/i));
+            fireEvent.click(screen.getByLabelText(/^1st checked bag/i));
             fireEvent.click(screen.getByLabelText(/priority boarding/i));
             fireEvent.click(screen.getByRole('button', { name: /continue to review & payment/i }));
 
