@@ -10,6 +10,9 @@ export interface BoardingPassProps {
     departureReadable: string;
     seat: string;
     cabin: string;
+    bagCount?: number;
+    priorityBoarding?: boolean;
+    boardingGroup?: string;
 }
 
 /**
@@ -30,7 +33,11 @@ export default function BoardingPass({
     departureReadable,
     seat,
     cabin,
+    bagCount = 0,
+    priorityBoarding = false,
+    boardingGroup,
 }: BoardingPassProps) {
+    const group = boardingGroup || (priorityBoarding ? 'GROUP 1' : 'GROUP 3');
     return (
         <article
             className="checkin-boarding-pass"
@@ -40,6 +47,23 @@ export default function BoardingPass({
                 <div>
                     <p className="checkin-boarding-pass-kicker">Boarding pass</p>
                     <h3>{passengerName}</h3>
+                    {priorityBoarding && (
+                        <span
+                            className="checkin-priority-badge"
+                            style={{
+                                display: 'inline-block',
+                                background: '#eab308',
+                                color: '#000',
+                                fontWeight: 'bold',
+                                fontSize: '0.7rem',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                marginTop: '4px',
+                            }}
+                        >
+                            PRIORITY BOARDING
+                        </span>
+                    )}
                 </div>
                 <p className="checkin-boarding-pass-flight">
                     <span>{airline}</span>
@@ -67,6 +91,14 @@ export default function BoardingPass({
                 <div>
                     <dt>Cabin</dt>
                     <dd>{cabin}</dd>
+                </div>
+                <div>
+                    <dt>Group</dt>
+                    <dd>{group}</dd>
+                </div>
+                <div>
+                    <dt>Baggage</dt>
+                    <dd>BAGS: {bagCount}</dd>
                 </div>
             </dl>
 

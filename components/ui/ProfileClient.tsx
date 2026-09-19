@@ -39,6 +39,10 @@ interface Passenger {
     firstName: string;
     lastName: string;
     gender: string;
+    ancillaries?: Array<{
+        type: string;
+        priceCents?: number;
+    }>;
 }
 
 interface SeatAssignment {
@@ -787,9 +791,33 @@ export default function ProfileClient({
                                                         <div>{leg?.flight ? `${leg.flight.airline} ${leg.flight.flightNumber}` : '\u2014'}</div>
                                                         {booking.passengers && booking.passengers.length > 0 && (
                                                             <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.72)', marginTop: '2px' }}>
-                                                                {booking.passengers
-                                                                    .map(p => `${p.firstName} (${seatFor(leg, p.id)})`)
-                                                                    .join(', ')}
+                                                                {booking.passengers.map((p) => {
+                                                                    const bagCount = (p.ancillaries || []).filter(a => a.type.startsWith('CHECKED_BAG')).length;
+                                                                    const passengerSeat = (leg?.seatAssignments || []).find(sa => sa.passengerId === p.id);
+                                                                    const isBusinessOrFirst = passengerSeat?.cabinClass === 'BUSINESS' || passengerSeat?.cabinClass === 'FIRST';
+                                                                    const hasPriority = (p.ancillaries || []).some(a => a.type === 'PRIORITY_BOARDING') || isBusinessOrFirst;
+                                                                    const hasSpecial = (p.ancillaries || []).some(a => a.type === 'SPECIAL_ASSISTANCE');
+                                                                    return (
+                                                                        <div key={p.id} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                                                                            <span style={{ color: 'rgba(255,255,255,0.72)' }}>{p.firstName} ({seatFor(leg, p.id)})</span>
+                                                                            {bagCount > 0 && (
+                                                                                <span style={{ fontSize: '0.7rem', background: 'rgba(255,255,255,0.1)', padding: '1px 6px', borderRadius: '4px' }}>
+                                                                                    🧳 {bagCount} Checked Bag(s)
+                                                                                </span>
+                                                                            )}
+                                                                            {hasPriority && (
+                                                                                <span style={{ fontSize: '0.7rem', background: 'rgba(234, 179, 8, 0.2)', color: '#facc15', border: '1px solid rgba(234, 179, 8, 0.4)', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                                                                                    ⚡ Priority Boarding
+                                                                                </span>
+                                                                            )}
+                                                                            {hasSpecial && (
+                                                                                <span style={{ fontSize: '0.7rem', background: 'rgba(59, 130, 246, 0.2)', color: '#93c5fd', border: '1px solid rgba(59, 130, 246, 0.4)', padding: '1px 6px', borderRadius: '4px' }}>
+                                                                                    ♿ Special Assistance
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })}
                                                             </div>
                                                         )}
                                                     </td>
@@ -954,6 +982,9 @@ export default function ProfileClient({
                                             ? `${formatPrice(refund.amountCents)} ${receipt.currency} refund pending`
                                             : `${formatPrice(refund.amountCents)} ${receipt.currency} refund needs attention`
                                     : null;
+                                const ancillariesTotalCents = (booking.passengers || []).reduce((sum, p) => {
+                                    return sum + (p.ancillaries || []).reduce((pSum, a) => pSum + (a.priceCents || 0), 0);
+                                }, 0);
                                 return (
                                     <article
                                         key={booking.id}
@@ -966,6 +997,9 @@ export default function ProfileClient({
                                         </div>
                                         <div className="payment-receipt-details">
                                             <p>Paid <strong>{formatPrice(receipt.amountCents)} {receipt.currency}</strong></p>
+                                            {ancillariesTotalCents > 0 && (
+                                                <p>Bags &amp; extras: <strong>{formatPrice(ancillariesTotalCents)}</strong></p>
+                                            )}
                                             <p>
                                                 <span>Payment time </span>
                                                 <time dateTime={new Date(receipt.paidAt).toISOString()}>
@@ -1202,6 +1236,32 @@ export default function ProfileClient({
                                             <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>
                                                 Seat: <span style={{ color: '#34d399', fontWeight: 'bold' }}>{seatFor(p.id) || 'None'}</span> ({cabinLabel(cabinFor(p.id))})
                                             </div>
+                                            {(() => {
+                                                const bagCount = (p.ancillaries || []).filter(a => a.type.startsWith('CHECKED_BAG')).length;
+                                                const cabin = cabinFor(p.id);
+                                                const hasPriority = (p.ancillaries || []).some(a => a.type === 'PRIORITY_BOARDING') || cabin === 'BUSINESS' || cabin === 'FIRST';
+                                                const hasSpecial = (p.ancillaries || []).some(a => a.type === 'SPECIAL_ASSISTANCE');
+                                                if (bagCount === 0 && !hasPriority && !hasSpecial) return null;
+                                                return (
+                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
+                                                        {bagCount > 0 && (
+                                                            <span style={{ fontSize: '0.65rem', background: 'rgba(255,255,255,0.1)', padding: '1px 5px', borderRadius: '4px' }}>
+                                                                🧳 {bagCount} Checked Bag(s)
+                                                            </span>
+                                                        )}
+                                                        {hasPriority && (
+                                                            <span style={{ fontSize: '0.65rem', background: 'rgba(234, 179, 8, 0.2)', color: '#facc15', border: '1px solid rgba(234, 179, 8, 0.4)', padding: '1px 5px', borderRadius: '4px', fontWeight: 600 }}>
+                                                                ⚡ Priority Boarding
+                                                            </span>
+                                                        )}
+                                                        {hasSpecial && (
+                                                            <span style={{ fontSize: '0.65rem', background: 'rgba(59, 130, 246, 0.2)', color: '#93c5fd', border: '1px solid rgba(59, 130, 246, 0.4)', padding: '1px 5px', borderRadius: '4px' }}>
+                                                                ♿ Special Assistance
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
                                         </button>
                                     ))}
                                 </div>

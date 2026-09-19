@@ -142,6 +142,20 @@ export default async function ProfilePage() {
     orderBy: { createdAt: "desc" }
   });
 
+  const allPassengerIds = userBookings.flatMap(booking => booking.passengers.map(p => p.id));
+  const ancillaries = allPassengerIds.length > 0 && prisma.passengerAncillary
+    ? await prisma.passengerAncillary.findMany({
+        where: { passengerId: { in: allPassengerIds } },
+        select: { passengerId: true, type: true, priceCents: true },
+      })
+    : [];
+  const ancillariesByPassenger = new Map<string, Array<{ type: string; priceCents: number }>>();
+  for (const a of ancillaries) {
+    const list = ancillariesByPassenger.get(a.passengerId) || [];
+    list.push(a);
+    ancillariesByPassenger.set(a.passengerId, list);
+  }
+
   // The route each leg renders comes from the airports its flight references.
   // Resolved once here so the client component and the points activity both
   // keep receiving a flight with `from` and `to` on it (#73).
@@ -164,6 +178,10 @@ export default async function ProfilePage() {
 
     return {
       ...customerBooking,
+      passengers: booking.passengers.map(p => ({
+        ...p,
+        ancillaries: ancillariesByPassenger.get(p.id) ?? [],
+      })),
       statusChanges: booking.statusChanges.map(statusChange => ({
         refundCents: statusChange.refundCents,
         paymentRefund: statusChange.paymentRefund,

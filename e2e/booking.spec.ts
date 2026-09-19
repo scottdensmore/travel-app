@@ -151,9 +151,11 @@ test.describe('Flight Booking Journey', () => {
     await seatButton.click();
     
     // Continue to review
-    await page.click('button:has-text("Review Booking →")');
+    await page.click('button:has-text("Continue to Bags & Extras →")');
+    await expect(page.locator('text=Step 3 of 5')).toBeVisible();
+    await page.click('button:has-text("Continue to Review & Payment →")');
 
-    // --- STEP 3: Review ---
+    // --- STEP 4: Review ---
     await expect(page.locator('h2:has-text("Review Booking")')).toBeVisible();
     
     // Verify booking summary details
@@ -476,11 +478,13 @@ test.describe('Flight Booking Journey', () => {
     const seat = page.locator('button[title^="Select Seat"]').first();
     const seatName = (await seat.getAttribute('title'))!.replace('Select Seat ', '');
     await seat.click();
-    await page.getByRole('button', { name: 'Review Booking →' }).click();
+    await page.getByRole('button', { name: 'Continue to Bags & Extras →' }).click();
+    await expect(page.locator('text=Step 3 of 5')).toBeVisible();
+    await page.getByRole('button', { name: 'Continue to Review & Payment →' }).click();
 
     await expect(page.getByRole('timer')).toContainText(/Seat hold expires in (?:09:\d{2}|10:00)/);
     const confirmButton = page.getByRole('button', { name: 'Continue to secure payment' });
-    await page.getByRole('button', { name: '← Back' }).focus();
+    await page.getByRole('button', { name: '← Back to Bags & Extras' }).focus();
     await page.keyboard.press('Tab');
     await expect(confirmButton).toBeFocused();
     await expect(confirmButton).toHaveCSS('outline-style', 'solid');
@@ -509,7 +513,9 @@ test.describe('Flight Booking Journey', () => {
     // database deadline has just passed or the conservative browser deadline
     // reached zero first. Recovery must not lead to a dead end.
     await page.getByTitle(`Select Seat ${seatName}`).click();
-    await page.getByRole('button', { name: 'Review Booking →' }).click();
+    await page.getByRole('button', { name: 'Continue to Bags & Extras →' }).click();
+    await expect(page.locator('text=Step 3 of 5')).toBeVisible();
+    await page.getByRole('button', { name: 'Continue to Review & Payment →' }).click();
     await expect(page.getByRole('heading', { name: 'Review Booking' })).toBeVisible();
     await expect(page.getByRole('timer')).toContainText(/Seat hold expires in (?:09:\d{2}|10:00)/);
   });
@@ -548,15 +554,19 @@ test.describe('Flight Booking Journey', () => {
     expect(new Set([firstSeatName, secondSeatName, thirdSeatName])).toHaveProperty('size', 3);
 
     await firstSeat.click();
-    await page.getByRole('button', { name: 'Review Booking →' }).click();
+    await page.getByRole('button', { name: 'Continue to Bags & Extras →' }).click();
+    await expect(page.locator('text=Step 3 of 5')).toBeVisible();
+    await page.getByRole('button', { name: 'Continue to Review & Payment →' }).click();
     await expect(page.getByRole('heading', { name: 'Review Booking' })).toBeVisible();
 
     await secondSeat.click();
-    await secondTab.getByRole('button', { name: 'Review Booking →' }).click();
+    await secondTab.getByRole('button', { name: 'Continue to Bags & Extras →' }).click();
+    await expect(secondTab.locator('text=Step 3 of 5')).toBeVisible();
+    await secondTab.getByRole('button', { name: 'Continue to Review & Payment →' }).click();
     await expect(secondTab.getByRole('heading', { name: 'Review Booking' })).toBeVisible();
 
     await thirdSeat.click();
-    await thirdTab.getByRole('button', { name: 'Review Booking →' }).click();
+    await thirdTab.getByRole('button', { name: 'Continue to Bags & Extras →' }).click();
     await expect(thirdTab.getByRole('heading', { name: 'Select Your Seats' })).toBeVisible();
     const limitMessage = thirdTab.locator('[role="alert"]').filter({ hasText:
       'You already have seats held in two other checkouts. Finish one or wait for its hold to expire, then try again.',
@@ -684,7 +694,7 @@ test.describe('Flight Booking Journey', () => {
     const outboundSeat = page.locator('button[title^="Select Seat"]').first();
     const outboundSeatName = (await outboundSeat.getAttribute('title'))!.replace('Select Seat ', '');
     await outboundSeat.click();
-    await page.click('button:has-text("Review Booking →")');
+    await page.click('button:has-text("Continue to Bags & Extras →")');
     await expect(page.locator('h2:has-text("Select Your Seats")')).toBeVisible();
     // Not [role="alert"]: Next's route announcer is also one.
     await expect(page.getByText(/Please select a seat on the return flight/i)).toBeVisible();
@@ -698,13 +708,15 @@ test.describe('Flight Booking Journey', () => {
     const inboundSeatName = (await inboundSeat.getAttribute('title'))!.replace('Select Seat ', '');
     await inboundSeat.click();
 
-    // --- STEP 3: Review shows both legs, each carrying its own seat ---
+    // --- STEP 4: Review shows both legs, each carrying its own seat ---
     //
     // This used to assert the pooled list "Seats: 11A, 12C", which passed
     // whether or not the seats were paired with the right legs — and the review
     // step was in fact showing a single leg at the time (#152). Asserting each
     // seat inside its own leg is what tells those two states apart.
-    await page.click('button:has-text("Review Booking →")');
+    await page.click('button:has-text("Continue to Bags & Extras →")');
+    await expect(page.locator('text=Step 3 of 5')).toBeVisible();
+    await page.click('button:has-text("Continue to Review & Payment →")');
     await expect(page.locator('h2:has-text("Review Booking")')).toBeVisible();
     const reviewLegs = page.getByTestId('review-leg');
     await expect(reviewLegs).toHaveCount(2);

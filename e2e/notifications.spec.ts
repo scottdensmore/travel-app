@@ -103,7 +103,9 @@ test.describe('User Notifications & Alerts Journey', () => {
     const seatBtn = page.locator('button[title="Select Seat 11A"]');
     await expect(seatBtn).toBeVisible();
     await seatBtn.click();
-    await page.click('button:has-text("Review Booking →")');
+    await page.click('button:has-text("Continue to Bags & Extras →")');
+    await expect(page.locator('text=Step 3 of 5')).toBeVisible();
+    await page.click('button:has-text("Continue to Review & Payment →")');
 
     // Confirm booking
     await expect(page.locator('h2:has-text("Review Booking")')).toBeVisible();

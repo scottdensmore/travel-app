@@ -1,6 +1,9 @@
 /** @jest-environment node */
 import {
     accountTimeZoneSchema,
+    ancillaryTypeSchema,
+    bookingAncillariesMapSchema,
+    passengerAncillariesSchema,
     bookingRequestSchema,
     cityGuideSchema,
     checkoutPaymentRequestSchema,
@@ -675,3 +678,46 @@ describe('shared server validation schemas', () => {
         expect(flightStatusSchema.safeParse('BOARDING').success).toBe(false);
     });
 });
+
+describe('passenger ancillaries validation', () => {
+    it('accepts valid ancillary selection', () => {
+        const parsed = passengerAncillariesSchema.safeParse(['CARRY_ON', 'CHECKED_BAG_1', 'PRIORITY_BOARDING']);
+        expect(parsed.success).toBe(true);
+    });
+
+    it('rejects 2nd checked bag if 1st checked bag is not selected', () => {
+        const parsed = passengerAncillariesSchema.safeParse(['CHECKED_BAG_2']);
+        expect(parsed.success).toBe(false);
+        if (!parsed.success) {
+            expect(parsed.error.issues[0].message).toMatch(/first checked bag must be selected/i);
+        }
+    });
+
+    it('rejects duplicate ancillary types for a single passenger', () => {
+        const parsed = passengerAncillariesSchema.safeParse(['CHECKED_BAG_1', 'CHECKED_BAG_1']);
+        expect(parsed.success).toBe(false);
+    });
+
+    it('validates ancillaryTypeSchema values', () => {
+        expect(ancillaryTypeSchema.safeParse('CARRY_ON').success).toBe(true);
+        expect(ancillaryTypeSchema.safeParse('CHECKED_BAG_1').success).toBe(true);
+        expect(ancillaryTypeSchema.safeParse('CHECKED_BAG_2').success).toBe(true);
+        expect(ancillaryTypeSchema.safeParse('PRIORITY_BOARDING').success).toBe(true);
+        expect(ancillaryTypeSchema.safeParse('SPECIAL_ASSISTANCE').success).toBe(true);
+        expect(ancillaryTypeSchema.safeParse('EXTRA_LEG_ROOM').success).toBe(false);
+    });
+
+    it('validates bookingAncillariesMapSchema', () => {
+        const validMap = {
+            '0': ['CARRY_ON', 'CHECKED_BAG_1'],
+            '1': ['SPECIAL_ASSISTANCE'],
+        };
+        expect(bookingAncillariesMapSchema.safeParse(validMap).success).toBe(true);
+
+        const invalidMap = {
+            '0': ['CHECKED_BAG_2'],
+        };
+        expect(bookingAncillariesMapSchema.safeParse(invalidMap).success).toBe(false);
+    });
+});
+

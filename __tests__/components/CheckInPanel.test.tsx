@@ -59,6 +59,44 @@ const leg = (overrides: Partial<CheckInLegView> = {}): CheckInLegView => ({
     ...overrides,
 });
 
+function renderCheckInPanel(options: {
+    passenger?: {
+        firstName?: string;
+        lastName?: string;
+        ancillaries?: Array<{ type: string; priceCents?: number }>;
+        cabin?: string;
+        cabinClass?: string;
+    };
+    legOverrides?: Partial<CheckInLegView>;
+} = {}) {
+    const p = options.passenger;
+    const name = p ? `${p.firstName ?? 'Elena'} ${p.lastName ?? 'Rostova'}`.trim() : 'Elena Rostova';
+    return render(
+        <CheckInPanel
+            legs={[
+                leg({
+                    allowed: false,
+                    reason: 'ALREADY_CHECKED_IN',
+                    statusLabel: 'Checked in',
+                    awaiting: 0,
+                    travellers: [
+                        {
+                            id: 'p1',
+                            name,
+                            seat: 'Seat 11A',
+                            cabin: p?.cabin ?? 'Economy',
+                            cabinClass: p?.cabinClass,
+                            checkedIn: true,
+                            ...((p?.ancillaries ? { ancillaries: p.ancillaries } : {}) as any),
+                        },
+                    ],
+                    ...options.legOverrides,
+                }),
+            ]}
+        />
+    );
+}
+
 beforeEach(() => {
     mockedCheckIn.mockReset();
     mockedGetOccupiedSeats.mockReset();
@@ -846,6 +884,52 @@ describe('seat confirmation and seat change during check-in', () => {
 
             const alert = await screen.findByRole('alert');
             expect(alert).toHaveTextContent('Could not send boarding pass. Please try again.');
+        });
+    });
+
+    describe('baggage count and priority boarding on boarding pass', () => {
+        it('displays baggage count and priority boarding badge on boarding pass', () => {
+            renderCheckInPanel({
+                passenger: {
+                    firstName: 'Elena',
+                    lastName: 'Rostova',
+                    ancillaries: [
+                        { type: 'CHECKED_BAG_1', priceCents: 3500 },
+                        { type: 'PRIORITY_BOARDING', priceCents: 1500 },
+                    ],
+                },
+            });
+
+            expect(screen.getByText(/priority boarding/i)).toBeInTheDocument();
+            expect(screen.getByText(/bags: 1/i)).toBeInTheDocument();
+        });
+
+        it('displays BAGS: 0 when passenger has no checked bags', () => {
+            renderCheckInPanel({
+                passenger: {
+                    firstName: 'Elena',
+                    lastName: 'Rostova',
+                    ancillaries: [],
+                },
+            });
+
+            expect(screen.getByText(/bags: 0/i)).toBeInTheDocument();
+            expect(screen.queryByText(/priority boarding/i)).not.toBeInTheDocument();
+        });
+
+        it('displays priority boarding badge and GROUP 1 for Business cabin even without priority ancillary', () => {
+            renderCheckInPanel({
+                passenger: {
+                    firstName: 'Elena',
+                    lastName: 'Rostova',
+                    cabin: 'Business',
+                    cabinClass: 'BUSINESS',
+                    ancillaries: [],
+                },
+            });
+
+            expect(screen.getByText(/priority boarding/i)).toBeInTheDocument();
+            expect(screen.getByText(/group 1/i)).toBeInTheDocument();
         });
     });
 });

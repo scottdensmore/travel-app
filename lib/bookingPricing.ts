@@ -1,3 +1,5 @@
+import { AncillaryType, CabinClass } from '@prisma/client';
+
 export const CABIN_FARE_PERCENT = {
     ECONOMY: 100,
     PREMIUM_ECONOMY: 150,
@@ -5,7 +7,7 @@ export const CABIN_FARE_PERCENT = {
     FIRST: 300
 } as const;
 
-export type CabinClass = keyof typeof CABIN_FARE_PERCENT;
+export type { CabinClass };
 
 export function parsePriceToCents(price: string): number {
     const normalized = price.trim();
@@ -107,3 +109,41 @@ export function bookingTotalCents(
     }
     return flight?.priceCents ?? 0;
 }
+
+export function getAncillaryPriceCents(type: AncillaryType, cabin: CabinClass): number {
+    switch (type) {
+        case 'CARRY_ON':
+        case 'SPECIAL_ASSISTANCE':
+            return 0;
+        case 'CHECKED_BAG_1':
+            return cabin === 'BUSINESS' || cabin === 'FIRST' || cabin === 'PREMIUM_ECONOMY' ? 0 : 3500;
+        case 'CHECKED_BAG_2':
+            return cabin === 'BUSINESS' || cabin === 'FIRST' ? 0 : 4500;
+        case 'PRIORITY_BOARDING':
+            return cabin === 'BUSINESS' || cabin === 'FIRST' ? 0 : 1500;
+        default:
+            return 0;
+    }
+}
+
+export function calculatePassengerAncillaries(
+    cabin: CabinClass,
+    types: AncillaryType[]
+): { items: Array<{ type: AncillaryType; priceCents: number }>; totalCents: number } {
+    const items = types.map(type => ({
+        type,
+        priceCents: getAncillaryPriceCents(type, cabin),
+    }));
+    const totalCents = items.reduce((sum, item) => sum + item.priceCents, 0);
+    return { items, totalCents };
+}
+
+export function calculateBookingAncillariesTotalCents(
+    passengers: Array<{ cabin: CabinClass; ancillaries?: AncillaryType[] }>
+): number {
+    return passengers.reduce((sum, p) => {
+        const { totalCents } = calculatePassengerAncillaries(p.cabin, p.ancillaries || []);
+        return sum + totalCents;
+    }, 0);
+}
+

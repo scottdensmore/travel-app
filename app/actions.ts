@@ -38,7 +38,7 @@ import CityGuide from '@/lib/types/CityGuide';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { hasVerifiedStaffAccess } from '@/lib/staffAuthorization';
-import type { Flight, FlightStatus } from '@prisma/client';
+import type { AncillaryType, Flight, FlightStatus } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { assertSeatAvailableForCabin, validateSeatingLayout } from '@/lib/seatLayout';
 import { lockBookingsOnFlightForUpdate, lockFlightForUpdate } from '@/lib/flightLock';
@@ -47,6 +47,7 @@ import { updateFlightSeatingLayout } from '@/lib/FlightSeatLayoutService';
 import { actionValidationFailure, actionValidationFailures, type ActionValidationFailure } from '@/lib/actionResult';
 import {
     bookingTotalCents,
+    calculateBookingAncillariesTotalCents,
     calculatePassengerFareCents,
     flightFareCents,
     parsePriceToCents,
@@ -78,6 +79,7 @@ import {
 export type ActionResult<T> = { ok: true; data: T } | ActionValidationFailure;
 import { bookingWindowIsoDates } from '@/lib/dates';
 import {
+    bookingAncillariesMapSchema,
     bookingRequestSchema,
     accountTimeZoneSchema,
     checkInRequestSchema,
@@ -368,6 +370,7 @@ export async function bookFlightAction(bookingData: {
     flightIds: number[];
     passengers: PassengerInput[];
     idempotencyKey: string;
+    ancillariesByPassenger?: Record<string | number, AncillaryType[]>;
 }) {
     const session = await getServerSession(authOptions);
     const userId = session?.user?.id;
@@ -388,9 +391,26 @@ export async function bookFlightAction(bookingData: {
                 cabinClass: passenger.cabinClass as 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST',
             })),
             userId,
+            ancillariesByPassenger: bookingData.ancillariesByPassenger,
         });
         if (payment.status !== 'AUTHORIZED' && payment.status !== 'CAPTURED') {
             return actionValidationFailure('Payment authorization is required before booking.');
+        }
+
+        const ancillariesTotalCents = bookingData.ancillariesByPassenger
+            ? calculateBookingAncillariesTotalCents(
+                bookingData.passengers.map((passenger, index) => ({
+                    cabin: passenger.cabinClass,
+                    ancillaries: bookingData.ancillariesByPassenger?.[index] ?? bookingData.ancillariesByPassenger?.[String(index)] ?? [],
+                }))
+            )
+            : 0;
+
+        if (payment.amountCents < ancillariesTotalCents) {
+            return actionValidationFailure(
+                'Payment authorization does not cover selected baggage and extras.',
+                'payment',
+            );
         }
 
         result = await flightBookingService.bookFlight({
@@ -399,6 +419,7 @@ export async function bookFlightAction(bookingData: {
             passengers: bookingData.passengers,
             idempotencyKey: bookingData.idempotencyKey,
             paymentIntentId: payment.providerIntentId,
+            ancillariesByPassenger: bookingData.ancillariesByPassenger,
         });
         try {
             capture = await paymentService.capturePayment({
@@ -417,6 +438,12 @@ export async function bookFlightAction(bookingData: {
             return actionValidationFailure(
                 'Your booking and seats are secured, but payment capture is still being confirmed. Try again to finish payment.',
                 'payment.capture',
+            );
+        }
+        if (error instanceof Error && error.message.includes('already used for a different request')) {
+            return actionValidationFailure(
+                'Payment attempt does not match the current booking request.',
+                'payment',
             );
         }
         if (!(error instanceof SeatHoldUnavailableError)) throw error;
@@ -483,6 +510,7 @@ export async function startCheckoutPaymentAction(paymentData: {
         seatNumbers: string[];
         cabinClass: 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST';
     }>;
+    ancillariesByPassenger?: Record<string | number, AncillaryType[]>;
 }) {
     const session = await getServerSession(authOptions);
     const userId = session?.user?.id;
@@ -520,6 +548,25 @@ export async function startCheckoutPaymentAction(paymentData: {
             : error.message;
         return actionValidationFailure(message, field);
     }
+}
+
+export async function createPaymentAttemptAction(paymentData: {
+    checkoutId: string;
+    flightIds: number[];
+    passengers: Array<{
+        seatNumbers: string[];
+        cabinClass: 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST';
+    }>;
+    ancillariesByPassenger?: Record<string | number, AncillaryType[]>;
+}) {
+    if (paymentData.ancillariesByPassenger) {
+        const parsedAncillaries = parseActionInput(
+            bookingAncillariesMapSchema,
+            paymentData.ancillariesByPassenger,
+        );
+        if (!parsedAncillaries.ok) return parsedAncillaries;
+    }
+    return startCheckoutPaymentAction(paymentData);
 }
 
 export async function reconcilePaymentAttemptAction(paymentAttemptId: string) {
@@ -880,7 +927,11 @@ export async function resendBoardingPassAction(
         include: {
             booking: {
                 include: {
-                    passengers: true,
+                    passengers: {
+                        include: {
+                            ancillaries: true,
+                        },
+                    },
                 },
             },
             flight: {
@@ -923,11 +974,30 @@ export async function resendBoardingPassAction(
         const name = passenger
             ? `${passenger.firstName} ${passenger.lastName}`.trim()
             : 'Traveller';
-        return {
+        const ancillaries = passenger?.ancillaries;
+        const cabinUpper = (seat.cabinClass || '').toUpperCase();
+        const hasAncillaries = Boolean(ancillaries && ancillaries.length > 0);
+        const isPriority = Boolean(
+            (hasAncillaries && ancillaries?.some((a) => a.type === 'PRIORITY_BOARDING')) ||
+            cabinUpper === 'BUSINESS' ||
+            cabinUpper === 'FIRST'
+        );
+
+        const passengerDoc: TravelDocumentPassenger = {
             name,
             seat: seat.seatNumber,
             cabin: cabinLabel(seat.cabinClass),
         };
+
+        if (hasAncillaries || cabinUpper === 'BUSINESS' || cabinUpper === 'FIRST') {
+            const bagCount = ancillaries ? ancillaries.filter((a) => a.type.startsWith('CHECKED_BAG')).length : 0;
+            passengerDoc.ancillaries = ancillaries ?? [];
+            passengerDoc.bagCount = bagCount;
+            passengerDoc.priorityBoarding = isPriority;
+            passengerDoc.boardingGroup = isPriority ? 'GROUP 1' : (cabinUpper === 'PREMIUM_ECONOMY' ? 'GROUP 2' : 'GROUP 3');
+        }
+
+        return passengerDoc;
     });
 
     await sendTravelDocumentsEmail({

@@ -76,6 +76,10 @@ export interface CheckInLegView {
         checkedIn: boolean;
         cabinClass?: string;
         seatNumber?: string;
+        ancillaries?: Array<{
+            type: string;
+            priceCents?: number;
+        }>;
     }>;
 }
 
@@ -570,20 +574,31 @@ export default function CheckInPanel({ legs }: { legs: CheckInLegView[] }) {
                                             <div className="checkin-boarding-passes">
                                                 {leg.travellers
                                                     .filter(traveller => traveller.checkedIn)
-                                                    .map(traveller => (
-                                                        <BoardingPass
-                                                            key={`${leg.legId}-${traveller.id}`}
-                                                            passengerName={traveller.name}
-                                                            reference={leg.reference}
-                                                            airline={leg.airline}
-                                                            flightNumber={leg.flightNumber}
-                                                            from={leg.from}
-                                                            to={leg.to}
-                                                            departureReadable={leg.departureReadable}
-                                                            seat={traveller.seat}
-                                                            cabin={traveller.cabin}
-                                                        />
-                                                    ))}
+                                                    .map(traveller => {
+                                                        const bagCount = (traveller.ancillaries || []).filter(a => a.type.startsWith('CHECKED_BAG')).length;
+                                                        const cabinClass = getCabinClass(traveller);
+                                                        const hasPriority = (traveller.ancillaries || []).some(a => a.type === 'PRIORITY_BOARDING')
+                                                            || cabinClass === 'BUSINESS'
+                                                            || cabinClass === 'FIRST';
+                                                        const boardingGroup = hasPriority ? 'GROUP 1' : (cabinClass === 'PREMIUM_ECONOMY' ? 'GROUP 2' : 'GROUP 3');
+                                                        return (
+                                                            <BoardingPass
+                                                                key={`${leg.legId}-${traveller.id}`}
+                                                                passengerName={traveller.name}
+                                                                reference={leg.reference}
+                                                                airline={leg.airline}
+                                                                flightNumber={leg.flightNumber}
+                                                                from={leg.from}
+                                                                to={leg.to}
+                                                                departureReadable={leg.departureReadable}
+                                                                seat={traveller.seat}
+                                                                cabin={traveller.cabin}
+                                                                bagCount={bagCount}
+                                                                priorityBoarding={hasPriority}
+                                                                boardingGroup={boardingGroup}
+                                                            />
+                                                        );
+                                                    })}
                                                 <div className="checkin-document-actions">
                                                     <button
                                                         type="button"

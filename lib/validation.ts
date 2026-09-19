@@ -291,7 +291,10 @@ export const passengerSchema = z.object({
     passportNumber: requiredText('Passport number', 32)
         .transform(value => value.toUpperCase())
         .pipe(z.string().regex(/^[A-Z0-9-]+$/, 'Passport number contains invalid characters.')),
-    gender: z.enum(['Male', 'Female', 'Other']),
+    gender: z.preprocess(
+        val => (val === 'F' ? 'Female' : val === 'M' ? 'Male' : val),
+        z.enum(['Male', 'Female', 'Other'])
+    ),
     /// One seat per leg, in the same order as the itinerary's flights.
     seatNumbers: z.array(seatNumberSchema, { error: 'A seat is required for each flight.' })
         .min(1, 'A seat is required for each flight.')
@@ -308,6 +311,35 @@ const checkoutPaymentPassengerSchema = z.object({
     cabinClass: z.enum(['ECONOMY', 'PREMIUM_ECONOMY', 'BUSINESS', 'FIRST']),
 }).strict();
 
+export const ancillaryTypeSchema = z.enum([
+    'CARRY_ON',
+    'CHECKED_BAG_1',
+    'CHECKED_BAG_2',
+    'PRIORITY_BOARDING',
+    'SPECIAL_ASSISTANCE',
+]);
+
+export const passengerAncillariesSchema = z
+    .array(ancillaryTypeSchema)
+    .refine(
+        (types) => new Set(types).size === types.length,
+        { message: 'Duplicate ancillary items are not allowed.' }
+    )
+    .refine(
+        (types) => {
+            if (types.includes('CHECKED_BAG_2') && !types.includes('CHECKED_BAG_1')) {
+                return false;
+            }
+            return true;
+        },
+        { message: 'A first checked bag must be selected before adding a second checked bag.' }
+    );
+
+export const bookingAncillariesMapSchema = z.record(
+    z.string(),
+    passengerAncillariesSchema
+);
+
 export const checkoutPaymentRequestSchema = z.object({
     checkoutId: bookingRequestIdSchema,
     flightIds: z.array(positiveId('Flight ID'), { error: 'A flight is required.' })
@@ -316,6 +348,7 @@ export const checkoutPaymentRequestSchema = z.object({
     passengers: z.array(checkoutPaymentPassengerSchema, {
         error: 'At least one passenger is required.',
     }).min(1, 'At least one passenger is required.').max(MAX_PASSENGERS_PER_BOOKING),
+    ancillariesByPassenger: bookingAncillariesMapSchema.optional(),
 }).strict().superRefine(({ flightIds, passengers }, context) => {
     if (new Set(flightIds).size !== flightIds.length) {
         context.addIssue({
@@ -361,7 +394,8 @@ export const bookingRequestSchema = z.object({
     passengers: z.array(passengerSchema, { error: 'At least one passenger is required.' })
         .min(1, 'At least one passenger is required.')
         .max(MAX_PASSENGERS_PER_BOOKING),
-    idempotencyKey: bookingRequestIdSchema
+    idempotencyKey: bookingRequestIdSchema,
+    ancillariesByPassenger: bookingAncillariesMapSchema.optional(),
 }).strict().superRefine(({ flightIds, passengers }, context) => {
     if (new Set(flightIds).size !== flightIds.length) {
         context.addIssue({
@@ -641,3 +675,4 @@ export const checkoutSeatClaimsSchema = z.object({
     checkoutId: bookingRequestIdSchema,
     claims: seatClaimsSchema,
 }).strict();
+

@@ -118,10 +118,12 @@ test.describe('Multi-Passenger Booking Journey', () => {
     await expect(page.locator('text=Seat: 11A')).toBeVisible();
     await expect(page.locator('text=Seat: 11B')).toBeVisible();
 
-    // Let's go to step 3
-    await page.click('button:has-text("Review Booking →")');
+    // Let's go to step 3 (Bags & Extras) and then step 4 (Review)
+    await page.click('button:has-text("Continue to Bags & Extras →")');
+    await expect(page.locator('text=Step 3 of 5')).toBeVisible();
+    await page.click('button:has-text("Continue to Review & Payment →")');
 
-    // --- STEP 3: Review ---
+    // --- STEP 4: Review ---
     await expect(page.locator('h2:has-text("Review Booking")')).toBeVisible();
     // Each traveller's seat is read off the leg it is held on (#152).
     const reviewLeg = page.getByTestId('review-leg');

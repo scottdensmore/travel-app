@@ -1,6 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
-import type { PaymentAttempt } from '@prisma/client';
-import { calculateItineraryTotal, flightFareCents } from '@/lib/bookingPricing';
+import type { AncillaryType, PaymentAttempt } from '@prisma/client';
+import {
+    calculateBookingAncillariesTotalCents,
+    calculateItineraryTotal,
+    flightFareCents,
+} from '@/lib/bookingPricing';
 import { legFlightClause } from '@/lib/bookingItinerary';
 import { lockFlightForUpdate } from '@/lib/flightLock';
 import { prisma } from '@/lib/prisma';
@@ -27,6 +31,7 @@ interface CheckoutPaymentInput {
         seatNumbers: string[];
         cabinClass: 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST';
     }>;
+    ancillariesByPassenger?: Record<string | number, AncillaryType[]>;
 }
 
 interface CheckoutPaymentResult {
@@ -62,12 +67,28 @@ export class PaymentCancellationIncompleteError extends Error {
     }
 }
 
+
 function requestFingerprint(input: Omit<CheckoutPaymentInput, 'userId'>): string {
-    return createHash('sha256').update(JSON.stringify([
+    const rawAncillaries = input.ancillariesByPassenger;
+    const sortedAncillaries = rawAncillaries
+        ? Object.entries(rawAncillaries)
+            .filter(([, types]) => types && types.length > 0)
+            .sort(([a], [b]) => Number(a) - Number(b))
+            .map(([idx, types]) => ({
+                passengerIndex: Number(idx),
+                types: [...types].sort(),
+            }))
+        : [];
+
+    const payload: unknown[] = [
         input.checkoutId,
         input.flightIds,
         input.passengers.map(passenger => [passenger.seatNumbers, passenger.cabinClass]),
-    ])).digest('hex');
+    ];
+    if (sortedAncillaries.length > 0) {
+        payload.push(sortedAncillaries);
+    }
+    return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }
 
 function result(
@@ -161,13 +182,22 @@ export class CheckoutPaymentService {
                 flights.map(flightFareCents),
                 input.passengers.map(passenger => ({ cabinClass: passenger.cabinClass })),
             );
+            const ancillariesTotalCents = input.ancillariesByPassenger
+                ? calculateBookingAncillariesTotalCents(
+                    input.passengers.map((passenger, index) => ({
+                        cabin: passenger.cabinClass,
+                        ancillaries: input.ancillariesByPassenger?.[index] ?? input.ancillariesByPassenger?.[String(index)] ?? [],
+                    }))
+                )
+                : 0;
+
             return tx.paymentAttempt.create({
                 data: {
                     id: randomUUID(),
                     userId: input.userId,
                     checkoutId: input.checkoutId,
                     requestFingerprint: fingerprint,
-                    amountCents: total.cents,
+                    amountCents: total.cents + ancillariesTotalCents,
                     currency: 'USD',
                     status: 'CREATING',
                 },
