@@ -123,10 +123,14 @@ export const authOptions: NextAuthOptions = {
                 token.staffMfaVerified = user.staffMfaVerified;
                 token.staffMfaEnrollmentRequired = user.staffMfaEnrollmentRequired;
                 token.staffMfaVerifiedAt = user.staffMfaVerifiedAt;
+                if (user.name) token.name = user.name;
+                if (user.image) token.picture = user.image;
             } else if (token.id) {
                 const currentUser = await prisma.user.findUnique({
                     where: { id: token.id },
                     select: {
+                        name: true,
+                        image: true,
                         role: true,
                         authVersion: true,
                         emailVerified: true,
@@ -146,6 +150,12 @@ export const authOptions: NextAuthOptions = {
                         && !currentUser.staffMfaEnrolledAt);
                 if (currentUser && !token.invalidated) {
                     token.role = currentUser.role;
+                    if (currentUser.name !== undefined) {
+                        token.name = currentUser.name ?? undefined;
+                    }
+                    if (currentUser.image !== undefined) {
+                        token.picture = currentUser.image ?? undefined;
+                    }
                     if (currentUser.role !== 'ADMIN') {
                         token.staffMfaVerified = false;
                         token.staffMfaEnrollmentRequired = false;
@@ -162,6 +172,12 @@ export const authOptions: NextAuthOptions = {
                 session.user.role = token.role;
                 session.user.staffMfaVerified = token.staffMfaVerified === true;
                 session.user.staffMfaEnrollmentRequired = token.staffMfaEnrollmentRequired === true;
+                if (token.name !== undefined) {
+                    session.user.name = token.name;
+                }
+                if (token.picture !== undefined) {
+                    session.user.image = token.picture;
+                }
             }
             return session;
         },
