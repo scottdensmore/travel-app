@@ -8,7 +8,7 @@ import Link from 'next/link';
 // browser. SWC elides this today because the binding is only used as a type —
 // this makes that a guarantee rather than an optimisation.
 import type { PassengerInput } from '@/lib/FlightBookingService';
-import type { AncillaryType } from '@prisma/client';
+import type { AncillaryType, CabinClass } from '@prisma/client';
 import { bookFlightAction, holdChosenSeatsAction, startCheckoutPaymentAction } from '@/app/actions';
 import { isActionValidationFailure, type ActionValidationFailure } from '@/lib/actionResult';
 import { CABIN_FARE_PERCENT, calculateBookingAncillariesTotalCents, calculatePassengerFareCents, flightFareCents, formatPrice, getAncillaryPriceCents } from '@/lib/bookingPricing';
@@ -67,6 +67,7 @@ interface ConfirmedPassenger {
     /// One seat per leg, in itinerary order.
     seatNumbers: string[];
     cabinClass: string;
+    ancillaries?: Array<{ type: string; priceCents?: number }>;
 }
 
 function arrivalDayLabel(dayOffset: number): string {
@@ -1046,12 +1047,16 @@ export default function BookingCheckoutWizard({
                 // two by index would print one traveller's cabin under another
                 // traveller's name.
                 passengers: result.passengers.map((passenger: {
-                    firstName: string; lastName: string; seatNumbers: string[]; cabinClass: string;
-                }) => ({
+                    firstName: string; lastName: string; seatNumbers: string[]; cabinClass: CabinClass; ancillaries?: Array<{ type: string; priceCents?: number }>;
+                }, pIdx: number) => ({
                     firstName: passenger.firstName,
                     lastName: passenger.lastName,
                     seatNumbers: passenger.seatNumbers,
                     cabinClass: passenger.cabinClass,
+                    ancillaries: passenger.ancillaries ?? (ancillariesByPassenger[pIdx] || ['CARRY_ON']).map((type: AncillaryType) => ({
+                        type,
+                        priceCents: getAncillaryPriceCents(type, passenger.cabinClass),
+                    })),
                 }))
             });
             setStep(5);
@@ -2148,6 +2153,32 @@ export default function BookingCheckoutWizard({
                         </p>
                         <p style={{ color: '#34d399', marginBottom: '2rem', fontWeight: 'bold' }}>Confirmed total: {bookingResult.totalPriceCents !== null ? formatPrice(bookingResult.totalPriceCents) : grandTotalPriceDisplay}</p>
 
+                        {/* Payment receipt breakdown */}
+                        <div style={{
+                            width: '100%',
+                            maxWidth: '600px',
+                            margin: '0 auto 2rem',
+                            background: 'rgba(255,255,255,0.03)',
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            borderRadius: '12px',
+                            padding: '1.25rem',
+                            textAlign: 'left'
+                        }}>
+                            <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#fff', marginBottom: '0.75rem' }}>Receipt summary</h3>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'rgba(255,255,255,0.75)', marginBottom: '0.5rem' }}>
+                                <span>Flights ({bookingResult.passengers.length} traveller{bookingResult.passengers.length > 1 ? 's' : ''})</span>
+                                <span>{totalPriceDisplay}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'rgba(255,255,255,0.75)', marginBottom: '0.5rem' }}>
+                                <span>Bags &amp; extras</span>
+                                <span>{formatPrice(ancillariesTotalCents)}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.1rem', fontWeight: 'bold', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '0.75rem', marginTop: '0.5rem', color: '#34d399' }}>
+                                <span>Confirmed total</span>
+                                <span>{bookingResult.totalPriceCents !== null ? formatPrice(bookingResult.totalPriceCents) : grandTotalPriceDisplay}</span>
+                            </div>
+                        </div>
+
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', alignItems: 'center', marginBottom: '2.5rem' }}>
                             {/*
                               * One boarding pass per traveller per leg. A seat
@@ -2250,6 +2281,34 @@ export default function BookingCheckoutWizard({
                                             style={{ fontSize: '0.8rem', fontWeight: 'bold' }}
                                         />
                                     </div>
+
+                                    {/* Extras summary chips */}
+                                    {(() => {
+                                        const pAncillaries = p.ancillaries ?? (ancillariesByPassenger[idx] || []).map(t => ({ type: t }));
+                                        const pBagCount = pAncillaries.filter(a => a.type.startsWith('CHECKED_BAG')).length;
+                                        const pHasPriority = pAncillaries.some(a => a.type === 'PRIORITY_BOARDING') || p.cabinClass === 'BUSINESS' || p.cabinClass === 'FIRST';
+                                        const pHasSpecial = pAncillaries.some(a => a.type === 'SPECIAL_ASSISTANCE');
+                                        if (pBagCount === 0 && !pHasPriority && !pHasSpecial) return null;
+                                        return (
+                                            <div style={{ padding: '0 1.5rem 1rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                                {pBagCount > 0 && (
+                                                    <span style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.1)', color: '#e5e7eb', padding: '3px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                        🧳 {pBagCount} Checked Bag(s)
+                                                    </span>
+                                                )}
+                                                {pHasPriority && (
+                                                    <span style={{ fontSize: '0.75rem', background: 'rgba(234, 179, 8, 0.2)', color: '#facc15', border: '1px solid rgba(234, 179, 8, 0.4)', padding: '3px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                                                        ⚡ Priority Boarding
+                                                    </span>
+                                                )}
+                                                {pHasSpecial && (
+                                                    <span style={{ fontSize: '0.75rem', background: 'rgba(59, 130, 246, 0.2)', color: '#93c5fd', border: '1px solid rgba(59, 130, 246, 0.4)', padding: '3px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                        ♿ Special Assistance
+                                                    </span>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
 
                                     {/* Ticket bottom strip */}
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', background: 'rgba(0,0,0,0.3)', borderTop: '1px solid rgba(255,255,255,0.05)' }}>

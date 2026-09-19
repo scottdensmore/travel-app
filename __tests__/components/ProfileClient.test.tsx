@@ -1355,5 +1355,62 @@ describe('ProfileClient interactive dashboard', () => {
             // else (#76).
             expect(legs[0]).not.toHaveTextContent('11A');
         });
+
+        describe('baggage allowance, priority boarding, and extras display', () => {
+            it('displays baggage allowance and priority boarding badges under passenger details in booking history', () => {
+                renderBookings([
+                    {
+                        ...roundTripBooking,
+                        passengers: [
+                            {
+                                id: 'p-1',
+                                firstName: 'Jane',
+                                lastName: 'Doe',
+                                gender: 'Female',
+                                ancillaries: [
+                                    { type: 'CHECKED_BAG_1', priceCents: 3500 },
+                                    { type: 'PRIORITY_BOARDING', priceCents: 1500 },
+                                ],
+                            },
+                        ],
+                    },
+                ]);
+
+                const row = screen.getByTestId('booking-row-202');
+                expect(within(row).getAllByText(/1 checked bag/i).length).toBeGreaterThan(0);
+                expect(within(row).getAllByText(/priority boarding/i).length).toBeGreaterThan(0);
+            });
+
+            it('displays itemized extras in payment history receipt', () => {
+                renderBookings([
+                    {
+                        ...roundTripBooking,
+                        paymentReceipt: {
+                            amountCents: 71000,
+                            currency: 'USD',
+                            paidAt: '2026-06-01T10:00:00Z',
+                        },
+                        passengers: [
+                            {
+                                id: 'p-1',
+                                firstName: 'Jane',
+                                lastName: 'Doe',
+                                gender: 'Female',
+                                ancillaries: [
+                                    { type: 'CHECKED_BAG_1', priceCents: 3500 },
+                                    { type: 'PRIORITY_BOARDING', priceCents: 1500 },
+                                ],
+                            },
+                        ],
+                    },
+                ]);
+
+                const receipt = screen.getByRole('article', {
+                    name: 'Receipt for confirmation MA-22222222222222222222',
+                });
+                expect(within(receipt).getByText(/bags & extras:/i)).toBeInTheDocument();
+                expect(within(receipt).getByText(/\$50/i)).toBeInTheDocument();
+            });
+        });
     });
 });

@@ -29,6 +29,10 @@ export interface TravelDocumentPassenger {
     name: string;
     seat: string;
     cabin: string;
+    ancillaries?: Array<{ type: string; priceCents?: number }>;
+    bagCount?: number;
+    priorityBoarding?: boolean;
+    boardingGroup?: string;
 }
 
 export interface TravelDocumentEmailInput {
@@ -44,11 +48,25 @@ export interface TravelDocumentEmailInput {
 
 export function formatTravelDocumentsEmailText(input: TravelDocumentEmailInput): string {
     const passengerLines = input.passengers
-        .map((p, index) => [
-            `Passenger ${index + 1}: ${p.name}`,
-            `Seat: ${p.seat}`,
-            `Cabin: ${p.cabin}`,
-        ].join('\n'))
+        .map((p, index) => {
+            const bagCount = p.bagCount !== undefined
+                ? p.bagCount
+                : (p.ancillaries ? p.ancillaries.filter(a => a.type.startsWith('CHECKED_BAG')).length : 0);
+            const isPriority = p.priorityBoarding ?? (
+                Boolean(p.ancillaries?.some(a => a.type === 'PRIORITY_BOARDING')) ||
+                p.cabin.toUpperCase().includes('BUSINESS') ||
+                p.cabin.toUpperCase().includes('FIRST')
+            );
+            const group = p.boardingGroup ?? (isPriority ? 'GROUP 1' : 'GROUP 3');
+            const lines = [
+                `Passenger ${index + 1}: ${p.name}`,
+                `Seat: ${p.seat}`,
+                `Cabin: ${p.cabin}`,
+                `Boarding Group: ${group}${isPriority ? ' (PRIORITY BOARDING)' : ''}`,
+                `BAGS: ${bagCount}`,
+            ];
+            return lines.join('\n');
+        })
         .join('\n\n');
 
     return [

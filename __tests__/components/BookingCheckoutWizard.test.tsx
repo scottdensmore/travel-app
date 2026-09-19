@@ -1858,6 +1858,40 @@ describe('BookingCheckoutWizard', () => {
                 );
             });
         });
+
+        it('displays summary chips for extras and itemized extras in confirmation receipt (Step 5)', async () => {
+            mockBookFlightAction.mockResolvedValue({
+                id: 999,
+                reference: 'MA-EXTRA123456789',
+                createdAt: new Date('2026-07-01T00:30:00.000Z'),
+                totalPriceCents: 15000,
+                passengers: [{
+                    firstName: 'Elena',
+                    lastName: 'Rostova',
+                    seatNumbers: ['11A'],
+                    cabinClass: 'ECONOMY',
+                    ancillaries: [
+                        { type: 'CHECKED_BAG_1', priceCents: 3500 },
+                        { type: 'PRIORITY_BOARDING', priceCents: 1500 },
+                    ],
+                }],
+            });
+
+            await goToStep3();
+            fireEvent.click(screen.getByLabelText(/first checked bag/i));
+            fireEvent.click(screen.getByLabelText(/priority boarding/i));
+            fireEvent.click(screen.getByRole('button', { name: /continue to review & payment/i }));
+
+            fireEvent.click(await preparePayment('$150'));
+
+            await waitFor(() => {
+                expect(screen.getByText('Booking Confirmed!')).toBeInTheDocument();
+            });
+
+            expect(screen.getByText(/1 checked bag/i)).toBeInTheDocument();
+            expect(screen.getByText(/priority boarding/i)).toBeInTheDocument();
+            expect(screen.getAllByText(/bags & extras/i).length).toBeGreaterThan(1);
+        });
     });
 });
 

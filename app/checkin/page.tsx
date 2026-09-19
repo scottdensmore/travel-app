@@ -172,6 +172,20 @@ export default async function CheckInPage() {
         },
     });
 
+    const allPassengerIds = legs.flatMap(leg => leg.booking.passengers.map(p => p.id));
+    const ancillaries = allPassengerIds.length > 0 && prisma.passengerAncillary
+        ? await prisma.passengerAncillary.findMany({
+            where: { passengerId: { in: allPassengerIds } },
+            select: { passengerId: true, type: true, priceCents: true },
+        })
+        : [];
+    const ancillariesByPassenger = new Map<string, Array<{ type: string; priceCents: number }>>();
+    for (const a of ancillaries) {
+        const list = ancillariesByPassenger.get(a.passengerId) || [];
+        list.push(a);
+        ancillariesByPassenger.set(a.passengerId, list);
+    }
+
     const views: CheckInLegView[] = legs.map((leg) => {
         const flight = withRouteLabels(leg.flight);
         const eligibility = legCheckInEligibility({
@@ -220,6 +234,7 @@ export default async function CheckInPage() {
                 checkedIn: leg.seatAssignments.some(
                     seat => seat.passengerId === traveller.id && seat.checkedInAt !== null,
                 ),
+                ancillaries: ancillariesByPassenger.get(traveller.id) ?? [],
             }));
 
         return {

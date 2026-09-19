@@ -51,6 +51,26 @@ describe('travel document email delivery', () => {
         expect(text).toContain('Economy');
     });
 
+    it('formats plain-text email with baggage count and priority boarding details', () => {
+        const text = formatTravelDocumentsEmailText({
+            ...sampleInput,
+            passengers: [
+                {
+                    name: 'Ada Lovelace',
+                    seat: '11A',
+                    cabin: 'Economy',
+                    ancillaries: [
+                        { type: 'CHECKED_BAG_1', priceCents: 3500 },
+                        { type: 'PRIORITY_BOARDING', priceCents: 1500 },
+                    ],
+                },
+            ],
+        });
+
+        expect(text).toContain('BAGS: 1');
+        expect(text).toContain('Boarding Group: GROUP 1 (PRIORITY BOARDING)');
+    });
+
     it('sends travel documents via Postmark with correct payload structure, subject, and body', async () => {
         await sendTravelDocumentsEmail(sampleInput);
 

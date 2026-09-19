@@ -927,7 +927,11 @@ export async function resendBoardingPassAction(
         include: {
             booking: {
                 include: {
-                    passengers: true,
+                    passengers: {
+                        include: {
+                            ancillaries: true,
+                        },
+                    },
                 },
             },
             flight: {
@@ -970,11 +974,30 @@ export async function resendBoardingPassAction(
         const name = passenger
             ? `${passenger.firstName} ${passenger.lastName}`.trim()
             : 'Traveller';
-        return {
+        const ancillaries = passenger?.ancillaries;
+        const cabinUpper = (seat.cabinClass || '').toUpperCase();
+        const hasAncillaries = Boolean(ancillaries && ancillaries.length > 0);
+        const isPriority = Boolean(
+            (hasAncillaries && ancillaries?.some((a) => a.type === 'PRIORITY_BOARDING')) ||
+            cabinUpper === 'BUSINESS' ||
+            cabinUpper === 'FIRST'
+        );
+
+        const passengerDoc: TravelDocumentPassenger = {
             name,
             seat: seat.seatNumber,
             cabin: cabinLabel(seat.cabinClass),
         };
+
+        if (hasAncillaries || cabinUpper === 'BUSINESS' || cabinUpper === 'FIRST') {
+            const bagCount = ancillaries ? ancillaries.filter((a) => a.type.startsWith('CHECKED_BAG')).length : 0;
+            passengerDoc.ancillaries = ancillaries ?? [];
+            passengerDoc.bagCount = bagCount;
+            passengerDoc.priorityBoarding = isPriority;
+            passengerDoc.boardingGroup = isPriority ? 'GROUP 1' : 'GROUP 3';
+        }
+
+        return passengerDoc;
     });
 
     await sendTravelDocumentsEmail({

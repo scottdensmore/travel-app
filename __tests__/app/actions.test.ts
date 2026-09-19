@@ -3831,5 +3831,64 @@ describe('resendBoardingPassAction', () => {
             }),
         );
     });
+
+    it('includes baggage count and priority boarding when passengers have ancillaries', async () => {
+        mockedGetServerSession.mockResolvedValue({
+            user: { id: 'user-1', email: 'ada@example.com' },
+        });
+        mockedItineraryLegFindFirst.mockResolvedValue({
+            ...sampleLeg,
+            booking: {
+                ...sampleLeg.booking,
+                passengers: [
+                    {
+                        id: 'pass-1',
+                        firstName: 'Ada',
+                        lastName: 'Lovelace',
+                        ancillaries: [
+                            { type: 'CHECKED_BAG_1', priceCents: 3500 },
+                            { type: 'PRIORITY_BOARDING', priceCents: 1500 },
+                        ],
+                    },
+                    {
+                        id: 'pass-2',
+                        firstName: 'Grace',
+                        lastName: 'Hopper',
+                        ancillaries: [],
+                    },
+                ],
+            },
+        });
+        mockedSendTravelDocumentsEmail.mockResolvedValue(undefined);
+
+        const result = await resendBoardingPassAction(1, 10);
+
+        expect(result).toEqual({
+            ok: true,
+            data: {
+                sentTo: 'ada@example.com',
+            },
+        });
+        expect(mockedSendTravelDocumentsEmail).toHaveBeenCalledWith(
+            expect.objectContaining({
+                passengers: [
+                    expect.objectContaining({
+                        name: 'Ada Lovelace',
+                        seat: '11A',
+                        cabin: 'Economy',
+                        bagCount: 1,
+                        priorityBoarding: true,
+                        boardingGroup: 'GROUP 1',
+                    }),
+                    expect.objectContaining({
+                        name: 'Grace Hopper',
+                        seat: '11B',
+                        cabin: 'Economy',
+                    }),
+                ],
+            }),
+        );
+    });
 });
+
 
