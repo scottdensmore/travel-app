@@ -883,49 +883,51 @@ export default function ProfileClient({
                                                                 )}
                                                             </td>
                                                             <td className="py-2 text-right align-top booking-actions-cell" rowSpan={legRows.length}>
-                                                                {(cancellable || refundRetryable) && (
-                                                                    <div className="booking-actions">
-                                                                        {canChangeSeats && (
-                                                                            <button
-                                                                                onClick={() => setSelectedBooking(booking)}
-                                                                                disabled={isPending}
-                                                                                style={{
-                                                                                    background: '#6d28d9', backgroundImage: 'none', color: 'white', borderRadius: '4px',
-                                                                                    height: 'auto', width: 'auto', cursor: 'pointer', whiteSpace: 'nowrap'
-                                                                                }}
-                                                                            >
-                                                                                Change Seats
-                                                                            </button>
-                                                                        )}
-                                                                        {cancellable && (
-                                                                            <>
-                                                                                <button
-                                                                                    onClick={() => handleCancelBooking(booking.id, cancelledLeg?.flight?.flightNumber || '', isDisrupted)}
-                                                                                    disabled={isPending}
-                                                                                    style={{
-                                                                                        background: '#dc2626', backgroundImage: 'none', color: '#ffffff', borderRadius: '4px',
-                                                                                        height: 'auto', width: 'auto', cursor: 'pointer'
-                                                                                    }}
-                                                                                >
-                                                                                    Cancel
-                                                                                </button>
-                                                                            </>
-                                                                        )}
-                                                                        {refundRetryable && (
-                                                                            <button
-                                                                                onClick={() => handleRetryRefund(booking.id, refundAmountCents!)}
-                                                                                disabled={isPending || isRetryingRefund}
-                                                                                aria-busy={isRetryingRefund}
-                                                                                style={{
-                                                                                    background: '#d97706', backgroundImage: 'none', color: 'white', borderRadius: '4px',
-                                                                                    height: 'auto', width: 'auto', cursor: 'pointer', whiteSpace: 'nowrap'
-                                                                                }}
-                                                                            >
-                                                                                {isRetryingRefund ? 'Retrying refund…' : 'Retry Refund'}
-                                                                            </button>
-                                                                        )}
-                                                                    </div>
-                                                                )}
+                                                                <div className="booking-actions" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
+                                                                    <a href={`/api/documents/e-ticket/${booking.id}`} target="_blank" rel="noreferrer" style={{ padding: '0.25rem 0.5rem', background: '#34d399', color: '#000', borderRadius: '4px', textDecoration: 'none', fontWeight: 'bold', fontSize: '0.875rem', textAlign: 'center' }}>
+                                                                        Download E-Ticket (PDF)
+                                                                    </a>
+                                                                    <a href={`/api/documents/invoice/${booking.id}`} target="_blank" rel="noreferrer" style={{ padding: '0.25rem 0.5rem', background: '#a78bfa', color: '#000', borderRadius: '4px', textDecoration: 'none', fontWeight: 'bold', fontSize: '0.875rem', textAlign: 'center' }}>
+                                                                        Download Receipt (PDF)
+                                                                    </a>
+                                                                    {canChangeSeats && (
+                                                                        <button
+                                                                            onClick={() => setSelectedBooking(booking)}
+                                                                            disabled={isPending}
+                                                                            style={{
+                                                                                background: '#6d28d9', backgroundImage: 'none', color: 'white', borderRadius: '4px',
+                                                                                height: 'auto', width: 'auto', cursor: 'pointer', whiteSpace: 'nowrap'
+                                                                            }}
+                                                                        >
+                                                                            Change Seats
+                                                                        </button>
+                                                                    )}
+                                                                    {cancellable && (
+                                                                        <button
+                                                                            onClick={() => handleCancelBooking(booking.id, cancelledLeg?.flight?.flightNumber || '', isDisrupted)}
+                                                                            disabled={isPending}
+                                                                            style={{
+                                                                                background: '#dc2626', backgroundImage: 'none', color: '#ffffff', borderRadius: '4px',
+                                                                                height: 'auto', width: 'auto', cursor: 'pointer'
+                                                                            }}
+                                                                        >
+                                                                            Cancel
+                                                                        </button>
+                                                                    )}
+                                                                    {refundRetryable && (
+                                                                        <button
+                                                                            onClick={() => handleRetryRefund(booking.id, refundAmountCents!)}
+                                                                            disabled={isPending || isRetryingRefund}
+                                                                            aria-busy={isRetryingRefund}
+                                                                            style={{
+                                                                                background: '#d97706', backgroundImage: 'none', color: 'white', borderRadius: '4px',
+                                                                                height: 'auto', width: 'auto', cursor: 'pointer', whiteSpace: 'nowrap'
+                                                                            }}
+                                                                        >
+                                                                            {isRetryingRefund ? 'Retrying refund…' : 'Retry Refund'}
+                                                                        </button>
+                                                                    )}
+                                                                </div>
                                                                 {refundFeedback?.bookingId === booking.id && (
                                                                     <p
                                                                         ref={refundFeedbackRef}
