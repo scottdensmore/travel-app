@@ -793,7 +793,9 @@ export default function ProfileClient({
                                                             <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.72)', marginTop: '2px' }}>
                                                                 {booking.passengers.map((p) => {
                                                                     const bagCount = (p.ancillaries || []).filter(a => a.type.startsWith('CHECKED_BAG')).length;
-                                                                    const hasPriority = (p.ancillaries || []).some(a => a.type === 'PRIORITY_BOARDING');
+                                                                    const passengerSeat = (leg?.seatAssignments || []).find((sa: any) => sa.passengerId === p.id);
+                                                                    const isBusinessOrFirst = passengerSeat?.cabinClass === 'BUSINESS' || passengerSeat?.cabinClass === 'FIRST';
+                                                                    const hasPriority = (p.ancillaries || []).some(a => a.type === 'PRIORITY_BOARDING') || isBusinessOrFirst;
                                                                     const hasSpecial = (p.ancillaries || []).some(a => a.type === 'SPECIAL_ASSISTANCE');
                                                                     return (
                                                                         <div key={p.id} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
@@ -1236,7 +1238,8 @@ export default function ProfileClient({
                                             </div>
                                             {(() => {
                                                 const bagCount = (p.ancillaries || []).filter(a => a.type.startsWith('CHECKED_BAG')).length;
-                                                const hasPriority = (p.ancillaries || []).some(a => a.type === 'PRIORITY_BOARDING');
+                                                const cabin = cabinFor(p.id);
+                                                const hasPriority = (p.ancillaries || []).some(a => a.type === 'PRIORITY_BOARDING') || cabin === 'BUSINESS' || cabin === 'FIRST';
                                                 const hasSpecial = (p.ancillaries || []).some(a => a.type === 'SPECIAL_ASSISTANCE');
                                                 if (bagCount === 0 && !hasPriority && !hasSpecial) return null;
                                                 return (

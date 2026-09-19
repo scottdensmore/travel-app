@@ -994,7 +994,7 @@ export async function resendBoardingPassAction(
             passengerDoc.ancillaries = ancillaries ?? [];
             passengerDoc.bagCount = bagCount;
             passengerDoc.priorityBoarding = isPriority;
-            passengerDoc.boardingGroup = isPriority ? 'GROUP 1' : 'GROUP 3';
+            passengerDoc.boardingGroup = isPriority ? 'GROUP 1' : (cabinUpper === 'PREMIUM_ECONOMY' ? 'GROUP 2' : 'GROUP 3');
         }
 
         return passengerDoc;
