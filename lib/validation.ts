@@ -676,3 +676,33 @@ export const checkoutSeatClaimsSchema = z.object({
     claims: seatClaimsSchema,
 }).strict();
 
+export const airportIataCodeSchema = z.string()
+    .trim()
+    .regex(/^[A-Za-z]{3}$/, 'Airport code must be 3 letters.')
+    .transform(code => code.toUpperCase());
+
+export const flightStatusSearchSchema = z.discriminatedUnion('mode', [
+    z.object({
+        mode: z.literal('flightNumber'),
+        flightNumber: z.string().trim().min(2, 'Flight number must be at least 2 characters.').max(10),
+        date: isoDateSchema.optional(),
+    }),
+    z.object({
+        mode: z.literal('route'),
+        from: airportIataCodeSchema,
+        to: airportIataCodeSchema,
+        date: isoDateSchema.optional(),
+    }),
+]).refine(
+    (data) => {
+        if (data.mode === 'route' && data.from.toUpperCase() === data.to.toUpperCase()) {
+            return false;
+        }
+        return true;
+    },
+    { message: 'Origin and destination must be different.', path: ['to'] }
+);
+
+export type FlightStatusSearchInput = z.infer<typeof flightStatusSearchSchema>;
+
+
