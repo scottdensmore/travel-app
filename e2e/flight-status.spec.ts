@@ -2,97 +2,70 @@ import { test, expect } from '@playwright/test';
 import { prisma } from '../lib/prisma';
 import { airportCodesForRoute } from '../lib/airports';
 
-test.describe('Scheduled flight phases', () => {
-  const prefix = `phase-${Date.now()}`;
+test.describe('Public Flight Status Tracker', () => {
+    const flightNumber = `FS-${Date.now().toString().slice(-6)}`;
 
-  test.afterAll(async () => {
-    await prisma.flight.deleteMany({
-      where: { flightNumber: { startsWith: prefix } },
-    });
-  });
-
-  test('separates upcoming, departed, arrived, delayed, and cancelled flights', async ({ page }) => {
-    const now = Date.now();
-    const route = airportCodesForRoute('Seattle, USA', 'Detroit, USA');
-    const flights = [
-      {
-        flightNumber: `${prefix}-upcoming`,
-        departureDate: new Date(now + 6 * 60 * 60_000),
-        durationMinutes: 60,
-        status: 'ON_TIME' as const,
-      },
-      {
-        flightNumber: `${prefix}-departed`,
-        departureDate: new Date(now - 30 * 60_000),
-        durationMinutes: 120,
-        status: 'ON_TIME' as const,
-      },
-      {
-        flightNumber: `${prefix}-arrived`,
-        departureDate: new Date(now - 90 * 60_000),
-        durationMinutes: 30,
-        status: 'ON_TIME' as const,
-      },
-      {
-        flightNumber: `${prefix}-delayed`,
-        departureDate: new Date(now - 90 * 60_000),
-        durationMinutes: 30,
-        status: 'DELAYED' as const,
-      },
-      {
-        flightNumber: `${prefix}-cancelled`,
-        departureDate: new Date(now + 5 * 60 * 60_000),
-        durationMinutes: 60,
-        status: 'CANCELLED' as const,
-      },
-    ];
-
-    await prisma.flight.createMany({
-      data: flights.map(flight => ({
-        ...flight,
-        airline: 'Mona Airways',
-        ...route,
-        priceCents: 35_000,
-      })),
+    test.beforeAll(async () => {
+        const route = airportCodesForRoute('Seattle, USA', 'Detroit, USA');
+        await prisma.flight.create({
+            data: {
+                flightNumber,
+                airline: 'Mona Airways',
+                ...route,
+                departureDate: new Date(Date.now() + 25 * 60_000), // 25m out -> BOARDING
+                durationMinutes: 240,
+                priceCents: 35000,
+                status: 'ON_TIME',
+                departureTerminal: 'Main',
+                departureGate: 'B4',
+                arrivalTerminal: 'Evans',
+                arrivalGate: 'D12',
+            },
+        });
     });
 
-    const errors: string[] = [];
-    page.on('console', message => {
-      if (message.type() === 'error') errors.push(message.text());
+    test.afterAll(async () => {
+        await prisma.flight.deleteMany({ where: { flightNumber } });
     });
-    page.on('pageerror', error => errors.push(error.message));
 
-    await page.goto('/flights');
-    await expect(page.getByRole('heading', { name: 'Flight Status' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Live Flight Status' })).toHaveCount(0);
-    await page.getByPlaceholder(/Search by flight number/).fill(prefix);
+    test('Anonymous visitor searches by flight number and views detailed status card', async ({ page }) => {
+        await page.goto('/flight-status');
 
-    for (const [suffix, phase] of [
-      ['upcoming', 'Upcoming'],
-      ['departed', 'Departed'],
-      ['arrived', 'Arrived'],
-      ['delayed', 'Delayed'],
-      ['cancelled', 'Cancelled'],
-    ]) {
-      const row = page.getByRole('row').filter({ hasText: `${prefix}-${suffix}` });
-      await expect(row).toContainText(phase);
-    }
+        // Verify page loads without authentication
+        await expect(page.getByRole('heading', { name: /flight status/i })).toBeVisible();
 
-    await expect(page.getByText(
-      'Scheduled phase and airline-set status for Mona Airways flights.',
-    )).toBeVisible();
+        // Search by flight number
+        await page.getByRole('textbox', { name: /flight number/i }).fill(flightNumber);
+        await page.getByRole('button', { name: /(check status|search)/i }).click();
 
-    const filter = page.getByRole('combobox', {
-      name: 'Filter by flight phase or status',
+        // Verify detailed card displays
+        await expect(page.getByText(flightNumber)).toBeVisible();
+        await expect(page.getByText(/boarding/i)).toBeVisible();
+        await expect(page.getByText(/Gate B4/i)).toBeVisible();
+        await expect(page.getByText(/Gate D12/i)).toBeVisible();
     });
-    await expect(filter.getByRole('option')).toHaveText([
-      'All Phases / Statuses', 'Upcoming', 'Departed', 'Arrived', 'Delayed', 'Cancelled',
-    ]);
-    await filter.selectOption('ARRIVED');
-    await expect(page.getByRole('status')).toHaveText('1 flight shown');
-    await expect(page.getByText(`${prefix}-arrived`)).toBeVisible();
-    await expect(page.getByText(`${prefix}-departed`)).not.toBeVisible();
 
-    expect(errors).toEqual([]);
-  });
+    test('Anonymous visitor searches by route and deep links directly via URL', async ({ page }) => {
+        // Deep-link directly via URL
+        await page.goto(`/flight-status?from=SEA&to=DTW`);
+
+        await expect(page.getByText(flightNumber)).toBeVisible();
+    });
+
+    test('Legacy /flights redirects cleanly to /flight-status', async ({ page }) => {
+        await page.goto('/flights');
+        await expect(page).toHaveURL(/\/flight-status/);
+    });
+
+    test('Flight status page has zero horizontal overflow across breakpoints', async ({ page }) => {
+        await page.goto(`/flight-status?flight=${flightNumber}`);
+
+        for (const width of [320, 390, 768, 1280]) {
+            await page.setViewportSize({ width, height: 800 });
+            await expect.poll(() => page.evaluate(() => ({
+                clientWidth: document.documentElement.clientWidth,
+                scrollWidth: document.documentElement.scrollWidth,
+            }))).toEqual({ clientWidth: width, scrollWidth: width });
+        }
+    });
 });

@@ -330,12 +330,12 @@ test.describe('Admin Control Journey', () => {
 
     await page.goto('/admin/flights');
 
-    // Navigate to user-facing flight board
-    await page.goto('/flights');
+    // Navigate to user-facing flight tracker
+    await page.goto(`/flight-status?flight=${activeOccurrence.flightNumber}`);
 
-    // Verify the delayed flight is listed on the user flight board
-    await expect(page.locator('table').locator('text=Playwright Air').first()).toBeVisible();
-    await expect(page.locator('table').locator('text=Delayed').first()).toBeVisible();
+    // Verify the delayed flight is listed on the user flight tracker
+    await expect(page.getByText('Playwright Air').first()).toBeVisible();
+    await expect(page.getByText(/Delayed/i).first()).toBeVisible();
 
     // Override one occurrence with a custom layout through the manual generator.
     const occurrenceDate = new Date();
