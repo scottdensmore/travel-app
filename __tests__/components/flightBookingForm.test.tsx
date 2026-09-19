@@ -2,7 +2,7 @@ import React from 'react';
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import FlightBookingForm from '@/components/ui/flightBookingForm';
-import { bookFlightAction, searchFlightsAction } from '@/app/actions';
+import { bookFlightAction, searchFlightsAction, searchMultiCityFlightsAction, type MultiCitySearchResponse } from '@/app/actions';
 import type { FlightSearchCriteria } from '@/lib/flightSearchUrl';
 import { addDaysToIsoDate } from '@/lib/dates';
 
@@ -10,10 +10,12 @@ import { addDaysToIsoDate } from '@/lib/dates';
 jest.mock('@/app/actions', () => ({
     bookFlightAction: jest.fn(),
     searchFlightsAction: jest.fn(),
+    searchMultiCityFlightsAction: jest.fn(),
 }));
 
 const mockSearch = searchFlightsAction as jest.Mock;
 const mockBook = bookFlightAction as jest.Mock;
+const mockMultiCitySearch = searchMultiCityFlightsAction as jest.Mock;
 
 const searchSuccess = (flights: unknown[], nearbyDates: string[] = []) => ({
     flights,
@@ -1606,4 +1608,398 @@ describe('FlightBookingForm', () => {
     });
 
 });
+
+describe('Multi-city trip type search form', () => {
+    beforeEach(() => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-07-14T12:00:00.000Z'));
+        jest.clearAllMocks();
+    });
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
+    it('renders Multi-city radio option and switches to multi-city mode', () => {
+        render(<FlightBookingForm routes={routes} />);
+        const multiCityRadio = screen.getByLabelText(/multi-city/i);
+        expect(multiCityRadio).toBeInTheDocument();
+
+        fireEvent.click(multiCityRadio);
+        expect(screen.getByText(/flight 1/i)).toBeInTheDocument();
+        expect(screen.getByText(/flight 2/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /add flight/i })).toBeInTheDocument();
+    });
+
+    it('allows adding a 3rd leg, defaulting origin to previous destination', () => {
+        render(<FlightBookingForm routes={routes} />);
+        fireEvent.click(screen.getByLabelText(/multi-city/i));
+
+        const addBtn = screen.getByRole('button', { name: /add flight/i });
+        fireEvent.click(addBtn);
+
+        expect(screen.getByText(/flight 3/i)).toBeInTheDocument();
+        // Can add up to 5 legs
+        fireEvent.click(addBtn); // 4
+        fireEvent.click(addBtn); // 5
+        expect(screen.queryByRole('button', { name: /add flight/i })).toBeNull();
+    });
+
+    it('allows removing legs down to minimum of 2', () => {
+        render(<FlightBookingForm routes={routes} />);
+        fireEvent.click(screen.getByLabelText(/multi-city/i));
+
+        const addBtn = screen.getByRole('button', { name: /add flight/i });
+        fireEvent.click(addBtn); // 3 legs
+        expect(screen.getByText(/flight 3/i)).toBeInTheDocument();
+
+        const removeBtn = screen.getByLabelText(/remove flight 3/i);
+        fireEvent.click(removeBtn);
+
+        expect(screen.queryByText(/flight 3/i)).toBeNull();
+        // Remove button is hidden when only 2 legs remain
+        expect(screen.queryByLabelText(/remove flight/i)).toBeNull();
+    });
+
+    it('pre-fills added leg origin with previous destination and departure date with previous date', () => {
+        const { container } = render(<FlightBookingForm routes={routes} />);
+        fireEvent.click(screen.getByLabelText(/multi-city/i));
+
+        const leg2To = container.querySelector('#leg-1-to') as HTMLSelectElement;
+        const leg2Depart = container.querySelector('#leg-1-depart') as HTMLInputElement;
+
+        fireEvent.change(leg2To, { target: { value: 'Tokyo, Japan' } });
+        fireEvent.change(leg2Depart, { target: { value: '2026-07-20' } });
+
+        const addBtn = screen.getByRole('button', { name: /add flight/i });
+        fireEvent.click(addBtn);
+
+        const leg3From = container.querySelector('#leg-2-from') as HTMLSelectElement;
+        const leg3Depart = container.querySelector('#leg-2-depart') as HTMLInputElement;
+
+        expect(leg3From.value).toBe('Tokyo, Japan');
+        expect(leg3Depart.value).toBe('2026-07-20');
+    });
+
+    it('enforces sequential departure dates (Date(Leg N) >= Date(Leg N-1))', async () => {
+        const { container } = render(<FlightBookingForm routes={routes} />);
+        fireEvent.click(screen.getByLabelText(/multi-city/i));
+
+        const leg1Depart = container.querySelector('#leg-0-depart') as HTMLInputElement;
+        const leg2Depart = container.querySelector('#leg-1-depart') as HTMLInputElement;
+
+        fireEvent.change(leg1Depart, { target: { value: '2026-07-25' } });
+        fireEvent.change(leg2Depart, { target: { value: '2026-07-20' } });
+
+        const form = container.querySelector('#flight-search-form');
+        fireEvent.submit(form!);
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Flight 2 departure date cannot be earlier than Flight 1 departure date.'
+        );
+        expect(mockMultiCitySearch).not.toHaveBeenCalled();
+    });
+
+    it('enforces distinct origin and destination on legs (from !== to)', async () => {
+        const { container } = render(<FlightBookingForm routes={routes} />);
+        fireEvent.click(screen.getByLabelText(/multi-city/i));
+
+        const leg1From = container.querySelector('#leg-0-from') as HTMLSelectElement;
+        const leg1To = container.querySelector('#leg-0-to') as HTMLSelectElement;
+
+        fireEvent.change(leg1From, { target: { value: 'Detroit, USA' } });
+        fireEvent.change(leg1To, { target: { value: 'Detroit, USA' } });
+
+        fireEvent.click(screen.getByRole('button', { name: /find your trip/i }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Origin and destination must be different.'
+        );
+        expect(mockMultiCitySearch).not.toHaveBeenCalled();
+    });
+
+    it('submits multi-city search to searchMultiCityFlightsAction', async () => {
+        mockMultiCitySearch.mockResolvedValue({
+            legs: [
+                { status: 'ok', from: 'Seattle, USA', to: 'Detroit, USA', departureDate: '2026-07-15', flights: [], nearbyDates: [] },
+                { status: 'ok', from: 'Detroit, USA', to: 'Tokyo, Japan', departureDate: '2026-07-18', flights: [], nearbyDates: [] },
+            ],
+            cabinClass: 'ECONOMY',
+        });
+
+        const { container } = render(<FlightBookingForm routes={routes} />);
+        fireEvent.click(screen.getByLabelText(/multi-city/i));
+
+        const leg2Depart = container.querySelector('#leg-1-depart') as HTMLInputElement;
+        fireEvent.change(leg2Depart, { target: { value: '2026-07-18' } });
+
+        fireEvent.click(screen.getByRole('button', { name: /find your trip/i }));
+
+        await waitFor(() => {
+            expect(mockMultiCitySearch).toHaveBeenCalledWith({
+                legs: [
+                    { from: 'Seattle, USA', to: 'Detroit, USA', departureDate: '2026-07-15' },
+                    expect.objectContaining({ from: 'Detroit, USA', departureDate: '2026-07-18' }),
+                ],
+                cabinClass: 'ECONOMY',
+            });
+        });
+    });
+
+    it('handles server action error on multi-city search', async () => {
+        mockMultiCitySearch.mockRejectedValue(new Error('Network error'));
+
+        render(<FlightBookingForm routes={routes} />);
+        fireEvent.click(screen.getByLabelText(/multi-city/i));
+
+        fireEvent.click(screen.getByRole('button', { name: /find your trip/i }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Unable to search for flights right now.');
+    });
+
+    it('switches back to round-trip and restores standard fields', () => {
+        render(<FlightBookingForm routes={routes} />);
+        fireEvent.click(screen.getByLabelText(/multi-city/i));
+        expect(screen.getByText(/flight 1/i)).toBeInTheDocument();
+
+        fireEvent.click(screen.getByLabelText(/round trip/i));
+        expect(screen.queryByText(/flight 1/i)).toBeNull();
+        expect(screen.getByLabelText('From', { exact: true })).toBeInTheDocument();
+        expect(screen.getByLabelText('To', { exact: true })).toBeInTheDocument();
+        expect(screen.getByLabelText('Depart', { exact: true })).toBeInTheDocument();
+        expect(screen.getByLabelText('Return', { exact: true })).toBeInTheDocument();
+    });
+});
+
+describe('Multi-city step-by-step selection flow', () => {
+    beforeEach(() => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-07-14T12:00:00.000Z'));
+        jest.clearAllMocks();
+    });
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
+    const multiSearchResponse = {
+        legs: [
+            {
+                status: 'ok' as const,
+                from: 'Seattle, USA',
+                to: 'Detroit, USA',
+                departureDate: '2026-07-01',
+                flights: [{ id: 101, flightNumber: 'MA101', airline: 'Mona Airways', from: 'Seattle, USA', to: 'Detroit, USA', departureDate: '2026-07-01T08:00:00Z', priceCents: 30000, cabinAvailable: true, durationMinutes: 240, status: 'ON_TIME' as const, returnDate: null }],
+                nearbyDates: [],
+            },
+            {
+                status: 'ok' as const,
+                from: 'Detroit, USA',
+                to: 'New York, USA',
+                departureDate: '2026-07-05',
+                flights: [{ id: 102, flightNumber: 'MA102', airline: 'Mona Airways', from: 'Detroit, USA', to: 'New York, USA', departureDate: '2026-07-05T12:00:00Z', priceCents: 20000, cabinAvailable: true, durationMinutes: 120, status: 'ON_TIME' as const, returnDate: null }],
+                nearbyDates: [],
+            },
+        ],
+    } as unknown as MultiCitySearchResponse;
+
+    it('shows itinerary progress header and steps through leg selections', async () => {
+        render(<FlightBookingForm routes={routes} initialMultiCityResults={multiSearchResponse} />);
+
+        // Progress bar should show Step 1 of 2
+        expect(screen.getByText(/step 1 of 2/i)).toBeInTheDocument();
+        expect(screen.getByText('MA101')).toBeInTheDocument();
+
+        // Select Leg 1 flight
+        fireEvent.click(screen.getByRole('button', { name: /select flight ma101/i }));
+
+        // Advances to Step 2 of 2
+        expect(screen.getByText(/step 2 of 2/i)).toBeInTheDocument();
+        expect(screen.getByText('MA102')).toBeInTheDocument();
+        expect(screen.getByTestId('itinerary-total')).toHaveTextContent('Itinerary Total: $300'); // Running total
+        expect(screen.getByText(/selected:\s*ma101\s*\(\$300\)/i)).toBeInTheDocument(); // Chip with price
+
+        // Select Leg 2 flight
+        fireEvent.click(screen.getByRole('button', { name: /select flight ma102/i }));
+
+        // Both selected: shows total $500 and Review & Book Itinerary button
+        expect(screen.getByTestId('itinerary-total')).toHaveTextContent('Itinerary Total: $500');
+        const bookBtn = screen.getByRole('link', { name: /review & book itinerary/i });
+        expect(bookBtn).toHaveAttribute('href', expect.stringContaining('/checkout?flights=101,102'));
+    });
+
+    it('allows jumping back to edit an earlier leg and updates running total', async () => {
+        const responseWithChoices = {
+            legs: [
+                {
+                    status: 'ok' as const,
+                    from: 'Seattle, USA',
+                    to: 'Detroit, USA',
+                    departureDate: '2026-07-01',
+                    flights: [
+                        { id: 101, flightNumber: 'MA101', airline: 'Mona Airways', from: 'Seattle, USA', to: 'Detroit, USA', departureDate: '2026-07-01T08:00:00Z', priceCents: 30000, cabinAvailable: true, durationMinutes: 240, status: 'ON_TIME' as const, returnDate: null },
+                        { id: 103, flightNumber: 'MA103', airline: 'Mona Airways', from: 'Seattle, USA', to: 'Detroit, USA', departureDate: '2026-07-01T14:00:00Z', priceCents: 35000, cabinAvailable: true, durationMinutes: 240, status: 'ON_TIME' as const, returnDate: null },
+                    ],
+                    nearbyDates: [],
+                },
+                {
+                    status: 'ok' as const,
+                    from: 'Detroit, USA',
+                    to: 'New York, USA',
+                    departureDate: '2026-07-05',
+                    flights: [
+                        { id: 102, flightNumber: 'MA102', airline: 'Mona Airways', from: 'Detroit, USA', to: 'New York, USA', departureDate: '2026-07-05T12:00:00Z', priceCents: 20000, cabinAvailable: true, durationMinutes: 120, status: 'ON_TIME' as const, returnDate: null },
+                    ],
+                    nearbyDates: [],
+                },
+            ],
+        } as unknown as MultiCitySearchResponse;
+
+        render(<FlightBookingForm routes={routes} initialMultiCityResults={responseWithChoices} />);
+
+        // Select Leg 1 flight MA101 ($300)
+        fireEvent.click(screen.getByRole('button', { name: /select flight ma101/i }));
+        expect(screen.getByText(/step 2 of 2/i)).toBeInTheDocument();
+
+        // Select Leg 2 flight MA102 ($200) -> total $500
+        fireEvent.click(screen.getByRole('button', { name: /select flight ma102/i }));
+        expect(screen.getByTestId('itinerary-total')).toHaveTextContent('Itinerary Total: $500');
+
+        // Click Edit on Leg 1
+        const editLeg1Btn = screen.getByRole('button', { name: /edit flight 1/i });
+        fireEvent.click(editLeg1Btn);
+
+        // Active leg is back to Leg 1
+        expect(screen.getByText(/step 1 of 2/i)).toBeInTheDocument();
+        expect(screen.getByText('MA103')).toBeInTheDocument();
+
+        // Change selection to MA103 ($350)
+        fireEvent.click(screen.getByRole('button', { name: /select flight ma103/i }));
+
+        // Total should update to $550 ($350 + $200)
+        expect(screen.getByTestId('itinerary-total')).toHaveTextContent('Itinerary Total: $550');
+        const bookBtn = screen.getByRole('link', { name: /review & book itinerary/i });
+        expect(bookBtn).toHaveAttribute('href', expect.stringContaining('/checkout?flights=103,102'));
+    });
+
+    it('clears multi-city search results when a leg is added or removed', () => {
+        render(<FlightBookingForm routes={routes} initialMultiCityResults={multiSearchResponse} />);
+
+        expect(screen.getByText(/step 1 of 2/i)).toBeInTheDocument();
+
+        // Add flight button
+        const addBtn = screen.getByRole('button', { name: /add flight/i });
+        fireEvent.click(addBtn);
+
+        // Results should be cleared
+        expect(screen.queryByText(/step 1 of/i)).not.toBeInTheDocument();
+        expect(screen.getByText(/flight 3/i)).toBeInTheDocument();
+
+        // Now remove Flight 3
+        const removeBtn = screen.getByLabelText(/remove flight 3/i);
+        fireEvent.click(removeBtn);
+
+        expect(screen.queryByText(/flight 3/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/step 1 of/i)).not.toBeInTheDocument();
+    });
+
+    it('preserves multi-city search results when editing a leg input field before submitting', () => {
+        render(<FlightBookingForm routes={routes} initialMultiCityResults={multiSearchResponse} />);
+
+        expect(screen.getByText(/step 1 of 2/i)).toBeInTheDocument();
+
+        // Change departure date of Flight 1
+        const dateInput = screen.getByLabelText('Flight 1 Departure Date');
+        fireEvent.change(dateInput, { target: { value: '2026-07-02' } });
+
+        // Search results and progress header should still be visible
+        expect(screen.getByText(/step 1 of 2/i)).toBeInTheDocument();
+        expect(screen.getByText('MA101')).toBeInTheDocument();
+    });
+
+    it('renders accessible labels and fieldset for each multi-city leg', () => {
+        render(<FlightBookingForm routes={routes} />);
+        fireEvent.click(screen.getByLabelText(/multi-city/i));
+
+        expect(screen.getByLabelText('Flight 1 From')).toBeInTheDocument();
+        expect(screen.getByLabelText('Flight 1 To')).toBeInTheDocument();
+        expect(screen.getByLabelText('Flight 1 Departure Date')).toBeInTheDocument();
+        expect(screen.getByLabelText('Flight 2 From')).toBeInTheDocument();
+        expect(screen.getByLabelText('Flight 2 To')).toBeInTheDocument();
+        expect(screen.getByLabelText('Flight 2 Departure Date')).toBeInTheDocument();
+    });
+
+    it('includes cabin in checkout URL when cabin class is not economy', () => {
+        render(
+            <FlightBookingForm
+                routes={routes}
+                initialSearch={{
+                    from: 'Seattle, USA',
+                    to: 'Detroit, USA',
+                    departureDate: '2026-07-01',
+                    returnDate: '',
+                    tripType: 'one-way',
+                    cabinClass: 'BUSINESS',
+                }}
+                initialMultiCityResults={multiSearchResponse}
+            />
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: /select flight ma101/i }));
+        fireEvent.click(screen.getByRole('button', { name: /select flight ma102/i }));
+
+        const bookBtn = screen.getByRole('link', { name: /review & book itinerary/i });
+        expect(bookBtn).toHaveAttribute('href', expect.stringContaining('cabin=BUSINESS'));
+    });
+
+    it('clears active multi-city search results when submitting a round-trip search', async () => {
+        mockSearch.mockResolvedValue(searchSuccess(mockFlights));
+
+        render(<FlightBookingForm routes={routes} initialMultiCityResults={multiSearchResponse} />);
+
+        // Verify multi-city search results are active initially
+        expect(screen.getByText(/step 1 of 2/i)).toBeInTheDocument();
+        expect(screen.getByText('MA101')).toBeInTheDocument();
+
+        // Switch to round-trip
+        fireEvent.click(screen.getByLabelText(/round trip/i));
+
+        // Submit the search
+        fireEvent.click(screen.getByRole('button', { name: /find your trip/i }));
+
+        // Standard results should appear and multi-city results should be cleared
+        await waitFor(() => {
+            expect(screen.getByText('Available Flights')).toBeInTheDocument();
+        });
+        expect(screen.queryByText(/step 1 of 2/i)).not.toBeInTheDocument();
+        expect(screen.queryByText('Multi-City Itinerary')).not.toBeInTheDocument();
+    });
+
+    it('activates leg step via keyboard navigation (Enter and Space) on itinerary progress chips', () => {
+        render(<FlightBookingForm routes={routes} initialMultiCityResults={multiSearchResponse} />);
+
+        // Initially on Step 1
+        expect(screen.getByText(/step 1 of 2/i)).toBeInTheDocument();
+        expect(screen.getByText('MA101')).toBeInTheDocument();
+
+        // Locate chip for Flight 2
+        const flight2Chip = screen.getByRole('button', {
+            name: 'Jump to flight 2: Detroit, USA to New York, USA',
+        });
+        expect(flight2Chip).toHaveAttribute('tabIndex', '0');
+
+        // Press Enter to activate Leg 2
+        fireEvent.keyDown(flight2Chip, { key: 'Enter' });
+        expect(screen.getByText(/step 2 of 2/i)).toBeInTheDocument();
+        expect(screen.getByText('MA102')).toBeInTheDocument();
+
+        // Locate chip for Flight 1
+        const flight1Chip = screen.getByRole('button', {
+            name: 'Jump to flight 1: Seattle, USA to Detroit, USA',
+        });
+        expect(flight1Chip).toHaveAttribute('tabIndex', '0');
+
+        // Press Space to activate Leg 1
+        fireEvent.keyDown(flight1Chip, { key: ' ' });
+        expect(screen.getByText(/step 1 of 2/i)).toBeInTheDocument();
+        expect(screen.getByText('MA101')).toBeInTheDocument();
+    });
+});
+
 

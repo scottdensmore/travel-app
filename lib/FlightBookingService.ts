@@ -103,6 +103,16 @@ function matchesPersistedRequest(
 }
 
 export default class FlightBookingService {
+    static async bookFlight(bookingData: {
+        flightIds: number[];
+        userId: string;
+        passengers: PassengerInput[];
+        idempotencyKey: string;
+        paymentIntentId?: string | null;
+    }) {
+        return new FlightBookingService().bookFlight(bookingData);
+    }
+
     async bookFlight(bookingData: {
         flightIds: number[];
         userId: string;

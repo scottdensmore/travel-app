@@ -26,6 +26,7 @@ import {
     setFlightScheduleActiveAction,
     updateAccountTimeZoneAction,
     resendBoardingPassAction,
+    searchMultiCityFlightsAction,
 } from '@/app/actions';
 import { getServerSession } from 'next-auth';
 import TravelGuideService from '@/lib/TravelGuideService';
@@ -771,6 +772,110 @@ describe('searchFlightsAction', () => {
 
         expect(mockGenerateFlightsForDate).not.toHaveBeenCalled();
         expect(mockedFlightFindMany).not.toHaveBeenCalled();
+    });
+});
+
+describe('searchMultiCityFlightsAction', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockedFlightFindMany.mockResolvedValue([]);
+        mockedFlightScheduleFindMany.mockResolvedValue([]);
+    });
+    afterEach(() => jest.useRealTimers());
+
+    it('returns parallel leg results for valid multi-city criteria', async () => {
+        const payload = {
+            legs: [
+                { from: 'Seattle, USA', to: 'Detroit, USA', departureDate: '2026-07-01' },
+                { from: 'Detroit, USA', to: 'New York, USA', departureDate: '2026-07-05' },
+            ],
+            cabinClass: 'ECONOMY' as const,
+        };
+
+        const result = await searchMultiCityFlightsAction(payload);
+        expect(result).toHaveProperty('legs');
+        if ('legs' in result) {
+            expect(result.legs).toHaveLength(2);
+            expect(result.legs[0].status).toBe('ok');
+            expect(result.legs[1].status).toBe('ok');
+            expect(result.legs[0].from).toBe('Seattle, USA');
+            expect(result.legs[1].from).toBe('Detroit, USA');
+        }
+    });
+
+    it('gracefully isolates failure on one leg while returning ok for others', async () => {
+        // Leg 2 has an invalid / unresolvable route
+        const payload = {
+            legs: [
+                { from: 'Seattle, USA', to: 'Detroit, USA', departureDate: '2026-07-01' },
+                { from: 'Detroit, USA', to: 'Nonexistent Airport', departureDate: '2026-07-05' },
+            ],
+        };
+
+        const result = await searchMultiCityFlightsAction(payload);
+        expect(result).toHaveProperty('legs');
+        if ('legs' in result) {
+            expect(result.legs[0].status).toBe('ok');
+            expect(result.legs[1].flights).toEqual([]);
+        }
+    });
+
+    it('returns validation errors for invalid payload', async () => {
+        const result = await searchMultiCityFlightsAction({ legs: [] });
+        expect(result).toHaveProperty('validation');
+    });
+
+    it('isolates rejected promise on a leg and marks it as unavailable', async () => {
+        mockedFlightFindMany
+            .mockResolvedValueOnce([])
+            .mockRejectedValueOnce(new Error('Leg query failed'));
+
+        const payload = {
+            legs: [
+                { from: 'Seattle, USA', to: 'Detroit, USA', departureDate: '2026-07-01' },
+                { from: 'Detroit, USA', to: 'New York, USA', departureDate: '2026-07-05' },
+            ],
+            cabinClass: 'ECONOMY' as const,
+        };
+
+        const result = await searchMultiCityFlightsAction(payload);
+        expect(result).toHaveProperty('legs');
+        if ('legs' in result) {
+            expect(result.legs).toHaveLength(2);
+            expect(result.legs[0].status).toBe('ok');
+            expect(result.legs[1].status).toBe('unavailable');
+            expect(result.legs[1].flights).toEqual([]);
+            expect(result.legs[1].nearbyDates).toEqual([]);
+        }
+    });
+
+    it('returns matching flights and propagates cabinClass', async () => {
+        const flight = {
+            id: 101,
+            flightNumber: 'MA101',
+            from: 'Seattle, USA',
+            to: 'Detroit, USA',
+            departureDate: new Date('2026-07-01T12:00:00Z'),
+            economyRows: 10,
+        };
+        mockedFlightFindMany.mockResolvedValueOnce([routed(flight)]);
+
+        const payload = {
+            legs: [
+                { from: 'Seattle, USA', to: 'Detroit, USA', departureDate: '2026-07-01' },
+                { from: 'Detroit, USA', to: 'New York, USA', departureDate: '2026-07-05' },
+            ],
+            cabinClass: 'BUSINESS' as const,
+        };
+
+        const result = await searchMultiCityFlightsAction(payload);
+        expect(result).toHaveProperty('legs');
+        if ('legs' in result) {
+            expect(result.cabinClass).toBe('BUSINESS');
+            expect(result.legs[0].status).toBe('ok');
+            expect(result.legs[0].flights).toHaveLength(1);
+            expect(result.legs[0].flights[0].flightNumber).toBe('MA101');
+        }
     });
 });
 
