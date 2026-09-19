@@ -1706,6 +1706,8 @@ export default function BookingCheckoutWizard({
                                 return (
                                     <div
                                         key={pIdx}
+                                        role="group"
+                                        aria-labelledby={`passenger-extras-heading-${pIdx}`}
                                         style={{
                                             border: '1px solid rgba(255, 255, 255, 0.08)',
                                             borderRadius: '16px',
@@ -1714,7 +1716,7 @@ export default function BookingCheckoutWizard({
                                         }}
                                     >
                                         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem', borderBottom: '1px solid rgba(255, 255, 255, 0.06)', paddingBottom: '0.75rem' }}>
-                                            <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#a78bfa' }}>
+                                            <h3 id={`passenger-extras-heading-${pIdx}`} style={{ margin: 0, fontSize: '1.1rem', color: '#a78bfa' }}>
                                                 {passenger.firstName || passenger.lastName ? `${passenger.firstName} ${passenger.lastName}` : `Passenger #${pIdx + 1}`}
                                             </h3>
                                             <span style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.6)', background: 'rgba(255, 255, 255, 0.05)', padding: '3px 8px', borderRadius: '6px' }}>
