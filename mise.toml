@@ -1,2 +1,5 @@
+[settings]
+auto_install = true
+
 [tools]
 node = "22"
