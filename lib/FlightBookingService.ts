@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { CabinClass } from '@prisma/client';
+import type { AncillaryType, CabinClass } from '@prisma/client';
 import { heldSeats } from '@/lib/seatOccupancy';
 import { activeItineraryLegWhere, bookingFlights, legFlightClause } from '@/lib/bookingItinerary';
 import { prisma } from '@/lib/prisma';
@@ -7,7 +7,12 @@ import { assertSeatAvailableForCabin } from '@/lib/seatLayout';
 import { lockFlightForUpdate } from '@/lib/flightLock';
 import { checkoutHolderKey, consumeSeatHold, SeatHoldUnavailableError } from '@/lib/seatHolds';
 import { flightBookingServiceSchema, parseInput } from '@/lib/validation';
-import { calculateItineraryTotal, flightFareCents } from '@/lib/bookingPricing';
+import {
+    calculateBookingAncillariesTotalCents,
+    calculateItineraryTotal,
+    flightFareCents,
+    getAncillaryPriceCents,
+} from '@/lib/bookingPricing';
 import { safePassengerSelect } from '@/lib/passengerDataAccess';
 import {
     decryptPassengerData,
@@ -109,8 +114,16 @@ export default class FlightBookingService {
         passengers: PassengerInput[];
         idempotencyKey: string;
         paymentIntentId?: string | null;
+        ancillariesByPassenger?: Record<string | number, AncillaryType[]>;
     }) {
-        const { flightIds, userId, passengers, idempotencyKey, paymentIntentId } = parseInput(
+        const {
+            flightIds,
+            userId,
+            passengers,
+            idempotencyKey,
+            paymentIntentId,
+            ancillariesByPassenger,
+        } = parseInput(
             flightBookingServiceSchema,
             bookingData
         );
@@ -256,6 +269,13 @@ export default class FlightBookingService {
                 }))
             );
 
+            const ancillariesTotalCents = calculateBookingAncillariesTotalCents(
+                passengers.map((passenger, index) => ({
+                    cabin: passenger.cabinClass,
+                    ancillaries: (ancillariesByPassenger && (ancillariesByPassenger[index] || ancillariesByPassenger[String(index)])) || [],
+                }))
+            );
+
             // Retain passenger data until the trip ends, which is the last leg.
             const lastDeparture = flights
                 .map(flight => flight.departureDate)
@@ -287,7 +307,7 @@ export default class FlightBookingService {
             const booking = await tx.booking.create({
                 data: {
                     userId,
-                    totalPriceCents: total.cents,
+                    totalPriceCents: total.cents + ancillariesTotalCents,
                     legs: {
                         create: flightIds.map((flightId, index) => ({
                             sequence: index + 1,
@@ -326,6 +346,32 @@ export default class FlightBookingService {
                 )),
             });
 
+            const ancillaryRecords: Array<{ passengerId: string; type: AncillaryType; priceCents: number }> = [];
+            protectedPassengers.forEach((p, idx) => {
+                const types = (ancillariesByPassenger && (ancillariesByPassenger[idx] || ancillariesByPassenger[String(idx)])) || [];
+                const cabin = passengers[idx].cabinClass;
+                types.forEach((type) => {
+                    ancillaryRecords.push({
+                        passengerId: p.id,
+                        type,
+                        priceCents: getAncillaryPriceCents(type, cabin),
+                    });
+                });
+            });
+            if (ancillaryRecords.length > 0) {
+                await tx.passengerAncillary.createMany({ data: ancillaryRecords });
+            }
+
+            const ancillariesByPassengerId = new Map<string, Array<{ id: string; passengerId: string; type: AncillaryType; priceCents: number }>>();
+            ancillaryRecords.forEach(record => {
+                const existing = ancillariesByPassengerId.get(record.passengerId) || [];
+                existing.push({
+                    id: randomUUID(),
+                    ...record,
+                });
+                ancillariesByPassengerId.set(record.passengerId, existing);
+            });
+
             // What each traveller bought, keyed by the id we minted for them.
             // protectedPassengers is built from passengers in order, so the two
             // line up here by construction -- but the created rows come back
@@ -342,7 +388,7 @@ export default class FlightBookingService {
                 // here and a confirmation would print no seat at all.
                 passengers: booking.passengers.map(passenger => {
                     const purchased = purchasedByPassengerId.get(passenger.id);
-                    return {
+                    const basePassenger = {
                         id: passenger.id,
                         firstName: passenger.firstName,
                         lastName: passenger.lastName,
@@ -350,11 +396,53 @@ export default class FlightBookingService {
                         seatNumbers: purchased?.seatNumbers ?? [],
                         cabinClass: purchased?.cabinClass ?? 'ECONOMY',
                     };
+                    const passengerAncillaries = ancillariesByPassengerId.get(passenger.id);
+                    return passengerAncillaries && passengerAncillaries.length > 0
+                        ? { ...basePassenger, ancillaries: passengerAncillaries }
+                        : basePassenger;
                 }),
                 wasCreated: true,
             };
         });
 
         return savedBooking;
+    }
+
+    static async bookFlight(bookingData: {
+        flightIds: number[];
+        userId: string;
+        passengers: PassengerInput[];
+        idempotencyKey: string;
+        paymentIntentId?: string | null;
+        ancillariesByPassenger?: Record<string | number, AncillaryType[]>;
+    }) {
+        return new FlightBookingService().bookFlight(bookingData);
+    }
+
+    async findBookingById(bookingId: number) {
+        return prisma.booking.findUnique({
+            where: { id: bookingId },
+            include: {
+                legs: {
+                    where: activeItineraryLegWhere,
+                    include: { flight: true },
+                    orderBy: { sequence: 'asc' },
+                },
+                passengers: {
+                    select: {
+                        ...safePassengerSelect,
+                        seatAssignments: {
+                            where: { leg: activeItineraryLegWhere },
+                            include: { leg: true },
+                        },
+                        ancillaries: true,
+                    },
+                },
+            },
+        });
+    }
+
+    static async findBookingById(bookingId: number) {
+        return new FlightBookingService().findBookingById(bookingId);
     }
 }

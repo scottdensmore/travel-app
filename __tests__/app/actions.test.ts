@@ -19,6 +19,7 @@ import {
     getOccupiedSeatsAction,
     holdChosenSeatsAction,
     startCheckoutPaymentAction,
+    createPaymentAttemptAction,
     retryBookingRefundAction,
     reconcilePaymentAttemptAction,
     rebookItineraryAction,
@@ -1190,6 +1191,167 @@ describe('bookFlightAction', () => {
 
         expect(mockedNotificationCreate).toHaveBeenCalledTimes(1);
     });
+
+    it('forwards ancillariesByPassenger to FlightBookingService.bookFlight and paymentService', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        mockStartPayment.mockResolvedValue({
+            amountCents: 23_500,
+            currency: 'USD',
+            clientSecret: 'pi_secret_for_elements',
+            providerIntentId: 'pi_authorized',
+            status: 'CAPTURED',
+        });
+        mockBookFlight.mockResolvedValue({
+            id: 1,
+            flightIds: [42],
+            userId: 'user-123',
+            totalPriceCents: 23500,
+            wasCreated: true
+        });
+        mockedFlightFindUnique.mockResolvedValue({
+            id: 42,
+            airline: 'Gemini Airways',
+            flightNumber: 'GA101',
+            priceCents: 20000,
+            from: 'somewhere',
+            to: 'somewhere else',
+            fromAirport: { label: 'A' },
+            toAirport: { label: 'B' },
+        });
+
+        const passengers = [{
+            firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
+            passportNumber: 'AB123456', gender: 'Female', seatNumbers: ['11A'],
+            cabinClass: 'ECONOMY' as const
+        }];
+        const ancillariesByPassenger = {
+            0: ['CHECKED_BAG_1' as const],
+        };
+
+        const result = await bookFlightAction({
+            flightIds: [42],
+            passengers,
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+            ancillariesByPassenger,
+        });
+
+        expect(mockStartPayment).toHaveBeenCalledWith(expect.objectContaining({
+            checkoutId: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+            flightIds: [42],
+            userId: 'user-123',
+            ancillariesByPassenger,
+        }));
+        expect(mockBookFlight).toHaveBeenCalledWith(expect.objectContaining({
+            flightIds: [42],
+            userId: 'user-123',
+            passengers,
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+            paymentIntentId: 'pi_authorized',
+            ancillariesByPassenger,
+        }));
+        expect(result).toMatchObject({
+            id: 1,
+            totalPriceCents: 23500,
+            wasCreated: true,
+        });
+    });
+
+    it('rejects booking when payment authorization does not cover ancillaries', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        mockStartPayment.mockResolvedValue({
+            amountCents: 2_000,
+            currency: 'USD',
+            clientSecret: 'pi_secret_for_elements',
+            providerIntentId: 'pi_authorized',
+            status: 'AUTHORIZED',
+        });
+
+        const passengers = [{
+            firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
+            passportNumber: 'AB123456', gender: 'Female', seatNumbers: ['11A'],
+            cabinClass: 'ECONOMY' as const
+        }];
+        const ancillariesByPassenger = {
+            0: ['CHECKED_BAG_1' as const],
+        };
+
+        const result = await bookFlightAction({
+            flightIds: [42],
+            passengers,
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+            ancillariesByPassenger,
+        });
+
+        expect(result).toEqual({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'Payment authorization does not cover selected baggage and extras.',
+                fields: { payment: ['Payment authorization does not cover selected baggage and extras.'] },
+            },
+        });
+        expect(mockBookFlight).not.toHaveBeenCalled();
+    });
+
+    it('rejects booking when payment attempt fingerprint does not match request', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        mockStartPayment.mockRejectedValue(
+            new Error('Checkout payment ID was already used for a different request.')
+        );
+
+        const passengers = [{
+            firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
+            passportNumber: 'AB123456', gender: 'Female', seatNumbers: ['11A'],
+            cabinClass: 'ECONOMY' as const
+        }];
+
+        const result = await bookFlightAction({
+            flightIds: [42],
+            passengers,
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+            ancillariesByPassenger: {
+                0: ['CHECKED_BAG_1' as const],
+            },
+        });
+
+        expect(result).toEqual({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'Payment attempt does not match the current booking request.',
+                fields: { payment: ['Payment attempt does not match the current booking request.'] },
+            },
+        });
+        expect(mockBookFlight).not.toHaveBeenCalled();
+    });
+
+    it('rejects invalid ancillary combinations before booking', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+
+        const passengers = [{
+            firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
+            passportNumber: 'AB123456', gender: 'Female', seatNumbers: ['11A'],
+            cabinClass: 'ECONOMY' as const
+        }];
+
+        const result = await bookFlightAction({
+            flightIds: [42],
+            passengers,
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+            ancillariesByPassenger: {
+                0: ['CHECKED_BAG_2' as const],
+            },
+        });
+
+        expect(result).toMatchObject({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+            },
+        });
+        expect(mockStartPayment).not.toHaveBeenCalled();
+        expect(mockBookFlight).not.toHaveBeenCalled();
+    });
 });
 
 describe('startCheckoutPaymentAction', () => {
@@ -1280,6 +1442,59 @@ describe('startCheckoutPaymentAction', () => {
                 },
             },
         });
+    });
+
+    it('accepts ancillariesByPassenger and passes them to CheckoutPaymentService', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        mockStartPayment.mockResolvedValue({
+            amountCents: 63_500,
+            currency: 'USD',
+            clientSecret: 'pi_secret_for_elements',
+            providerIntentId: 'pi_server_only',
+            status: 'REQUIRES_PAYMENT_METHOD',
+        });
+
+        const inputWithAncillaries = {
+            ...input,
+            ancillariesByPassenger: {
+                0: ['CHECKED_BAG_1' as const],
+            },
+        };
+
+        await expect(createPaymentAttemptAction(inputWithAncillaries)).resolves.toEqual({
+            amountCents: 63_500,
+            currency: 'USD',
+            clientSecret: 'pi_secret_for_elements',
+            publishableKey: 'pk_test_public',
+            status: 'REQUIRES_PAYMENT_METHOD',
+        });
+        expect(mockStartPayment).toHaveBeenCalledWith(expect.objectContaining({
+            checkoutId: input.checkoutId,
+            flightIds: [42],
+            userId: 'user-123',
+            ancillariesByPassenger: {
+                0: ['CHECKED_BAG_1'],
+            },
+        }));
+    });
+
+    it('rejects invalid ancillary combinations when creating a payment attempt', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+
+        const inputWithInvalidAncillaries = {
+            ...input,
+            ancillariesByPassenger: {
+                0: ['CHECKED_BAG_2' as const],
+            },
+        };
+
+        await expect(createPaymentAttemptAction(inputWithInvalidAncillaries)).resolves.toMatchObject({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+            },
+        });
+        expect(mockStartPayment).not.toHaveBeenCalled();
     });
 });
 
