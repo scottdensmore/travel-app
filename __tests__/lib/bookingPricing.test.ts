@@ -1,7 +1,10 @@
 /** @jest-environment node */
 import {
     bookingTotalCents,
+    calculateBookingAncillariesTotalCents,
+    calculatePassengerAncillaries,
     flightFareCents,
+    getAncillaryPriceCents,
 } from '@/lib/bookingPricing';
 import { calculateBookingTotal, calculateItineraryTotal, parsePriceToCents } from '@/lib/bookingPricing';
 
@@ -88,4 +91,59 @@ describe('calculateItineraryTotal', () => {
             expect(flightFareCents({ priceCents: 0 })).toBe(0);
         });
     });
-})
+});
+
+describe('ancillary pricing and cabin allowances', () => {
+    it('prices Economy checked bags and priority boarding correctly', () => {
+        const result = calculatePassengerAncillaries('ECONOMY', ['CARRY_ON', 'CHECKED_BAG_1', 'CHECKED_BAG_2', 'PRIORITY_BOARDING']);
+        expect(result.totalCents).toBe(3500 + 4500 + 1500); // 9500 cents
+        expect(result.items.find(i => i.type === 'CARRY_ON')?.priceCents).toBe(0);
+        expect(result.items.find(i => i.type === 'CHECKED_BAG_1')?.priceCents).toBe(3500);
+        expect(result.items.find(i => i.type === 'CHECKED_BAG_2')?.priceCents).toBe(4500);
+        expect(result.items.find(i => i.type === 'PRIORITY_BOARDING')?.priceCents).toBe(1500);
+    });
+
+    it('gives Premium Economy 1 free checked bag and free carry-on', () => {
+        const result = calculatePassengerAncillaries('PREMIUM_ECONOMY', ['CARRY_ON', 'CHECKED_BAG_1', 'CHECKED_BAG_2', 'PRIORITY_BOARDING']);
+        expect(result.totalCents).toBe(0 + 4500 + 1500); // 6000 cents
+        expect(result.items.find(i => i.type === 'CHECKED_BAG_1')?.priceCents).toBe(0);
+    });
+
+    it('gives Business and First class 2 free checked bags and free priority boarding', () => {
+        const bizResult = calculatePassengerAncillaries('BUSINESS', ['CARRY_ON', 'CHECKED_BAG_1', 'CHECKED_BAG_2', 'PRIORITY_BOARDING']);
+        expect(bizResult.totalCents).toBe(0);
+
+        const firstResult = calculatePassengerAncillaries('FIRST', ['CARRY_ON', 'CHECKED_BAG_1', 'CHECKED_BAG_2', 'PRIORITY_BOARDING']);
+        expect(firstResult.totalCents).toBe(0);
+    });
+
+    it('calculates total for booking across multiple passengers', () => {
+        const total = calculateBookingAncillariesTotalCents([
+            { cabin: 'ECONOMY', ancillaries: ['CHECKED_BAG_1', 'PRIORITY_BOARDING'] },
+            { cabin: 'BUSINESS', ancillaries: ['CHECKED_BAG_1', 'CHECKED_BAG_2', 'PRIORITY_BOARDING'] },
+            { cabin: 'ECONOMY', ancillaries: [] },
+            { cabin: 'PREMIUM_ECONOMY' },
+        ]);
+        expect(total).toBe(5000);
+    });
+
+    it('calculates individual ancillary prices directly with getAncillaryPriceCents', () => {
+        expect(getAncillaryPriceCents('CARRY_ON', 'ECONOMY')).toBe(0);
+        expect(getAncillaryPriceCents('SPECIAL_ASSISTANCE', 'ECONOMY')).toBe(0);
+        expect(getAncillaryPriceCents('CHECKED_BAG_1', 'ECONOMY')).toBe(3500);
+        expect(getAncillaryPriceCents('CHECKED_BAG_2', 'ECONOMY')).toBe(4500);
+        expect(getAncillaryPriceCents('PRIORITY_BOARDING', 'ECONOMY')).toBe(1500);
+
+        expect(getAncillaryPriceCents('CHECKED_BAG_1', 'PREMIUM_ECONOMY')).toBe(0);
+        expect(getAncillaryPriceCents('CHECKED_BAG_2', 'PREMIUM_ECONOMY')).toBe(4500);
+        expect(getAncillaryPriceCents('PRIORITY_BOARDING', 'PREMIUM_ECONOMY')).toBe(1500);
+
+        expect(getAncillaryPriceCents('CHECKED_BAG_1', 'BUSINESS')).toBe(0);
+        expect(getAncillaryPriceCents('CHECKED_BAG_2', 'BUSINESS')).toBe(0);
+        expect(getAncillaryPriceCents('PRIORITY_BOARDING', 'BUSINESS')).toBe(0);
+
+        expect(getAncillaryPriceCents('CHECKED_BAG_1', 'FIRST')).toBe(0);
+        expect(getAncillaryPriceCents('CHECKED_BAG_2', 'FIRST')).toBe(0);
+        expect(getAncillaryPriceCents('PRIORITY_BOARDING', 'FIRST')).toBe(0);
+    });
+});

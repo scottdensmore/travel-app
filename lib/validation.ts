@@ -641,3 +641,33 @@ export const checkoutSeatClaimsSchema = z.object({
     checkoutId: bookingRequestIdSchema,
     claims: seatClaimsSchema,
 }).strict();
+
+export const ancillaryTypeSchema = z.enum([
+    'CARRY_ON',
+    'CHECKED_BAG_1',
+    'CHECKED_BAG_2',
+    'PRIORITY_BOARDING',
+    'SPECIAL_ASSISTANCE',
+]);
+
+export const passengerAncillariesSchema = z
+    .array(ancillaryTypeSchema)
+    .refine(
+        (types) => new Set(types).size === types.length,
+        { message: 'Duplicate ancillary items are not allowed.' }
+    )
+    .refine(
+        (types) => {
+            if (types.includes('CHECKED_BAG_2') && !types.includes('CHECKED_BAG_1')) {
+                return false;
+            }
+            return true;
+        },
+        { message: 'A first checked bag must be selected before adding a second checked bag.' }
+    );
+
+export const bookingAncillariesMapSchema = z.record(
+    z.string(),
+    passengerAncillariesSchema
+);
+
