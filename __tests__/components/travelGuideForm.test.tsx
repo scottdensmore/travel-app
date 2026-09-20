@@ -155,10 +155,11 @@ describe('TravelGuideForm', () => {
         expect(highlightInputs[1]).toHaveValue('Louvre');
     });
 
-    it('handles image upload via file input', async () => {
+    it('handles image upload via file input with valid image', async () => {
+        const validPngDataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
         const dummyFileReader = {
             readAsDataURL: jest.fn().mockImplementation(function(this: any) {
-                this.result = 'data:image/png;base64,mocked';
+                this.result = validPngDataUrl;
                 if (this.onloadend) this.onloadend();
             }),
             onloadend: null as any,
@@ -171,11 +172,107 @@ describe('TravelGuideForm', () => {
 
         const fileInput = screen.getByLabelText(/Cover Image:/i);
         const file = new File(['foo'], 'foo.png', { type: 'image/png' });
-        
+
         fireEvent.change(fileInput, { target: { files: [file] } });
 
         expect(dummyFileReader.readAsDataURL).toHaveBeenCalledWith(file);
         expect(await screen.findByAltText('Cover Preview')).toBeInTheDocument();
+
+        global.FileReader = originalFileReader;
+    });
+
+    it('rejects oversized image uploads (> 500 KB) without reading as data URL', () => {
+        const dummyFileReader = {
+            readAsDataURL: jest.fn(),
+            onloadend: null as any,
+            result: '',
+        };
+        const originalFileReader = global.FileReader;
+        global.FileReader = jest.fn().mockImplementation(() => dummyFileReader) as any;
+
+        render(<TravelGuideForm />);
+
+        const fileInput = screen.getByLabelText(/Cover Image:/i);
+        const largeContent = new Uint8Array(512_001);
+        const file = new File([largeContent], 'large.png', { type: 'image/png' });
+
+        fireEvent.change(fileInput, { target: { files: [file] } });
+
+        expect(dummyFileReader.readAsDataURL).not.toHaveBeenCalled();
+        expect(screen.getByText('Image must be 500 KB or smaller.')).toBeInTheDocument();
+        expect(screen.queryByAltText('Cover Preview')).not.toBeInTheDocument();
+
+        global.FileReader = originalFileReader;
+    });
+
+    it('rejects SVG image uploads with security error message', () => {
+        const dummyFileReader = {
+            readAsDataURL: jest.fn(),
+            onloadend: null as any,
+            result: '',
+        };
+        const originalFileReader = global.FileReader;
+        global.FileReader = jest.fn().mockImplementation(() => dummyFileReader) as any;
+
+        render(<TravelGuideForm />);
+
+        const fileInput = screen.getByLabelText(/Cover Image:/i);
+        const file = new File(['<svg></svg>'], 'image.svg', { type: 'image/svg+xml' });
+
+        fireEvent.change(fileInput, { target: { files: [file] } });
+
+        expect(dummyFileReader.readAsDataURL).not.toHaveBeenCalled();
+        expect(screen.getByText('SVG images are not allowed for security reasons.')).toBeInTheDocument();
+        expect(screen.queryByAltText('Cover Preview')).not.toBeInTheDocument();
+
+        global.FileReader = originalFileReader;
+    });
+
+    it('rejects unsupported file formats (e.g. image/gif)', () => {
+        const dummyFileReader = {
+            readAsDataURL: jest.fn(),
+            onloadend: null as any,
+            result: '',
+        };
+        const originalFileReader = global.FileReader;
+        global.FileReader = jest.fn().mockImplementation(() => dummyFileReader) as any;
+
+        render(<TravelGuideForm />);
+
+        const fileInput = screen.getByLabelText(/Cover Image:/i);
+        const file = new File(['gifdata'], 'image.gif', { type: 'image/gif' });
+
+        fireEvent.change(fileInput, { target: { files: [file] } });
+
+        expect(dummyFileReader.readAsDataURL).not.toHaveBeenCalled();
+        expect(screen.getByText('Only JPEG, PNG, WebP, and AVIF images are allowed.')).toBeInTheDocument();
+        expect(screen.queryByAltText('Cover Preview')).not.toBeInTheDocument();
+
+        global.FileReader = originalFileReader;
+    });
+
+    it('rejects image files whose payload fails data URL validation', async () => {
+        const corruptedDataUrl = 'data:image/png;base64,not-valid-base64!';
+        const dummyFileReader = {
+            readAsDataURL: jest.fn().mockImplementation(function(this: any) {
+                this.result = corruptedDataUrl;
+                if (this.onloadend) this.onloadend();
+            }),
+            onloadend: null as any,
+            result: '',
+        };
+        const originalFileReader = global.FileReader;
+        global.FileReader = jest.fn().mockImplementation(() => dummyFileReader) as any;
+
+        render(<TravelGuideForm />);
+
+        const fileInput = screen.getByLabelText(/Cover Image:/i);
+        const file = new File(['corrupted'], 'corrupted.png', { type: 'image/png' });
+
+        fireEvent.change(fileInput, { target: { files: [file] } });
+
+        expect(dummyFileReader.readAsDataURL).toHaveBeenCalledWith(file);
+        expect(screen.queryByAltText('Cover Preview')).not.toBeInTheDocument();
 
         global.FileReader = originalFileReader;
     });

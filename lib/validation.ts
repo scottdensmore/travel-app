@@ -9,6 +9,7 @@ import {
     RETURN_AFTER_BOOKING_WINDOW_MESSAGE,
     bookingWindowIsoDates,
 } from '@/lib/dates';
+import { validateImageDataUrl } from '@/lib/uploadValidation';
 
 export const MAX_MUTATION_BYTES = 1_000_000;
 export const MAX_REGISTRATION_BYTES = 16_384;
@@ -176,10 +177,28 @@ export const searchFlightsSchema = z.object({
 const coverImageSchema = z.string()
     .trim()
     .max(750_000, 'Cover image is too large.')
-    .refine(
-        value => value.startsWith('data:image/') || value.startsWith('/') || /^https?:\/\//.test(value),
-        'Cover image must be an image URL or data URL.'
-    );
+    .superRefine((value, context) => {
+        if (value.startsWith('data:image/')) {
+            const validation = validateImageDataUrl(value);
+            if (!validation.valid) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: validation.error,
+                });
+            }
+            return;
+        }
+
+        const isRelativePath = value.startsWith('/') && !value.startsWith('//');
+        const isAbsoluteHttps = /^https:\/\/\S+$/i.test(value);
+
+        if (!isRelativePath && !isAbsoluteHttps) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'Cover image must be a relative path (/...), secure URL (https://...), or valid image data URL.',
+            });
+        }
+    });
 
 export const cityGuideSchema = z.object({
     id: positiveId('City guide ID').optional(),

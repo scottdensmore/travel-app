@@ -597,14 +597,15 @@ describe('shared server validation schemas', () => {
     });
 
     it('covers exact city-guide and schedule boundaries', () => {
-        const imagePrefix = 'data:image/png;base64,';
+        const pngHeader = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+        const boundaryPng = Buffer.concat([pngHeader, Buffer.alloc(512_000 - pngHeader.length)]);
         const boundaryGuide = {
             city: 'C'.repeat(100),
             country: 'K'.repeat(100),
             latlong: [-90, 180],
             description: 'D'.repeat(5_000),
             highlights: Array.from({ length: 20 }, () => 'H'.repeat(200)),
-            coverImage: imagePrefix + 'a'.repeat(750_000 - imagePrefix.length)
+            coverImage: `data:image/png;base64,${boundaryPng.toString('base64')}`
         };
         expect(cityGuideSchema.safeParse(boundaryGuide).success).toBe(true);
         expect(cityGuideSchema.safeParse({ ...boundaryGuide, description: 'D'.repeat(5_001) }).success).toBe(false);
@@ -952,5 +953,135 @@ describe('passenger security and emergency contact validation', () => {
             }).success).toBe(false);
         });
     });
+
+    describe('cityGuideSchema coverImage upload validation', () => {
+        const baseGuide = {
+            city: 'Tokyo',
+            country: 'Japan',
+            latlong: [35.6762, 139.6503] as [number, number],
+            description: 'Vibrant capital of Japan.',
+            highlights: ['Shinjuku', 'Shibuya', 'Asakusa'],
+        };
+
+        const sampleJpeg = Buffer.from([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46]);
+        const samplePng = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00]);
+        const sampleWebp = Buffer.from([
+            0x52, 0x49, 0x46, 0x46, 0x20, 0x00, 0x00, 0x00,
+            0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x20,
+        ]);
+        const sampleAvif = Buffer.from([
+            0x00, 0x00, 0x00, 0x1C, 0x66, 0x74, 0x79, 0x70,
+            0x61, 0x76, 0x69, 0x66, 0x00, 0x00, 0x00, 0x00,
+        ]);
+
+        it('accepts relative paths (/path)', () => {
+            const result = cityGuideSchema.safeParse({
+                ...baseGuide,
+                coverImage: '/images/destinations/tokyo.jpg',
+            });
+            expect(result.success).toBe(true);
+        });
+
+        it('accepts absolute https:// URLs', () => {
+            const result = cityGuideSchema.safeParse({
+                ...baseGuide,
+                coverImage: 'https://images.example.com/destinations/tokyo.png',
+            });
+            expect(result.success).toBe(true);
+        });
+
+        it('accepts valid PNG data URLs', () => {
+            const result = cityGuideSchema.safeParse({
+                ...baseGuide,
+                coverImage: `data:image/png;base64,${samplePng.toString('base64')}`,
+            });
+            expect(result.success).toBe(true);
+        });
+
+        it('accepts valid JPEG data URLs', () => {
+            const result = cityGuideSchema.safeParse({
+                ...baseGuide,
+                coverImage: `data:image/jpeg;base64,${sampleJpeg.toString('base64')}`,
+            });
+            expect(result.success).toBe(true);
+        });
+
+        it('accepts valid WebP data URLs', () => {
+            const result = cityGuideSchema.safeParse({
+                ...baseGuide,
+                coverImage: `data:image/webp;base64,${sampleWebp.toString('base64')}`,
+            });
+            expect(result.success).toBe(true);
+        });
+
+        it('accepts valid AVIF data URLs', () => {
+            const result = cityGuideSchema.safeParse({
+                ...baseGuide,
+                coverImage: `data:image/avif;base64,${sampleAvif.toString('base64')}`,
+            });
+            expect(result.success).toBe(true);
+        });
+
+        it('rejects insecure http:// URLs', () => {
+            const result = cityGuideSchema.safeParse({
+                ...baseGuide,
+                coverImage: 'http://images.example.com/tokyo.jpg',
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('rejects javascript: and other URI schemes', () => {
+            const result = cityGuideSchema.safeParse({
+                ...baseGuide,
+                coverImage: 'javascript:alert(1)',
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('rejects SVG data URLs', () => {
+            const svgDataUrl = 'data:image/svg+xml;base64,PHN2Zz48c2NyaXB0PmFsZXJ0KDEpPC9zY3JpcHQ+PC9zdmc+';
+            const result = cityGuideSchema.safeParse({
+                ...baseGuide,
+                coverImage: svgDataUrl,
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('rejects oversized data URLs (> 500 KB)', () => {
+            const oversized = Buffer.concat([samplePng, Buffer.alloc(512_001)]);
+            const result = cityGuideSchema.safeParse({
+                ...baseGuide,
+                coverImage: `data:image/png;base64,${oversized.toString('base64')}`,
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('rejects corrupted base64 data URLs', () => {
+            const result = cityGuideSchema.safeParse({
+                ...baseGuide,
+                coverImage: 'data:image/png;base64,not-valid-base64!',
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('rejects MIME type vs magic byte mismatches', () => {
+            // Declared JPEG but PNG payload
+            const result = cityGuideSchema.safeParse({
+                ...baseGuide,
+                coverImage: `data:image/jpeg;base64,${samplePng.toString('base64')}`,
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('rejects polyglot image payloads containing script tags', () => {
+            const polyglot = Buffer.concat([samplePng, Buffer.from('<script>alert("polyglot")</script>')]);
+            const result = cityGuideSchema.safeParse({
+                ...baseGuide,
+                coverImage: `data:image/png;base64,${polyglot.toString('base64')}`,
+            });
+            expect(result.success).toBe(false);
+        });
+    });
 });
+
 
