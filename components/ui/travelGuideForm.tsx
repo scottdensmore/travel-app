@@ -1,5 +1,6 @@
 "use client"
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { saveCityGuideAction } from '@/app/actions';
 import CityGuide from '../../lib/types/CityGuide';
 import { isActionValidationFailure } from '@/lib/actionResult';
@@ -162,9 +163,7 @@ const TravelGuideForm: React.FC = () => {
           />
           {coverImage && (
             <div className="mb-4">
-              {/* This preview is a browser-generated data URL, not an optimizable asset. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={coverImage} alt="Cover Preview" className="max-w-xs h-auto rounded shadow" />
+              <Image src={coverImage} alt="Cover Preview" width={320} height={180} unoptimized className="max-w-xs h-auto rounded shadow" />
             </div>
           )}
         </div>
