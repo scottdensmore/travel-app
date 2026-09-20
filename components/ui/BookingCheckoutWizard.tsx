@@ -1146,7 +1146,9 @@ export default function BookingCheckoutWizard({
     };
 
     return (
-        <div style={{ maxWidth: '900px', width: '100%', margin: '100px auto 4rem', color: '#fff', padding: '0 1rem' }}>
+        <div
+            className="booking-wizard-container"
+            style={{ maxWidth: '900px', width: '100%', margin: '100px auto 4rem', color: '#fff', padding: '0 1rem', boxSizing: 'border-box', minWidth: 0 }}>
             {/* Steps Header indicator */}
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2.5rem', position: 'relative' }}>
                 <div style={{ position: 'absolute', top: '15px', left: 0, right: 0, height: '2px', background: 'rgba(255, 255, 255, 0.1)', zIndex: 1 }} />
@@ -1192,14 +1194,19 @@ export default function BookingCheckoutWizard({
             )}
 
             {/* Glassmorphic Container Card */}
-            <div style={{
-                background: 'rgba(255, 255, 255, 0.03)',
-                padding: '2.5rem',
-                borderRadius: '24px',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                backdropFilter: 'blur(20px)',
-                boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4)'
-            }}>
+            <div
+                className="booking-wizard-card"
+                style={{
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    padding: '2.5rem',
+                    borderRadius: '24px',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    backdropFilter: 'blur(20px)',
+                    boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4)',
+                    boxSizing: 'border-box',
+                    minWidth: 0,
+                    maxWidth: '100%'
+                }}>
 
                 {/* STEP 1: PASSENGERS FORM */}
                 {step === 1 && (
@@ -1211,7 +1218,20 @@ export default function BookingCheckoutWizard({
                         <p style={{ color: 'rgba(255,255,255,0.5)', marginBottom: '2rem' }}>Please enter details exactly as they appear on passenger passports.</p>
 
                         {passengers.map((passenger, index) => (
-                            <div key={index} style={{ border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '1.5rem', marginBottom: '1.5rem', background: 'rgba(255,255,255,0.01)', position: 'relative' }}>
+                            <div
+                                key={index}
+                                className="booking-passenger-card"
+                                style={{
+                                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                                    borderRadius: '12px',
+                                    padding: '1.5rem',
+                                    marginBottom: '1.5rem',
+                                    background: 'rgba(255,255,255,0.01)',
+                                    position: 'relative',
+                                    boxSizing: 'border-box',
+                                    minWidth: 0,
+                                    maxWidth: '100%'
+                                }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
                                     <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#a78bfa' }}>Passenger #{index + 1}</h3>
                                     {passengers.length > 1 && (
@@ -1224,7 +1244,7 @@ export default function BookingCheckoutWizard({
                                     )}
                                 </div>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '1rem', marginBottom: '1rem' }}>
                                     <div>
                                         <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}>First Name</label>
                                         <input
@@ -1255,7 +1275,7 @@ export default function BookingCheckoutWizard({
                                     </div>
                                 </div>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '1rem', marginBottom: '1rem' }}>
                                     <div>
                                         <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}>Date of Birth</label>
                                         <input
@@ -1285,7 +1305,16 @@ export default function BookingCheckoutWizard({
                                     </div>
                                 </div>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                                <div
+                                    className="booking-traveler-selects"
+                                    style={{
+                                        display: 'grid',
+                                        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                                        gap: '1rem',
+                                        minWidth: 0,
+                                        width: '100%',
+                                        boxSizing: 'border-box'
+                                    }}>
                                     <div>
                                         <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}>Gender</label>
                                         <select
@@ -1618,7 +1647,7 @@ export default function BookingCheckoutWizard({
                             style={{ display: 'flex', flexWrap: 'wrap', gap: '2.5rem' }}
                         >
                             {/* Left panel: Passenger selector */}
-                            <div style={{ flex: '1 1 250px' }}>
+                            <div style={{ flex: '1 1 250px', minWidth: 0 }}>
                                 <h3 style={{ fontSize: '1rem', color: '#a78bfa', marginBottom: '1rem' }}>Passengers</h3>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                                     {passengers.map((p, idx) => (
@@ -1649,8 +1678,23 @@ export default function BookingCheckoutWizard({
                                                 transition: 'all 0.2s'
                                             }}>
                                             <span style={{ display: 'block', fontWeight: 'bold', fontSize: '0.9rem' }}>{p.firstName || 'Passenger'} {p.lastName || `#${idx + 1}`}</span>
-                                            <span style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>
-                                                Class: {cabinLabel(p.cabinClass)} | Seat: <span style={{ color: '#34d399', fontWeight: 'bold' }}>{p.seatNumbers[activeLegIndex] || 'Not Chosen'}</span>
+                                            <span
+                                                className="booking-passenger-card-subtitle"
+                                                style={{
+                                                    display: 'flex',
+                                                    flexWrap: 'wrap',
+                                                    gap: '0.25rem 0.5rem',
+                                                    fontSize: '0.75rem',
+                                                    color: 'rgba(255,255,255,0.5)',
+                                                    marginTop: '2px',
+                                                    minWidth: 0
+                                                }}>
+                                                <span className="booking-passenger-card-segment" style={{ whiteSpace: 'nowrap' }}>
+                                                    Class: {cabinLabel(p.cabinClass)}
+                                                </span>
+                                                <span className="booking-passenger-card-segment" style={{ whiteSpace: 'nowrap' }}>
+                                                    Seat: <span style={{ color: '#34d399', fontWeight: 'bold' }}>{p.seatNumbers[activeLegIndex] || 'Not Chosen'}</span>
+                                                </span>
                                             </span>
                                         </button>
                                         {getPassengerSeatError(idx) && (

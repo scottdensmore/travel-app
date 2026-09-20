@@ -974,7 +974,7 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByText(/Auto-Assign Adjacent Seats/i));
 
             // Verify both travelers are assigned adjacent seats (11A and 11B by default)
-            const passengerCards = screen.getAllByText(/Class:/);
+            const passengerCards = screen.getAllByText(/Class:/).map((el) => el.closest('button') || el);
             expect(passengerCards[0].textContent).toContain('Seat: 11A');
             expect(passengerCards[1].textContent).toContain('Seat: 11B');
         });
@@ -987,7 +987,7 @@ describe('BookingCheckoutWizard', () => {
 
             fireEvent.click(screen.getByText(/Auto-Assign Adjacent Seats/i));
 
-            const passengerCards = screen.getAllByText(/Class:/);
+            const passengerCards = screen.getAllByText(/Class:/).map((el) => el.closest('button') || el);
             expect(passengerCards[0].textContent).toContain('Seat: 11A');
             expect(passengerCards[1].textContent).toContain('Seat: 11C');
         });
@@ -1000,7 +1000,7 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(seat11D);
 
             // Active traveler gets 11D, the next traveler gets adjacent 11E
-            const passengerCards = screen.getAllByText(/Class:/);
+            const passengerCards = screen.getAllByText(/Class:/).map((el) => el.closest('button') || el);
             expect(passengerCards[0].textContent).toContain('Seat: 11D');
             expect(passengerCards[1].textContent).toContain('Seat: 11E');
         });
@@ -1017,7 +1017,7 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(seat11D);
 
             // Only active traveler gets seat, next traveler has no seat
-            const passengerCards = screen.getAllByText(/Class:/);
+            const passengerCards = screen.getAllByText(/Class:/).map((el) => el.closest('button') || el);
             expect(passengerCards[0].textContent).toContain('Seat: 11D');
             expect(passengerCards[1].textContent).toContain('Seat: Not Chosen');
         });
@@ -1041,7 +1041,7 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(seat11C);
 
             // Verify Alice has 11A and Bob has 11C
-            let cards = screen.getAllByText(/Class:/);
+            let cards = screen.getAllByText(/Class:/).map((el) => el.closest('button') || el);
             expect(cards[0].textContent).toContain('Seat: 11A');
             expect(cards[1].textContent).toContain('Seat: 11C');
 
@@ -1052,7 +1052,7 @@ describe('BookingCheckoutWizard', () => {
             fireEvent.click(screen.getByTitle(/Seat 11C/));
 
             // Verify Alice now has 11C and Bob has 11A
-            cards = screen.getAllByText(/Class:/);
+            cards = screen.getAllByText(/Class:/).map((el) => el.closest('button') || el);
             expect(cards[0].textContent).toContain('Seat: 11C');
             expect(cards[1].textContent).toContain('Seat: 11A');
         });
