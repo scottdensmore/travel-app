@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 -- Contract step for the fare (#135).
 --
 -- "priceCents" has been authoritative since #134, and #144 moved the last

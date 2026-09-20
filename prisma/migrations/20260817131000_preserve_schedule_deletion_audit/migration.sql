@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 -- Preserve schedule term-change history when its template is permanently
 -- removed, and record the deleted template's exact before-state (#83).
 --

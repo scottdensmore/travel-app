@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 -- Contract step for the flight return date (#69).
 --
 -- "returnDate" never described a return the customer could hold. Every flight

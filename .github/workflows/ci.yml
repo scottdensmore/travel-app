@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+  security:
+    name: Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        run: npm audit --audit-level=high
+
+      - name: Secret scanning check
+        run: |
+          echo "Scanning repository for committed secrets..."
+          ! git grep -E -I "(BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY|AIza[0-9A-Za-z-_]{35}|sk_live_[0-9a-zA-Z]{24})" -- ':!node_modules'
+
+      - name: Migration verification
+        run: |
+          echo "Verifying migration scripts include SET LOCAL lock_timeout = '3s'..."
+          node -e '
+            const fs = require("fs");
+            const path = require("path");
+            const dir = "prisma/migrations";
+            const entries = fs.readdirSync(dir, { withFileTypes: true }).filter(e => e.isDirectory());
+            let failed = false;
+            for (const e of entries) {
+              const file = path.join(dir, e.name, "migration.sql");
+              if (!fs.existsSync(file)) continue;
+              const sql = fs.readFileSync(file, "utf8");
+              if (!sql.includes("SET LOCAL lock_timeout = '\''3s'\'';")) {
+                console.error(`Migration ${e.name} is missing SET LOCAL lock_timeout = '\''3s'\'';`);
+                failed = true;
+              }
+            }
+            if (failed) process.exit(1);
+            console.log(`Verified ${entries.length} migrations include SET LOCAL lock_timeout = '\''3s'\'';`);
+          '
+
+  database:
+    name: Database
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: travel_app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/travel_app
+      DATABASE_IS_DISPOSABLE: 'true'
+      NEXTAUTH_SECRET: ci-only-nextauth-secret-at-least-32-characters
+      NEXTAUTH_URL: http://localhost:3000
+      PASSENGER_DATA_ENCRYPTION_KEYS: ci-v1:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      STAFF_MFA_ENCRYPTION_KEYS: ci-v1:YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODk=
+      AUTH_TRUSTED_PROXY_HOPS: 1
+      AUTH_EMAIL_FROM: Mona Airways <no-reply@localhost>
+      AUTH_EMAIL_PROVIDER: mailpit
+      AUTH_EMAIL_API_URL: http://localhost:8025/api/v1/send
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run migrations
+        run: npx prisma migrate deploy
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Run database tests
+        run: npm run test:database

@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 -- Preserve every itinerary a booking has held while allowing one position to
 -- be replaced after an airline disruption.
 --

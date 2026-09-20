@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 -- Contract step for the booking total (#107, #108).
 --
 -- "totalPriceCents" has been the source of truth since #107; "totalPrice" was

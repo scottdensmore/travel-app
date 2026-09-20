@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 -- CreateEnum
 CREATE TYPE "Role" AS ENUM ('USER', 'ADMIN');
 

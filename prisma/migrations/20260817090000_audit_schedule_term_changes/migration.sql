@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 -- Record every bulk duration/fare change with the exact before/after values,
 -- affected counts, actor and a stable retry key (#83, #237).
 --

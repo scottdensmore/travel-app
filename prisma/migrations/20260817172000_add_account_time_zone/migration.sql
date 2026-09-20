@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 -- Give account activity a persistent timezone chosen by the customer. Existing
 -- accounts receive UTC as an explicit fallback; the UI labels it rather than
 -- inheriting whichever browser happens to render the page.

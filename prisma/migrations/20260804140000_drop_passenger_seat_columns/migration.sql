@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 -- Contract step for the traveller record (#137).
 --
 -- "Passenger" fused a traveller with a seat on one flight. A traveller is one

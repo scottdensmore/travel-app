@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 -- A booking becomes a sequence of flights rather than exactly one.
 --
 -- There is no separate itinerary table: it would be one-to-one with "Booking"

@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 -- Contract step for the schedule return time (#69, #124).
 --
 -- "returnTime" existed for one purpose: computing "Flight"."returnDate" as

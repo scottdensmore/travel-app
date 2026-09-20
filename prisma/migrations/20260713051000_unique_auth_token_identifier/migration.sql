@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 WITH ranked_tokens AS (
   SELECT
     ctid,

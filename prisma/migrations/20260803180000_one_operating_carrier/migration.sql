@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 -- One operating carrier (#72).
 --
 -- The application called itself Mona Airways while every flight it had ever
