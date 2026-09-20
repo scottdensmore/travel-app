@@ -77,6 +77,12 @@ import {
 } from '@/lib/travelDocumentEmail';
 import { serverRenderTime } from '@/lib/serverClock';
 import { FlightStatusService, type FlightStatusResult } from '@/lib/flightStatusService';
+import {
+    checkAccountDeletionEligibility,
+    deleteUserAccount,
+    verifyUserPassword,
+    type DeletionEligibilityResult,
+} from '@/lib/privacyService';
 
 export type ActionServerError = {
     ok: false;
@@ -2123,4 +2129,35 @@ export async function searchFlightStatusAction(
         return { ok: false, error: { code: 'SERVER_ERROR', message: 'Unable to retrieve flight status.' } };
     }
 }
+
+export async function checkAccountDeletionEligibilityAction(): Promise<ActionResult<DeletionEligibilityResult>> {
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.id;
+    if (!userId) throw new Error('Unauthorized');
+
+    const eligibility = await checkAccountDeletionEligibility(userId);
+    return { ok: true, data: eligibility };
+}
+
+export async function deleteAccountAction(password?: string): Promise<ActionResult<{ deleted: true }>> {
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.id;
+    if (!userId) throw new Error('Unauthorized');
+
+    const verification = await verifyUserPassword(userId, password ?? '');
+    if (!verification.valid) {
+        return actionValidationFailure(verification.message || 'Incorrect password.', 'password');
+    }
+
+    const eligibility = await checkAccountDeletionEligibility(userId);
+    if (!eligibility.eligible) {
+        return actionValidationFailure(eligibility.message ?? 'Cannot delete account with upcoming flights.', '_root');
+    }
+
+    await deleteUserAccount(userId);
+    revalidatePath('/');
+    revalidatePath('/profile');
+    return { ok: true, data: { deleted: true } };
+}
+
 
