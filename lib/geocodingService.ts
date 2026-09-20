@@ -92,6 +92,7 @@ export class GeocodingService {
     private timeoutMs: number;
 
     private cache = new Map<string, CacheEntry>();
+    private inFlight = new Map<string, Promise<GeocodeResult>>();
     private lastRequestTime = 0;
     private queue: Promise<void> = Promise.resolve();
 
@@ -104,6 +105,30 @@ export class GeocodingService {
 
     public clearCache(): void {
         this.cache.clear();
+        this.inFlight.clear();
+    }
+
+    private getCached(cacheKey: string): GeocodeResult | null {
+        const cached = this.cache.get(cacheKey);
+        if (!cached) {
+            return null;
+        }
+
+        if (Date.now() < cached.expiresAt) {
+            if (cached.error) {
+                throw cached.error;
+            }
+            if (cached.result) {
+                return {
+                    ...cached.result,
+                    source: 'cache',
+                };
+            }
+        } else {
+            this.cache.delete(cacheKey);
+        }
+
+        return null;
     }
 
     public async lookup(city: string, country: string): Promise<GeocodeResult> {
@@ -115,30 +140,43 @@ export class GeocodingService {
         }
 
         const cacheKey = `${cleanCity.toLowerCase()}:${cleanCountry.toLowerCase()}`;
-        const cached = this.cache.get(cacheKey);
+        const cached = this.getCached(cacheKey);
 
         if (cached) {
-            if (Date.now() < cached.expiresAt) {
-                if (cached.error) {
-                    throw cached.error;
-                }
-                if (cached.result) {
-                    return {
-                        ...cached.result,
-                        source: 'cache',
-                    };
-                }
-            } else {
-                this.cache.delete(cacheKey);
-            }
+            return cached;
         }
 
+        const inFlightPromise = this.inFlight.get(cacheKey);
+        if (inFlightPromise) {
+            const result = await inFlightPromise;
+            return {
+                ...result,
+                source: 'cache',
+            };
+        }
+
+        const lookupPromise = this.executeLookup(cleanCity, cleanCountry, cacheKey);
+        this.inFlight.set(cacheKey, lookupPromise);
+
+        try {
+            return await lookupPromise;
+        } finally {
+            this.inFlight.delete(cacheKey);
+        }
+    }
+
+    private async executeLookup(cleanCity: string, cleanCountry: string, cacheKey: string): Promise<GeocodeResult> {
         let upstreamError: Error | null = null;
         let upstreamNotFound = false;
         let upstreamResult: GeocodeResult | null = null;
 
         try {
             upstreamResult = await this.throttledFetch(async () => {
+                const cachedInsideQueue = this.getCached(cacheKey);
+                if (cachedInsideQueue) {
+                    return cachedInsideQueue;
+                }
+
                 const query = `${cleanCity},${cleanCountry}`;
                 const url = `${NOMINATIM_BASE_URL}?q=${encodeURIComponent(query)}&format=json&limit=1`;
 

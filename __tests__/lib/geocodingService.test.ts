@@ -55,6 +55,28 @@ describe('GeocodingService', () => {
         expect(global.fetch).toHaveBeenCalledTimes(1);
     });
 
+    it('deduplicates concurrent in-flight requests for the same location', async () => {
+        global.fetch = jest.fn().mockImplementation(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            return {
+                ok: true,
+                status: 200,
+                json: async () => [{ lat: '47.6062', lon: '-122.3321' }],
+            } as Response;
+        });
+
+        const [first, second] = await Promise.all([
+            service.lookup('Seattle', 'USA'),
+            service.lookup('Seattle', 'USA'),
+        ]);
+
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+        expect(first.latitude).toBe(47.6062);
+        expect(second.latitude).toBe(47.6062);
+        expect(first.source).toBe('nominatim');
+        expect(second.source).toBe('cache');
+    });
+
     it('throttles rapid sequential requests to enforce rate limits', async () => {
         global.fetch = jest.fn().mockResolvedValue({
             ok: true,
