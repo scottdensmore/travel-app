@@ -1,4 +1,5 @@
 import { Prisma, PrismaClient } from '@prisma/client';
+import { isLevelEnabled, logger } from '@/lib/logger';
 
 export function sanitizePrismaErrorMessage(error: unknown): void {
     if (error && typeof error === 'object' && 'message' in error && typeof (error as { message: unknown }).message === 'string') {
@@ -15,9 +16,18 @@ function extendClient(client: PrismaClient): PrismaClient {
         return client.$extends({
             query: {
                 $allModels: {
-                    async $allOperations({ query, args }) {
+                    async $allOperations({ query, args, model, operation }) {
+                        const start = Date.now();
                         try {
-                            return await query(args);
+                            const result = await query(args);
+                            if (isLevelEnabled('debug')) {
+                                logger.debug(`Prisma query: ${model ?? 'model'}.${operation ?? 'operation'}`, {
+                                    model,
+                                    operation,
+                                    durationMs: Date.now() - start,
+                                });
+                            }
+                            return result;
                         } catch (error) {
                             sanitizePrismaErrorMessage(error);
                             throw error;
@@ -46,10 +56,12 @@ function createPrismaClient(): PrismaClient {
 
     if (typeof client.$on === 'function') {
         client.$on('warn', (event) => {
-            console.warn(redactPrismaLogEvent('warn', event));
+            const redacted = redactPrismaLogEvent('warn', event);
+            logger.warn('Prisma warning', redacted);
         });
         client.$on('error', (event) => {
-            console.error(redactPrismaLogEvent('error', event));
+            const redacted = redactPrismaLogEvent('error', event);
+            logger.error('Prisma error', redacted);
         });
     }
 
