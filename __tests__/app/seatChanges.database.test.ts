@@ -174,4 +174,139 @@ describe('changeBookingSeatsAction on a round trip', () => {
         });
         expect(retaken).not.toBeNull();
     });
+
+    it('rejects seat change requests from a non-owner and leaves seats intact', async () => {
+        const suffix = `${Date.now()}c`;
+        const flight = await createFlight(`F${suffix}`, 'Seattle, USA', 'Detroit, USA', '2027-08-01');
+        const owner = await createUser(`${suffix}owner`);
+        const nonOwner = await createUser(`${suffix}intruder`);
+
+        const booking = await bookHeldFlight(new FlightBookingService(), {
+            flightIds: [flight.id],
+            userId: owner.id,
+            passengers: [{
+                firstName: 'Katherine',
+                lastName: 'Johnson',
+                dateOfBirth: new Date('1990-01-01'),
+                passportNumber: 'US1234567',
+                gender: 'Female',
+                seatNumbers: ['11A'],
+                cabinClass: 'ECONOMY',
+            }],
+            idempotencyKey: randomUUID(),
+        });
+        created.bookingIds.push(booking.id);
+
+        const legs = await prisma.itineraryLeg.findMany({
+            where: { bookingId: booking.id },
+            include: { seatAssignments: true },
+        });
+        const passengerId = legs[0].seatAssignments[0].passengerId;
+
+        // Attempt seat change as nonOwner
+        mockedSession.mockResolvedValue({ user: { id: nonOwner.id } });
+
+        await expect(changeBookingSeatsAction(booking.id, [
+            { passengerId, legId: legs[0].id, seatNumber: '12B' },
+        ])).rejects.toThrow('Unauthorized');
+
+        // Seat remains unchanged in database
+        const afterAssignment = await prisma.seatAssignment.findFirst({
+            where: { legId: legs[0].id, passengerId },
+        });
+        expect(afterAssignment?.seatNumber).toBe('11A');
+    });
+
+    it('fails cleanly without corruption when two transactions race for the same seat concurrently and preserves ancillaries', async () => {
+        const suffix = `${Date.now()}d`;
+        const flight = await createFlight(`F${suffix}`, 'Seattle, USA', 'Detroit, USA', '2027-09-01');
+        const user = await createUser(suffix);
+
+        const bookingA = await bookHeldFlight(new FlightBookingService(), {
+            flightIds: [flight.id],
+            userId: user.id,
+            passengers: [{
+                firstName: 'Alice',
+                lastName: 'Smith',
+                dateOfBirth: new Date('1990-01-01'),
+                passportNumber: 'US1111111',
+                gender: 'Female',
+                seatNumbers: ['11A'],
+                cabinClass: 'ECONOMY',
+            }],
+            idempotencyKey: randomUUID(),
+        });
+        created.bookingIds.push(bookingA.id);
+
+        const bookingB = await bookHeldFlight(new FlightBookingService(), {
+            flightIds: [flight.id],
+            userId: user.id,
+            passengers: [{
+                firstName: 'Bob',
+                lastName: 'Jones',
+                dateOfBirth: new Date('1992-02-02'),
+                passportNumber: 'US2222222',
+                gender: 'Male',
+                seatNumbers: ['12A'],
+                cabinClass: 'ECONOMY',
+            }],
+            idempotencyKey: randomUUID(),
+        });
+        created.bookingIds.push(bookingB.id);
+
+        const legsA = await prisma.itineraryLeg.findMany({
+            where: { bookingId: bookingA.id },
+            include: { seatAssignments: true },
+        });
+        const legsB = await prisma.itineraryLeg.findMany({
+            where: { bookingId: bookingB.id },
+            include: { seatAssignments: true },
+        });
+
+        const passengerAId = legsA[0].seatAssignments[0].passengerId;
+        const passengerBId = legsB[0].seatAssignments[0].passengerId;
+
+        // Add an ancillary to Alice
+        await prisma.passengerAncillary.create({
+            data: {
+                passengerId: passengerAId,
+                type: 'CHECKED_BAG_1',
+                priceCents: 3500,
+            },
+        });
+
+        mockedSession.mockResolvedValue({ user: { id: user.id } });
+
+        // Both attempt to claim the exact same target seat '14B' concurrently
+        const [resultA, resultB] = await Promise.allSettled([
+            changeBookingSeatsAction(bookingA.id, [
+                { passengerId: passengerAId, legId: legsA[0].id, seatNumber: '14B' },
+            ]),
+            changeBookingSeatsAction(bookingB.id, [
+                { passengerId: passengerBId, legId: legsB[0].id, seatNumber: '14B' },
+            ]),
+        ]);
+
+        const fulfilled = [resultA, resultB].filter(r => r.status === 'fulfilled');
+        const rejected = [resultA, resultB].filter(r => r.status === 'rejected');
+
+        expect(fulfilled).toHaveLength(1);
+        expect(rejected).toHaveLength(1);
+
+        const rejectedReason = (rejected[0] as PromiseRejectedResult).reason;
+        expect(rejectedReason.message).toMatch(/already occupied/i);
+
+        // Verify exactly one active assignment has 14B on this flight
+        const assignmentsOnFlight = await prisma.seatAssignment.findMany({
+            where: { flightId: flight.id, seatNumber: '14B', releasedAt: null },
+        });
+        expect(assignmentsOnFlight).toHaveLength(1);
+
+        // Verify that passenger A's ancillary remains intact
+        const ancillariesA = await prisma.passengerAncillary.findMany({
+            where: { passengerId: passengerAId },
+        });
+        expect(ancillariesA).toHaveLength(1);
+        expect(ancillariesA[0].type).toBe('CHECKED_BAG_1');
+    });
 });

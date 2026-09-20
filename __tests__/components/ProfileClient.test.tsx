@@ -1412,5 +1412,134 @@ describe('ProfileClient interactive dashboard', () => {
                 expect(within(receipt).getByText(/\$50/i)).toBeInTheDocument();
             });
         });
+
+        describe('self-service seat change in user profile (#355)', () => {
+            it('renders per-leg Change Seat button for confirmed upcoming flight legs', () => {
+                renderBookings([roundTripBooking]);
+                const leg0Btn = screen.getByRole('button', { name: /Change seat for Gemini Airways GA101/i });
+                const leg1Btn = screen.getByRole('button', { name: /Change seat for Gemini Airways GA900/i });
+                expect(leg0Btn).toBeInTheDocument();
+                expect(leg1Btn).toBeInTheDocument();
+                expect(leg0Btn).toHaveClass('leg-change-seat-btn');
+
+                // When leg 0 is checked in, only leg 1 has a Change Seat button
+                cleanup();
+                const partlyCheckedIn = {
+                    ...roundTripBooking,
+                    legs: roundTripBooking.legs.map((leg, index) => ({
+                        ...leg,
+                        seatAssignments: leg.seatAssignments.map(sa => ({
+                            ...sa,
+                            checkedInAt: index === 0 ? '2026-06-14T10:00:00.000Z' : null,
+                        })),
+                    })),
+                };
+                renderBookings([partlyCheckedIn]);
+                expect(screen.queryByRole('button', { name: /Change seat for Gemini Airways GA101/i })).not.toBeInTheDocument();
+                expect(screen.getByRole('button', { name: /Change seat for Gemini Airways GA900/i })).toBeInTheDocument();
+
+                // When booking is cancelled, no Change Seat buttons are rendered
+                cleanup();
+                const cancelledBooking = {
+                    ...roundTripBooking,
+                    status: 'CANCELLED',
+                };
+                renderBookings([cancelledBooking]);
+                expect(screen.queryByRole('button', { name: /Change seat for/i })).not.toBeInTheDocument();
+            });
+
+            it('clicking per-leg Change Seat opens modal focused directly on that flight leg', async () => {
+                mockGetOccupiedSeats.mockResolvedValue([]);
+                renderBookings([roundTripBooking]);
+
+                // Click leg 1 Change Seat button
+                const leg1Btn = screen.getByRole('button', { name: /Change seat for Gemini Airways GA900/i });
+                fireEvent.click(leg1Btn);
+
+                await act(async () => {});
+
+                // Modal opens with leg 2 details
+                const dialog = screen.getByRole('dialog');
+                expect(dialog).toBeInTheDocument();
+                expect(within(dialog).getByRole('heading', { name: 'Change Seats' })).toBeInTheDocument();
+                // Jane's seat on leg 2 is 4C
+                expect(await within(dialog).findByRole('button', { name: /Jane Doe.*Seat: 4C/i })).toBeInTheDocument();
+            });
+
+            it('modal dialog has proper accessibility attributes and closes on Escape key', async () => {
+                mockGetOccupiedSeats.mockResolvedValue([]);
+                renderBookings([roundTripBooking]);
+
+                fireEvent.click(screen.getByRole('button', { name: /Change seat for Gemini Airways GA101/i }));
+                await act(async () => {});
+
+                const dialog = screen.getByRole('dialog');
+                expect(dialog).toHaveAttribute('aria-modal', 'true');
+                expect(dialog).toHaveAttribute('aria-labelledby', 'seat-change-modal-title');
+                expect(within(dialog).getByRole('heading', { name: 'Change Seats' })).toHaveAttribute('id', 'seat-change-modal-title');
+
+                // Escape key closes the modal
+                fireEvent.keyDown(window, { key: 'Escape', code: 'Escape' });
+                expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+            });
+
+            it('provides accessible seat choices and announces immediate success feedback upon save', async () => {
+                mockGetOccupiedSeats.mockResolvedValue(['11B']);
+                mockChangeBookingSeats.mockResolvedValue({ success: true });
+                renderBookings([roundTripBooking]);
+
+                fireEvent.click(screen.getByRole('button', { name: /Change seat for Gemini Airways GA101/i }));
+                await act(async () => {});
+
+                // Seat 11A is available
+                const seat11A = await screen.findByRole('button', { name: 'Select Seat 11A' });
+                expect(seat11A).toHaveAttribute('aria-pressed', 'false');
+
+                // Seat 11B is occupied
+                const seat11B = await screen.findByRole('button', { name: 'Seat 11B, occupied' });
+                expect(seat11B).toBeDisabled();
+                expect(seat11B).toHaveAttribute('aria-disabled', 'true');
+
+                // Select seat 11A
+                fireEvent.click(seat11A);
+                expect(seat11A).toHaveAttribute('aria-pressed', 'true');
+                expect(seat11A).toHaveAttribute('aria-label', 'Seat 11A, selected');
+
+                // Save
+                const saveBtn = screen.getByRole('button', { name: 'Save New Seats' });
+                fireEvent.click(saveBtn);
+
+                await waitFor(() => {
+                    expect(mockChangeBookingSeats).toHaveBeenCalledWith(202, [
+                        { passengerId: 'p-1', legId: 501, seatNumber: '11A' },
+                        { passengerId: 'p-1', legId: 502, seatNumber: '4C' },
+                    ]);
+                });
+
+                // Modal closes and success feedback is announced
+                await waitFor(() => {
+                    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+                });
+                const feedback = screen.getByRole('status');
+                expect(feedback).toHaveClass('seat-change-feedback');
+                expect(feedback).toHaveTextContent('Seats updated successfully.');
+            });
+
+            it('has zero horizontal overflow bounds and high contrast styling', async () => {
+                mockGetOccupiedSeats.mockResolvedValue([]);
+                renderBookings([roundTripBooking]);
+
+                fireEvent.click(screen.getByRole('button', { name: /Change seat for Gemini Airways GA101/i }));
+                await act(async () => {});
+
+                const dialog = screen.getByRole('dialog');
+                // Check dialog bounds
+                expect(dialog).toHaveStyle({
+                    maxWidth: '800px',
+                    width: '100%',
+                    boxSizing: 'border-box',
+                });
+            });
+        });
     });
 });

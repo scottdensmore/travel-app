@@ -1338,11 +1338,15 @@ export async function changeBookingSeatsAction(
             const lockedBooking = await tx.booking.findUnique({
                 where: { id: bookingId },
                 select: {
+                    userId: true,
                     status: true,
                     passengers: { select: { id: true } },
                 }
             });
             if (!lockedBooking) throw new Error("Booking not found");
+            if (!hasVerifiedStaffAccess(session) && lockedBooking.userId !== userId) {
+                throw new Error("Unauthorized");
+            }
             if (lockedBooking.status === "CANCELLED") {
                 throw new Error("Seats cannot be changed on a cancelled booking");
             }
@@ -1369,6 +1373,7 @@ export async function changeBookingSeatsAction(
             );
             if (lockedFlights.size !== flightIds.length) throw new Error("Flight not found");
 
+            const requestedSeats = new Set<string>();
             for (const change of seatChanges) {
                 const passenger = lockedBooking.passengers.find(p => p.id === change.passengerId);
                 if (!passenger) {
@@ -1387,6 +1392,12 @@ export async function changeBookingSeatsAction(
                     heldAssignment.cabinClass,
                     lockedFlights.get(flightId)!,
                 );
+
+                const flightSeatKey = `${flightId}:${change.seatNumber}`;
+                if (requestedSeats.has(flightSeatKey)) {
+                    throw new Error(`Seat ${change.seatNumber} is already occupied by another passenger.`);
+                }
+                requestedSeats.add(flightSeatKey);
             }
 
             // Occupancy comes from the seat assignments, which record a seat per
@@ -1411,11 +1422,23 @@ export async function changeBookingSeatsAction(
             // Apply changes. Scoped to the named leg: a passenger on a round trip
             // has an assignment per leg, so updating by passenger alone would
             // overwrite the seat they still hold on the other one.
-            for (const change of seatChanges) {
-                await tx.seatAssignment.updateMany({
-                    where: { passengerId: change.passengerId, legId: change.legId },
-                    data: { seatNumber: change.seatNumber }
-                });
+            try {
+                for (const change of seatChanges) {
+                    await tx.seatAssignment.updateMany({
+                        where: { passengerId: change.passengerId, legId: change.legId },
+                        data: { seatNumber: change.seatNumber }
+                    });
+                }
+            } catch (error) {
+                if (
+                    error &&
+                    typeof error === 'object' &&
+                    (('code' in error && error.code === 'P2002') ||
+                     ('message' in error && typeof error.message === 'string' && error.message.includes('SeatAssignment_flightId_seatNumber_held_key')))
+                ) {
+                    throw new Error('Seat is already occupied by another passenger.');
+                }
+                throw error;
             }
         });
     } catch (error) {
@@ -1427,6 +1450,7 @@ export async function changeBookingSeatsAction(
 
     revalidatePath('/profile');
     revalidatePath('/admin');
+    return { success: true };
 }
 
 export async function deleteReviewAction(reviewId: string) {
