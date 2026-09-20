@@ -3,7 +3,7 @@ import React from 'react';
 import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
-import { airportCodesForRoute } from '@/lib/airports';
+import { airportCodesForRoute, airportLocalDate, airportTimeZoneFor } from '@/lib/airports';
 
 jest.mock('next-auth', () => ({ getServerSession: jest.fn() }));
 jest.mock('next/cache', () => ({ revalidatePath: jest.fn() }));
@@ -240,7 +240,8 @@ describe('the route a page renders', () => {
         // one asking for the relation inside a `select` rather than an
         // `include` -- so this is where that shape meets a real database.
         const fixtureFlight = await prisma.flight.findUnique({ where: { id: flightId } });
-        const date = fixtureFlight?.departureDate.toISOString().slice(0, 10);
+        const zone = (fixtureFlight?.fromAirportCode ? airportTimeZoneFor(fixtureFlight.fromAirportCode) : null) ?? 'UTC';
+        const date = fixtureFlight ? airportLocalDate(zone, fixtureFlight.departureDate) : undefined;
         expect(await routeHandedOver(() => FlightStatusPage({
             searchParams: Promise.resolve({ flight: flightNumber, date }),
         }))).toMatchObject({ from: ORIGIN, to: DESTINATION });

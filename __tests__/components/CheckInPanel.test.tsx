@@ -931,5 +931,64 @@ describe('seat confirmation and seat change during check-in', () => {
             expect(screen.getByText(/priority boarding/i)).toBeInTheDocument();
             expect(screen.getByText(/group 1/i)).toBeInTheDocument();
         });
+
+        it('displays TSA PreCheck badge when traveller has KTN', () => {
+            render(
+                <CheckInPanel
+                    legs={[
+                        leg({
+                            allowed: false,
+                            reason: 'ALREADY_CHECKED_IN',
+                            statusLabel: 'Checked in',
+                            awaiting: 0,
+                            travellers: [
+                                {
+                                    id: 'p1',
+                                    name: 'Elena Rostova',
+                                    seat: 'Seat 11A',
+                                    cabin: 'Economy',
+                                    checkedIn: true,
+                                    hasKtn: true,
+                                },
+                            ],
+                        }),
+                    ]}
+                />
+            );
+
+            const badges = screen.getAllByText('TSA PreCheck');
+            expect(badges.length).toBeGreaterThanOrEqual(1);
+            for (const badge of badges) {
+                expect(badge).toBeInTheDocument();
+            }
+        });
+
+        it('does not display TSA PreCheck badge when traveller has no KTN', () => {
+            render(
+                <CheckInPanel
+                    legs={[
+                        leg({
+                            allowed: false,
+                            reason: 'ALREADY_CHECKED_IN',
+                            statusLabel: 'Checked in',
+                            awaiting: 0,
+                            travellers: [
+                                {
+                                    id: 'p1',
+                                    name: 'Elena Rostova',
+                                    seat: 'Seat 11A',
+                                    cabin: 'Economy',
+                                    checkedIn: true,
+                                    hasKtn: false,
+                                },
+                            ],
+                        }),
+                    ]}
+                />
+            );
+
+            expect(screen.queryByText('TSA PreCheck')).not.toBeInTheDocument();
+        });
     });
 });
+

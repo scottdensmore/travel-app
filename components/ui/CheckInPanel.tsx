@@ -80,6 +80,8 @@ export interface CheckInLegView {
             type: string;
             priceCents?: number;
         }>;
+        hasKtn?: boolean;
+        ktn?: string;
     }>;
 }
 
@@ -532,6 +534,26 @@ export default function CheckInPanel({ legs }: { legs: CheckInLegView[] }) {
                                                         <li key={`${leg.legId}-${traveller.id}`}>
                                                             <span className="checkin-traveller-name">
                                                                 {traveller.name}
+                                                                {(traveller.hasKtn || Boolean(traveller.ktn)) && (
+                                                                    <span
+                                                                        className="checkin-tsa-precheck-badge"
+                                                                        data-testid="tsa-precheck-badge"
+                                                                        aria-label="TSA PreCheck"
+                                                                        style={{
+                                                                            display: 'inline-block',
+                                                                            background: '#1e3a8a',
+                                                                            color: '#ffffff',
+                                                                            fontWeight: 'bold',
+                                                                            fontSize: '0.65rem',
+                                                                            padding: '2px 6px',
+                                                                            borderRadius: '4px',
+                                                                            marginLeft: '8px',
+                                                                            letterSpacing: '0.05em',
+                                                                        }}
+                                                                    >
+                                                                        TSA PreCheck
+                                                                    </span>
+                                                                )}
                                                             </span>
                                                             <span className="checkin-traveller-seat">
                                                                 {traveller.checkedIn
@@ -596,6 +618,7 @@ export default function CheckInPanel({ legs }: { legs: CheckInLegView[] }) {
                                                                 bagCount={bagCount}
                                                                 priorityBoarding={hasPriority}
                                                                 boardingGroup={boardingGroup}
+                                                                hasKtn={Boolean(traveller.hasKtn || traveller.ktn)}
                                                             />
                                                         );
                                                     })}

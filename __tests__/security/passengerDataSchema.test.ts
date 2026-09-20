@@ -10,8 +10,14 @@ describe('passenger data storage schema', () => {
 
         expect(passengerModel).toContain('dateOfBirthEncrypted');
         expect(passengerModel).toContain('passportNumberEncrypted');
+        expect(passengerModel).toContain('ktnEncrypted');
+        expect(passengerModel).toContain('redressNumberEncrypted');
+        expect(passengerModel).toContain('emergencyContactEncrypted');
         expect(passengerModel).not.toMatch(/^\s*dateOfBirth\s+/m);
         expect(passengerModel).not.toMatch(/^\s*passportNumber\s+/m);
+        expect(passengerModel).not.toMatch(/^\s*ktn\s+/m);
+        expect(passengerModel).not.toMatch(/^\s*redressNumber\s+/m);
+        expect(passengerModel).not.toMatch(/^\s*emergencyContact\s+/m);
     });
 
     it('tracks expiry and deletion of sensitive passenger data', () => {
