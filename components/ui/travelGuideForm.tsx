@@ -181,10 +181,14 @@ const TravelGuideForm: React.FC = () => {
 
         </div>
         <div>
-          {latitude && <div><i><strong>Location:</strong> {latitude},{longitude}</i></div>}
-          <p data-testid="geocode-attribution" className="text-xs text-slate-400 mt-1">
-            Location data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline">OpenStreetMap</a> contributors
-          </p>
+          {latitude !== null && longitude !== null && (
+            <div>
+              <div><i><strong>Location:</strong> {latitude},{longitude}</i></div>
+              <p data-testid="geocode-attribution" className="text-xs text-slate-400 mt-1">
+                Location data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline">OpenStreetMap</a> contributors
+              </p>
+            </div>
+          )}
           {error && <div className="text-red-500 mb-4">{error}</div>}
         </div>
         <div>

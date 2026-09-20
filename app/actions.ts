@@ -151,7 +151,7 @@ export async function saveCityGuideAction(cityGuide: CityGuide) {
     const session = await getServerSession(authOptions);
     if (!hasVerifiedStaffAccess(session)) throw new Error("Unauthorized");
 
-    if (cityGuide.coverImage?.startsWith('data:image/')) {
+    if (cityGuide?.coverImage?.startsWith('data:image/')) {
         try {
             cityGuide.coverImage = await saveGuideImage(cityGuide.coverImage);
         } catch (error) {

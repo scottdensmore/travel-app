@@ -22,21 +22,14 @@ describe('TravelGuideForm', () => {
         global.fetch = jest.fn() as unknown as typeof fetch;
     });
 
-    it('renders the core input fields and geocoding attribution badge', () => {
+    it('renders the core input fields without attribution badge on initial mount', () => {
         render(<TravelGuideForm />);
         expect(screen.getByText('Add a New Travel Guide')).toBeInTheDocument();
         expect(screen.getByLabelText(/City/i)).toBeInTheDocument();
         expect(screen.getByLabelText(/Country/i)).toBeInTheDocument();
         expect(screen.getByLabelText(/Description/i)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Submit' })).toBeInTheDocument();
-
-        const attribution = screen.getByTestId('geocode-attribution');
-        expect(attribution).toBeInTheDocument();
-        expect(attribution).toHaveTextContent(/Location data ©.*OpenStreetMap.*contributors/);
-        const link = screen.getByRole('link', { name: 'OpenStreetMap' });
-        expect(link).toHaveAttribute('href', 'https://www.openstreetmap.org/copyright');
-        expect(link).toHaveAttribute('target', '_blank');
-        expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+        expect(screen.queryByTestId('geocode-attribution')).not.toBeInTheDocument();
     });
 
     it('looks up coordinates once both city and country are filled', async () => {
@@ -48,6 +41,8 @@ describe('TravelGuideForm', () => {
         });
 
         render(<TravelGuideForm />);
+        expect(screen.queryByTestId('geocode-attribution')).not.toBeInTheDocument();
+
         fireEvent.change(screen.getByLabelText(/City/i), { target: { value: 'Paris' } });
         fireEvent.change(screen.getByLabelText(/Country/i), { target: { value: 'France' } });
         fireEvent.blur(screen.getByLabelText(/Country/i));
@@ -55,6 +50,13 @@ describe('TravelGuideForm', () => {
         await waitFor(() => {
             expect(screen.getByText(/Location:/)).toBeInTheDocument();
             expect(screen.getByText(/48\.8566/)).toBeInTheDocument();
+            const attribution = screen.getByTestId('geocode-attribution');
+            expect(attribution).toBeInTheDocument();
+            expect(attribution).toHaveTextContent(/Location data ©.*OpenStreetMap.*contributors/);
+            const link = screen.getByRole('link', { name: 'OpenStreetMap' });
+            expect(link).toHaveAttribute('href', 'https://www.openstreetmap.org/copyright');
+            expect(link).toHaveAttribute('target', '_blank');
+            expect(link).toHaveAttribute('rel', 'noopener noreferrer');
         });
         expect(mockGeocode).toHaveBeenCalledWith({
             city: 'Paris',
