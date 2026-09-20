@@ -10,7 +10,7 @@ const nextConfig = {
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: blob: https:",
             "font-src 'self'",
-            "connect-src 'self' https://nominatim.openstreetmap.org https://api.stripe.com",
+            "connect-src 'self' https://api.stripe.com",
             "frame-ancestors 'none'",
             "form-action 'self'",
             "base-uri 'self'",

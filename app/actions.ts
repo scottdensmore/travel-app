@@ -35,6 +35,8 @@ import {
     FlightScheduleDeletionService,
 } from '@/lib/flightScheduleDeletionService';
 import CityGuide from '@/lib/types/CityGuide';
+import { geocodingService, type GeocodeResult } from '@/lib/geocodingService';
+import { saveGuideImage } from '@/lib/guideImageStorage';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { hasVerifiedStaffAccess } from '@/lib/staffAuthorization';
@@ -100,6 +102,7 @@ import {
     accountTimeZoneSchema,
     checkInRequestSchema,
     cityGuideSchema,
+    geocodeQuerySchema,
     favoriteSchema,
     flightScheduleActivationSchema,
     flightScheduleDeletionSchema,
@@ -148,6 +151,17 @@ export async function saveCityGuideAction(cityGuide: CityGuide) {
     const session = await getServerSession(authOptions);
     if (!hasVerifiedStaffAccess(session)) throw new Error("Unauthorized");
 
+    if (cityGuide?.coverImage?.startsWith('data:image/')) {
+        try {
+            cityGuide.coverImage = await saveGuideImage(cityGuide.coverImage);
+        } catch (error) {
+            return actionValidationFailure(
+                error instanceof Error ? error.message : 'Failed to save cover image.',
+                'coverImage',
+            );
+        }
+    }
+
     const parsed = parseActionInput(cityGuideSchema, cityGuide);
     if (!parsed.ok) return parsed;
     const result = await travelGuideService.saveCityGuide(parsed.data as CityGuide);
@@ -168,6 +182,24 @@ export async function deleteCityGuideAction(cityGuideId: number) {
     });
     revalidatePath('/admin/travelguide');
     revalidatePath('/travelguide');
+}
+
+export async function geocodeCityAction(query: { city: string; country: string }): Promise<ActionResult<GeocodeResult>> {
+    const session = await getServerSession(authOptions);
+    if (!hasVerifiedStaffAccess(session)) throw new Error("Unauthorized");
+
+    const parsed = parseActionInput(geocodeQuerySchema, query);
+    if (!parsed.ok) return parsed;
+
+    try {
+        const result = await geocodingService.lookup(parsed.data.city, parsed.data.country);
+        return { ok: true, data: result };
+    } catch (error) {
+        return actionValidationFailure(
+            error instanceof Error ? error.message : 'Location not found.',
+            'city',
+        );
+    }
 }
 
 export async function searchFlightsAction(

@@ -974,20 +974,26 @@ describe('passenger security and emergency contact validation', () => {
             0x61, 0x76, 0x69, 0x66, 0x00, 0x00, 0x00, 0x00,
         ]);
 
-        it('accepts relative paths (/path)', () => {
-            const result = cityGuideSchema.safeParse({
+        it('accepts allowed local static paths (/img/...) and managed uploads', () => {
+            const staticResult = cityGuideSchema.safeParse({
                 ...baseGuide,
-                coverImage: '/images/destinations/tokyo.jpg',
+                coverImage: '/img/my-profile-photo.jpg',
             });
-            expect(result.success).toBe(true);
+            expect(staticResult.success).toBe(true);
+
+            const managedResult = cityGuideSchema.safeParse({
+                ...baseGuide,
+                coverImage: '/uploads/guides/guide-1234567890abcdef.png',
+            });
+            expect(managedResult.success).toBe(true);
         });
 
-        it('accepts absolute https:// URLs', () => {
+        it('rejects unmanaged external https:// URLs', () => {
             const result = cityGuideSchema.safeParse({
                 ...baseGuide,
                 coverImage: 'https://images.example.com/destinations/tokyo.png',
             });
-            expect(result.success).toBe(true);
+            expect(result.success).toBe(false);
         });
 
         it('accepts valid PNG data URLs', () => {

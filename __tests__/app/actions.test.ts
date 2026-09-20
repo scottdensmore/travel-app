@@ -62,8 +62,13 @@ import {
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { sendTravelDocumentsEmail } from '@/lib/travelDocumentEmail';
+import { saveGuideImage } from '@/lib/guideImageStorage';
 
 // Keep these heavy/server-only modules out of the unit test.
+jest.mock('@/lib/guideImageStorage', () => ({
+    saveGuideImage: jest.fn(),
+    isManagedGuideImagePath: jest.requireActual('@/lib/guideImageStorage').isManagedGuideImagePath,
+}));
 jest.mock('next-auth', () => ({ getServerSession: jest.fn() }));
 jest.mock('next/cache', () => ({ revalidatePath: jest.fn() }));
 jest.mock('next/navigation', () => ({ redirect: jest.fn() }));
@@ -290,6 +295,7 @@ const mockedNotificationFindUnique = (prisma as any).notification.findUnique as 
 const mockedNotificationCreateMany = (prisma as any).notification.createMany as jest.Mock;
 const mockedItineraryLegFindFirst = (prisma as any).itineraryLeg.findFirst as jest.Mock;
 const mockedSendTravelDocumentsEmail = sendTravelDocumentsEmail as jest.Mock;
+const mockedSaveGuideImage = saveGuideImage as jest.Mock;
 
 const sampleGuide: any = {
     city: 'Paris',
@@ -383,6 +389,65 @@ describe('saveCityGuideAction authorization', () => {
             city: 'Paris',
             highlights: ['Eiffel Tower']
         }));
+    });
+
+    it('converts data:image/ coverImage payloads using saveGuideImage', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
+        mockedSaveGuideImage.mockResolvedValue('/uploads/guides/guide-1234567890abcdef.png');
+        mockSaveCityGuide.mockResolvedValue({ ...sampleGuide, id: 1 });
+
+        const dataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+        const result = await saveCityGuideAction({
+            ...sampleGuide,
+            coverImage: dataUrl,
+        });
+
+        expect(mockedSaveGuideImage).toHaveBeenCalledWith(dataUrl);
+        expect(mockSaveCityGuide).toHaveBeenCalledWith(expect.objectContaining({
+            coverImage: '/uploads/guides/guide-1234567890abcdef.png',
+        }));
+        expect(result).toHaveProperty('id', 1);
+    });
+
+    it('returns an ActionValidationFailure for coverImage if saveGuideImage throws', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
+        mockedSaveGuideImage.mockRejectedValue(new Error('Image must be 500 KB or smaller.'));
+
+        const dataUrl = 'data:image/png;base64,toolarge';
+        const result = await saveCityGuideAction({
+            ...sampleGuide,
+            coverImage: dataUrl,
+        });
+
+        expect(mockedSaveGuideImage).toHaveBeenCalledWith(dataUrl);
+        expect(result).toEqual({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'Image must be 500 KB or smaller.',
+                fields: {
+                    coverImage: ['Image must be 500 KB or smaller.'],
+                },
+            },
+        });
+        expect(mockSaveCityGuide).not.toHaveBeenCalled();
+    });
+
+    it('bypasses saveGuideImage when coverImage is a non-data-URL path', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
+        mockSaveCityGuide.mockResolvedValue({ ...sampleGuide, id: 1 });
+
+        const staticImagePath = '/img/seeded.jpg';
+        const result = await saveCityGuideAction({
+            ...sampleGuide,
+            coverImage: staticImagePath,
+        });
+
+        expect(mockedSaveGuideImage).not.toHaveBeenCalled();
+        expect(mockSaveCityGuide).toHaveBeenCalledWith(expect.objectContaining({
+            coverImage: staticImagePath,
+        }));
+        expect(result).toHaveProperty('id', 1);
     });
 });
 

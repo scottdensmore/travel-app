@@ -1,7 +1,7 @@
 "use client"
 import React, { useState } from 'react';
 import Image from 'next/image';
-import { saveCityGuideAction } from '@/app/actions';
+import { geocodeCityAction, saveCityGuideAction } from '@/app/actions';
 import CityGuide from '../../lib/types/CityGuide';
 import { isActionValidationFailure } from '@/lib/actionResult';
 import {
@@ -84,23 +84,24 @@ const TravelGuideForm: React.FC = () => {
 
   const fetchCoordinates = async (cityName: string, countryName: string) => {
     try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cityName)},${encodeURIComponent(countryName)}&format=json`
-      );
-      const data = await response.json();
-      if (data && data.length > 0) {
-        setLatitude(parseFloat(data[0].lat));
-        setLongitude(parseFloat(data[0].lon));
+      const result = await geocodeCityAction({ city: cityName, country: countryName });
+      if (isActionValidationFailure(result)) {
+        setLatitude(null);
+        setLongitude(null);
+        setError(result.error.message);
+      } else if (result.ok) {
+        setLatitude(result.data.latitude);
+        setLongitude(result.data.longitude);
         setError('');
       } else {
         setLatitude(null);
         setLongitude(null);
         setError('Location not found.');
       }
-    } catch {
+    } catch (err) {
       setLatitude(null);
       setLongitude(null);
-      setError('Failed to fetch coordinates.');
+      setError(err instanceof Error ? err.message : 'Failed to fetch coordinates.');
     }
   };
 
@@ -180,7 +181,14 @@ const TravelGuideForm: React.FC = () => {
 
         </div>
         <div>
-          {latitude && <div><i><strong>Location:</strong> {latitude},{longitude}</i></div>}
+          {latitude !== null && longitude !== null && (
+            <div>
+              <div><i><strong>Location:</strong> {latitude},{longitude}</i></div>
+              <p data-testid="geocode-attribution" className="text-xs text-slate-400 mt-1">
+                Location data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline">OpenStreetMap</a> contributors
+              </p>
+            </div>
+          )}
           {error && <div className="text-red-500 mb-4">{error}</div>}
         </div>
         <div>
