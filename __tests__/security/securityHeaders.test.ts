@@ -66,9 +66,11 @@ describe('Security Headers & Content Security Policy (Issue #89)', () => {
         expect(directives.get('font-src')).toEqual(["'self'"]);
         expect(directives.get('connect-src')).toEqual([
             "'self'",
-            'https://nominatim.openstreetmap.org',
             'https://api.stripe.com',
         ]);
+        expect(directives.get('connect-src')).not.toContain(
+            'https://nominatim.openstreetmap.org'
+        );
         expect(directives.get('frame-ancestors')).toEqual(["'none'"]);
         expect(directives.get('form-action')).toEqual(["'self'"]);
         expect(directives.get('base-uri')).toEqual(["'self'"]);
