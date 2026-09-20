@@ -89,9 +89,9 @@ const TravelGuideForm: React.FC = () => {
         setLatitude(null);
         setLongitude(null);
         setError(result.error.message);
-      } else if (result && typeof result.latitude === 'number' && typeof result.longitude === 'number') {
-        setLatitude(result.latitude);
-        setLongitude(result.longitude);
+      } else if (result.ok) {
+        setLatitude(result.data.latitude);
+        setLongitude(result.data.longitude);
         setError('');
       } else {
         setLatitude(null);

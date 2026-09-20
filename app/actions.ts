@@ -184,14 +184,22 @@ export async function deleteCityGuideAction(cityGuideId: number) {
     revalidatePath('/travelguide');
 }
 
-export async function geocodeCityAction(query: { city: string; country: string }): Promise<GeocodeResult | ActionValidationFailure> {
+export async function geocodeCityAction(query: { city: string; country: string }): Promise<ActionResult<GeocodeResult>> {
     const session = await getServerSession(authOptions);
     if (!hasVerifiedStaffAccess(session)) throw new Error("Unauthorized");
 
     const parsed = parseActionInput(geocodeQuerySchema, query);
     if (!parsed.ok) return parsed;
 
-    return await geocodingService.lookup(parsed.data.city, parsed.data.country);
+    try {
+        const result = await geocodingService.lookup(parsed.data.city, parsed.data.country);
+        return { ok: true, data: result };
+    } catch (error) {
+        return actionValidationFailure(
+            error instanceof Error ? error.message : 'Location not found.',
+            'city',
+        );
+    }
 }
 
 export async function searchFlightsAction(

@@ -81,11 +81,32 @@ describe('geocodeCityAction', () => {
 
         const result = await geocodeCityAction({ city: 'Seattle', country: 'USA' });
         expect(result).toEqual({
-            latitude: 47.6062,
-            longitude: -122.3321,
-            attribution: 'Data © OpenStreetMap contributors',
-            source: 'nominatim',
+            ok: true,
+            data: {
+                latitude: 47.6062,
+                longitude: -122.3321,
+                attribution: 'Data © OpenStreetMap contributors',
+                source: 'nominatim',
+            },
         });
         expect(geocodingService.lookup).toHaveBeenCalledWith('Seattle', 'USA');
+    });
+
+    it('returns ActionValidationFailure when geocodingService.lookup throws', async () => {
+        (getServerSession as jest.Mock).mockResolvedValue({ user: { role: 'ADMIN' } });
+        (hasVerifiedStaffAccess as jest.Mock).mockReturnValue(true);
+        (geocodingService.lookup as jest.Mock).mockRejectedValue(new Error('Location not found: Nowhere, USA'));
+
+        const result = await geocodeCityAction({ city: 'Nowhere', country: 'USA' });
+        expect(result).toEqual({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'Location not found: Nowhere, USA',
+                fields: {
+                    city: ['Location not found: Nowhere, USA'],
+                },
+            },
+        });
     });
 });

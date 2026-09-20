@@ -13,6 +13,7 @@ export interface GeocodingServiceOptions {
     cacheTtlMs?: number;
     negativeTtlMs?: number;
     timeoutMs?: number;
+    maxEntries?: number;
 }
 
 interface CacheEntry {
@@ -90,6 +91,7 @@ export class GeocodingService {
     private cacheTtlMs: number;
     private negativeTtlMs: number;
     private timeoutMs: number;
+    private maxEntries: number;
 
     private cache = new Map<string, CacheEntry>();
     private inFlight = new Map<string, Promise<GeocodeResult>>();
@@ -101,11 +103,24 @@ export class GeocodingService {
         this.cacheTtlMs = options?.cacheTtlMs ?? 24 * 60 * 60 * 1000; // 24 hours
         this.negativeTtlMs = options?.negativeTtlMs ?? 5 * 60 * 1000; // 5 minutes
         this.timeoutMs = options?.timeoutMs ?? 4000; // 4 seconds
+        this.maxEntries = options?.maxEntries ?? 1000;
     }
 
     public clearCache(): void {
         this.cache.clear();
         this.inFlight.clear();
+    }
+
+    private setCache(cacheKey: string, entry: CacheEntry): void {
+        if (this.cache.has(cacheKey)) {
+            this.cache.delete(cacheKey);
+        } else if (this.cache.size >= this.maxEntries) {
+            const oldestKey = this.cache.keys().next().value;
+            if (oldestKey !== undefined) {
+                this.cache.delete(oldestKey);
+            }
+        }
+        this.cache.set(cacheKey, entry);
     }
 
     private getCached(cacheKey: string): GeocodeResult | null {
@@ -115,6 +130,10 @@ export class GeocodingService {
         }
 
         if (Date.now() < cached.expiresAt) {
+            // Refresh LRU order on access
+            this.cache.delete(cacheKey);
+            this.cache.set(cacheKey, cached);
+
             if (cached.error) {
                 throw cached.error;
             }
@@ -165,6 +184,60 @@ export class GeocodingService {
         }
     }
 
+    private async fetchNominatim(cleanCity: string, cleanCountry: string): Promise<GeocodeResult | null> {
+        const query = `${cleanCity},${cleanCountry}`;
+        const url = `${NOMINATIM_BASE_URL}?q=${encodeURIComponent(query)}&format=json&limit=1`;
+
+        let signal: AbortSignal | undefined;
+        let timeoutId: NodeJS.Timeout | undefined;
+
+        if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+            signal = AbortSignal.timeout(this.timeoutMs);
+        } else {
+            const controller = new AbortController();
+            timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+            signal = controller.signal;
+        }
+
+        try {
+            const response = await fetch(url, {
+                headers: {
+                    'User-Agent': USER_AGENT,
+                    'Accept': 'application/json',
+                },
+                cache: 'no-store',
+                signal,
+            });
+
+            if (!response.ok) {
+                throw new Error(`Nominatim HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = (await response.json()) as Array<{ lat: string; lon: string }>;
+            if (!Array.isArray(data) || data.length === 0) {
+                return null;
+            }
+
+            const latitude = parseFloat(data[0].lat);
+            const longitude = parseFloat(data[0].lon);
+
+            if (Number.isNaN(latitude) || Number.isNaN(longitude)) {
+                return null;
+            }
+
+            return {
+                latitude,
+                longitude,
+                attribution: ATTRIBUTION,
+                source: 'nominatim' as const,
+            };
+        } finally {
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+            }
+        }
+    }
+
     private async executeLookup(cleanCity: string, cleanCountry: string, cacheKey: string): Promise<GeocodeResult> {
         let upstreamError: Error | null = null;
         let upstreamNotFound = false;
@@ -177,68 +250,22 @@ export class GeocodingService {
                     return cachedInsideQueue;
                 }
 
-                const query = `${cleanCity},${cleanCountry}`;
-                const url = `${NOMINATIM_BASE_URL}?q=${encodeURIComponent(query)}&format=json&limit=1`;
-
-                let signal: AbortSignal | undefined;
-                let timeoutId: NodeJS.Timeout | undefined;
-
-                if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
-                    signal = AbortSignal.timeout(this.timeoutMs);
-                } else {
-                    const controller = new AbortController();
-                    timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
-                    signal = controller.signal;
-                }
-
-                try {
-                    const response = await fetch(url, {
-                        headers: {
-                            'User-Agent': USER_AGENT,
-                            'Accept': 'application/json',
-                        },
-                        signal,
-                    });
-
-                    if (!response.ok) {
-                        throw new Error(`Nominatim HTTP ${response.status}: ${response.statusText}`);
-                    }
-
-                    const data = (await response.json()) as Array<{ lat: string; lon: string }>;
-                    if (!Array.isArray(data) || data.length === 0) {
-                        upstreamNotFound = true;
-                        return null;
-                    }
-
-                    const latitude = parseFloat(data[0].lat);
-                    const longitude = parseFloat(data[0].lon);
-
-                    if (Number.isNaN(latitude) || Number.isNaN(longitude)) {
-                        upstreamNotFound = true;
-                        return null;
-                    }
-
-                    return {
-                        latitude,
-                        longitude,
-                        attribution: ATTRIBUTION,
-                        source: 'nominatim' as const,
-                    };
-                } finally {
-                    if (timeoutId) {
-                        clearTimeout(timeoutId);
-                    }
-                }
+                return await this.fetchNominatim(cleanCity, cleanCountry);
             });
+            if (upstreamResult === null) {
+                upstreamNotFound = true;
+            }
         } catch (err) {
             upstreamError = err instanceof Error ? err : new Error(String(err));
         }
 
         if (upstreamResult) {
-            this.cache.set(cacheKey, {
-                result: upstreamResult,
-                expiresAt: Date.now() + this.cacheTtlMs,
-            });
+            if (upstreamResult.source !== 'cache') {
+                this.setCache(cacheKey, {
+                    result: upstreamResult,
+                    expiresAt: Date.now() + this.cacheTtlMs,
+                });
+            }
             return upstreamResult;
         }
 
@@ -251,7 +278,7 @@ export class GeocodingService {
                 attribution: ATTRIBUTION,
                 source: 'fallback',
             };
-            this.cache.set(cacheKey, {
+            this.setCache(cacheKey, {
                 result: fallbackResult,
                 expiresAt: Date.now() + this.cacheTtlMs,
             });
@@ -260,7 +287,7 @@ export class GeocodingService {
 
         if (upstreamNotFound) {
             const notFoundError = new Error(`Location not found: ${cleanCity}, ${cleanCountry}`);
-            this.cache.set(cacheKey, {
+            this.setCache(cacheKey, {
                 error: notFoundError,
                 expiresAt: Date.now() + this.negativeTtlMs,
             });

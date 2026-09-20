@@ -34,6 +34,7 @@ describe('GeocodingService', () => {
                 headers: expect.objectContaining({
                     'User-Agent': expect.stringContaining('MonaAirways-TravelApp'),
                 }),
+                cache: 'no-store',
             })
         );
     });
@@ -175,6 +176,104 @@ describe('GeocodingService', () => {
     it('rejects with error when city or country is blank', async () => {
         await expect(service.lookup('', 'USA')).rejects.toThrow('City and country are required');
         await expect(service.lookup('Seattle', '   ')).rejects.toThrow('City and country are required');
+    });
+
+    it('evicts the oldest entry when cache entries exceed maxEntries', async () => {
+        const boundedService = new GeocodingService({
+            minRequestIntervalMs: 0,
+            maxEntries: 2,
+        });
+
+        global.fetch = jest.fn()
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => [{ lat: '1.0', lon: '1.0' }],
+            } as Response)
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => [{ lat: '2.0', lon: '2.0' }],
+            } as Response)
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => [{ lat: '3.0', lon: '3.0' }],
+            } as Response)
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => [{ lat: '1.0', lon: '1.0' }],
+            } as Response);
+
+        // Fill up to maxEntries (2)
+        const res1 = await boundedService.lookup('City1', 'Country1');
+        const res2 = await boundedService.lookup('City2', 'Country2');
+        expect(res1.source).toBe('nominatim');
+        expect(res2.source).toBe('nominatim');
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+
+        // Inserting third entry should evict the oldest (City1)
+        const res3 = await boundedService.lookup('City3', 'Country3');
+        expect(res3.source).toBe('nominatim');
+        expect(global.fetch).toHaveBeenCalledTimes(3);
+
+        // City2 should still be cached
+        const res2Cached = await boundedService.lookup('City2', 'Country2');
+        expect(res2Cached.source).toBe('cache');
+        expect(global.fetch).toHaveBeenCalledTimes(3);
+
+        // City1 was evicted, so looking it up again calls fetch
+        const res1Refetched = await boundedService.lookup('City1', 'Country1');
+        expect(res1Refetched.source).toBe('nominatim');
+        expect(global.fetch).toHaveBeenCalledTimes(4);
+    });
+
+    it('refreshes entry position on access so least recently used is evicted', async () => {
+        const boundedService = new GeocodingService({
+            minRequestIntervalMs: 0,
+            maxEntries: 2,
+        });
+
+        global.fetch = jest.fn()
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => [{ lat: '1.0', lon: '1.0' }],
+            } as Response)
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => [{ lat: '2.0', lon: '2.0' }],
+            } as Response)
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => [{ lat: '3.0', lon: '3.0' }],
+            } as Response)
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => [{ lat: '2.0', lon: '2.0' }],
+            } as Response);
+
+        await boundedService.lookup('City1', 'Country1');
+        await boundedService.lookup('City2', 'Country2');
+
+        // Access City1 to make it most recently used
+        const res1Cached = await boundedService.lookup('City1', 'Country1');
+        expect(res1Cached.source).toBe('cache');
+
+        // Add City3: should evict City2 (least recently used) instead of City1
+        await boundedService.lookup('City3', 'Country3');
+
+        // City1 should still be in cache
+        const res1StillCached = await boundedService.lookup('City1', 'Country1');
+        expect(res1StillCached.source).toBe('cache');
+
+        // City2 was evicted, so looking it up calls fetch
+        const res2Refetched = await boundedService.lookup('City2', 'Country2');
+        expect(res2Refetched.source).toBe('nominatim');
     });
 
     it('exports a default singleton instance', () => {

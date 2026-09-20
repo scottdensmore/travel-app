@@ -34,10 +34,13 @@ describe('TravelGuideForm', () => {
 
     it('looks up coordinates once both city and country are filled', async () => {
         mockGeocode.mockResolvedValue({
-            latitude: 48.8566,
-            longitude: 2.3522,
-            attribution: 'Data © OpenStreetMap contributors, ODbL 1.0',
-            source: 'nominatim',
+            ok: true,
+            data: {
+                latitude: 48.8566,
+                longitude: 2.3522,
+                attribution: 'Data © OpenStreetMap contributors, ODbL 1.0',
+                source: 'nominatim',
+            },
         });
 
         render(<TravelGuideForm />);
@@ -84,10 +87,13 @@ describe('TravelGuideForm', () => {
 
     it('looks up coordinates and submits them via saveCityGuideAction', async () => {
         mockGeocode.mockResolvedValue({
-            latitude: 48.8566,
-            longitude: 2.3522,
-            attribution: 'Data © OpenStreetMap contributors, ODbL 1.0',
-            source: 'nominatim',
+            ok: true,
+            data: {
+                latitude: 48.8566,
+                longitude: 2.3522,
+                attribution: 'Data © OpenStreetMap contributors, ODbL 1.0',
+                source: 'nominatim',
+            },
         });
         mockSave.mockResolvedValue({ id: 1 });
 
