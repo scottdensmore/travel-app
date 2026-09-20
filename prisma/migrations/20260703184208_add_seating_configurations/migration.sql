@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 -- AlterTable
 ALTER TABLE "Flight" ADD COLUMN     "businessRows" INTEGER,
 ADD COLUMN     "economyRows" INTEGER,

@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 -- Store flight and schedule fares as an integer number of minor units.
 --
 -- The fare is a formatted string ("$350"), so every consumer parses text the

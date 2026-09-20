@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 -- Store the booking total as an integer number of minor units.
 --
 -- The total was persisted as a formatted string, so awarding status points

@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 -- Generated occurrences need durable provenance before an administrator can be
 -- told truthfully which flights a schedule edit will affect (#237, #83).
 -- Flight number alone is not provenance: manual occurrences may share it, and

@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 -- Separate where someone sits from who they are.
 --
 -- "Passenger" fused a traveller with a seat on one flight. A traveller is one

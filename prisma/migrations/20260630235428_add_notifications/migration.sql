@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 -- CreateTable
 CREATE TABLE "Notification" (
     "id" TEXT NOT NULL,

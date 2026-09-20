@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 DO $$
 BEGIN
     IF EXISTS (

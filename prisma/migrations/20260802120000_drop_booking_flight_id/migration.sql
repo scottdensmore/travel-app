@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 -- Contract step for the itinerary (#109, #111).
 --
 -- A booking's flights are its legs. "flightId" was retained and still written so

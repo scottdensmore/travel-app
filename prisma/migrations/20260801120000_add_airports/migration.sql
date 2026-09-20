@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 -- Reference data for the places routes fly between.
 --
 -- "label" carries the free-text value "Flight"."from" and "Flight"."to" hold

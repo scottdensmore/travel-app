@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 ALTER TABLE "User"
     ADD COLUMN "staffMfaSecretEncrypted" TEXT,
     ADD COLUMN "staffMfaEnrolledAt" TIMESTAMP(3),

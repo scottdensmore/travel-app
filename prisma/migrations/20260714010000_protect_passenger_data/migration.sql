@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 -- Existing rows belong to the pre-production demo dataset. Purge their
 -- plaintext identity fields during the migration rather than copying
 -- sensitive values without access to the runtime encryption key.

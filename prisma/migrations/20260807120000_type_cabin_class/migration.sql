@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 -- Type the cabin a seat is held in (#73).
 --
 -- `SeatAssignment.cabinClass` was `TEXT NOT NULL` with no enum and no check

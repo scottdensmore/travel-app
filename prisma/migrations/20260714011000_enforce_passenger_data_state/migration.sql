@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 ALTER TABLE "Passenger"
 ADD CONSTRAINT "Passenger_sensitive_data_state_check"
 CHECK (
