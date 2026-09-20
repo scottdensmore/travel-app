@@ -3,6 +3,11 @@ import React, { useState } from 'react';
 import { saveCityGuideAction } from '@/app/actions';
 import CityGuide from '../../lib/types/CityGuide';
 import { isActionValidationFailure } from '@/lib/actionResult';
+import {
+  DEFAULT_MAX_UPLOAD_BYTES,
+  ALLOWED_IMAGE_MIME_TYPES,
+  validateImageDataUrl,
+} from '@/lib/uploadValidation';
 
 const TravelGuideForm: React.FC = () => {
   const [city, setCity] = useState('');
@@ -19,13 +24,47 @@ const TravelGuideForm: React.FC = () => {
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setCoverImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    if (!file) {
+      return;
     }
+
+    if (file.type === 'image/svg+xml') {
+      setError('SVG images are not allowed for security reasons.');
+      setCoverImage(null);
+      e.target.value = '';
+      return;
+    }
+
+    if (!(ALLOWED_IMAGE_MIME_TYPES as readonly string[]).includes(file.type)) {
+      setError('Only JPEG, PNG, WebP, and AVIF images are allowed.');
+      setCoverImage(null);
+      e.target.value = '';
+      return;
+    }
+
+    if (file.size > DEFAULT_MAX_UPLOAD_BYTES) {
+      setError('Image must be 500 KB or smaller.');
+      setCoverImage(null);
+      e.target.value = '';
+      return;
+    }
+
+    setError('');
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      if (result) {
+        const validation = validateImageDataUrl(result);
+        if (!validation.valid) {
+          setError(validation.error);
+          setCoverImage(null);
+          e.target.value = '';
+          return;
+        }
+      }
+      setCoverImage(result);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleHighlightChange = (index: number, value: string) => {
