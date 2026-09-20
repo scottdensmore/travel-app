@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useRef, useCallback, useTransition } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import PointsActivityTable from "@/components/ui/pointsActivityTable";
@@ -321,6 +322,15 @@ export default function ProfileClient({
         bookingId: number;
         message: string;
         focus: boolean;
+        isError?: boolean;
+    } | null>(null);
+    const [reviewFeedback, setReviewFeedback] = useState<{
+        reviewId: string;
+        message: string;
+    } | null>(null);
+    const [favoriteFeedback, setFavoriteFeedback] = useState<{
+        cityId: number;
+        message: string;
     } | null>(null);
     const refundFeedbackRef = useRef<HTMLParagraphElement | null>(null);
     const rebookingFeedbackRef = useRef<HTMLParagraphElement | null>(null);
@@ -559,7 +569,14 @@ export default function ProfileClient({
             } catch {
                 refusal = 'Failed to cancel booking. Please try again.';
             } finally {
-                if (refusal) alert(refusal);
+                if (refusal) {
+                    setRefundFeedback({
+                        bookingId,
+                        message: refusal,
+                        focus: true,
+                        isError: true,
+                    });
+                }
             }
         });
     };
@@ -575,8 +592,12 @@ export default function ProfileClient({
             try {
                 const result = await retryBookingRefundAction(bookingId);
                 if (isActionValidationFailure(result)) {
-                    alert(result.error.message);
-                    setRefundFeedback(null);
+                    setRefundFeedback({
+                        bookingId,
+                        message: result.error.message,
+                        focus: true,
+                        isError: true,
+                    });
                     return;
                 }
                 const message = result.status === 'SUCCEEDED'
@@ -587,8 +608,12 @@ export default function ProfileClient({
                 setRefundFeedback({ bookingId, message, focus: true });
                 router.refresh();
             } catch {
-                setRefundFeedback(null);
-                alert('Your refund is still pending. Please try again later.');
+                setRefundFeedback({
+                    bookingId,
+                    message: 'Your refund is still pending. Please try again later.',
+                    focus: true,
+                    isError: true,
+                });
             } finally {
                 setActiveRefundBookingId(null);
             }
@@ -597,6 +622,7 @@ export default function ProfileClient({
 
     const handleDeleteReview = (reviewId: string) => {
         if (!confirm('Are you sure you want to delete this review?')) return;
+        setReviewFeedback(null);
 
         startTransition(async () => {
             try {
@@ -604,19 +630,26 @@ export default function ProfileClient({
                 if (isActionValidationFailure(result)) throw new Error(result.error.message);
                 router.refresh();
             } catch (error) {
-                alert('Failed to delete review. Please try again.');
+                setReviewFeedback({
+                    reviewId,
+                    message: error instanceof Error && error.message ? error.message : 'Failed to delete review. Please try again.',
+                });
             }
         });
     };
 
     const handleUnfavorite = (cityId: number, cityName: string) => {
+        setFavoriteFeedback(null);
         startTransition(async () => {
             try {
                 const result = await toggleFavoriteCityGuideAction(cityId);
                 if (isActionValidationFailure(result)) throw new Error(result.error.message);
                 router.refresh();
             } catch (error) {
-                alert('Failed to update favorite. Please try again.');
+                setFavoriteFeedback({
+                    cityId,
+                    message: error instanceof Error && error.message ? error.message : 'Failed to update favorite. Please try again.',
+                });
             }
         });
     };
@@ -731,10 +764,7 @@ export default function ProfileClient({
         <div className="page-container profile">
             <div className="sidebar-menu">
                 <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-                    {/* OAuth providers may supply arbitrary remote or data URLs
-                        that cannot be enumerated in Next Image configuration. */}
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={userAvatar} className="user-avatar" alt="Avatar" style={{ display: 'inline-block' }} />
+                    <Image src={userAvatar} className="user-avatar" alt="User avatar" width={48} height={48} unoptimized style={{ display: 'inline-block' }} />
                     <h3 style={{ margin: '1rem 0 0.5rem' }}>{userName}</h3>
                     <p style={{ margin: '0.25rem 0' }}><strong>Current Status:</strong> {currentStatus}</p>
                     <p style={{ margin: '0.25rem 0' }}><strong>Status Points:</strong> {currentPoints.toLocaleString()}</p>
@@ -1007,7 +1037,7 @@ export default function ProfileClient({
                                                                     <p
                                                                         ref={refundFeedbackRef}
                                                                         className="refund-action-feedback"
-                                                                        role="status"
+                                                                        role={refundFeedback.isError ? "alert" : "status"}
                                                                         aria-live="polite"
                                                                         tabIndex={-1}
                                                                     >
@@ -1098,16 +1128,29 @@ export default function ProfileClient({
                 {/* Favorites Section */}
                 <div className="profile-card mt-8">
                     <h2 className="text-2xl font-bold mb-4">Favorite City Guides</h2>
+                    {favoriteFeedback && (
+                        <div
+                            role="alert"
+                            style={{
+                                padding: '8px 12px',
+                                marginBottom: '16px',
+                                borderRadius: '4px',
+                                backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                                border: '1px solid rgba(239, 68, 68, 0.4)',
+                                color: '#f87171',
+                                fontSize: '0.875rem'
+                            }}
+                        >
+                            {favoriteFeedback.message}
+                        </div>
+                    )}
                     {favorites.length > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1rem' }}>
                             {favorites.map((fav) => (
                                 <div key={fav.id} className="border rounded-lg p-4 bg-gray-50 flex flex-col justify-between" style={{ border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', padding: '1rem', backgroundColor: 'rgba(255, 255, 255, 0.02)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                                     <div>
                                         {fav.cityGuide.coverImage && (
-                                            // Admin-uploaded covers are stored as data URLs,
-                                            // which are already browser-ready and cannot be optimized.
-                                            // eslint-disable-next-line @next/next/no-img-element
-                                            <img src={fav.cityGuide.coverImage} alt={fav.cityGuide.city} style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '4px', marginBottom: '8px' }} />
+                                            <Image src={fav.cityGuide.coverImage} alt={fav.cityGuide.city} width={300} height={120} unoptimized style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '4px', marginBottom: '8px' }} />
                                         )}
                                         <h3 style={{ margin: '0 0 4px', fontSize: '1.1rem', color: '#fff' }}>{fav.cityGuide.city}</h3>
                                         <p style={{ margin: '0 0 12px', color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>{fav.cityGuide.country}</p>
@@ -1141,6 +1184,22 @@ export default function ProfileClient({
                 {/* Reviews Section */}
                 <div className="profile-card mt-8">
                     <h2 className="text-2xl font-bold mb-4">My Reviews</h2>
+                    {reviewFeedback && (
+                        <div
+                            role="alert"
+                            style={{
+                                padding: '8px 12px',
+                                marginBottom: '16px',
+                                borderRadius: '4px',
+                                backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                                border: '1px solid rgba(239, 68, 68, 0.4)',
+                                color: '#f87171',
+                                fontSize: '0.875rem'
+                            }}
+                        >
+                            {reviewFeedback.message}
+                        </div>
+                    )}
                     {reviews.length > 0 ? (
                         <div className="space-y-4" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             {reviews.map((rev) => (

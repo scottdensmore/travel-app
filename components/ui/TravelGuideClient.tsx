@@ -1,5 +1,6 @@
 "use client"
 import React, { useState, useEffect, useRef, useTransition, useSyncExternalStore } from 'react';
+import Image from 'next/image';
 import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
 import { toggleFavoriteCityGuideAction, submitCityGuideReviewAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
@@ -437,14 +438,7 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
                                 {selectedCity.reviews.map(r => (
                                     <li key={r.id}>
                                         <div className="guide-review-head">
-                                            {/* Reviewer avatars can originate from arbitrary OAuth providers. */}
-                                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                                            <img
-                                                src={r.user?.image || "/img/my-profile-photo.jpg"}
-                                                alt=""
-                                                width="24"
-                                                height="24"
-                                            />
+                                            <Image src={r.user?.image || "/img/my-profile-photo.jpg"} alt={r.user?.name || "User"} width={32} height={32} unoptimized style={{ borderRadius: '50%', objectFit: 'cover' }} />
                                             <strong>{r.user?.name || "Traveler"}</strong>
                                             <span className="guide-stars" aria-label={`${r.rating} out of 5`}>
                                                 {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}
