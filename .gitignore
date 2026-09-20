@@ -51,3 +51,7 @@ git_diff.txt
 # playwright
 /playwright-report/
 /test-results/
+
+# Managed user uploads
+public/uploads/guides/*
+!public/uploads/guides/.gitkeep

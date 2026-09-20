@@ -10,6 +10,7 @@ import {
     bookingWindowIsoDates,
 } from '@/lib/dates';
 import { validateImageDataUrl } from '@/lib/uploadValidation';
+import { isManagedGuideImagePath } from '@/lib/guideImageStorage';
 
 export const MAX_MUTATION_BYTES = 1_000_000;
 export const MAX_REGISTRATION_BYTES = 16_384;
@@ -174,7 +175,7 @@ export const searchFlightsSchema = z.object({
     }
 });
 
-const coverImageSchema = z.string()
+export const coverImageSchema = z.string()
     .trim()
     .max(750_000, 'Cover image is too large.')
     .superRefine((value, context) => {
@@ -189,13 +190,12 @@ const coverImageSchema = z.string()
             return;
         }
 
-        const isRelativePath = value.startsWith('/') && !value.startsWith('//');
-        const isAbsoluteHttps = /^https:\/\/\S+$/i.test(value);
+        const isAllowedPath = isManagedGuideImagePath(value) || /^\/img\//.test(value);
 
-        if (!isRelativePath && !isAbsoluteHttps) {
+        if (!isAllowedPath) {
             context.addIssue({
                 code: z.ZodIssueCode.custom,
-                message: 'Cover image must be a relative path (/...), secure URL (https://...), or valid image data URL.',
+                message: 'Cover image must be a managed upload path (/uploads/guides/guide-...), a static image (/img/...), or valid image data URL.',
             });
         }
     });
