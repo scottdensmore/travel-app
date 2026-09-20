@@ -1404,6 +1404,46 @@ footer a:hover {
   white-space: nowrap;
 }
 
+/* Traveler gender and cabin selects stack to full width on narrow viewports
+   to prevent travel class option truncation (Issue #79). */
+.booking-traveler-selects {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.booking-traveler-selects select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Guard checkout wizard containers against horizontal overflow (#79). */
+.booking-wizard-container,
+.booking-wizard-card,
+.booking-passenger-card {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+/* Discrete segments prevent passenger card subtitle mid-value wrapping (#79). */
+.booking-passenger-card-subtitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  min-width: 0;
+}
+
+.booking-passenger-card-segment {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+}
+
 .booking-seat-actions,
 .booking-review-actions {
   margin-top: 2.5rem;
@@ -1557,6 +1597,23 @@ footer a:hover {
     justify-content: center;
     text-align: center;
     white-space: normal;
+  }
+
+  .booking-traveler-selects {
+    grid-template-columns: 1fr !important;
+  }
+
+  .booking-wizard-container {
+    padding: 0 0.75rem !important;
+  }
+
+  .booking-wizard-card {
+    padding: 1.25rem 1rem !important;
+    border-radius: 16px !important;
+  }
+
+  .booking-passenger-card {
+    padding: 1rem !important;
   }
 }
 
