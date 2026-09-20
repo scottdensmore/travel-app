@@ -160,11 +160,9 @@ export default function FlightStatusBoard({ flights, renderedAt, coverage }: Fli
                     {/* No live feed backs either the heading or these derived
                         schedule phases. Delayed/cancelled remain airline-set
                         statuses; the coverage line states the board's bounds. */}
-                    <p style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '1.1rem' }}>Scheduled phase and airline-set status for Mona Airways flights.</p>
-                    {/* 0.6 rather than 0.45: at 0.45 this measured 4.31:1,
-                        under AA, on the one sentence that has to be read to
-                        avoid reading "not listed" as "cancelled". */}
-                    <p style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.95rem', marginTop: '0.5rem' }}>
+                    <p style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '1.1rem' }}>Scheduled phase and airline-set status for Mona Airways flights.</p>
+                    {/* 0.7 rather than 0.45/0.6: ensures strong WCAG AA/AAA compliance against dark background */}
+                    <p style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.95rem', marginTop: '0.5rem' }}>
                         This board covers departures in {coverage}.
                     </p>
                 </div>
@@ -186,6 +184,8 @@ export default function FlightStatusBoard({ flights, renderedAt, coverage }: Fli
                     <div style={{ flex: '2 1 300px' }}>
                         <input
                             type="text"
+                            id="flight-status-search"
+                            aria-label="Search flights by flight number, airline, origin, or destination"
                             placeholder="Search by flight number, airline, origin, or destination..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
@@ -245,15 +245,15 @@ export default function FlightStatusBoard({ flights, renderedAt, coverage }: Fli
                     </p>
                     {filteredFlights.length > 0 ? (
                         <div style={{ overflowX: 'auto' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                            <table aria-label="Flight departures and status" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                                 <thead>
                                     <tr style={{ backgroundColor: 'rgba(255, 255, 255, 0.02)', borderBottom: '2px solid rgba(255, 255, 255, 0.08)' }}>
-                                        <th style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa' }}>Flight</th>
-                                        <th style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa' }}>From</th>
-                                        <th style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa' }}>To</th>
-                                        <th style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa' }}>Departure / Arrival</th>
-                                        <th style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa' }}>Phase / Status</th>
-                                        <th style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa', textAlign: 'right' }}>Price</th>
+                                        <th scope="col" style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa' }}>Flight</th>
+                                        <th scope="col" style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa' }}>From</th>
+                                        <th scope="col" style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa' }}>To</th>
+                                        <th scope="col" style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa' }}>Departure / Arrival</th>
+                                        <th scope="col" style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa' }}>Phase / Status</th>
+                                        <th scope="col" style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#a78bfa', textAlign: 'right' }}>Price</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -268,13 +268,13 @@ export default function FlightStatusBoard({ flights, renderedAt, coverage }: Fli
                                         <tr key={flight.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.06)', transition: 'background-color 0.2s' }} className="hover:bg-white/5 transition-colors">
                                             <td style={{ padding: '1.25rem 1.5rem' }}>
                                                 <div style={{ fontWeight: 'bold', color: '#c084fc' }}>{flight.airline}</div>
-                                                <div style={{ fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.5)' }}>{flight.flightNumber}</div>
+                                                <div style={{ fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.7)' }}>{flight.flightNumber}</div>
                                             </td>
                                             <td style={{ padding: '1.25rem 1.5rem', fontWeight: '500', color: '#fff' }}>{flight.from}</td>
                                             <td style={{ padding: '1.25rem 1.5rem', fontWeight: '500', color: '#fff' }}>{flight.to}</td>
                                             <td style={{ padding: '1.25rem 1.5rem', color: '#fff' }}>
                                                 <div style={{ whiteSpace: 'nowrap' }}>{departure.readableDate}</div>
-                                                <div style={{ fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.5)' }}>
+                                                <div style={{ fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.7)' }}>
                                                     {departure.time} {departure.zoneLabel}
                                                     {arrival ? (
                                                         <>
@@ -321,7 +321,7 @@ export default function FlightStatusBoard({ flights, renderedAt, coverage }: Fli
                             </table>
                         </div>
                     ) : (
-                        <div style={{ padding: '3rem 1.5rem', textAlign: 'center', color: 'rgba(255, 255, 255, 0.5)' }}>
+                        <div style={{ padding: '3rem 1.5rem', textAlign: 'center', color: 'rgba(255, 255, 255, 0.7)' }}>
                             <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem', fontWeight: 'normal' }}>
                                 {/* Decorative: otherwise heading navigation
                                     announces "magnifying glass tilted left"
