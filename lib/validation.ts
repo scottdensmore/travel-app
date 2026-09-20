@@ -213,6 +213,11 @@ export const cityGuideSchema = z.object({
     coverImage: coverImageSchema.nullish()
 }).strict();
 
+export const geocodeQuerySchema = z.object({
+    city: requiredText('City', 100),
+    country: requiredText('Country', 100),
+}).strict();
+
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Time must use HH:MM format.');
 const rowCountSchema = z.number()
     .int('Row configurations must be non-negative integers.')

@@ -35,6 +35,7 @@ import {
     FlightScheduleDeletionService,
 } from '@/lib/flightScheduleDeletionService';
 import CityGuide from '@/lib/types/CityGuide';
+import { geocodingService, type GeocodeResult } from '@/lib/geocodingService';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { hasVerifiedStaffAccess } from '@/lib/staffAuthorization';
@@ -100,6 +101,7 @@ import {
     accountTimeZoneSchema,
     checkInRequestSchema,
     cityGuideSchema,
+    geocodeQuerySchema,
     favoriteSchema,
     flightScheduleActivationSchema,
     flightScheduleDeletionSchema,
@@ -168,6 +170,16 @@ export async function deleteCityGuideAction(cityGuideId: number) {
     });
     revalidatePath('/admin/travelguide');
     revalidatePath('/travelguide');
+}
+
+export async function geocodeCityAction(query: { city: string; country: string }): Promise<GeocodeResult | ActionValidationFailure> {
+    const session = await getServerSession(authOptions);
+    if (!hasVerifiedStaffAccess(session)) throw new Error("Unauthorized");
+
+    const parsed = parseActionInput(geocodeQuerySchema, query);
+    if (!parsed.ok) return parsed;
+
+    return await geocodingService.lookup(parsed.data.city, parsed.data.country);
 }
 
 export async function searchFlightsAction(
