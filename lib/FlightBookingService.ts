@@ -29,6 +29,13 @@ export interface PassengerInput {
   /// One seat per leg, in itinerary order.
   seatNumbers: string[];
   cabinClass: CabinClass;
+  ktn?: string;
+  redressNumber?: string;
+  emergencyContact?: {
+    name: string;
+    relationship: string;
+    phone: string;
+  };
 }
 
 function passengerRequestSignature(passenger: PassengerInput): string {
@@ -301,6 +308,24 @@ export default class FlightBookingService {
                     gender: passenger.gender,
                     // A traveller is a person, not a seat. Where they sit is a
                     // SeatAssignment per leg, written below (#137).
+                    ...(passenger.ktn ? {
+                        ktnEncrypted: encryptPassengerData(passenger.ktn, {
+                            passengerId: id,
+                            field: 'ktn',
+                        }),
+                    } : {}),
+                    ...(passenger.redressNumber ? {
+                        redressNumberEncrypted: encryptPassengerData(passenger.redressNumber, {
+                            passengerId: id,
+                            field: 'redressNumber',
+                        }),
+                    } : {}),
+                    ...(passenger.emergencyContact ? {
+                        emergencyContactEncrypted: encryptPassengerData(JSON.stringify(passenger.emergencyContact), {
+                            passengerId: id,
+                            field: 'emergencyContact',
+                        }),
+                    } : {}),
                 };
             });
 

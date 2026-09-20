@@ -59,6 +59,13 @@ interface PassengerFormState {
     cabinClass: 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST';
     /// One seat per leg, in the same order as the itinerary's flights.
     seatNumbers: string[];
+    ktn?: string;
+    redressNumber?: string;
+    emergencyContact?: {
+        name: string;
+        relationship: string;
+        phone: string;
+    };
 }
 
 interface ConfirmedPassenger {
@@ -227,7 +234,14 @@ export default function BookingCheckoutWizard({
             passportNumber: '',
             gender: 'Male',
             cabinClass: defaultCabin,
-            seatNumbers: flights.map(() => '')
+            seatNumbers: flights.map(() => ''),
+            ktn: '',
+            redressNumber: '',
+            emergencyContact: {
+                name: '',
+                relationship: '',
+                phone: '',
+            },
         }
     ]);
     const [activePassengerIndex, setActivePassengerIndex] = useState<number>(0);
@@ -308,7 +322,14 @@ export default function BookingCheckoutWizard({
                 passportNumber: '',
                 gender: 'Male',
                 cabinClass: defaultCabin,
-                seatNumbers: flights.map(() => '')
+                seatNumbers: flights.map(() => ''),
+                ktn: '',
+                redressNumber: '',
+                emergencyContact: {
+                    name: '',
+                    relationship: '',
+                    phone: '',
+                },
             }
         ]);
         setAncillariesByPassenger(prev => ({
@@ -339,7 +360,11 @@ export default function BookingCheckoutWizard({
         field: K,
         value: PassengerFormState[K]
     ) => {
-        const updated = passengers.map(passenger => ({ ...passenger, seatNumbers: [...passenger.seatNumbers] }));
+        const updated = passengers.map(passenger => ({
+            ...passenger,
+            seatNumbers: [...passenger.seatNumbers],
+            emergencyContact: passenger.emergencyContact ? { ...passenger.emergencyContact } : undefined,
+        }));
         updated[index] = { ...updated[index], [field]: value };
 
         // Reset every leg's seat if the cabin changes: the row ranges differ per
@@ -357,7 +382,36 @@ export default function BookingCheckoutWizard({
         });
     };
 
-    const getPassengerFieldError = (index: number, field: keyof PassengerFormState) =>
+    const handleEmergencyContactChange = (
+        index: number,
+        field: 'name' | 'relationship' | 'phone',
+        value: string
+    ) => {
+        const updated = passengers.map(passenger => ({
+            ...passenger,
+            seatNumbers: [...passenger.seatNumbers],
+            emergencyContact: {
+                name: '',
+                relationship: '',
+                phone: '',
+                ...(passenger.emergencyContact ?? {}),
+            },
+        }));
+        updated[index].emergencyContact = {
+            ...updated[index].emergencyContact!,
+            [field]: value,
+        };
+        setPassengers(updated);
+        const fieldPath = `passengers.${index}.emergencyContact.${field}`;
+        setServerFieldErrors(current => {
+            if (!current[fieldPath]) return current;
+            const next = { ...current };
+            delete next[fieldPath];
+            return next;
+        });
+    };
+
+    const getPassengerFieldError = (index: number, field: string) =>
         serverFieldErrors[`passengers.${index}.${field}`]?.[0];
 
     /**
@@ -1010,7 +1064,16 @@ export default function BookingCheckoutWizard({
                 gender: p.gender,
                 // One seat per leg, in itinerary order.
                 seatNumbers: p.seatNumbers,
-                cabinClass: p.cabinClass
+                cabinClass: p.cabinClass,
+                ktn: p.ktn?.trim() || undefined,
+                redressNumber: p.redressNumber?.trim() || undefined,
+                emergencyContact: (p.emergencyContact?.name?.trim() || p.emergencyContact?.relationship?.trim() || p.emergencyContact?.phone?.trim())
+                    ? {
+                        name: p.emergencyContact.name.trim(),
+                        relationship: p.emergencyContact.relationship.trim(),
+                        phone: p.emergencyContact.phone.trim(),
+                    }
+                    : undefined,
             }));
 
             idempotencyKeyRef.current ??= createBookingRequestId();
@@ -1245,6 +1308,172 @@ export default function BookingCheckoutWizard({
                                             ))}
                                         </select>
                                     </div>
+                                </div>
+
+                                <div
+                                    className="booking-security-section"
+                                    style={{
+                                        marginTop: '1.25rem',
+                                        paddingTop: '1.25rem',
+                                        borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                                    }}
+                                >
+                                    <div style={{ marginBottom: '0.75rem' }}>
+                                        <h4
+                                            id={`passenger-${index}-security-heading`}
+                                            style={{
+                                                margin: 0,
+                                                fontSize: '0.95rem',
+                                                color: '#c084fc',
+                                                fontWeight: 600,
+                                            }}
+                                        >
+                                            Travel Security & Emergency Contact
+                                        </h4>
+                                        <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)' }}>
+                                            Optional: Known Traveler Number (KTN) for TSA PreCheck, Redress Number, and Emergency Contact details.
+                                        </p>
+                                    </div>
+
+                                    <fieldset
+                                        aria-labelledby={`passenger-${index}-security-heading`}
+                                        style={{ border: 'none', padding: 0, margin: 0 }}
+                                    >
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+                                            <div style={{ minWidth: 0 }}>
+                                                <label
+                                                    htmlFor={`passenger-${index}-ktn`}
+                                                    style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}
+                                                >
+                                                    Known Traveler Number (KTN)
+                                                </label>
+                                                <input
+                                                    id={`passenger-${index}-ktn`}
+                                                    type="text"
+                                                    value={passenger.ktn ?? ''}
+                                                    onChange={(e) => handlePassengerChange(index, 'ktn', e.target.value)}
+                                                    placeholder="9-character code"
+                                                    maxLength={9}
+                                                    data-validation-path={`passengers.${index}.ktn`}
+                                                    aria-invalid={Boolean(getPassengerFieldError(index, 'ktn'))}
+                                                    aria-describedby={getPassengerFieldError(index, 'ktn') ? `passenger-${index}-ktn-error` : undefined}
+                                                    style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                                                />
+                                                {getPassengerFieldError(index, 'ktn') && (
+                                                    <div id={`passenger-${index}-ktn-error`} style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '4px' }}>
+                                                        {getPassengerFieldError(index, 'ktn')}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div style={{ minWidth: 0 }}>
+                                                <label
+                                                    htmlFor={`passenger-${index}-redress`}
+                                                    style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}
+                                                >
+                                                    Redress Number
+                                                </label>
+                                                <input
+                                                    id={`passenger-${index}-redress`}
+                                                    type="text"
+                                                    value={passenger.redressNumber ?? ''}
+                                                    onChange={(e) => handlePassengerChange(index, 'redressNumber', e.target.value)}
+                                                    placeholder="7-digit number"
+                                                    maxLength={7}
+                                                    data-validation-path={`passengers.${index}.redressNumber`}
+                                                    aria-invalid={Boolean(getPassengerFieldError(index, 'redressNumber'))}
+                                                    aria-describedby={getPassengerFieldError(index, 'redressNumber') ? `passenger-${index}-redressNumber-error` : undefined}
+                                                    style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                                                />
+                                                {getPassengerFieldError(index, 'redressNumber') && (
+                                                    <div id={`passenger-${index}-redressNumber-error`} style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '4px' }}>
+                                                        {getPassengerFieldError(index, 'redressNumber')}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div style={{ marginTop: '0.75rem', marginBottom: '0.5rem' }}>
+                                            <span style={{ fontSize: '0.85rem', color: '#a78bfa', fontWeight: 600 }}>Emergency Contact</span>
+                                        </div>
+
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '1rem' }}>
+                                            <div style={{ minWidth: 0 }}>
+                                                <label
+                                                    htmlFor={`passenger-${index}-emergency-name`}
+                                                    style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}
+                                                >
+                                                    Emergency Contact Name
+                                                </label>
+                                                <input
+                                                    id={`passenger-${index}-emergency-name`}
+                                                    type="text"
+                                                    value={passenger.emergencyContact?.name ?? ''}
+                                                    onChange={(e) => handleEmergencyContactChange(index, 'name', e.target.value)}
+                                                    placeholder="Jane Doe"
+                                                    data-validation-path={`passengers.${index}.emergencyContact.name`}
+                                                    aria-invalid={Boolean(getPassengerFieldError(index, 'emergencyContact.name'))}
+                                                    aria-describedby={getPassengerFieldError(index, 'emergencyContact.name') ? `passenger-${index}-emergencyName-error` : undefined}
+                                                    style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                                                />
+                                                {getPassengerFieldError(index, 'emergencyContact.name') && (
+                                                    <div id={`passenger-${index}-emergencyName-error`} style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '4px' }}>
+                                                        {getPassengerFieldError(index, 'emergencyContact.name')}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div style={{ minWidth: 0 }}>
+                                                <label
+                                                    htmlFor={`passenger-${index}-emergency-relationship`}
+                                                    style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}
+                                                >
+                                                    Emergency Contact Relationship
+                                                </label>
+                                                <input
+                                                    id={`passenger-${index}-emergency-relationship`}
+                                                    type="text"
+                                                    value={passenger.emergencyContact?.relationship ?? ''}
+                                                    onChange={(e) => handleEmergencyContactChange(index, 'relationship', e.target.value)}
+                                                    placeholder="Spouse, Parent, etc."
+                                                    data-validation-path={`passengers.${index}.emergencyContact.relationship`}
+                                                    aria-invalid={Boolean(getPassengerFieldError(index, 'emergencyContact.relationship'))}
+                                                    aria-describedby={getPassengerFieldError(index, 'emergencyContact.relationship') ? `passenger-${index}-emergencyRel-error` : undefined}
+                                                    style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                                                />
+                                                {getPassengerFieldError(index, 'emergencyContact.relationship') && (
+                                                    <div id={`passenger-${index}-emergencyRel-error`} style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '4px' }}>
+                                                        {getPassengerFieldError(index, 'emergencyContact.relationship')}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div style={{ minWidth: 0 }}>
+                                                <label
+                                                    htmlFor={`passenger-${index}-emergency-phone`}
+                                                    style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'rgba(255,255,255,0.7)' }}
+                                                >
+                                                    Emergency Contact Phone
+                                                </label>
+                                                <input
+                                                    id={`passenger-${index}-emergency-phone`}
+                                                    type="tel"
+                                                    value={passenger.emergencyContact?.phone ?? ''}
+                                                    onChange={(e) => handleEmergencyContactChange(index, 'phone', e.target.value)}
+                                                    placeholder="+1 (555) 000-0000"
+                                                    data-validation-path={`passengers.${index}.emergencyContact.phone`}
+                                                    aria-invalid={Boolean(getPassengerFieldError(index, 'emergencyContact.phone'))}
+                                                    aria-describedby={getPassengerFieldError(index, 'emergencyContact.phone') ? `passenger-${index}-emergencyPhone-error` : undefined}
+                                                    style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                                                />
+                                                {getPassengerFieldError(index, 'emergencyContact.phone') && (
+                                                    <div id={`passenger-${index}-emergencyPhone-error`} style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '4px' }}>
+                                                        {getPassengerFieldError(index, 'emergencyContact.phone')}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </fieldset>
                                 </div>
                             </div>
                         ))}

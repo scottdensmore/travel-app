@@ -54,6 +54,13 @@ describe('passenger identity data in PostgreSQL', () => {
                 gender: 'Female',
                 seatNumbers: ['11A'],
                 cabinClass: 'ECONOMY',
+                ktn: '123456789',
+                redressNumber: '1234567',
+                emergencyContact: {
+                    name: 'Lord Byron',
+                    relationship: 'Father',
+                    phone: '+1 555-0199',
+                },
             }],
         });
         bookingId = result.id;
@@ -73,13 +80,19 @@ describe('passenger identity data in PostgreSQL', () => {
             id: string;
             dateOfBirthEncrypted: string;
             passportNumberEncrypted: string;
+            ktnEncrypted: string | null;
+            redressNumberEncrypted: string | null;
+            emergencyContactEncrypted: string | null;
         }>>`
-            SELECT "id", "dateOfBirthEncrypted", "passportNumberEncrypted"
+            SELECT "id", "dateOfBirthEncrypted", "passportNumberEncrypted", "ktnEncrypted", "redressNumberEncrypted", "emergencyContactEncrypted"
             FROM "Passenger"
             WHERE "bookingId" = ${bookingId}
         `;
         expect(stored.dateOfBirthEncrypted).not.toContain('1990-01-01');
         expect(stored.passportNumberEncrypted).not.toContain('SECRET123');
+        expect(stored.ktnEncrypted).not.toContain('123456789');
+        expect(stored.redressNumberEncrypted).not.toContain('1234567');
+        expect(stored.emergencyContactEncrypted).not.toContain('Lord Byron');
         expect(decryptPassengerData(stored.dateOfBirthEncrypted, {
             passengerId: stored.id,
             field: 'dateOfBirth',
@@ -88,6 +101,22 @@ describe('passenger identity data in PostgreSQL', () => {
             passengerId: stored.id,
             field: 'passportNumber',
         })).toBe('SECRET123');
+        expect(decryptPassengerData(stored.ktnEncrypted!, {
+            passengerId: stored.id,
+            field: 'ktn',
+        })).toBe('123456789');
+        expect(decryptPassengerData(stored.redressNumberEncrypted!, {
+            passengerId: stored.id,
+            field: 'redressNumber',
+        })).toBe('1234567');
+        expect(JSON.parse(decryptPassengerData(stored.emergencyContactEncrypted!, {
+            passengerId: stored.id,
+            field: 'emergencyContact',
+        }))).toEqual({
+            name: 'Lord Byron',
+            relationship: 'Father',
+            phone: '+1 555-0199',
+        });
 
         const expiredAt = new Date('2026-01-01T00:00:00.000Z');
         await prisma.passenger.update({
@@ -106,11 +135,17 @@ describe('passenger identity data in PostgreSQL', () => {
             select: {
                 dateOfBirthEncrypted: true,
                 passportNumberEncrypted: true,
+                ktnEncrypted: true,
+                redressNumberEncrypted: true,
+                emergencyContactEncrypted: true,
                 sensitiveDataDeletedAt: true,
             },
         })).resolves.toMatchObject({
             dateOfBirthEncrypted: null,
             passportNumberEncrypted: null,
+            ktnEncrypted: null,
+            redressNumberEncrypted: null,
+            emergencyContactEncrypted: null,
             sensitiveDataDeletedAt: expect.any(Date),
         });
     });

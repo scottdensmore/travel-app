@@ -72,6 +72,25 @@ describe('pdfGenerator', () => {
       expect(buffer).toBeInstanceOf(Buffer);
       expect(buffer.length).toBeGreaterThan(0);
     });
+
+    it('renders TSA PreCheck badge on e-ticket when passenger has KTN', async () => {
+      const bookingWithKtn = {
+        ...mockBooking,
+        passengers: [
+          {
+            id: 'p1',
+            firstName: 'John',
+            lastName: 'Doe',
+            ktnEncrypted: 'v1:active:iv:ciphertext:tag',
+          }
+        ]
+      };
+      await generateETicketPDF(bookingWithKtn as any);
+      const PDFDocumentMock = jest.requireMock('pdfkit');
+      const instances = PDFDocumentMock.mock.results;
+      const latestInstance = instances[instances.length - 1].value;
+      expect(latestInstance.text).toHaveBeenCalledWith(expect.stringContaining('TSA PreCheck'));
+    });
   });
 
   describe('generateInvoicePDF', () => {

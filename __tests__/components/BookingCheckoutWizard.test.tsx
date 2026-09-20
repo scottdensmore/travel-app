@@ -1893,5 +1893,155 @@ describe('BookingCheckoutWizard', () => {
             expect(screen.getAllByText(/bags & extras/i).length).toBeGreaterThan(1);
         });
     });
+
+    describe('Travel Security & Emergency Contact (Issue #356)', () => {
+        it('renders Travel Security & Emergency Contact section and fields for each traveler', () => {
+            render(<BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />);
+
+            // Check traveler 1 security fields
+            expect(screen.getByText('Travel Security & Emergency Contact')).toBeInTheDocument();
+            expect(screen.getByLabelText(/known traveler number \(ktn\)/i)).toBeInTheDocument();
+            expect(screen.getByLabelText(/redress number/i)).toBeInTheDocument();
+            expect(screen.getByLabelText(/emergency contact name/i)).toBeInTheDocument();
+            expect(screen.getByLabelText(/emergency contact relationship/i)).toBeInTheDocument();
+            expect(screen.getByLabelText(/emergency contact phone/i)).toBeInTheDocument();
+
+            const ktnInput = screen.getByLabelText(/known traveler number \(ktn\)/i);
+            expect(ktnInput).toHaveAttribute('maxLength', '9');
+            expect(ktnInput).toHaveAttribute('placeholder', '9-character code');
+
+            const redressInput = screen.getByLabelText(/redress number/i);
+            expect(redressInput).toHaveAttribute('maxLength', '7');
+            expect(redressInput).toHaveAttribute('placeholder', '7-digit number');
+
+            // Add a second passenger and verify fields exist for passenger 2
+            fireEvent.click(screen.getByText('+ Add Traveler'));
+            expect(screen.getAllByText('Travel Security & Emergency Contact')).toHaveLength(2);
+            expect(screen.getAllByLabelText(/known traveler number \(ktn\)/i)).toHaveLength(2);
+            expect(screen.getAllByLabelText(/redress number/i)).toHaveLength(2);
+            expect(screen.getAllByLabelText(/emergency contact name/i)).toHaveLength(2);
+        });
+
+        it('passes KTN, Redress Number, and Emergency Contact to booking action when provided', async () => {
+            mockBookFlightAction.mockResolvedValue({
+                id: 12345,
+                reference: 'MA-0123456789ABCDEF0123',
+                createdAt: new Date('2026-07-01T00:30:00.000Z'),
+                totalPriceCents: 10000,
+                passengers: [{
+                    firstName: 'Alice',
+                    lastName: 'Smith',
+                    seatNumbers: ['11A'],
+                    cabinClass: 'ECONOMY'
+                }]
+            });
+
+            const { container } = render(<BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />);
+
+            // Fill standard passenger details
+            fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Alice' } });
+            fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Smith' } });
+            fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1995-05-15' } });
+            fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US1234567' } });
+
+            // Fill security & emergency contact details
+            fireEvent.change(screen.getByLabelText(/known traveler number \(ktn\)/i), { target: { value: '987654321' } });
+            fireEvent.change(screen.getByLabelText(/redress number/i), { target: { value: '1234567' } });
+            fireEvent.change(screen.getByLabelText(/emergency contact name/i), { target: { value: 'Jane Doe' } });
+            fireEvent.change(screen.getByLabelText(/emergency contact relationship/i), { target: { value: 'Spouse' } });
+            fireEvent.change(screen.getByLabelText(/emergency contact phone/i), { target: { value: '+1-555-555-5555' } });
+
+            // Advance to seats
+            fireEvent.click(screen.getByRole('button', { name: /select seats/i }));
+
+            // Select seat 11A
+            fireEvent.click(screen.getByTitle('Select Seat 11A'));
+
+            // Advance through bags to review
+            await advanceFromSeatsToReview();
+
+            // Proceed through payment
+            const paymentButton = await preparePayment('$100');
+            fireEvent.click(paymentButton);
+
+            await waitFor(() => {
+                expect(screen.getByText('Booking Confirmed!')).toBeInTheDocument();
+                expect(mockBookFlightAction).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        passengers: [
+                            expect.objectContaining({
+                                firstName: 'Alice',
+                                lastName: 'Smith',
+                                ktn: '987654321',
+                                redressNumber: '1234567',
+                                emergencyContact: {
+                                    name: 'Jane Doe',
+                                    relationship: 'Spouse',
+                                    phone: '+1-555-555-5555',
+                                },
+                            }),
+                        ],
+                    })
+                );
+            });
+        });
+
+        it('proceeds successfully with undefined security fields when left blank', async () => {
+            mockBookFlightAction.mockResolvedValue({
+                id: 12346,
+                reference: 'MA-0123456789ABCDEF0124',
+                createdAt: new Date('2026-07-01T00:30:00.000Z'),
+                totalPriceCents: 10000,
+                passengers: [{
+                    firstName: 'Alice',
+                    lastName: 'Smith',
+                    seatNumbers: ['11A'],
+                    cabinClass: 'ECONOMY'
+                }]
+            });
+
+            const { container } = render(<BookingCheckoutWizard flights={[sampleFlight]} occupiedSeats={[[]]} />);
+
+            // Fill standard passenger details only
+            fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Alice' } });
+            fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Smith' } });
+            fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1995-05-15' } });
+            fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US1234567' } });
+
+            // Leave KTN, Redress, and Emergency contact empty
+            // Advance to seats
+            fireEvent.click(screen.getByRole('button', { name: /select seats/i }));
+
+            // Should advance to step 2 without validation errors
+            expect(await screen.findByText('Select Your Seats')).toBeInTheDocument();
+
+            // Select seat 11A
+            fireEvent.click(screen.getByTitle('Select Seat 11A'));
+
+            // Advance through bags to review
+            await advanceFromSeatsToReview();
+
+            // Proceed through payment
+            const paymentButton = await preparePayment('$100');
+            fireEvent.click(paymentButton);
+
+            await waitFor(() => {
+                expect(screen.getByText('Booking Confirmed!')).toBeInTheDocument();
+                expect(mockBookFlightAction).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        passengers: [
+                            expect.objectContaining({
+                                firstName: 'Alice',
+                                lastName: 'Smith',
+                                ktn: undefined,
+                                redressNumber: undefined,
+                                emergencyContact: undefined,
+                            }),
+                        ],
+                    })
+                );
+            });
+        });
+    });
 });
 

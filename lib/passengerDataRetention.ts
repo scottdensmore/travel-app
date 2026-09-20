@@ -3,6 +3,9 @@ import { prisma } from '@/lib/prisma';
 const purgeValues = (now: Date) => ({
     dateOfBirthEncrypted: null,
     passportNumberEncrypted: null,
+    ktnEncrypted: null,
+    redressNumberEncrypted: null,
+    emergencyContactEncrypted: null,
     sensitiveDataDeletedAt: now,
 });
 

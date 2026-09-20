@@ -16,5 +16,8 @@ describe('passenger data access projections', () => {
         expect(safePassengerSelect).not.toHaveProperty('flightId');
         expect(safePassengerSelect).not.toHaveProperty('dateOfBirthEncrypted');
         expect(safePassengerSelect).not.toHaveProperty('passportNumberEncrypted');
+        expect(safePassengerSelect).not.toHaveProperty('ktnEncrypted');
+        expect(safePassengerSelect).not.toHaveProperty('redressNumberEncrypted');
+        expect(safePassengerSelect).not.toHaveProperty('emergencyContactEncrypted');
     });
 });

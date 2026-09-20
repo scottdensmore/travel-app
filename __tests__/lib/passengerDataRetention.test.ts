@@ -29,6 +29,9 @@ describe('passenger data retention', () => {
             data: {
                 dateOfBirthEncrypted: null,
                 passportNumberEncrypted: null,
+                ktnEncrypted: null,
+                redressNumberEncrypted: null,
+                emergencyContactEncrypted: null,
                 sensitiveDataDeletedAt: now,
             },
         });
@@ -47,6 +50,9 @@ describe('passenger data retention', () => {
             data: {
                 dateOfBirthEncrypted: null,
                 passportNumberEncrypted: null,
+                ktnEncrypted: null,
+                redressNumberEncrypted: null,
+                emergencyContactEncrypted: null,
                 sensitiveDataDeletedAt: now,
             },
         });

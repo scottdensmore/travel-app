@@ -24,7 +24,9 @@ export async function generateETicketPDF(booking: any): Promise<Buffer> {
       // Passenger Manifest
       doc.fontSize(14).text('Passengers', { underline: true });
       booking.passengers?.forEach((p: any) => {
-        doc.fontSize(12).text(`${p.firstName} ${p.lastName}`);
+        const hasKtn = Boolean(p.ktnEncrypted || p.hasKtn || p.ktn);
+        const preCheck = hasKtn ? ' [TSA PreCheck]' : '';
+        doc.fontSize(12).text(`${p.firstName} ${p.lastName}${preCheck}`);
       });
       doc.moveDown();
 
@@ -74,6 +76,41 @@ export async function generateInvoicePDF(booking: any): Promise<Buffer> {
 
       doc.fontSize(14).text('Payment Summary', { underline: true });
       doc.fontSize(12).text(`Payment Intent: ${booking.paymentIntentId || 'N/A'}`);
+
+      doc.end();
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+export async function generateBoardingPassPDF(passData: any): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ margin: 50 });
+      const buffers: Buffer[] = [];
+
+      doc.on('data', (chunk) => buffers.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(buffers)));
+
+      doc.fontSize(24).text('Boarding Pass', { align: 'center' });
+      doc.moveDown();
+
+      const hasKtn = Boolean(passData.hasKtn || passData.ktn || passData.ktnEncrypted);
+      const passengerName = passData.passengerName || `${passData.firstName || ''} ${passData.lastName || ''}`.trim();
+      doc.fontSize(14).text(`Passenger: ${passengerName}`);
+      if (hasKtn) {
+        doc.fontSize(12).text('TSA PreCheck', { underline: true });
+      }
+      doc.moveDown();
+
+      if (passData.airline && passData.flightNumber) {
+        doc.fontSize(12).text(`Flight: ${passData.airline} ${passData.flightNumber}`);
+      } else if (passData.flightNumber) {
+        doc.fontSize(12).text(`Flight: ${passData.flightNumber}`);
+      }
+      if (passData.seat) doc.fontSize(12).text(`Seat: ${passData.seat}`);
+      if (passData.cabin) doc.fontSize(12).text(`Cabin: ${passData.cabin}`);
 
       doc.end();
     } catch (err) {

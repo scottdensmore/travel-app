@@ -14,7 +14,18 @@ const RETENTION_DAYS = 30;
 const KEY_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{0,31}$/;
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
-export type PassengerSensitiveField = 'dateOfBirth' | 'passportNumber';
+export type PassengerSensitiveField =
+    | 'dateOfBirth'
+    | 'passportNumber'
+    | 'ktn'
+    | 'redressNumber'
+    | 'emergencyContact';
+
+export interface EmergencyContact {
+    name: string;
+    relationship: string;
+    phone: string;
+}
 
 export interface PassengerDataContext {
     passengerId: string;
@@ -121,3 +132,54 @@ export function decryptPassengerData(
 export function getPassengerDataRetentionDeadline(departureDate: Date): Date {
     return new Date(departureDate.getTime() + RETENTION_DAYS * 24 * 60 * 60 * 1_000);
 }
+
+export function encryptKtn(
+    ktn: string,
+    context: { passengerId: string },
+    keyRing = getConfiguredPassengerDataEncryptionKeys(),
+): string {
+    return encryptPassengerData(ktn, { passengerId: context.passengerId, field: 'ktn' }, keyRing);
+}
+
+export function decryptKtn(
+    envelope: string,
+    context: { passengerId: string },
+    keyRing = getConfiguredPassengerDataEncryptionKeys(),
+): string {
+    return decryptPassengerData(envelope, { passengerId: context.passengerId, field: 'ktn' }, keyRing);
+}
+
+export function encryptRedressNumber(
+    redressNumber: string,
+    context: { passengerId: string },
+    keyRing = getConfiguredPassengerDataEncryptionKeys(),
+): string {
+    return encryptPassengerData(redressNumber, { passengerId: context.passengerId, field: 'redressNumber' }, keyRing);
+}
+
+export function decryptRedressNumber(
+    envelope: string,
+    context: { passengerId: string },
+    keyRing = getConfiguredPassengerDataEncryptionKeys(),
+): string {
+    return decryptPassengerData(envelope, { passengerId: context.passengerId, field: 'redressNumber' }, keyRing);
+}
+
+export function encryptEmergencyContact(
+    contact: EmergencyContact,
+    context: { passengerId: string },
+    keyRing = getConfiguredPassengerDataEncryptionKeys(),
+): string {
+    return encryptPassengerData(JSON.stringify(contact), { passengerId: context.passengerId, field: 'emergencyContact' }, keyRing);
+}
+
+export function decryptEmergencyContact(
+    envelope: string,
+    context: { passengerId: string },
+    keyRing = getConfiguredPassengerDataEncryptionKeys(),
+): EmergencyContact {
+    const raw = decryptPassengerData(envelope, { passengerId: context.passengerId, field: 'emergencyContact' }, keyRing);
+    return JSON.parse(raw) as EmergencyContact;
+}
+
+export { safePassengerSelect } from './passengerDataAccess';

@@ -13,6 +13,8 @@ export interface BoardingPassProps {
     bagCount?: number;
     priorityBoarding?: boolean;
     boardingGroup?: string;
+    hasKtn?: boolean;
+    ktn?: string;
 }
 
 /**
@@ -36,8 +38,11 @@ export default function BoardingPass({
     bagCount = 0,
     priorityBoarding = false,
     boardingGroup,
+    hasKtn = false,
+    ktn,
 }: BoardingPassProps) {
     const group = boardingGroup || (priorityBoarding ? 'GROUP 1' : 'GROUP 3');
+    const isPreCheck = Boolean(hasKtn || ktn);
     return (
         <article
             className="checkin-boarding-pass"
@@ -47,23 +52,43 @@ export default function BoardingPass({
                 <div>
                     <p className="checkin-boarding-pass-kicker">Boarding pass</p>
                     <h3>{passengerName}</h3>
-                    {priorityBoarding && (
-                        <span
-                            className="checkin-priority-badge"
-                            style={{
-                                display: 'inline-block',
-                                background: '#eab308',
-                                color: '#000',
-                                fontWeight: 'bold',
-                                fontSize: '0.7rem',
-                                padding: '2px 8px',
-                                borderRadius: '4px',
-                                marginTop: '4px',
-                            }}
-                        >
-                            PRIORITY BOARDING
-                        </span>
-                    )}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', marginTop: '4px' }}>
+                        {priorityBoarding && (
+                            <span
+                                className="checkin-priority-badge"
+                                style={{
+                                    display: 'inline-block',
+                                    background: '#eab308',
+                                    color: '#000',
+                                    fontWeight: 'bold',
+                                    fontSize: '0.7rem',
+                                    padding: '2px 8px',
+                                    borderRadius: '4px',
+                                }}
+                            >
+                                PRIORITY BOARDING
+                            </span>
+                        )}
+                        {isPreCheck && (
+                            <span
+                                className="checkin-tsa-precheck-badge"
+                                data-testid="tsa-precheck-badge"
+                                aria-label="TSA PreCheck"
+                                style={{
+                                    display: 'inline-block',
+                                    background: '#1e3a8a',
+                                    color: '#ffffff',
+                                    fontWeight: 'bold',
+                                    fontSize: '0.7rem',
+                                    padding: '2px 8px',
+                                    borderRadius: '4px',
+                                    letterSpacing: '0.05em',
+                                }}
+                            >
+                                TSA PreCheck
+                            </span>
+                        )}
+                    </div>
                 </div>
                 <p className="checkin-boarding-pass-flight">
                     <span>{airline}</span>

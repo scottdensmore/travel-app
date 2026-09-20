@@ -319,10 +319,13 @@ model Passenger {
   id                      String    @id @default(cuid())
   firstName               String
   lastName                String
-  dateOfBirthEncrypted    String?   @db.Text
-  passportNumberEncrypted String?   @db.Text
-  sensitiveDataExpiresAt  DateTime?
-  sensitiveDataDeletedAt  DateTime?
+  dateOfBirthEncrypted       String?   @db.Text
+  passportNumberEncrypted    String?   @db.Text
+  ktnEncrypted               String?   @db.Text
+  redressNumberEncrypted     String?   @db.Text
+  emergencyContactEncrypted  String?   @db.Text
+  sensitiveDataExpiresAt     DateTime?
+  sensitiveDataDeletedAt     DateTime?
   gender                  String
   /// When this traveller's document details were confirmed at check-in, and null
   /// until they are.

@@ -284,6 +284,41 @@ const seatNumberSchema = requiredText('Seat number', 6)
     .transform(value => value.toUpperCase())
     .pipe(z.string().regex(/^[1-9]\d{0,2}[A-Z]$/, 'Seat number is invalid.'));
 
+export const ktnSchema = z.preprocess(
+    val => (val === '' || val === null || val === undefined ? undefined : typeof val === 'string' ? val.trim() : val),
+    z.string()
+        .regex(/^[A-Za-z0-9]{9}$/, 'Known Traveler Number must be a 9-character alphanumeric code.')
+        .transform(val => val.toUpperCase())
+        .optional()
+);
+
+export const redressNumberSchema = z.preprocess(
+    val => (val === '' || val === null || val === undefined ? undefined : typeof val === 'string' ? val.trim() : val),
+    z.string()
+        .regex(/^\d{7}$/, 'Redress Number must be a 7-digit numeric string.')
+        .optional()
+);
+
+export const emergencyContactFieldsSchema = z.object({
+    name: requiredText('Contact name', 100),
+    relationship: requiredText('Relationship', 50),
+    phone: requiredText('Phone number', 30)
+        .regex(/^[+]?[0-9\s().-]{7,25}$/, 'Phone number format is invalid.'),
+}).strict();
+
+export const emergencyContactSchema = z.preprocess(
+    val => {
+        if (!val || typeof val !== 'object') return undefined;
+        const obj = val as Record<string, unknown>;
+        const name = typeof obj.name === 'string' ? obj.name.trim() : '';
+        const relationship = typeof obj.relationship === 'string' ? obj.relationship.trim() : '';
+        const phone = typeof obj.phone === 'string' ? obj.phone.trim() : '';
+        if (!name && !relationship && !phone) return undefined;
+        return val;
+    },
+    emergencyContactFieldsSchema.optional()
+);
+
 export const passengerSchema = z.object({
     firstName: requiredText('First name', 100),
     lastName: requiredText('Last name', 100),
@@ -299,7 +334,10 @@ export const passengerSchema = z.object({
     seatNumbers: z.array(seatNumberSchema, { error: 'A seat is required for each flight.' })
         .min(1, 'A seat is required for each flight.')
         .max(MAX_ITINERARY_LEGS),
-    cabinClass: z.enum(['ECONOMY', 'PREMIUM_ECONOMY', 'BUSINESS', 'FIRST'])
+    cabinClass: z.enum(['ECONOMY', 'PREMIUM_ECONOMY', 'BUSINESS', 'FIRST']),
+    ktn: ktnSchema,
+    redressNumber: redressNumberSchema,
+    emergencyContact: emergencyContactSchema,
 }).strict();
 
 export const bookingRequestIdSchema = z.uuid('Booking request ID must be a UUID.');

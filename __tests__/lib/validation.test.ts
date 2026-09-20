@@ -24,6 +24,9 @@ import {
     seatChangesSchema,
     airportIataCodeSchema,
     flightStatusSearchSchema,
+    ktnSchema,
+    redressNumberSchema,
+    emergencyContactSchema,
 } from '@/lib/validation';
 
 describe('account timezone validation', () => {
@@ -811,6 +814,143 @@ describe('flightStatusSearchSchema', () => {
             date: '2026/07/15',
         });
         expect(parsed.success).toBe(false);
+    });
+});
+
+describe('passenger security and emergency contact validation', () => {
+    describe('ktnSchema', () => {
+        it('accepts valid 9-character alphanumeric KTN and normalizes to uppercase', () => {
+            expect(ktnSchema.parse('123456789')).toBe('123456789');
+            expect(ktnSchema.parse(' abc123456 ')).toBe('ABC123456');
+            expect(ktnSchema.parse('987654321')).toBe('987654321');
+        });
+
+        it('accepts optional / empty / undefined / null values', () => {
+            expect(ktnSchema.parse(undefined)).toBeUndefined();
+            expect(ktnSchema.parse('')).toBeUndefined();
+            expect(ktnSchema.parse(null)).toBeUndefined();
+        });
+
+        it('rejects KTN that is not 9 characters or contains invalid characters', () => {
+            expect(ktnSchema.safeParse('12345678').success).toBe(false);
+            expect(ktnSchema.safeParse('1234567890').success).toBe(false);
+            expect(ktnSchema.safeParse('ABC12345!').success).toBe(false);
+            expect(ktnSchema.safeParse('ABC-12345').success).toBe(false);
+        });
+    });
+
+    describe('redressNumberSchema', () => {
+        it('accepts valid 7-digit numeric string', () => {
+            expect(redressNumberSchema.parse('1234567')).toBe('1234567');
+            expect(redressNumberSchema.parse(' 7654321 ')).toBe('7654321');
+        });
+
+        it('accepts optional / empty / undefined / null values', () => {
+            expect(redressNumberSchema.parse(undefined)).toBeUndefined();
+            expect(redressNumberSchema.parse('')).toBeUndefined();
+            expect(redressNumberSchema.parse(null)).toBeUndefined();
+        });
+
+        it('rejects redress numbers that are not exactly 7 digits or contain non-digits', () => {
+            expect(redressNumberSchema.safeParse('123456').success).toBe(false);
+            expect(redressNumberSchema.safeParse('12345678').success).toBe(false);
+            expect(redressNumberSchema.safeParse('123456A').success).toBe(false);
+            expect(redressNumberSchema.safeParse('123-456').success).toBe(false);
+        });
+    });
+
+    describe('emergencyContactSchema', () => {
+        it('accepts valid emergency contact object', () => {
+            const valid = {
+                name: 'Jane Doe',
+                relationship: 'Spouse',
+                phone: '+1 (555) 123-4567',
+            };
+            expect(emergencyContactSchema.parse(valid)).toEqual(valid);
+        });
+
+        it('accepts optional / empty / undefined / null values', () => {
+            expect(emergencyContactSchema.parse(undefined)).toBeUndefined();
+            expect(emergencyContactSchema.parse(null)).toBeUndefined();
+            expect(emergencyContactSchema.parse({})).toBeUndefined();
+            expect(emergencyContactSchema.parse({ name: '', relationship: '', phone: '' })).toBeUndefined();
+        });
+
+        it('rejects emergency contact with missing required fields when provided', () => {
+            expect(emergencyContactSchema.safeParse({ name: 'Jane Doe' }).success).toBe(false);
+            expect(emergencyContactSchema.safeParse({ name: 'Jane Doe', relationship: 'Spouse' }).success).toBe(false);
+            expect(emergencyContactSchema.safeParse({
+                name: 'Jane Doe',
+                relationship: 'Spouse',
+                phone: 'abc',
+            }).success).toBe(false);
+        });
+    });
+
+    describe('passengerSchema security fields integration', () => {
+        const basePassenger = {
+            firstName: 'Ada',
+            lastName: 'Lovelace',
+            dateOfBirth: '1990-01-01',
+            passportNumber: 'AB123456',
+            gender: 'Female',
+            seatNumbers: ['11A'],
+            cabinClass: 'ECONOMY',
+        };
+
+        it('accepts passenger with KTN, Redress, and Emergency Contact', () => {
+            const withSecurity = {
+                ...basePassenger,
+                ktn: '123456789',
+                redressNumber: '1234567',
+                emergencyContact: {
+                    name: 'Charles Babbage',
+                    relationship: 'Colleague',
+                    phone: '+1 555-0100',
+                },
+            };
+            const result = passengerSchema.safeParse(withSecurity);
+            expect(result.success).toBe(true);
+            if (result.success) {
+                expect(result.data.ktn).toBe('123456789');
+                expect(result.data.redressNumber).toBe('1234567');
+                expect(result.data.emergencyContact).toEqual({
+                    name: 'Charles Babbage',
+                    relationship: 'Colleague',
+                    phone: '+1 555-0100',
+                });
+            }
+        });
+
+        it('accepts passenger without security fields (optionality preserved)', () => {
+            const result = passengerSchema.safeParse(basePassenger);
+            expect(result.success).toBe(true);
+        });
+
+        it('rejects passenger with invalid KTN', () => {
+            expect(passengerSchema.safeParse({
+                ...basePassenger,
+                ktn: 'short',
+            }).success).toBe(false);
+        });
+
+        it('rejects passenger with invalid Redress Number', () => {
+            expect(passengerSchema.safeParse({
+                ...basePassenger,
+                redressNumber: '123',
+            }).success).toBe(false);
+        });
+
+        it('rejects passenger with invalid Emergency Contact phone', () => {
+            expect(passengerSchema.safeParse({
+                ...basePassenger,
+                emergencyContact: {
+                    name: 'Charles',
+                    relationship: 'Friend',
+                    phone: 'invalid',
+                },
+            }).success).toBe(false);
+        });
     });
 });
 
