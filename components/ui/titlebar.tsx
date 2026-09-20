@@ -582,9 +582,7 @@ const TitleBar: React.FC = () => {
 
                             <div className="avatar" style={{ display: 'flex', alignItems: 'center' }}>
                                 <Link href="/profile" style={{ display: 'flex' }}>
-                                    {/* OAuth providers may supply arbitrary remote or data URLs. */}
-                                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img src={userAvatar} width="32" height="32" alt="Profile" style={{ borderRadius: '50%', display: 'block' }} />
+                                    <Image src={userAvatar} alt="Profile" width={32} height={32} unoptimized style={{ borderRadius: '50%', display: 'block' }} />
                                 </Link>
                             </div>
                             <button onClick={() => signOut()} style={{ background: 'none', border: 'none', padding: 0, height: 'auto', width: 'auto', color: pathname?.startsWith('/admin') ? 'white' : 'inherit', cursor: 'pointer', fontWeight: 'bold', fontSize: 'inherit', fontFamily: 'inherit' }}>
