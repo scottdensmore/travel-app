@@ -154,6 +154,11 @@ describe('ProfileClient interactive dashboard', () => {
         expect(screen.getByRole('combobox', { name: 'Account timezone' }))
             .toHaveValue('UTC');
 
+        // Privacy & Data navigation link
+        const privacyLink = screen.getByRole('link', { name: /privacy & data/i });
+        expect(privacyLink).toBeInTheDocument();
+        expect(privacyLink).toHaveAttribute('href', '/profile/privacy');
+
         // Bookings
         expect(screen.getByText('Gemini Airways GA101')).toBeInTheDocument();
         expect(screen.getByTestId('booking-row-101'))

@@ -48,7 +48,7 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic';
 
 interface HomeProps {
-  searchParams: Promise<FlightSearchParamRecord>;
+  searchParams: Promise<FlightSearchParamRecord & { accountDeleted?: string }>;
 }
 
 export default async function Home({ searchParams }: HomeProps) {
@@ -56,6 +56,7 @@ export default async function Home({ searchParams }: HomeProps) {
     getFlightRoutesAction(),
     searchParams,
   ]);
+  const isAccountDeleted = requestedSearch.accountDeleted === 'true';
   // Selectable dates are calendar days at the origin airport, so the origin has
   // to be resolved before the window. A shared link carries its own origin; the
   // form otherwise opens on the first available one. The client recomputes this
@@ -88,12 +89,30 @@ export default async function Home({ searchParams }: HomeProps) {
     : { earliestDate, latestDate };
 
   return (
-    <FlightBookingForm
-      routes={routes}
-      minimumDepartureDate={window.earliestDate}
-      maximumDepartureDate={window.latestDate}
-      initialSearch={initialSearch}
-      unusableLink={unusableLink}
-    />
+    <>
+      {isAccountDeleted && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="account-deletion-banner"
+          data-testid="account-deleted-banner"
+        >
+          <div className="account-deletion-banner-content">
+            <span className="account-deletion-banner-icon" aria-hidden="true">✓</span>
+            <div>
+              <strong>Account successfully deleted</strong>
+              <p>Your personal data and active sessions have been permanently erased in accordance with GDPR and CCPA policies.</p>
+            </div>
+          </div>
+        </div>
+      )}
+      <FlightBookingForm
+        routes={routes}
+        minimumDepartureDate={window.earliestDate}
+        maximumDepartureDate={window.latestDate}
+        initialSearch={initialSearch}
+        unusableLink={unusableLink}
+      />
+    </>
   );
 }

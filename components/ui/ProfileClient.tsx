@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useRef, useCallback, useTransition } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import PointsActivityTable from "@/components/ui/pointsActivityTable";
 import NextStatusChart from "@/components/ui/charts/nextStatusChart";
@@ -702,6 +703,15 @@ export default function ProfileClient({
                     timeZone={accountTimeZone}
                     choices={accountTimeZoneChoices}
                 />
+
+                <div className="profile-privacy-section" style={{ marginBottom: '2rem' }}>
+                    <Link
+                        href="/profile/privacy"
+                        className="profile-privacy-link"
+                    >
+                        Privacy &amp; Data
+                    </Link>
+                </div>
 
                 <div style={{ marginBottom: '2rem' }}>
                     <NextStatusChart points={currentPoints} />
