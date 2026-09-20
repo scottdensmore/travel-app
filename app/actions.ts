@@ -36,6 +36,7 @@ import {
 } from '@/lib/flightScheduleDeletionService';
 import CityGuide from '@/lib/types/CityGuide';
 import { geocodingService, type GeocodeResult } from '@/lib/geocodingService';
+import { saveGuideImage } from '@/lib/guideImageStorage';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { hasVerifiedStaffAccess } from '@/lib/staffAuthorization';
@@ -149,6 +150,17 @@ const flightBookingService = new FlightBookingService();
 export async function saveCityGuideAction(cityGuide: CityGuide) {
     const session = await getServerSession(authOptions);
     if (!hasVerifiedStaffAccess(session)) throw new Error("Unauthorized");
+
+    if (cityGuide.coverImage?.startsWith('data:image/')) {
+        try {
+            cityGuide.coverImage = await saveGuideImage(cityGuide.coverImage);
+        } catch (error) {
+            return actionValidationFailure(
+                error instanceof Error ? error.message : 'Failed to save cover image.',
+                'coverImage',
+            );
+        }
+    }
 
     const parsed = parseActionInput(cityGuideSchema, cityGuide);
     if (!parsed.ok) return parsed;
