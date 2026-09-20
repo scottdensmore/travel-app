@@ -2310,6 +2310,7 @@ describe('changeBookingSeatsAction', () => {
             )
         );
         mockTx.booking.findUnique.mockResolvedValue({
+            userId: 'user-123',
             status: 'CONFIRMED',
             passengers: [
                 { id: 'p-1', firstName: 'Jane' }
@@ -2472,7 +2473,7 @@ describe('changeBookingSeatsAction', () => {
             legs: [{ id: 50, sequence: 1, flightId: 10, flight: { id: 10 } }],
             passengers: []
         });
-        mockTx.booking.findUnique.mockResolvedValue({ status: 'CANCELLED', passengers: [] });
+        mockTx.booking.findUnique.mockResolvedValue({ userId: 'user-123', status: 'CANCELLED', passengers: [] });
 
         await expect(changeBookingSeatsAction(1, [
             { passengerId: 'p-1', legId: 50, seatNumber: '12A' }
@@ -2480,6 +2481,70 @@ describe('changeBookingSeatsAction', () => {
             'Seats cannot be changed on a cancelled booking'
         );
         expect(mockTx.passenger.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects if the locked booking belongs to another user', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+        mockedBookingFindUnique.mockResolvedValue({
+            id: 1,
+            userId: 'user-123',
+            flightId: 10,
+            legs: [{ id: 50, sequence: 1, flightId: 10, flight: { id: 10 } }],
+            passengers: [{ id: 'p-1', firstName: 'Jane' }],
+        });
+        mockTx.booking.findUnique.mockResolvedValue({
+            userId: 'other-user',
+            status: 'CONFIRMED',
+            passengers: [{ id: 'p-1' }],
+        });
+
+        await expect(changeBookingSeatsAction(1, [
+            { passengerId: 'p-1', legId: 50, seatNumber: '12B' }
+        ])).rejects.toThrow('Unauthorized');
+        expect(mockTx.seatAssignment.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('allows staff to change seats on another user\'s booking', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'admin-1', role: 'ADMIN', staffMfaVerified: true } });
+        mockedBookingFindUnique.mockResolvedValue({
+            id: 1,
+            userId: 'another-user',
+            flightId: 10,
+            legs: [{ id: 50, sequence: 1, flightId: 10, flight: { id: 10 } }],
+            passengers: [{ id: 'p-1', firstName: 'Jane' }],
+        });
+        mockTx.booking.findUnique.mockResolvedValue({
+            userId: 'another-user',
+            status: 'CONFIRMED',
+            passengers: [{ id: 'p-1' }],
+        });
+
+        await changeBookingSeatsAction(1, [
+            { passengerId: 'p-1', legId: 50, seatNumber: '12B' }
+        ]);
+
+        expect(mockTx.seatAssignment.updateMany).toHaveBeenCalledWith({
+            where: { passengerId: 'p-1', legId: 50 },
+            data: { seatNumber: '12B' }
+        });
+    });
+
+    it('rejects duplicate seats requested in the same batch', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
+
+        const result = await changeBookingSeatsAction(1, [
+            { passengerId: 'p-1', legId: 50, seatNumber: '12B' },
+            { passengerId: 'p-2', legId: 50, seatNumber: '12B' },
+        ]);
+
+        expect(result).toMatchObject({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'Seats must be unique.',
+            },
+        });
+        expect(mockTx.seatAssignment.updateMany).not.toHaveBeenCalled();
     });
 
     it('rejects malformed seat changes before starting a transaction', async () => {

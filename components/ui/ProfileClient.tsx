@@ -289,6 +289,10 @@ function bookingPresentation(booking: Booking, renderedAt: number) {
         priceLabel: booking.totalPriceCents !== null && booking.totalPriceCents !== undefined
             ? formatPrice(booking.totalPriceCents)
             : legs[0]?.flight ? formatPrice(flightFareCents(legs[0].flight)) : '\u2014',
+        canChangeLeg: (leg: BookingLeg | null) =>
+            !isCancelled && !departed && Boolean(leg?.flight) && leg?.flight?.status !== 'CANCELLED' && booking.passengers.some(
+                passenger => passengerCanChangeSeatOnLeg(leg!, passenger.id),
+            ),
         seatFor: (leg: BookingLeg | null, passengerId: string) =>
             seatLabel(leg?.seatAssignments?.find(seat => seat.passengerId === passengerId)),
     };
@@ -320,6 +324,13 @@ export default function ProfileClient({
     const refundFeedbackRef = useRef<HTMLParagraphElement | null>(null);
     const rebookingFeedbackRef = useRef<HTMLParagraphElement | null>(null);
     const [rebookingFeedback, setRebookingFeedback] = useState<string | null>(null);
+    const [seatChangeFeedback, setSeatChangeFeedback] = useState<{
+        bookingId: number;
+        message: string;
+        focus: boolean;
+    } | null>(null);
+    const seatChangeFeedbackRef = useRef<HTMLParagraphElement | null>(null);
+    const targetLegIdRef = useRef<number | null>(null);
     const bookingsRegionRef = useRef<HTMLDivElement | null>(null);
     const receiptBookings = bookings.filter(booking => booking.paymentReceipt);
 
@@ -330,6 +341,10 @@ export default function ProfileClient({
     useEffect(() => {
         if (rebookingFeedback) rebookingFeedbackRef.current?.focus();
     }, [rebookingFeedback]);
+
+    useEffect(() => {
+        if (seatChangeFeedback?.focus) seatChangeFeedbackRef.current?.focus();
+    }, [seatChangeFeedback]);
     /**
      * Whether the region still scrolls sideways.
      *
@@ -486,13 +501,33 @@ export default function ProfileClient({
         }
         setPassengerSeats(initial);
         setActivePassengerIdx(0);
-        setActiveLegIdx(0);
+        const initialLegIdx = targetLegIdRef.current !== null
+            ? Math.max(0, legs.findIndex(leg => leg.id === targetLegIdRef.current))
+            : 0;
+        targetLegIdRef.current = null;
+        setActiveLegIdx(initialLegIdx);
         setModalError(null);
 
         return () => {
             activeBookingIdRef.current = null;
         };
     }, [selectedBooking, loadOccupancyForBooking]);
+
+    useEffect(() => {
+        if (!selectedBooking) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setSelectedBooking(null);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [selectedBooking]);
+
+    const handleOpenSeatModalForLeg = (booking: Booking, legId?: number) => {
+        targetLegIdRef.current = legId ?? null;
+        setSelectedBooking(booking);
+    };
 
     const handleCancelBooking = (bookingId: number, flightNumber: string, disrupted = false) => {
         // A disruption is the airline's doing, so the prompt says what the
@@ -626,7 +661,13 @@ export default function ProfileClient({
                 setModalError(result.error.message);
                 return;
             }
+            const savedBookingId = selectedBooking.id;
             setSelectedBooking(null);
+            setSeatChangeFeedback({
+                bookingId: savedBookingId,
+                message: 'Seats updated successfully.',
+                focus: true,
+            });
             router.refresh();
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : 'Failed to update seats. Please try again.';
@@ -762,7 +803,7 @@ export default function ProfileClient({
                                         legs, legRows, isDisrupted, cancelledLeg, cancellable,
                                         statusText, statusColour, disruptionNote, refundText,
                                         refundRetryable, priceLabel, seatFor, hasCheckedInLeg,
-                                        canChangeSeats,
+                                        canChangeSeats, canChangeLeg,
                                     } = bookingPresentation(booking, renderedAt);
                                     const refundAmountCents = booking.statusChanges?.[0]?.paymentRefund?.amountCents;
                                     const isRetryingRefund = activeRefundBookingId === booking.id;
@@ -818,6 +859,19 @@ export default function ProfileClient({
                                                                         </div>
                                                                     );
                                                                 })}
+                                                            </div>
+                                                        )}
+                                                        {canChangeLeg(leg) && (
+                                                            <div style={{ marginTop: '6px' }}>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleOpenSeatModalForLeg(booking, leg?.id)}
+                                                                    disabled={isPending}
+                                                                    className="leg-change-seat-btn"
+                                                                    aria-label={`Change seat for ${leg?.flight ? `${leg.flight.airline} ${leg.flight.flightNumber}` : 'flight'}`}
+                                                                >
+                                                                    Change Seat
+                                                                </button>
                                                             </div>
                                                         )}
                                                     </td>
@@ -892,7 +946,7 @@ export default function ProfileClient({
                                                                     </a>
                                                                     {canChangeSeats && (
                                                                         <button
-                                                                            onClick={() => setSelectedBooking(booking)}
+                                                                            onClick={() => handleOpenSeatModalForLeg(booking)}
                                                                             disabled={isPending}
                                                                             style={{
                                                                                 background: '#6d28d9', backgroundImage: 'none', color: 'white', borderRadius: '4px',
@@ -928,6 +982,17 @@ export default function ProfileClient({
                                                                         </button>
                                                                     )}
                                                                 </div>
+                                                                {seatChangeFeedback?.bookingId === booking.id && (
+                                                                    <p
+                                                                        ref={seatChangeFeedbackRef}
+                                                                        className="seat-change-feedback"
+                                                                        role="status"
+                                                                        aria-live="polite"
+                                                                        tabIndex={-1}
+                                                                    >
+                                                                        {seatChangeFeedback.message}
+                                                                    </p>
+                                                                )}
                                                                 {refundFeedback?.bookingId === booking.id && (
                                                                     <p
                                                                         ref={refundFeedbackRef}
@@ -1115,37 +1180,56 @@ export default function ProfileClient({
 
             {/* SEAT EDITOR MODAL */}
             {selectedBooking && selectedBooking.passengers && (
-                <div style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                    backdropFilter: 'blur(10px)',
-                    zIndex: 9999,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '1rem'
-                }}>
-                    <div style={{
-                        background: 'linear-gradient(135deg, #1e1b4b 0%, #311042 100%)',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        borderRadius: '24px',
-                        padding: '2.5rem',
-                        maxWidth: '800px',
-                        width: '100%',
-                        maxHeight: '90vh',
+                <div
+                    role="presentation"
+                    onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                            setSelectedBooking(null);
+                        }
+                    }}
+                    style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                        backdropFilter: 'blur(10px)',
+                        zIndex: 9999,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: 'clamp(8px, 2vw, 16px)',
+                        boxSizing: 'border-box',
                         overflowY: 'auto',
-                        color: '#fff',
-                        boxShadow: '0 20px 40px rgba(0, 0, 0, 0.5)'
-                    }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                            <h2 style={{ fontSize: '1.5rem', color: '#c084fc', margin: 0, fontWeight: 'bold' }}>Change Seats</h2>
+                    }}
+                >
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="seat-change-modal-title"
+                        style={{
+                            background: 'linear-gradient(135deg, #1e1b4b 0%, #311042 100%)',
+                            border: '1px solid rgba(255, 255, 255, 0.16)',
+                            borderRadius: '20px',
+                            padding: 'clamp(16px, 3vw, 32px)',
+                            maxWidth: '800px',
+                            width: '100%',
+                            maxHeight: '90vh',
+                            overflowY: 'auto',
+                            overflowX: 'hidden',
+                            boxSizing: 'border-box',
+                            color: '#fff',
+                            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.55)',
+                        }}
+                    >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '12px' }}>
+                            <h2 id="seat-change-modal-title" style={{ fontSize: '1.5rem', color: '#c084fc', margin: 0, fontWeight: 'bold' }}>Change Seats</h2>
                             <button
+                                type="button"
                                 onClick={() => setSelectedBooking(null)}
-                                style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: '1.5rem', cursor: 'pointer' }}
+                                aria-label="Close seat selection dialog"
+                                style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', fontSize: '1.5rem', cursor: 'pointer', padding: '4px 8px', minWidth: '32px', minHeight: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                             >
                                 ✕
                             </button>
@@ -1181,20 +1265,20 @@ export default function ProfileClient({
                                             type="button"
                                             role="tab"
                                             aria-selected={isActive}
+                                            aria-controls={`seat-map-panel-${leg.id}`}
                                             onClick={() => {
                                                 setActiveLegIdx(index);
                                                 setActivePassengerIdx(0);
                                             }}
                                             style={{
-                                                // globals.css pins buttons to 52px.
                                                 height: 'auto',
                                                 minHeight: '52px',
                                                 width: 'auto',
                                                 flex: '1 1 12rem',
                                                 padding: '10px 16px',
                                                 borderRadius: '8px',
-                                                border: `2px solid ${isActive ? '#8b5cf6' : 'rgba(255,255,255,0.15)'}`,
-                                                background: isActive ? 'rgba(139, 92, 246, 0.12)' : 'transparent',
+                                                border: `2px solid ${isActive ? '#8b5cf6' : 'rgba(255,255,255,0.2)'}`,
+                                                background: isActive ? 'rgba(139, 92, 246, 0.2)' : 'rgba(255, 255, 255, 0.04)',
                                                 color: '#fff',
                                                 cursor: 'pointer',
                                             }}
@@ -1202,7 +1286,7 @@ export default function ProfileClient({
                                             <span style={{ display: 'block', fontWeight: 'bold', fontSize: '0.9rem' }}>
                                                 {legDirectionLabel(index, modalLegs.length)}
                                             </span>
-                                            <span style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
+                                            <span style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)' }}>
                                                 {leg.flight!.from} → {leg.flight!.to}
                                             </span>
                                         </button>
@@ -1211,9 +1295,9 @@ export default function ProfileClient({
                             </div>
                         )}
 
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2rem' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'clamp(1rem, 3vw, 2rem)', minWidth: 0, width: '100%', boxSizing: 'border-box' }}>
                             {/* Left panel: Passengers list */}
-                            <div style={{ flex: '1 1 200px' }}>
+                            <div style={{ flex: '1 1 200px', minWidth: 0, maxWidth: '100%', width: '100%', boxSizing: 'border-box' }}>
                                 <h3 style={{ fontSize: '0.95rem', color: '#a78bfa', marginBottom: '0.75rem' }}>Passengers</h3>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                     {activePassengers.map((p, idx) => (
@@ -1229,9 +1313,10 @@ export default function ProfileClient({
                                                 textAlign: 'left',
                                                 padding: '10px',
                                                 borderRadius: '8px',
-                                                border: activePassengerIdx === idx ? '2px solid #8b5cf6' : '1px solid rgba(255,255,255,0.08)',
-                                                background: activePassengerIdx === idx ? 'rgba(139, 92, 246, 0.08)' : 'rgba(255,255,255,0.01)',
-                                                cursor: 'pointer'
+                                                border: activePassengerIdx === idx ? '2px solid #8b5cf6' : '1px solid rgba(255,255,255,0.12)',
+                                                background: activePassengerIdx === idx ? 'rgba(139, 92, 246, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                cursor: 'pointer',
+                                                boxSizing: 'border-box',
                                             }}
                                         >
                                             <div style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{p.firstName} {p.lastName}</div>
@@ -1276,7 +1361,10 @@ export default function ProfileClient({
                                     cabinFor(activePassenger?.id ?? '')
                                 );
                                 return (
-                                    <div style={{ flex: '2 1 300px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                    <div
+                                        id={activeLeg ? `seat-map-panel-${activeLeg.id}` : undefined}
+                                        style={{ flex: '2 1 280px', minWidth: 0, maxWidth: '100%', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}
+                                    >
                                         <h3 style={{ fontSize: '0.95rem', color: '#a78bfa', marginBottom: '0.75rem' }}>
                                             Select Seat for {activePassenger?.firstName}
                                         </h3>
@@ -1318,12 +1406,16 @@ export default function ProfileClient({
                                                 </button>
                                             </div>
                                         ) : isLoadingOccupancy ? (
-                                            <div style={{
-                                                padding: '2rem 1rem',
-                                                textAlign: 'center',
-                                                color: 'rgba(255, 255, 255, 0.7)',
-                                                fontSize: '0.9rem',
-                                            }}>
+                                            <div
+                                                role="status"
+                                                aria-live="polite"
+                                                style={{
+                                                    padding: '2rem 1rem',
+                                                    textAlign: 'center',
+                                                    color: 'rgba(255, 255, 255, 0.7)',
+                                                    fontSize: '0.9rem',
+                                                }}
+                                            >
                                                 Loading seat availability...
                                             </div>
                                         ) : activeCabinRows.length === 0 ? (
@@ -1331,13 +1423,16 @@ export default function ProfileClient({
                                                 This cabin has no seats in the current flight layout. Contact support to change this booking.
                                             </p>
                                         ) : <div style={{
-                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            border: '1px solid rgba(255,255,255,0.16)',
                                             borderRadius: '40px 40px 12px 12px',
-                                            padding: '2rem 1rem 1rem',
+                                            padding: '1.5rem 1rem 1rem',
                                             width: 'min(100%, 280px)',
-                                            background: 'rgba(0,0,0,0.2)',
-                                            maxHeight: '300px',
-                                            overflow: 'auto',
+                                            maxWidth: '100%',
+                                            boxSizing: 'border-box',
+                                            background: 'rgba(0,0,0,0.25)',
+                                            maxHeight: '320px',
+                                            overflowX: 'auto',
+                                            overflowY: 'auto',
                                             display: 'flex',
                                             flexDirection: 'column',
                                             alignItems: 'center'
@@ -1353,7 +1448,7 @@ export default function ProfileClient({
                                                 paddingLeft: '18px',
                                                 marginBottom: '8px',
                                                 fontSize: '0.7rem',
-                                                color: 'rgba(255,255,255,0.4)',
+                                                color: 'rgba(255,255,255,0.7)',
                                                 fontWeight: 'bold'
                                             }}>
                                                 {parsedPattern.split("").map((char, charIdx) => {
@@ -1368,7 +1463,7 @@ export default function ProfileClient({
                                                     return (
                                                         <span
                                                             key={`seat-header-${charIdx}`}
-                                                            style={{ width: '22px', textAlign: 'center' }}
+                                                            style={{ width: '24px', textAlign: 'center' }}
                                                         >
                                                             {char}
                                                         </span>
@@ -1380,7 +1475,7 @@ export default function ProfileClient({
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: `${Math.max(240, parsedPattern.length * 36)}px`, flexShrink: 0 }}>
                                                 {activeCabinRows.map((row) => (
                                                     <div key={row} style={{ display: 'flex', gap: '6px', alignItems: 'center', justifyContent: 'center' }}>
-                                                        <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)', width: '12px', textAlign: 'right', marginRight: '2px' }}>{row}</span>
+                                                        <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.6)', width: '14px', textAlign: 'right', marginRight: '2px', fontWeight: 'bold' }}>{row}</span>
 
                                                         {parsedPattern.split("").map((char, charIdx) => {
                                                             if (char === '-') {
@@ -1391,7 +1486,7 @@ export default function ProfileClient({
                                                                             width: '10px',
                                                                             textAlign: 'center',
                                                                             fontSize: '0.55rem',
-                                                                            color: 'rgba(255,255,255,0.1)',
+                                                                            color: 'rgba(255,255,255,0.3)',
                                                                             userSelect: 'none'
                                                                         }}
                                                                     >
@@ -1409,6 +1504,9 @@ export default function ProfileClient({
                                                                     key={letter}
                                                                     type="button"
                                                                     disabled={occupied}
+                                                                    aria-disabled={occupied ? true : undefined}
+                                                                    aria-pressed={selected}
+                                                                    aria-label={occupied ? `Seat ${seatId}, occupied` : selected ? `Seat ${seatId}, selected` : `Select Seat ${seatId}`}
                                                                     onClick={() => {
                                                                         const pid = activePassenger?.id;
                                                                         if (!activeLeg || !pid) return;
@@ -1416,16 +1514,17 @@ export default function ProfileClient({
                                                                         setModalError(null);
                                                                     }}
                                                                     style={{
-                                                                        width: '22px',
-                                                                        height: '22px',
+                                                                        width: '24px',
+                                                                        height: '24px',
                                                                         borderRadius: '4px',
-                                                                        border: selected ? '1px solid #8b5cf6' : '1px solid rgba(255,255,255,0.15)',
-                                                                        background: selected ? '#8b5cf6' : occupied ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                                                                        border: selected ? '2px solid #ffffff' : occupied ? '1px solid rgba(239, 68, 68, 0.6)' : '1px solid rgba(255,255,255,0.3)',
+                                                                        background: selected ? '#8b5cf6' : occupied ? 'rgba(239, 68, 68, 0.25)' : 'rgba(255, 255, 255, 0.12)',
                                                                         cursor: occupied ? 'not-allowed' : 'pointer',
-                                                                        fontSize: '0.6rem',
+                                                                        fontSize: '0.65rem',
                                                                         fontWeight: 'bold',
-                                                                        color: selected ? '#fff' : occupied ? '#ef4444' : '#fff',
-                                                                        padding: 0
+                                                                        color: selected ? '#ffffff' : occupied ? '#fca5a5' : '#ffffff',
+                                                                        padding: 0,
+                                                                        boxShadow: selected ? '0 0 0 2px #8b5cf6' : 'none',
                                                                     }}
                                                                     title={occupied ? `Seat ${seatId} Occupied` : `Select Seat ${seatId}`}
                                                                 >
@@ -1442,14 +1541,16 @@ export default function ProfileClient({
                             })()}
                         </div>
 
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1.5rem' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '2rem', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1.5rem', width: '100%', boxSizing: 'border-box' }}>
                             <button
+                                type="button"
                                 onClick={() => setSelectedBooking(null)}
-                                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+                                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
                             >
                                 Cancel
                             </button>
                             <button
+                                type="button"
                                 onClick={handleSaveSeats}
                                 disabled={isSavingSeats || Boolean(modalOccupiedError) || isLoadingOccupancy}
                                 style={{

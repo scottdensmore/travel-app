@@ -1832,6 +1832,58 @@ footer a:hover {
   box-shadow: 0 0 0 5px rgba(251, 191, 36, 0.28);
 }
 
+.seat-change-feedback {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  color: #34d399;
+  max-width: 14rem;
+  text-align: left;
+  font-weight: 600;
+}
+
+.seat-change-feedback:focus {
+  outline: 3px solid #34d399;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 5px rgba(52, 211, 153, 0.28);
+}
+
+.leg-change-seat-btn {
+  background: #6d28d9;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  font-weight: bold;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background-color 0.2s, outline 0.2s;
+}
+
+.leg-change-seat-btn:hover:not(:disabled) {
+  background: #7c3aed;
+}
+
+.leg-change-seat-btn:focus-visible {
+  outline: 3px solid #f5d0fe;
+  outline-offset: 2px;
+}
+
+.leg-change-seat-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .leg-change-seat-btn {
+    min-height: 38px;
+    padding: 6px 12px;
+    font-size: 0.85rem;
+  }
+}
+
 .payment-recovery-feedback {
   border-radius: 8px;
   margin: 1rem 0;
