@@ -1,5 +1,5 @@
 import { Prisma, PrismaClient } from '@prisma/client';
-import { isLevelEnabled, logger } from '@/lib/logger';
+import { isLevelEnabled, logger } from './logger';
 
 export function sanitizePrismaErrorMessage(error: unknown): void {
     if (error && typeof error === 'object' && 'message' in error && typeof (error as { message: unknown }).message === 'string') {
