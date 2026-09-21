@@ -90,14 +90,14 @@ describe('Continuous Verification CI Workflow (.github/workflows/ci.yml)', () =>
             expect(verifyJob['runs-on']).toBe('ubuntu-latest');
         });
 
-        it('checks out code and sets up Node.js 20 with cache', () => {
+        it('checks out code and sets up Node.js 22 with cache', () => {
             const steps = verifyJob.steps ?? [];
             const checkoutStep = steps.find(s => s.uses?.startsWith('actions/checkout'));
             expect(checkoutStep).toBeDefined();
 
             const setupNodeStep = steps.find(s => s.uses?.startsWith('actions/setup-node'));
             expect(setupNodeStep).toBeDefined();
-            expect(String(setupNodeStep?.with?.['node-version'])).toBe('20');
+            expect(String(setupNodeStep?.with?.['node-version'])).toBe('22');
             expect(setupNodeStep?.with?.cache).toBe('npm');
         });
 
@@ -122,6 +122,14 @@ describe('Continuous Verification CI Workflow (.github/workflows/ci.yml)', () =>
 
         it('runs on ubuntu-latest', () => {
             expect(securityJob['runs-on']).toBe('ubuntu-latest');
+        });
+
+        it('checks out code and sets up Node.js 22 with cache', () => {
+            const steps = securityJob.steps ?? [];
+            const setupNodeStep = steps.find(s => s.uses?.startsWith('actions/setup-node'));
+            expect(setupNodeStep).toBeDefined();
+            expect(String(setupNodeStep?.with?.['node-version'])).toBe('22');
+            expect(setupNodeStep?.with?.cache).toBe('npm');
         });
 
         it('runs npm audit --audit-level=high', () => {
@@ -164,6 +172,14 @@ describe('Continuous Verification CI Workflow (.github/workflows/ci.yml)', () =>
             expect(postgresService?.image).toContain('postgres');
             expect(postgresService?.ports).toBeDefined();
             expect(postgresService?.env?.POSTGRES_DB).toBe('travel_app');
+        });
+
+        it('checks out code and sets up Node.js 22 with cache', () => {
+            const steps = databaseJob.steps ?? [];
+            const setupNodeStep = steps.find(s => s.uses?.startsWith('actions/setup-node'));
+            expect(setupNodeStep).toBeDefined();
+            expect(String(setupNodeStep?.with?.['node-version'])).toBe('22');
+            expect(setupNodeStep?.with?.cache).toBe('npm');
         });
 
         it('runs migrations and database tests', () => {

@@ -116,7 +116,11 @@ export default function ReviewModerationClient({
             const reason = notes[reviewId]?.trim() || `Moderator action: ${action}`;
             const res = await moderateReviewAction(reviewId, action, reason);
             if (res && !res.ok) {
-                const errorMsg = 'message' in res ? String(res.message) : 'Moderation action failed.';
+                const resRecord = res as unknown as Record<string, unknown>;
+                const errorMsg =
+                    ('error' in res && res.error?.message) ||
+                    ('message' in resRecord && String(resRecord.message)) ||
+                    'Moderation action failed.';
                 setFeedback({ type: 'error', message: errorMsg });
                 return;
             }
@@ -162,7 +166,11 @@ export default function ReviewModerationClient({
         try {
             const res = await deleteReviewAction(reviewId);
             if (res && !res.ok) {
-                const errorMsg = 'message' in res ? String(res.message) : 'Failed to delete review.';
+                const resRecord = res as unknown as Record<string, unknown>;
+                const errorMsg =
+                    ('error' in res && res.error?.message) ||
+                    ('message' in resRecord && String(resRecord.message)) ||
+                    'Failed to delete review.';
                 setFeedback({ type: 'error', message: errorMsg });
                 return;
             }
@@ -379,9 +387,11 @@ export default function ReviewModerationClient({
                             const breakdown = getReportBreakdown(review.reports);
                             const isExpanded = expandedReports[review.id] || false;
                             const isBusy = isProcessing[review.id] || false;
-                            const isEdited =
+                            const isEdited = Boolean(
+                                review.createdAt &&
                                 review.updatedAt &&
-                                new Date(review.updatedAt).getTime() > new Date(review.createdAt).getTime();
+                                new Date(review.updatedAt).getTime() - new Date(review.createdAt).getTime() > 60_000
+                            );
 
                             return (
                                 <div

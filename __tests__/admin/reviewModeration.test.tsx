@@ -316,4 +316,109 @@ describe('ReviewModerationClient', () => {
         const alert = await screen.findByRole('alert');
         expect(alert).toHaveTextContent(/Staff access required/i);
     });
+
+    it('displays error feedback when moderation action fails with structured error.message', async () => {
+        (actions.moderateReviewAction as jest.Mock).mockResolvedValue({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'Invalid moderation state transition.',
+                fields: {},
+            },
+        });
+
+        render(
+            <ReviewModerationClient
+                initialReviews={mockReviews as any}
+                initialAudits={mockAudits as any}
+            />
+        );
+
+        const hideBtn = screen.getByRole('button', { name: /^hide$/i });
+        fireEvent.click(hideBtn);
+
+        await waitFor(() => {
+            expect(actions.moderateReviewAction).toHaveBeenCalled();
+        });
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent(/Invalid moderation state transition/i);
+    });
+
+    it('displays error feedback when delete action fails', async () => {
+        (actions.deleteReviewAction as jest.Mock).mockResolvedValue({
+            ok: false,
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'Failed to delete: review not found.',
+                fields: {},
+            },
+        });
+
+        render(
+            <ReviewModerationClient
+                initialReviews={mockReviews as any}
+                initialAudits={mockAudits as any}
+            />
+        );
+
+        const deleteBtn = screen.getByRole('button', { name: /^delete$/i });
+        fireEvent.click(deleteBtn);
+
+        const confirmBtn = screen.getByRole('button', { name: /confirm delete/i });
+        fireEvent.click(confirmBtn);
+
+        await waitFor(() => {
+            expect(actions.deleteReviewAction).toHaveBeenCalled();
+        });
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent(/Failed to delete: review not found/i);
+    });
+
+    it('displays edited label only when updated after 60 second threshold', () => {
+        const createdAt = new Date('2026-01-01T12:00:00.000Z');
+        const updatedWithinThreshold = new Date('2026-01-01T12:00:30.000Z'); // 30s later
+        const updatedAfterThreshold = new Date('2026-01-01T12:02:00.000Z'); // 120s later
+
+        const reviewsWithEdits = [
+            {
+                id: 'rev-not-edited',
+                content: 'Review not considered edited.',
+                rating: 5,
+                status: 'APPROVED',
+                createdAt,
+                updatedAt: updatedWithinThreshold,
+                cityGuide: { city: 'Nice', country: 'France' },
+                user: { name: 'Quick Poster' },
+                reports: [{ id: 'rep-ne', reason: 'OTHER', status: 'PENDING', reporter: { name: 'R' }, createdAt }],
+            },
+            {
+                id: 'rev-edited',
+                content: 'Review genuinely edited later.',
+                rating: 5,
+                status: 'APPROVED',
+                createdAt,
+                updatedAt: updatedAfterThreshold,
+                cityGuide: { city: 'Lyon', country: 'France' },
+                user: { name: 'Thoughtful Poster' },
+                reports: [{ id: 'rep-e', reason: 'OTHER', status: 'PENDING', reporter: { name: 'R' }, createdAt }],
+            },
+        ];
+
+        render(
+            <ReviewModerationClient
+                initialReviews={reviewsWithEdits as any}
+                initialAudits={[]}
+            />
+        );
+
+        // Within 60s should NOT display (Edited: ...)
+        expect(screen.queryByText(/Review not considered edited/i)).toBeInTheDocument();
+        // Look for the edited span
+        expect(screen.getByText(/\(Edited: 1\/1\/2026\)/i)).toBeInTheDocument();
+        // Only one should have the Edited badge
+        const editedBadges = screen.getAllByText(/\(Edited:/i);
+        expect(editedBadges).toHaveLength(1);
+    });
 });
