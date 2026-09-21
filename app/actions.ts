@@ -113,7 +113,6 @@ import {
     occurrenceRequestSchema,
     parseActionInput,
     parseInput,
-    reviewSchema,
     scheduleSchema,
     searchFlightsSchema,
     seatChangesSchema,
@@ -787,23 +786,13 @@ export async function updateAccountTimeZoneAction(timeZone: string) {
     return updated;
 }
 
-export async function submitCityGuideReviewAction(cityGuideId: number, rating: number, content: string) {
-    const session = await getServerSession(authOptions);
-    const userId = session?.user?.id;
-    if (!userId) throw new Error("Unauthorized");
-
-    const parsed = parseActionInput(reviewSchema, { cityGuideId, rating, content });
-    if (!parsed.ok) return parsed;
-    const validated = parsed.data;
-    return await prisma.review.create({
-        data: {
-            userId,
-            cityGuideId: validated.cityGuideId,
-            rating: validated.rating,
-            content: validated.content
-        }
-    });
-}
+export {
+    submitCityGuideReviewAction,
+    updateCityGuideReviewAction,
+    reportCityGuideReviewAction,
+    moderateReviewAction,
+    deleteReviewAction,
+} from '@/app/actions/reviewActions';
 
 const DEPARTED_MESSAGE =
     'This booking cannot be cancelled because the flight has already departed.';
@@ -1491,30 +1480,6 @@ export async function changeBookingSeatsAction(
     return { success: true };
 }
 
-export async function deleteReviewAction(reviewId: string) {
-    const session = await getServerSession(authOptions);
-    const userId = session?.user?.id;
-    if (!userId) throw new Error("Unauthorized");
-
-    const parsed = parseActionInput(stringIdSchema, reviewId);
-    if (!parsed.ok) return parsed;
-    reviewId = parsed.data;
-    const review = await prisma.review.findUnique({
-        where: { id: reviewId }
-    });
-    if (!review) throw new Error("Review not found");
-
-    if (!hasVerifiedStaffAccess(session) && review.userId !== userId) {
-        throw new Error("Unauthorized");
-    }
-
-    const deleted = await prisma.review.delete({
-        where: { id: reviewId }
-    });
-    revalidatePath('/travelguide');
-    revalidatePath('/profile');
-    return deleted;
-}
 
 const MAX_OCCURRENCE_RANGE_DAYS = 366;
 

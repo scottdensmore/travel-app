@@ -9,7 +9,7 @@ import NextStatusChart from "@/components/ui/charts/nextStatusChart";
 import PointsHistoryChart from "@/components/ui/charts/pointsHistoryChart";
 import { flightFareCents, formatPrice } from '@/lib/bookingPricing';
 import { cabinLabel, legDirectionLabel, legFlightClause, orderedLegs, outboundFlight, seatLabel } from '@/lib/bookingItinerary';
-import { cancelBookingAction, deleteReviewAction, toggleFavoriteCityGuideAction, changeBookingSeatsAction, getOccupiedSeatsAction, retryBookingRefundAction } from '@/app/actions';
+import { cancelBookingAction, deleteReviewAction, updateCityGuideReviewAction, toggleFavoriteCityGuideAction, changeBookingSeatsAction, getOccupiedSeatsAction, retryBookingRefundAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
 import { PointsActivityDisplayData } from '@/lib/types/PointsActivity';
 import { flightDeparture } from '@/lib/flightTime';
@@ -327,7 +327,11 @@ export default function ProfileClient({
     const [reviewFeedback, setReviewFeedback] = useState<{
         reviewId: string;
         message: string;
+        isError?: boolean;
     } | null>(null);
+    const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
+    const [editingRating, setEditingRating] = useState<number>(5);
+    const [editingContent, setEditingContent] = useState<string>('');
     const [favoriteFeedback, setFavoriteFeedback] = useState<{
         cityId: number;
         message: string;
@@ -633,6 +637,52 @@ export default function ProfileClient({
                 setReviewFeedback({
                     reviewId,
                     message: error instanceof Error && error.message ? error.message : 'Failed to delete review. Please try again.',
+                });
+            }
+        });
+    };
+
+    const handleStartEditReview = (rev: Review) => {
+        setEditingReviewId(rev.id);
+        setEditingRating(rev.rating);
+        setEditingContent(rev.content);
+        setReviewFeedback(null);
+    };
+
+    const handleCancelEditReview = () => {
+        setEditingReviewId(null);
+        setEditingRating(5);
+        setEditingContent('');
+        setReviewFeedback(null);
+    };
+
+    const handleSaveEditReview = (reviewId: string) => {
+        if (!editingContent.trim()) return;
+        setReviewFeedback(null);
+
+        startTransition(async () => {
+            try {
+                const result = await updateCityGuideReviewAction(reviewId, editingRating, editingContent);
+                if (isActionValidationFailure(result)) {
+                    setReviewFeedback({
+                        reviewId,
+                        message: result.error.message,
+                        isError: true,
+                    });
+                    return;
+                }
+                setEditingReviewId(null);
+                setReviewFeedback({
+                    reviewId,
+                    message: 'Review updated successfully.',
+                    isError: false,
+                });
+                router.refresh();
+            } catch (error) {
+                setReviewFeedback({
+                    reviewId,
+                    message: error instanceof Error && error.message ? error.message : 'Failed to update review. Please try again.',
+                    isError: true,
                 });
             }
         });
@@ -1191,9 +1241,9 @@ export default function ProfileClient({
                                 padding: '8px 12px',
                                 marginBottom: '16px',
                                 borderRadius: '4px',
-                                backgroundColor: 'rgba(239, 68, 68, 0.15)',
-                                border: '1px solid rgba(239, 68, 68, 0.4)',
-                                color: '#f87171',
+                                backgroundColor: reviewFeedback.isError !== false ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
+                                border: reviewFeedback.isError !== false ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(34, 197, 94, 0.4)',
+                                color: reviewFeedback.isError !== false ? '#f87171' : '#4ade80',
                                 fontSize: '0.875rem'
                             }}
                         >
@@ -1203,34 +1253,157 @@ export default function ProfileClient({
                     {reviews.length > 0 ? (
                         <div className="space-y-4" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             {reviews.map((rev) => (
-                                <div key={rev.id} className="border-b pb-4 flex justify-between items-start" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                    <div style={{ flex: 1 }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px' }}>
-                                            <h4 style={{ margin: 0, fontSize: '1rem', color: '#fff' }}>{rev.cityGuide.city}</h4>
-                                            <span style={{ color: '#f59e0b' }}>{'★'.repeat(rev.rating)}{'☆'.repeat(5 - rev.rating)}</span>
+                                <div key={rev.id} className="border-b pb-4 flex justify-between items-start" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
+                                    {editingReviewId === rev.id ? (
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '8px' }}>
+                                                <h4 style={{ margin: 0, fontSize: '1rem', color: '#fff' }}>{rev.cityGuide.city}</h4>
+                                                <span style={{ fontSize: '0.8rem', color: '#c084fc' }}>(editing)</span>
+                                            </div>
+                                            <form
+                                                onSubmit={(e) => {
+                                                    e.preventDefault();
+                                                    handleSaveEditReview(rev.id);
+                                                }}
+                                                style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}
+                                            >
+                                                <div>
+                                                    <label htmlFor={`edit-rating-${rev.id}`} style={{ display: 'block', fontSize: '0.85rem', color: '#a78bfa', marginBottom: '4px' }}>
+                                                        Rating
+                                                    </label>
+                                                    <select
+                                                        id={`edit-rating-${rev.id}`}
+                                                        aria-label="Rating"
+                                                        value={editingRating}
+                                                        onChange={(e) => setEditingRating(Number(e.target.value))}
+                                                        disabled={isPending}
+                                                        style={{
+                                                            padding: '6px 10px',
+                                                            borderRadius: '4px',
+                                                            border: '1px solid rgba(255, 255, 255, 0.2)',
+                                                            background: '#17142d',
+                                                            color: '#fff',
+                                                            fontSize: '0.9rem',
+                                                        }}
+                                                    >
+                                                        <option value="5">★★★★★ Excellent (5)</option>
+                                                        <option value="4">★★★★ Good (4)</option>
+                                                        <option value="3">★★★ Average (3)</option>
+                                                        <option value="2">★★ Poor (2)</option>
+                                                        <option value="1">★ Terrible (1)</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label htmlFor={`edit-content-${rev.id}`} style={{ display: 'block', fontSize: '0.85rem', color: '#a78bfa', marginBottom: '4px' }}>
+                                                        Review
+                                                    </label>
+                                                    <textarea
+                                                        id={`edit-content-${rev.id}`}
+                                                        aria-label="Review content"
+                                                        value={editingContent}
+                                                        onChange={(e) => setEditingContent(e.target.value)}
+                                                        disabled={isPending}
+                                                        rows={3}
+                                                        style={{
+                                                            width: '100%',
+                                                            padding: '8px',
+                                                            borderRadius: '4px',
+                                                            border: '1px solid rgba(255, 255, 255, 0.2)',
+                                                            background: 'rgba(255, 255, 255, 0.05)',
+                                                            color: '#fff',
+                                                            fontSize: '0.9rem',
+                                                            boxSizing: 'border-box',
+                                                        }}
+                                                    />
+                                                </div>
+                                                <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                                                    <button
+                                                        type="submit"
+                                                        disabled={isPending || !editingContent.trim()}
+                                                        style={{
+                                                            backgroundColor: '#c084fc',
+                                                            border: 'none',
+                                                            borderRadius: '4px',
+                                                            color: '#0f0a19',
+                                                            padding: '6px 16px',
+                                                            fontSize: '14px',
+                                                            fontWeight: 'bold',
+                                                            cursor: isPending ? 'not-allowed' : 'pointer',
+                                                        }}
+                                                    >
+                                                        Save
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleCancelEditReview}
+                                                        disabled={isPending}
+                                                        style={{
+                                                            backgroundColor: 'transparent',
+                                                            border: '1px solid rgba(255, 255, 255, 0.2)',
+                                                            borderRadius: '4px',
+                                                            color: 'rgba(255, 255, 255, 0.8)',
+                                                            padding: '6px 14px',
+                                                            fontSize: '14px',
+                                                            cursor: 'pointer',
+                                                        }}
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            </form>
                                         </div>
-                                        <p style={{ margin: '4px 0', fontSize: '0.95rem', color: 'rgba(255, 255, 255, 0.8)' }}>{rev.content}</p>
-                                        <span style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.4)' }}>{new Date(rev.createdAt).toLocaleDateString()}</span>
-                                    </div>
-                                    <button
-                                        onClick={() => handleDeleteReview(rev.id)}
-                                        disabled={isPending}
-                                        aria-label="Delete review"
-                                        style={{
-                                            backgroundColor: 'transparent',
-                                            border: 'none',
-                                            color: '#ef4444',
-                                            padding: '4px',
-                                            fontSize: '14px',
-                                            height: 'auto',
-                                            width: 'auto',
-                                            cursor: 'pointer',
-                                            fontWeight: 'bold'
-                                        }}
-                                        title="Delete Review"
-                                    >
-                                        🗑️ Delete
-                                    </button>
+                                    ) : (
+                                        <>
+                                            <div style={{ flex: 1 }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px' }}>
+                                                    <h4 style={{ margin: 0, fontSize: '1rem', color: '#fff' }}>{rev.cityGuide.city}</h4>
+                                                    <span style={{ color: '#f59e0b' }}>{'★'.repeat(rev.rating)}{'☆'.repeat(5 - rev.rating)}</span>
+                                                </div>
+                                                <p style={{ margin: '4px 0', fontSize: '0.95rem', color: 'rgba(255, 255, 255, 0.8)' }}>{rev.content}</p>
+                                                <span style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.4)' }}>{new Date(rev.createdAt).toLocaleDateString()}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                <button
+                                                    onClick={() => handleStartEditReview(rev)}
+                                                    disabled={isPending}
+                                                    aria-label="Edit review"
+                                                    style={{
+                                                        backgroundColor: 'transparent',
+                                                        border: 'none',
+                                                        color: '#c084fc',
+                                                        padding: '4px',
+                                                        fontSize: '14px',
+                                                        height: 'auto',
+                                                        width: 'auto',
+                                                        cursor: 'pointer',
+                                                        fontWeight: 'bold'
+                                                    }}
+                                                    title="Edit Review"
+                                                >
+                                                    ✏️ Edit
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteReview(rev.id)}
+                                                    disabled={isPending}
+                                                    aria-label="Delete review"
+                                                    style={{
+                                                        backgroundColor: 'transparent',
+                                                        border: 'none',
+                                                        color: '#ef4444',
+                                                        padding: '4px',
+                                                        fontSize: '14px',
+                                                        height: 'auto',
+                                                        width: 'auto',
+                                                        cursor: 'pointer',
+                                                        fontWeight: 'bold'
+                                                    }}
+                                                    title="Delete Review"
+                                                >
+                                                    🗑️ Delete
+                                                </button>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             ))}
                         </div>

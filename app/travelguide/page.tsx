@@ -17,9 +17,19 @@ export default async function TravelGuidePage() {
     const cities = await prisma.cityGuide.findMany({
         include: {
             reviews: {
+                where: userId
+                    ? {
+                          OR: [
+                              { status: 'APPROVED' },
+                              { userId },
+                          ],
+                      }
+                    : { status: 'APPROVED' },
+                orderBy: { createdAt: 'desc' },
                 include: {
                     user: {
                         select: {
+                            id: true,
                             name: true,
                             image: true,
                         },

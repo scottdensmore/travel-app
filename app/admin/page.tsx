@@ -116,6 +116,22 @@ export default async function AdminDashboard() {
                         Search and manage bookings, process cancellations, resend documents, and leave notes.
                     </p>
                 </Link>
+                <Link href="/admin/reviews" className="admin-card hover:border-purple-500 transition-all" style={{
+                    textDecoration: 'none',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.5rem',
+                    flex: '1',
+                    minWidth: '250px',
+                    padding: '24px',
+                    marginBottom: 0,
+                    border: '1px solid rgba(255, 255, 255, 0.08)'
+                }}>
+                    <h3 style={{ color: '#c084fc', fontSize: '1.25rem', margin: 0, fontWeight: 'bold' }}>Review Moderation</h3>
+                    <p style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem', margin: 0 }}>
+                        Moderate traveler reviews, inspect reported issues, resolve flags, and view moderation audit history.
+                    </p>
+                </Link>
             </div>
 
             {/* Recent Bookings List */}

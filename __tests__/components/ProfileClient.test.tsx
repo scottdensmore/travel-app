@@ -13,7 +13,7 @@ global.ResizeObserver = class {
 } as unknown as typeof ResizeObserver;
 jest.setTimeout(15000);
 import ProfileClient from '@/components/ui/ProfileClient';
-import { cancelBookingAction, deleteReviewAction, toggleFavoriteCityGuideAction, changeBookingSeatsAction, getOccupiedSeatsAction, retryBookingRefundAction, rebookItineraryAction } from '@/app/actions';
+import { cancelBookingAction, deleteReviewAction, updateCityGuideReviewAction, toggleFavoriteCityGuideAction, changeBookingSeatsAction, getOccupiedSeatsAction, retryBookingRefundAction, rebookItineraryAction } from '@/app/actions';
 import type { ReplacementFlightGroup } from '@/lib/itineraryReplacementSearch';
 import { useRouter } from 'next/navigation';
 
@@ -26,6 +26,7 @@ jest.mock('next/navigation', () => ({
 jest.mock('@/app/actions', () => ({
     cancelBookingAction: jest.fn(),
     deleteReviewAction: jest.fn(),
+    updateCityGuideReviewAction: jest.fn(),
     toggleFavoriteCityGuideAction: jest.fn(),
     changeBookingSeatsAction: jest.fn(),
     getOccupiedSeatsAction: jest.fn(),
@@ -42,6 +43,7 @@ jest.mock('@/components/ui/charts/pointsHistoryChart', () => ({
 
 const mockCancelBooking = cancelBookingAction as jest.Mock;
 const mockDeleteReview = deleteReviewAction as jest.Mock;
+const mockUpdateReview = updateCityGuideReviewAction as jest.Mock;
 const mockToggleFavorite = toggleFavoriteCityGuideAction as jest.Mock;
 const mockChangeBookingSeats = changeBookingSeatsAction as jest.Mock;
 const mockGetOccupiedSeats = getOccupiedSeatsAction as jest.Mock;
@@ -293,6 +295,107 @@ describe('ProfileClient interactive dashboard', () => {
         await waitFor(() => {
             expect(mockDeleteReview).toHaveBeenCalledWith('rev-1');
             expect(mockRefresh).toHaveBeenCalled();
+        });
+    });
+
+    it('handles editing a review interactively and updating via updateCityGuideReviewAction', async () => {
+        mockUpdateReview.mockResolvedValue({ ok: true, data: { id: 'rev-1' } });
+        render(
+            <ProfileClient
+                userName="Jane Doe"
+                userAvatar="avatar.png"
+                accountTimeZone="UTC"
+                accountTimeZoneChoices={['UTC', 'America/Los_Angeles']}
+                currentStatus="Gold"
+                currentPoints={4200}
+                bookings={[]}
+                favorites={[]}
+                reviews={sampleReviews}
+                activityData={[]}
+                monthlyHistory={[]}
+                renderedAt={new Date('2026-06-01T00:00:00Z').getTime()}
+            />
+        );
+
+        const editBtn = screen.getByRole('button', { name: 'Edit review' });
+        fireEvent.click(editBtn);
+
+        // Inline edit form should be visible
+        const contentInput = screen.getByRole('textbox', { name: /review content/i }) as HTMLTextAreaElement;
+        expect(contentInput.value).toBe('Loved the music history!');
+
+        // Update content
+        fireEvent.change(contentInput, { target: { value: 'Updated: Absolutely incredible music history!' } });
+
+        const saveBtn = screen.getByRole('button', { name: 'Save' });
+        fireEvent.click(saveBtn);
+
+        await waitFor(() => {
+            expect(mockUpdateReview).toHaveBeenCalledWith('rev-1', 5, 'Updated: Absolutely incredible music history!');
+            expect(mockRefresh).toHaveBeenCalled();
+        });
+    });
+
+    it('handles cancelling review edit mode in profile', () => {
+        render(
+            <ProfileClient
+                userName="Jane Doe"
+                userAvatar="avatar.png"
+                accountTimeZone="UTC"
+                accountTimeZoneChoices={['UTC', 'America/Los_Angeles']}
+                currentStatus="Gold"
+                currentPoints={4200}
+                bookings={[]}
+                favorites={[]}
+                reviews={sampleReviews}
+                activityData={[]}
+                monthlyHistory={[]}
+                renderedAt={new Date('2026-06-01T00:00:00Z').getTime()}
+            />
+        );
+
+        const editBtn = screen.getByRole('button', { name: 'Edit review' });
+        fireEvent.click(editBtn);
+
+        expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+
+        const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
+        fireEvent.click(cancelBtn);
+
+        expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Edit review' })).toBeInTheDocument();
+    });
+
+    it('displays error alert when review update fails in profile', async () => {
+        mockUpdateReview.mockResolvedValue({
+            ok: false,
+            error: { code: 'VALIDATION_ERROR', message: 'Review must be at least 10 characters long.' },
+        });
+
+        render(
+            <ProfileClient
+                userName="Jane Doe"
+                userAvatar="avatar.png"
+                accountTimeZone="UTC"
+                accountTimeZoneChoices={['UTC', 'America/Los_Angeles']}
+                currentStatus="Gold"
+                currentPoints={4200}
+                bookings={[]}
+                favorites={[]}
+                reviews={sampleReviews}
+                activityData={[]}
+                monthlyHistory={[]}
+                renderedAt={new Date('2026-06-01T00:00:00Z').getTime()}
+            />
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit review' }));
+        fireEvent.change(screen.getByRole('textbox', { name: /review content/i }), { target: { value: 'Too short' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        await waitFor(() => {
+            const alert = screen.getByRole('alert');
+            expect(alert).toHaveTextContent('Review must be at least 10 characters long.');
         });
     });
 

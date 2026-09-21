@@ -90,14 +90,14 @@ describe('Continuous Verification CI Workflow (.github/workflows/ci.yml)', () =>
             expect(verifyJob['runs-on']).toBe('ubuntu-latest');
         });
 
-        it('checks out code and sets up Node.js 20 with cache', () => {
+        it('checks out code and sets up Node.js 22 with cache', () => {
             const steps = verifyJob.steps ?? [];
             const checkoutStep = steps.find(s => s.uses?.startsWith('actions/checkout'));
             expect(checkoutStep).toBeDefined();
 
             const setupNodeStep = steps.find(s => s.uses?.startsWith('actions/setup-node'));
             expect(setupNodeStep).toBeDefined();
-            expect(String(setupNodeStep?.with?.['node-version'])).toBe('20');
+            expect(String(setupNodeStep?.with?.['node-version'])).toBe('22');
             expect(setupNodeStep?.with?.cache).toBe('npm');
         });
 
@@ -111,6 +111,12 @@ describe('Continuous Verification CI Workflow (.github/workflows/ci.yml)', () =>
             expect(runCommands.some(cmd => cmd.includes('npm run lint'))).toBe(true);
             expect(runCommands.some(cmd => cmd.includes('npm run test:unit'))).toBe(true);
         });
+
+        it('configures passenger and staff mfa encryption keys in verify job environment', () => {
+            expect(verifyJob.env).toBeDefined();
+            expect(verifyJob.env?.PASSENGER_DATA_ENCRYPTION_KEYS).toBeDefined();
+            expect(verifyJob.env?.STAFF_MFA_ENCRYPTION_KEYS).toBeDefined();
+        });
     });
 
     describe('security job', () => {
@@ -122,6 +128,14 @@ describe('Continuous Verification CI Workflow (.github/workflows/ci.yml)', () =>
 
         it('runs on ubuntu-latest', () => {
             expect(securityJob['runs-on']).toBe('ubuntu-latest');
+        });
+
+        it('checks out code and sets up Node.js 22 with cache', () => {
+            const steps = securityJob.steps ?? [];
+            const setupNodeStep = steps.find(s => s.uses?.startsWith('actions/setup-node'));
+            expect(setupNodeStep).toBeDefined();
+            expect(String(setupNodeStep?.with?.['node-version'])).toBe('22');
+            expect(setupNodeStep?.with?.cache).toBe('npm');
         });
 
         it('runs npm audit --audit-level=high', () => {
@@ -166,11 +180,20 @@ describe('Continuous Verification CI Workflow (.github/workflows/ci.yml)', () =>
             expect(postgresService?.env?.POSTGRES_DB).toBe('travel_app');
         });
 
-        it('runs migrations and database tests', () => {
+        it('checks out code and sets up Node.js 22 with cache', () => {
+            const steps = databaseJob.steps ?? [];
+            const setupNodeStep = steps.find(s => s.uses?.startsWith('actions/setup-node'));
+            expect(setupNodeStep).toBeDefined();
+            expect(String(setupNodeStep?.with?.['node-version'])).toBe('22');
+            expect(setupNodeStep?.with?.cache).toBe('npm');
+        });
+
+        it('runs migrations, seeds database, and runs database tests', () => {
             const steps = databaseJob.steps ?? [];
             const runCommands = steps.map(s => s.run).filter((cmd): cmd is string => Boolean(cmd));
 
             expect(runCommands.some(cmd => cmd.includes('npx prisma migrate deploy'))).toBe(true);
+            expect(runCommands.some(cmd => cmd.includes('npx prisma db seed'))).toBe(true);
             expect(runCommands.some(cmd => cmd.includes('npm run test:database'))).toBe(true);
         });
     });
