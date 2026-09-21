@@ -111,6 +111,12 @@ describe('Continuous Verification CI Workflow (.github/workflows/ci.yml)', () =>
             expect(runCommands.some(cmd => cmd.includes('npm run lint'))).toBe(true);
             expect(runCommands.some(cmd => cmd.includes('npm run test:unit'))).toBe(true);
         });
+
+        it('configures passenger and staff mfa encryption keys in verify job environment', () => {
+            expect(verifyJob.env).toBeDefined();
+            expect(verifyJob.env?.PASSENGER_DATA_ENCRYPTION_KEYS).toBeDefined();
+            expect(verifyJob.env?.STAFF_MFA_ENCRYPTION_KEYS).toBeDefined();
+        });
     });
 
     describe('security job', () => {
@@ -182,11 +188,12 @@ describe('Continuous Verification CI Workflow (.github/workflows/ci.yml)', () =>
             expect(setupNodeStep?.with?.cache).toBe('npm');
         });
 
-        it('runs migrations and database tests', () => {
+        it('runs migrations, seeds database, and runs database tests', () => {
             const steps = databaseJob.steps ?? [];
             const runCommands = steps.map(s => s.run).filter((cmd): cmd is string => Boolean(cmd));
 
             expect(runCommands.some(cmd => cmd.includes('npx prisma migrate deploy'))).toBe(true);
+            expect(runCommands.some(cmd => cmd.includes('npx prisma db seed'))).toBe(true);
             expect(runCommands.some(cmd => cmd.includes('npm run test:database'))).toBe(true);
         });
     });
