@@ -65,6 +65,8 @@ model User {
   bookingStatusChanges    BookingStatusChange[]
   favorites               UserFavorite[]
   reviews                 Review[]
+  reviewReports           ReviewReport[]          @relation("UserReviewReports")
+  moderationAudits        ReviewModerationAudit[] @relation("ModeratorAudits")
   notifications           Notification[]
   flightScheduleTermsChanges FlightScheduleTermsChange[]
   flightScheduleDeletions    FlightScheduleDeletion[]
@@ -458,16 +460,84 @@ model UserFavorite {
   @@unique([userId, cityGuideId])
 }
 
+enum ReviewStatus {
+  APPROVED
+  PENDING_MODERATION
+  HIDDEN
+}
+
+enum ReviewReportReason {
+  SPAM
+  OFFENSIVE
+  HARASSMENT
+  MISINFORMATION
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  RESOLVED
+  DISMISSED
+}
+
+enum ModerationAction {
+  APPROVE
+  HIDE
+  DISMISS_REPORTS
+  DELETE
+}
+
 model Review {
-  id          String   @id @default(cuid())
+  id          String       @id @default(cuid())
   content     String
   rating      Int
   userId      String
   cityGuideId Int
-  createdAt   DateTime @default(now())
+  status      ReviewStatus @default(APPROVED)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @default(now()) @updatedAt
 
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cityGuide CityGuide @relation(fields: [cityGuideId], references: [id], onDelete: Cascade)
+  user             User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cityGuide        CityGuide               @relation(fields: [cityGuideId], references: [id], onDelete: Cascade)
+  reports          ReviewReport[]
+  moderationAudits ReviewModerationAudit[]
+
+  @@unique([userId, cityGuideId])
+  @@index([cityGuideId, status])
+  @@index([status])
+}
+
+model ReviewReport {
+  id         String             @id @default(cuid())
+  reviewId   String
+  review     Review             @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  reporterId String
+  reporter   User               @relation("UserReviewReports", fields: [reporterId], references: [id], onDelete: Cascade)
+  reason     ReviewReportReason
+  details    String?
+  status     ReportStatus       @default(PENDING)
+  createdAt  DateTime           @default(now())
+  resolvedAt DateTime?
+
+  @@unique([reviewId, reporterId])
+  @@index([reviewId, status])
+  @@index([status])
+}
+
+model ReviewModerationAudit {
+  id          String           @id @default(cuid())
+  reviewId    String?
+  review      Review?          @relation(fields: [reviewId], references: [id], onDelete: SetNull)
+  moderatorId String
+  moderator   User             @relation("ModeratorAudits", fields: [moderatorId], references: [id], onDelete: Cascade)
+  action      ModerationAction
+  reason      String?
+  metadata    Json?
+  createdAt   DateTime         @default(now())
+
+  @@index([reviewId])
+  @@index([moderatorId])
+  @@index([createdAt])
 }
 
 model FlightSchedule {
