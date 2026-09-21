@@ -56,6 +56,7 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
     const [reviewRating, setReviewRating] = useState(5);
     const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
     const [reportingReviewId, setReportingReviewId] = useState<string | null>(null);
+    const [isSubmittingReview, setIsSubmittingReview] = useState(false);
     const [mapFailed, setMapFailed] = useState(false);
     const [topology, setTopology] = useState<object | null>(null);
     const [mapTimedOut, setMapTimedOut] = useState(false);
@@ -213,7 +214,8 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
     };
 
     const handleReviewSubmit = async (cityId: number) => {
-        if (!reviewContent.trim()) return;
+        if (!reviewContent.trim() || isSubmittingReview) return;
+        setIsSubmittingReview(true);
         try {
             if (editingReviewId) {
                 const result = await updateCityGuideReviewAction(editingReviewId, reviewRating, reviewContent);
@@ -239,6 +241,8 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
             }
         } catch {
             setFeedback(editingReviewId ? 'Please sign in to update a review.' : 'Please sign in to submit a review.');
+        } finally {
+            setIsSubmittingReview(false);
         }
     };
 
@@ -594,7 +598,7 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
                                 <button
                                     type="button"
                                     onClick={() => handleReviewSubmit(selectedCity.id)}
-                                    disabled={!reviewContent.trim()}
+                                    disabled={!reviewContent.trim() || isSubmittingReview}
                                     className="guide-review-submit"
                                 >
                                     {editingReviewId ? 'Update Review' : 'Submit Review'}
@@ -607,6 +611,7 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
                                             setReviewContent('');
                                             setReviewRating(5);
                                         }}
+                                        disabled={isSubmittingReview}
                                         aria-label="Cancel edit"
                                         className="guide-review-cancel"
                                         style={{
@@ -615,7 +620,7 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
                                             borderRadius: '6px',
                                             color: 'rgba(255, 255, 255, 0.8)',
                                             padding: '0.5rem 1rem',
-                                            cursor: 'pointer',
+                                            cursor: isSubmittingReview ? 'not-allowed' : 'pointer',
                                             minHeight: '44px',
                                         }}
                                     >

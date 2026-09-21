@@ -38,12 +38,38 @@ export default function ReportReviewModal({
 
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
+                e.preventDefault();
                 onClose();
+                return;
+            }
+
+            if (e.key !== 'Tab' || !dialogRef.current) return;
+
+            const focusableElements = Array.from(
+                dialogRef.current.querySelectorAll<HTMLElement>(
+                    'button:not(:disabled), select:not(:disabled), textarea:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])'
+                )
+            );
+            if (focusableElements.length === 0) return;
+
+            const firstElement = focusableElements[0];
+            const lastElement = focusableElements[focusableElements.length - 1];
+
+            if (e.shiftKey) {
+                if (document.activeElement === firstElement || !dialogRef.current.contains(document.activeElement)) {
+                    e.preventDefault();
+                    lastElement.focus();
+                }
+            } else {
+                if (document.activeElement === lastElement || !dialogRef.current.contains(document.activeElement)) {
+                    e.preventDefault();
+                    firstElement.focus();
+                }
             }
         };
 
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, onClose]);
 
     if (!isOpen) return null;
@@ -121,13 +147,14 @@ export default function ReportReviewModal({
                     <button
                         type="button"
                         onClick={onClose}
+                        disabled={isSubmitting}
                         aria-label="Close dialog"
                         style={{
                             background: 'transparent',
                             border: 'none',
                             color: 'rgba(255, 255, 255, 0.7)',
                             fontSize: '1.25rem',
-                            cursor: 'pointer',
+                            cursor: isSubmitting ? 'not-allowed' : 'pointer',
                             padding: '4px 8px',
                         }}
                     >

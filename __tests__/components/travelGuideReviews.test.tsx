@@ -209,4 +209,112 @@ describe('TravelGuideClient Reviews & Reporting', () => {
 
         expect(screen.getByText(/under moderator review/i)).toBeInTheDocument();
     });
+
+    it('traps keyboard focus within ReportReviewModal', async () => {
+        render(<TravelGuideClient cities={mockCities as any} initialFavorites={[]} />);
+        fireEvent.click(screen.getByText('Kyoto, Japan'));
+
+        const reportBtn = screen.getByRole('button', { name: /report review/i });
+        fireEvent.click(reportBtn);
+
+        const dialog = screen.getByRole('dialog', { name: /report review/i });
+        expect(dialog).toBeInTheDocument();
+
+        const closeBtn = screen.getByRole('button', { name: /close dialog/i });
+        const reasonSelect = screen.getByLabelText(/reason/i);
+        const detailsTextarea = screen.getByLabelText(/details/i);
+        const cancelBtn = screen.getByRole('button', { name: /^cancel$/i });
+        const submitBtn = screen.getByRole('button', { name: /submit report/i });
+
+        // Initial focus lands on reason select
+        expect(reasonSelect).toHaveFocus();
+
+        // Forward tab from submitBtn (last element) wraps to closeBtn (first element)
+        submitBtn.focus();
+        fireEvent.keyDown(document, { key: 'Tab' });
+        expect(closeBtn).toHaveFocus();
+
+        // Backward tab from closeBtn (first element) wraps to submitBtn (last element)
+        fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+        expect(submitBtn).toHaveFocus();
+
+        // Forward tab when focus is outside the dialog pulls focus back to first element
+        document.body.focus();
+        fireEvent.keyDown(document, { key: 'Tab' });
+        expect(closeBtn).toHaveFocus();
+
+        // Backward tab when focus is outside the dialog pulls focus back to last element
+        document.body.focus();
+        fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+        expect(submitBtn).toHaveFocus();
+    });
+
+    it('disables submit button and prevents duplicate submissions while review submit is in-flight', async () => {
+        let resolveSubmit: (val: any) => void = () => {};
+        const pendingPromise = new Promise((resolve) => {
+            resolveSubmit = resolve;
+        });
+        const mockSubmitAction = actions.submitCityGuideReviewAction as jest.Mock;
+        mockSubmitAction.mockReturnValue(pendingPromise);
+
+        render(<TravelGuideClient cities={mockCities as any} initialFavorites={[]} />);
+        fireEvent.click(screen.getByText('Kyoto, Japan'));
+
+        const textarea = screen.getByLabelText(/your review/i);
+        fireEvent.change(textarea, { target: { value: 'Great experience in Kyoto!' } });
+
+        const submitBtn = screen.getByRole('button', { name: /submit review/i });
+        expect(submitBtn).not.toBeDisabled();
+
+        // Click submit
+        fireEvent.click(submitBtn);
+
+        // Submit button should now be disabled while in flight
+        expect(submitBtn).toBeDisabled();
+
+        // Attempt duplicate click while in flight
+        fireEvent.click(submitBtn);
+        expect(mockSubmitAction).toHaveBeenCalledTimes(1);
+
+        // Resolve the action
+        resolveSubmit({ ok: true, data: { id: 'rev-new' } });
+        await waitFor(() => {
+            expect(submitBtn).toBeDisabled(); // disabled because content was reset to empty string
+        });
+    });
+
+    it('disables update button and prevents duplicate updates while review update is in-flight', async () => {
+        mockSessionUser = { id: 'author-id', name: 'Author Traveler' };
+        let resolveUpdate: (val: any) => void = () => {};
+        const pendingPromise = new Promise((resolve) => {
+            resolveUpdate = resolve;
+        });
+        const mockUpdateAction = actions.updateCityGuideReviewAction as jest.Mock;
+        mockUpdateAction.mockReturnValue(pendingPromise);
+
+        render(<TravelGuideClient cities={mockCities as any} initialFavorites={[]} />);
+        fireEvent.click(screen.getByText('Kyoto, Japan'));
+
+        const editBtn = screen.getByRole('button', { name: /edit review/i });
+        fireEvent.click(editBtn);
+
+        const updateBtn = screen.getByRole('button', { name: /update review/i });
+        expect(updateBtn).not.toBeDisabled();
+
+        // Click update
+        fireEvent.click(updateBtn);
+
+        // Button should now be disabled while in flight
+        expect(updateBtn).toBeDisabled();
+
+        // Duplicate click
+        fireEvent.click(updateBtn);
+        expect(mockUpdateAction).toHaveBeenCalledTimes(1);
+
+        // Resolve update
+        resolveUpdate({ ok: true, data: { id: 'rev-1' } });
+        await waitFor(() => {
+            expect(mockRefresh).toHaveBeenCalled();
+        });
+    });
 });

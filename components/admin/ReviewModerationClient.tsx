@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { moderateReviewAction, deleteReviewAction } from '@/app/actions';
 
@@ -48,7 +48,11 @@ export default function ReviewModerationClient({
 }: ReviewModerationClientProps) {
     const router = useRouter();
     const [reviews, setReviews] = useState<ReviewItem[]>(initialReviews);
-    const [audits] = useState<AuditItem[]>(initialAudits);
+    const audits = initialAudits;
+
+    useEffect(() => {
+        setReviews(initialReviews);
+    }, [initialReviews]);
     const [activeTab, setActiveTab] = useState<TabType>('needs_attention');
     const [searchQuery, setSearchQuery] = useState('');
     const [notes, setNotes] = useState<Record<string, string>>({});

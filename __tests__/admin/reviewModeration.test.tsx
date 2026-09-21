@@ -421,4 +421,42 @@ describe('ReviewModerationClient', () => {
         const editedBadges = screen.getAllByText(/\(Edited:/i);
         expect(editedBadges).toHaveLength(1);
     });
+
+    it('synchronizes audits with updated initialAudits prop seamlessly', () => {
+        const { rerender } = render(
+            <ReviewModerationClient
+                initialReviews={mockReviews as any}
+                initialAudits={mockAudits as any}
+            />
+        );
+
+        // Switch to Audit Trail tab
+        fireEvent.click(screen.getByRole('tab', { name: /audit trail/i }));
+        expect(screen.getByText(/Automated threshold: 3\+ user reports/i)).toBeInTheDocument();
+        expect(screen.queryByText(/Subsequent moderator approval note/i)).not.toBeInTheDocument();
+
+        // New audits passed (as would happen via router.refresh())
+        const updatedAudits = [
+            ...mockAudits,
+            {
+                id: 'aud-2',
+                action: 'APPROVE',
+                reason: 'Subsequent moderator approval note',
+                createdAt: new Date('2026-01-02T02:00:00Z'),
+                moderator: { name: 'Admin Staff' },
+                review: { cityGuide: { city: 'Tokyo' } },
+            },
+        ];
+
+        rerender(
+            <ReviewModerationClient
+                initialReviews={mockReviews as any}
+                initialAudits={updatedAudits as any}
+            />
+        );
+
+        // Newly passed audit should now be rendered immediately
+        expect(screen.getByText(/Subsequent moderator approval note/i)).toBeInTheDocument();
+        expect(screen.getByText(/Admin Staff/i)).toBeInTheDocument();
+    });
 });
