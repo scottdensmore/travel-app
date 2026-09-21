@@ -27,6 +27,9 @@ const positiveId = (label: string) => z.number({ error: `${label} must be a numb
     .int(`${label} must be an integer.`)
     .positive(`${label} must be positive.`);
 
+export const numericIdSchema = positiveId('ID');
+export const stringIdSchema = requiredText('ID', 128);
+
 const dateOnlySchema = z.union([z.string(), z.date()]).transform((value, context) => {
     if (value instanceof Date && Number.isNaN(value.getTime())) {
         context.addIssue({ code: 'custom', message: 'Date is invalid.' });
@@ -116,8 +119,26 @@ export const favoriteSchema = z.object({
 
 export const reviewSchema = z.object({
     cityGuideId: positiveId('City guide ID'),
-    rating: z.number().int().min(1).max(5),
-    content: requiredText('Review', 2_000)
+    rating: z.number().int().min(1, 'Rating must be at least 1.').max(5, 'Rating cannot exceed 5.'),
+    content: requiredText('Review', 2_000).min(10, 'Review must be at least 10 characters long.')
+}).strict();
+
+export const updateReviewSchema = z.object({
+    reviewId: stringIdSchema,
+    rating: z.number().int().min(1, 'Rating must be at least 1.').max(5, 'Rating cannot exceed 5.'),
+    content: requiredText('Review', 2_000).min(10, 'Review must be at least 10 characters long.')
+}).strict();
+
+export const reportReviewSchema = z.object({
+    reviewId: stringIdSchema,
+    reason: z.enum(['SPAM', 'OFFENSIVE', 'HARASSMENT', 'MISINFORMATION', 'OTHER']),
+    details: z.string().trim().max(500, 'Details must be 500 characters or fewer.').optional()
+}).strict();
+
+export const moderateReviewSchema = z.object({
+    reviewId: stringIdSchema,
+    action: z.enum(['APPROVE', 'HIDE', 'DISMISS_REPORTS', 'DELETE']),
+    reason: z.string().trim().max(500, 'Reason must be 500 characters or fewer.').optional()
 }).strict();
 
 export const cabinClassSchema = z.enum(['ECONOMY', 'PREMIUM_ECONOMY', 'BUSINESS', 'FIRST']);
@@ -600,8 +621,6 @@ export const rebookItineraryRequestSchema = z.object({
 
 export type RebookItineraryRequest = z.infer<typeof rebookItineraryRequestSchema>;
 
-export const numericIdSchema = positiveId('ID');
-export const stringIdSchema = requiredText('ID', 128);
 export const flightStatusSchema = z.enum(['ON_TIME', 'DELAYED', 'CANCELLED']);
 
 export const occurrenceRequestSchema = z.object({
