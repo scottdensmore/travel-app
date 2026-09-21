@@ -2,9 +2,11 @@
 import React, { useState, useEffect, useRef, useTransition, useSyncExternalStore } from 'react';
 import Image from 'next/image';
 import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
-import { toggleFavoriteCityGuideAction, submitCityGuideReviewAction } from '@/app/actions';
+import { toggleFavoriteCityGuideAction, submitCityGuideReviewAction, updateCityGuideReviewAction } from '@/app/actions';
 import { isActionValidationFailure } from '@/lib/actionResult';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import ReportReviewModal from '@/components/ui/ReportReviewModal';
 
 const DEFAULT_CITY_NAME = 'Detroit';
 // How long the topology may be in flight before the panel stops calling it
@@ -18,7 +20,11 @@ interface Review {
     id: string;
     content: string;
     rating: number;
-    user: { name: string | null; image: string | null };
+    status?: string;
+    createdAt?: Date | string;
+    updatedAt?: Date | string;
+    userId?: string;
+    user: { id?: string; name: string | null; image: string | null };
 }
 
 interface City {
@@ -32,12 +38,24 @@ interface City {
     reviews: Review[];
 }
 
+function useSafeSession() {
+    try {
+        return useSession();
+    } catch {
+        return { data: null, status: 'unauthenticated' as const };
+    }
+}
+
 export default function TravelGuideClient({ cities, initialFavorites }: { cities: City[], initialFavorites: number[] }) {
+    const { data: session } = useSafeSession();
+    const currentUserId = session?.user?.id;
     const [selectedCityName, setSelectedCityName] = useState<string | null>(DEFAULT_CITY_NAME);
     const [favorites, setFavorites] = useState<Set<number>>(new Set(initialFavorites));
     const [isPending, startTransition] = useTransition();
     const [reviewContent, setReviewContent] = useState('');
     const [reviewRating, setReviewRating] = useState(5);
+    const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
+    const [reportingReviewId, setReportingReviewId] = useState<string | null>(null);
     const [mapFailed, setMapFailed] = useState(false);
     const [topology, setTopology] = useState<object | null>(null);
     const [mapTimedOut, setMapTimedOut] = useState(false);
@@ -119,6 +137,8 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
         setSelectedCityName(cityName);
         setReviewContent('');
         setReviewRating(5);
+        setEditingReviewId(null);
+        setReportingReviewId(null);
         setFeedback(null);
         if (cityName) revealDetail();
     };
@@ -195,16 +215,30 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
     const handleReviewSubmit = async (cityId: number) => {
         if (!reviewContent.trim()) return;
         try {
-            const result = await submitCityGuideReviewAction(cityId, reviewRating, reviewContent);
-            if (isActionValidationFailure(result)) {
-                setFeedback(result.error.message);
-                return;
+            if (editingReviewId) {
+                const result = await updateCityGuideReviewAction(editingReviewId, reviewRating, reviewContent);
+                if (isActionValidationFailure(result)) {
+                    setFeedback(result.error.message);
+                    return;
+                }
+                setEditingReviewId(null);
+                setReviewContent('');
+                setReviewRating(5);
+                setFeedback(null);
+                router.refresh();
+            } else {
+                const result = await submitCityGuideReviewAction(cityId, reviewRating, reviewContent);
+                if (isActionValidationFailure(result)) {
+                    setFeedback(result.error.message);
+                    return;
+                }
+                setReviewContent('');
+                setReviewRating(5);
+                setFeedback(null);
+                router.refresh(); // Refresh page to show the new review
             }
-            setReviewContent('');
-            setFeedback(null);
-            router.refresh(); // Refresh page to show the new review
         } catch {
-            setFeedback('Please sign in to submit a review.');
+            setFeedback(editingReviewId ? 'Please sign in to update a review.' : 'Please sign in to submit a review.');
         }
     };
 
@@ -435,24 +469,108 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
                         <h4>Reviews</h4>
                         {selectedCity.reviews && selectedCity.reviews.length > 0 ? (
                             <ul className="guide-reviews">
-                                {selectedCity.reviews.map(r => (
-                                    <li key={r.id}>
-                                        <div className="guide-review-head">
-                                            <Image src={r.user?.image || "/img/my-profile-photo.jpg"} alt={r.user?.name || "User"} width={32} height={32} unoptimized style={{ borderRadius: '50%', objectFit: 'cover' }} />
-                                            <strong>{r.user?.name || "Traveler"}</strong>
-                                            <span className="guide-stars" aria-label={`${r.rating} out of 5`}>
-                                                {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}
-                                            </span>
-                                        </div>
-                                        <p>{r.content}</p>
-                                    </li>
-                                ))}
+                                {selectedCity.reviews.map(r => {
+                                    const isAuthor = Boolean(currentUserId && (r.userId === currentUserId || r.user?.id === currentUserId));
+                                    const isEdited = Boolean(
+                                        r.createdAt &&
+                                        r.updatedAt &&
+                                        new Date(r.updatedAt).getTime() - new Date(r.createdAt).getTime() > 60_000
+                                    );
+                                    const isModerationPending = Boolean(r.status && r.status !== 'APPROVED');
+
+                                    return (
+                                        <li key={r.id}>
+                                            <div className="guide-review-head">
+                                                <Image src={r.user?.image || "/img/my-profile-photo.jpg"} alt={r.user?.name || "User"} width={32} height={32} unoptimized style={{ borderRadius: '50%', objectFit: 'cover' }} />
+                                                <strong>{r.user?.name || "Traveler"}</strong>
+                                                <span className="guide-stars" aria-label={`${r.rating} out of 5`}>
+                                                    {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}
+                                                </span>
+                                                {isEdited && (
+                                                    <span
+                                                        className="guide-review-edited"
+                                                        title={r.updatedAt ? `Edited on ${new Date(r.updatedAt).toLocaleDateString()}` : 'Edited'}
+                                                        style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)', fontStyle: 'italic', marginLeft: '4px' }}
+                                                    >
+                                                        (edited)
+                                                    </span>
+                                                )}
+                                                {isModerationPending && (
+                                                    <span
+                                                        className="guide-review-status-badge"
+                                                        style={{
+                                                            fontSize: '0.75rem',
+                                                            padding: '2px 6px',
+                                                            borderRadius: '4px',
+                                                            backgroundColor: 'rgba(234, 179, 8, 0.2)',
+                                                            color: '#facc15',
+                                                            border: '1px solid rgba(234, 179, 8, 0.4)',
+                                                            marginLeft: '6px',
+                                                        }}
+                                                    >
+                                                        Under Moderator Review
+                                                    </span>
+                                                )}
+                                                <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                    {isAuthor && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setEditingReviewId(r.id);
+                                                                setReviewContent(r.content);
+                                                                setReviewRating(r.rating);
+                                                            }}
+                                                            aria-label="Edit review"
+                                                            className="guide-review-edit"
+                                                            style={{
+                                                                background: 'transparent',
+                                                                border: '1px solid rgba(255, 255, 255, 0.2)',
+                                                                borderRadius: '4px',
+                                                                color: '#c084fc',
+                                                                fontSize: '0.75rem',
+                                                                padding: '2px 8px',
+                                                                cursor: 'pointer',
+                                                            }}
+                                                        >
+                                                            Edit
+                                                        </button>
+                                                    )}
+                                                    {!isAuthor && currentUserId && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setReportingReviewId(r.id)}
+                                                            aria-label="Report review"
+                                                            className="guide-review-report"
+                                                            style={{
+                                                                background: 'transparent',
+                                                                border: '1px solid rgba(255, 255, 255, 0.2)',
+                                                                borderRadius: '4px',
+                                                                color: '#f87171',
+                                                                fontSize: '0.75rem',
+                                                                padding: '2px 8px',
+                                                                cursor: 'pointer',
+                                                            }}
+                                                        >
+                                                            Report Review
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <p>{r.content}</p>
+                                        </li>
+                                    );
+                                })}
                             </ul>
                         ) : (
                             <p className="guide-empty">No reviews yet. Be the first!</p>
                         )}
 
                         <div className="guide-review-form">
+                            {editingReviewId && (
+                                <div style={{ marginBottom: '4px' }}>
+                                    <span style={{ fontSize: '0.85rem', color: '#c084fc', fontWeight: 'bold' }}>Editing Your Review</span>
+                                </div>
+                            )}
                             <label htmlFor="review-rating">Your rating</label>
                             <select
                                 id="review-rating"
@@ -472,14 +590,39 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
                                 onChange={e => setReviewContent(e.target.value)}
                                 placeholder="Share your experience…"
                             />
-                            <button
-                                type="button"
-                                onClick={() => handleReviewSubmit(selectedCity.id)}
-                                disabled={!reviewContent.trim()}
-                                className="guide-review-submit"
-                            >
-                                Submit Review
-                            </button>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => handleReviewSubmit(selectedCity.id)}
+                                    disabled={!reviewContent.trim()}
+                                    className="guide-review-submit"
+                                >
+                                    {editingReviewId ? 'Update Review' : 'Submit Review'}
+                                </button>
+                                {editingReviewId && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setEditingReviewId(null);
+                                            setReviewContent('');
+                                            setReviewRating(5);
+                                        }}
+                                        aria-label="Cancel edit"
+                                        className="guide-review-cancel"
+                                        style={{
+                                            background: 'transparent',
+                                            border: '1px solid rgba(255, 255, 255, 0.2)',
+                                            borderRadius: '6px',
+                                            color: 'rgba(255, 255, 255, 0.8)',
+                                            padding: '0.5rem 1rem',
+                                            cursor: 'pointer',
+                                            minHeight: '44px',
+                                        }}
+                                    >
+                                        Cancel Edit
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </section>
                 ) : (
@@ -488,6 +631,16 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
                     </p>
                 )}
             </div>
+            {reportingReviewId && (
+                <ReportReviewModal
+                    reviewId={reportingReviewId}
+                    onClose={() => setReportingReviewId(null)}
+                    onSuccess={() => {
+                        setReportingReviewId(null);
+                        router.refresh();
+                    }}
+                />
+            )}
         </div>
     );
 }
