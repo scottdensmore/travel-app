@@ -63,8 +63,19 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { sendTravelDocumentsEmail } from '@/lib/travelDocumentEmail';
 import { saveGuideImage } from '@/lib/guideImageStorage';
+import { submitReview, moderateReview } from '@/lib/reviewModerationService';
 
 // Keep these heavy/server-only modules out of the unit test.
+jest.mock('@/lib/reviewModerationService', () => {
+    const actual = jest.requireActual('@/lib/reviewModerationService');
+    return {
+        ...actual,
+        submitReview: jest.fn(),
+        updateReview: jest.fn(),
+        reportReview: jest.fn(),
+        moderateReview: jest.fn(),
+    };
+});
 jest.mock('@/lib/guideImageStorage', () => ({
     saveGuideImage: jest.fn(),
     isManagedGuideImagePath: jest.requireActual('@/lib/guideImageStorage').isManagedGuideImagePath,
@@ -1791,26 +1802,27 @@ describe('toggleFavoriteCityGuideAction', () => {
 describe('submitCityGuideReviewAction', () => {
     beforeEach(() => jest.clearAllMocks());
 
-    it('throws unauthorized if not logged in', async () => {
+    it('rejects an unauthenticated user with validation failure', async () => {
         mockedGetServerSession.mockResolvedValue(null);
-        await expect(submitCityGuideReviewAction(5, 5, 'Great!')).rejects.toThrow('Unauthorized');
+        const result = await submitCityGuideReviewAction(5, 5, 'Great city to visit!');
+        expect(result).toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR' } });
+        if (!result.ok) {
+            expect(result.error.message).toMatch(/sign in/i);
+        }
     });
 
     it('creates a new review if logged in', async () => {
         mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
-        mockedReviewCreate.mockResolvedValue({ id: 99, userId: 'user-123', cityGuideId: 5, rating: 5, content: 'Great!' });
+        (submitReview as jest.Mock).mockResolvedValue({ id: 99, userId: 'user-123', cityGuideId: 5, rating: 5, content: 'Great city to visit!' });
 
-        const result = await submitCityGuideReviewAction(5, 5, 'Great!');
+        const result = await submitCityGuideReviewAction(5, 5, 'Great city to visit!');
 
-        expect(mockedReviewCreate).toHaveBeenCalledWith({
-            data: {
-                userId: 'user-123',
-                cityGuideId: 5,
-                rating: 5,
-                content: 'Great!'
-            }
+        expect(submitReview).toHaveBeenCalledWith('user-123', {
+            cityGuideId: 5,
+            rating: 5,
+            content: 'Great city to visit!',
         });
-        expect(result).toEqual({ id: 99, userId: 'user-123', cityGuideId: 5, rating: 5, content: 'Great!' });
+        expect(result).toEqual({ ok: true, data: { id: 99, userId: 'user-123', cityGuideId: 5, rating: 5, content: 'Great city to visit!' } });
     });
 
     it('rejects oversized review content before database access', async () => {
@@ -1818,7 +1830,7 @@ describe('submitCityGuideReviewAction', () => {
 
         await expect(submitCityGuideReviewAction(5, 5, 'x'.repeat(2_001)))
             .resolves.toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR' } });
-        expect(mockedReviewCreate).not.toHaveBeenCalled();
+        expect(submitReview).not.toHaveBeenCalled();
     });
 });
 
@@ -2627,15 +2639,24 @@ describe('deleteReviewAction', () => {
 
     it('rejects an unauthenticated user', async () => {
         mockedGetServerSession.mockResolvedValue(null);
-        await expect(deleteReviewAction('rev-123')).rejects.toThrow('Unauthorized');
+        const result = await deleteReviewAction('rev-123');
+        expect(result).toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR' } });
+        if (!result.ok) {
+            expect(result.error.message).toMatch(/sign in/i);
+        }
     });
 
     it('rejects a user trying to delete another user\'s review', async () => {
         mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123', role: 'USER' } });
         mockedReviewFindUnique.mockResolvedValue({ id: 'rev-123', userId: 'other-user' });
 
-        await expect(deleteReviewAction('rev-123')).rejects.toThrow('Unauthorized');
+        const result = await deleteReviewAction('rev-123');
+        expect(result).toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR' } });
+        if (!result.ok) {
+            expect(result.error.message).toMatch(/unauthorized/i);
+        }
         expect(mockedReviewDelete).not.toHaveBeenCalled();
+        expect(moderateReview).not.toHaveBeenCalled();
     });
 
     it('allows a user to delete their own review', async () => {
@@ -2647,18 +2668,22 @@ describe('deleteReviewAction', () => {
 
         expect(mockedReviewFindUnique).toHaveBeenCalledWith({ where: { id: 'rev-123' } });
         expect(mockedReviewDelete).toHaveBeenCalledWith({ where: { id: 'rev-123' } });
-        expect(result).toEqual({ id: 'rev-123' });
+        expect(result).toEqual({ ok: true, data: { id: 'rev-123' } });
     });
 
-    it('allows an admin to delete any review', async () => {
+    it('allows an admin to delete any review delegating to moderateReview', async () => {
         mockedGetServerSession.mockResolvedValue({ user: { id: 'admin-123', role: 'ADMIN', staffMfaVerified: true } });
         mockedReviewFindUnique.mockResolvedValue({ id: 'rev-123', userId: 'some-user' });
-        mockedReviewDelete.mockResolvedValue({ id: 'rev-123' });
+        (moderateReview as jest.Mock).mockResolvedValue(undefined);
 
         const result = await deleteReviewAction('rev-123');
 
-        expect(mockedReviewDelete).toHaveBeenCalledWith({ where: { id: 'rev-123' } });
-        expect(result).toEqual({ id: 'rev-123' });
+        expect(moderateReview).toHaveBeenCalledWith('admin-123', {
+            reviewId: 'rev-123',
+            action: 'DELETE',
+        });
+        expect(mockedReviewDelete).not.toHaveBeenCalled();
+        expect(result).toEqual({ ok: true, data: { id: 'rev-123' } });
     });
 });
 
