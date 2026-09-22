@@ -1,21 +1,24 @@
 import type { Metadata } from 'next';
 import FlightRecordChart from './FlightRecordChart';
+import { getFlightOnTimeAnalytics } from '@/lib/flightAnalyticsService';
 
 export const metadata: Metadata = {
     title: 'Flight record',
-    description: 'A record of your Mona Airways journeys.',
+    description: 'A record of your Mona Airways journeys and operational performance.',
 };
 
 export const dynamic = 'force-dynamic';
 
 /**
  * A server component, so the route can carry its own title and description.
- * The chart is browser-interactive and lives in its own client component (#72).
+ * Aggregates trailing completed flight performance from PostgreSQL records.
  */
-export default function FlightRecordPage() {
+export default async function FlightRecordPage() {
+    const analytics = await getFlightOnTimeAnalytics();
+
     return (
         <div className="content">
-            <FlightRecordChart />
+            <FlightRecordChart analytics={analytics} />
         </div>
     );
 }
