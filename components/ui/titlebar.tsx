@@ -456,22 +456,46 @@ const TitleBar: React.FC = () => {
                                             background: 'rgba(0,0,0,0.1)'
                                         }}>
                                             <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#c084fc' }}>Notifications</span>
-                                            {unreadCount > 0 && (
-                                                <button 
-                                                    onClick={handleMarkAllAsRead}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                {unreadCount > 0 && (
+                                                    <button 
+                                                        onClick={handleMarkAllAsRead}
+                                                        style={{
+                                                            background: 'none',
+                                                            border: 'none',
+                                                            color: '#a78bfa',
+                                                            fontSize: '0.75rem',
+                                                            cursor: 'pointer',
+                                                            fontWeight: 'bold',
+                                                            padding: 0
+                                                        }}
+                                                    >
+                                                        Mark all read
+                                                    </button>
+                                                )}
+                                                <Link
+                                                    href="/profile/notifications"
+                                                    aria-label="Notification settings"
+                                                    onClick={() => setIsOpen(false)}
                                                     style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        color: '#c4b5fd',
+                                                        fontSize: '0.95rem',
+                                                        textDecoration: 'none',
+                                                        padding: '2px',
+                                                        borderRadius: '4px',
+                                                        lineHeight: 1,
                                                         background: 'none',
                                                         border: 'none',
-                                                        color: '#a78bfa',
-                                                        fontSize: '0.75rem',
                                                         cursor: 'pointer',
-                                                        fontWeight: 'bold',
-                                                        padding: 0
                                                     }}
+                                                    title="Notification settings"
                                                 >
-                                                    Mark all read
-                                                </button>
-                                            )}
+                                                    ⚙️
+                                                </Link>
+                                            </div>
                                         </div>
 
                                         {/* List */}

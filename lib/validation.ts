@@ -786,4 +786,26 @@ export const flightStatusSearchSchema = z.discriminatedUnion('mode', [
 
 export type FlightStatusSearchInput = z.infer<typeof flightStatusSearchSchema>;
 
+export const notificationCategoryEnum = z.enum(['FLIGHT_STATUS', 'ACCOUNT_ACTIVITY', 'TRAVEL_GUIDES']);
+export const notificationChannelEnum = z.enum(['IN_APP', 'EMAIL']);
+export const notificationDeliveryStatusEnum = z.enum(['PENDING', 'SENT', 'FAILED']);
 
+export const notificationPreferenceItemSchema = z.object({
+    category: notificationCategoryEnum,
+    channel: notificationChannelEnum,
+    enabled: z.boolean(),
+});
+
+export const updateNotificationPreferencesSchema = z.array(notificationPreferenceItemSchema).min(1).max(10);
+
+export const adminNotificationDeliveriesQuerySchema = z.object({
+    status: notificationDeliveryStatusEnum.optional(),
+    channel: notificationChannelEnum.optional(),
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(1).max(100).default(25),
+    search: z.string().optional(),
+});
+
+export type NotificationPreferenceItem = z.infer<typeof notificationPreferenceItemSchema>;
+export type UpdateNotificationPreferencesInput = z.infer<typeof updateNotificationPreferencesSchema>;
+export type AdminNotificationDeliveriesQuery = z.infer<typeof adminNotificationDeliveriesQuerySchema>;

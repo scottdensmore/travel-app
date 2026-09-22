@@ -132,6 +132,22 @@ export default async function AdminDashboard() {
                         Moderate traveler reviews, inspect reported issues, resolve flags, and view moderation audit history.
                     </p>
                 </Link>
+                <Link href="/admin/notifications" className="admin-card hover:border-purple-500 transition-all" style={{
+                    textDecoration: 'none',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.5rem',
+                    flex: '1',
+                    minWidth: '250px',
+                    padding: '24px',
+                    marginBottom: 0,
+                    border: '1px solid rgba(255, 255, 255, 0.08)'
+                }}>
+                    <h3 style={{ color: '#c084fc', fontSize: '1.25rem', margin: 0, fontWeight: 'bold' }}>Notification Deliveries</h3>
+                    <p style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem', margin: 0 }}>
+                        Audit multi-channel dispatch logs, inspect delivery failures, and retry stalled notifications.
+                    </p>
+                </Link>
             </div>
 
             {/* Recent Bookings List */}

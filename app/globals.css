@@ -2729,6 +2729,47 @@ footer a:hover {
   outline-offset: 2px;
 }
 
+.notification-toggle-switch:focus-visible {
+  outline: 2px solid #c084fc !important;
+  outline-offset: 3px !important;
+}
+
+@media (max-width: 640px) {
+  .notification-preferences-card table,
+  .notification-preferences-card thead,
+  .notification-preferences-card tbody,
+  .notification-preferences-card th,
+  .notification-preferences-card td,
+  .notification-preferences-card tr {
+    display: block;
+  }
+
+  .notification-preferences-card thead tr {
+    position: absolute;
+    top: -9999px;
+    left: -9999px;
+  }
+
+  .notification-preferences-card tr {
+    padding: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .notification-preferences-card td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0 !important;
+  }
+
+  .notification-preferences-card td::before {
+    content: attr(data-label);
+    font-size: 0.85rem;
+    color: #c4b5fd;
+    font-weight: 500;
+  }
+}
+
 .privacy-page {
   max-width: 1100px;
   margin: 0 auto;

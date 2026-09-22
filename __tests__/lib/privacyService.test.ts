@@ -35,6 +35,10 @@ jest.mock('@/lib/prisma', () => ({
             findMany: jest.fn(),
             deleteMany: jest.fn(),
         },
+        notificationPreference: {
+            findMany: jest.fn(),
+            deleteMany: jest.fn(),
+        },
         userFavorite: {
             findMany: jest.fn(),
             deleteMany: jest.fn(),
@@ -77,6 +81,10 @@ describe('privacyService', () => {
             findMany: jest.Mock;
         };
         notification: {
+            findMany: jest.Mock;
+            deleteMany: jest.Mock;
+        };
+        notificationPreference: {
             findMany: jest.Mock;
             deleteMany: jest.Mock;
         };
@@ -249,14 +257,37 @@ describe('privacyService', () => {
                 },
             ]);
 
+            mockPrisma.notificationPreference.findMany.mockResolvedValue([
+                {
+                    category: 'FLIGHT_STATUS',
+                    channel: 'EMAIL',
+                    enabled: true,
+                    createdAt: new Date('2026-01-15T08:00:00Z'),
+                    updatedAt: new Date('2026-01-15T08:00:00Z'),
+                },
+            ]);
+
             mockPrisma.notification.findMany.mockResolvedValue([
                 {
                     id: 'notif-1',
                     title: 'Flight Confirmed',
                     message: 'Flight MA101 is booked.',
                     type: 'FLIGHT_STATUS',
+                    category: 'FLIGHT_STATUS',
                     isRead: true,
                     createdAt: new Date('2026-02-01T12:05:00Z'),
+                    deliveries: [
+                        {
+                            id: 'del-1',
+                            channel: 'EMAIL',
+                            status: 'SENT',
+                            recipient: 'jane@example.com',
+                            attempts: 1,
+                            lastAttemptAt: new Date('2026-02-01T12:05:05Z'),
+                            error: null,
+                            createdAt: new Date('2026-02-01T12:05:00Z'),
+                        },
+                    ],
                 },
             ]);
 
@@ -290,11 +321,72 @@ describe('privacyService', () => {
                 { type: 'CHECKED_BAG_1', priceCents: 3500 },
             ]);
 
-            // Assert reviews, notifications, favorites, points
+            // Assert reviews, notifications, favorites, points, notification preferences
             expect(exportResult.reviews).toHaveLength(1);
             expect(exportResult.notifications).toHaveLength(1);
+            expect(exportResult.notifications[0].category).toBe('FLIGHT_STATUS');
+            expect(exportResult.notifications[0].deliveries).toEqual([
+                {
+                    id: 'del-1',
+                    channel: 'EMAIL',
+                    status: 'SENT',
+                    recipient: 'jane@example.com',
+                    attempts: 1,
+                    lastAttemptAt: new Date('2026-02-01T12:05:05Z'),
+                    error: null,
+                    createdAt: new Date('2026-02-01T12:05:00Z'),
+                },
+            ]);
             expect(exportResult.favorites).toHaveLength(1);
+            expect(exportResult.notificationPreferences).toEqual([
+                {
+                    category: 'FLIGHT_STATUS',
+                    channel: 'EMAIL',
+                    enabled: true,
+                    createdAt: new Date('2026-01-15T08:00:00Z'),
+                    updatedAt: new Date('2026-01-15T08:00:00Z'),
+                },
+            ]);
             expect(exportResult.pointsActivity.currentPoints).toBeGreaterThanOrEqual(0);
+
+            // Assert Prisma queries
+            expect(mockPrisma.notificationPreference.findMany).toHaveBeenCalledWith({
+                where: { userId },
+                orderBy: [{ category: 'asc' }, { channel: 'asc' }],
+                select: {
+                    category: true,
+                    channel: true,
+                    enabled: true,
+                    createdAt: true,
+                    updatedAt: true,
+                },
+            });
+            expect(mockPrisma.notification.findMany).toHaveBeenCalledWith({
+                where: { userId },
+                orderBy: { createdAt: 'desc' },
+                select: {
+                    id: true,
+                    title: true,
+                    message: true,
+                    type: true,
+                    category: true,
+                    isRead: true,
+                    createdAt: true,
+                    deliveries: {
+                        orderBy: { createdAt: 'desc' },
+                        select: {
+                            id: true,
+                            channel: true,
+                            status: true,
+                            recipient: true,
+                            attempts: true,
+                            lastAttemptAt: true,
+                            error: true,
+                            createdAt: true,
+                        },
+                    },
+                },
+            });
 
             // Verify sanitization: no forbidden properties
             expect(() => assertNoSensitiveExportData(exportResult)).not.toThrow();
@@ -456,9 +548,10 @@ describe('privacyService', () => {
             expect(mockPrisma.session.deleteMany).toHaveBeenCalledWith({ where: { userId } });
             expect(mockPrisma.account.deleteMany).toHaveBeenCalledWith({ where: { userId } });
 
-            // 5. Cleaned up personal favorites and notifications
+            // 5. Cleaned up personal favorites, notifications, and notification preferences
             expect(mockPrisma.userFavorite.deleteMany).toHaveBeenCalledWith({ where: { userId } });
             expect(mockPrisma.notification.deleteMany).toHaveBeenCalledWith({ where: { userId } });
+            expect(mockPrisma.notificationPreference.deleteMany).toHaveBeenCalledWith({ where: { userId } });
         });
     });
 

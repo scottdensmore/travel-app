@@ -825,12 +825,18 @@ export default function ProfileClient({
                     choices={accountTimeZoneChoices}
                 />
 
-                <div className="profile-privacy-section" style={{ marginBottom: '2rem' }}>
+                <div className="profile-privacy-section" style={{ marginBottom: '2rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     <Link
                         href="/profile/privacy"
                         className="profile-privacy-link"
                     >
                         Privacy &amp; Data
+                    </Link>
+                    <Link
+                        href="/profile/notifications"
+                        className="profile-privacy-link"
+                    >
+                        Notification Preferences
                     </Link>
                 </div>
 

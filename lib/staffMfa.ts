@@ -219,3 +219,5 @@ export async function verifyAndConsumeStaffTotp(
         return false;
     }
 }
+
+export { hasVerifiedStaffAccess } from './staffAuthorization';

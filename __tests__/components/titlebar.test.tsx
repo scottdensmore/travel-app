@@ -378,6 +378,23 @@ describe('TitleBar', () => {
             expect(mockMarkAllNotificationsAsRead).toHaveBeenCalled();
         });
     });
+
+    it('renders notification settings link in drawer header pointing to /profile/notifications', async () => {
+        (usePathname as jest.Mock).mockReturnValue('/book');
+        (require('next-auth/react').useSession as jest.Mock).mockReturnValue({
+            data: { user: { id: 'u1', name: 'Bob', role: 'USER' } }
+        });
+        mockGetUserNotifications.mockResolvedValue([]);
+
+        render(<TitleBar />);
+
+        const bellButton = screen.getByRole('button', { name: /toggle notifications/i });
+        fireEvent.click(bellButton);
+
+        const settingsLink = await screen.findByRole('link', { name: /notification settings/i });
+        expect(settingsLink).toBeInTheDocument();
+        expect(settingsLink).toHaveAttribute('href', '/profile/notifications');
+    });
 });
 
 describe('the notification drawer is reachable, not just visible', () => {

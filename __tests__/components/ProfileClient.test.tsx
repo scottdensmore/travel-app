@@ -161,6 +161,11 @@ describe('ProfileClient interactive dashboard', () => {
         expect(privacyLink).toBeInTheDocument();
         expect(privacyLink).toHaveAttribute('href', '/profile/privacy');
 
+        // Notification Preferences navigation link
+        const notifLink = screen.getByRole('link', { name: /notification preferences/i });
+        expect(notifLink).toBeInTheDocument();
+        expect(notifLink).toHaveAttribute('href', '/profile/notifications');
+
         // Bookings
         expect(screen.getByText('Gemini Airways GA101')).toBeInTheDocument();
         expect(screen.getByTestId('booking-row-101'))

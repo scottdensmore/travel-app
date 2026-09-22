@@ -27,6 +27,12 @@ import {
     ktnSchema,
     redressNumberSchema,
     emergencyContactSchema,
+    notificationCategoryEnum,
+    notificationChannelEnum,
+    notificationDeliveryStatusEnum,
+    notificationPreferenceItemSchema,
+    updateNotificationPreferencesSchema,
+    adminNotificationDeliveriesQuerySchema,
 } from '@/lib/validation';
 
 describe('account timezone validation', () => {
@@ -1087,6 +1093,94 @@ describe('passenger security and emergency contact validation', () => {
             });
             expect(result.success).toBe(false);
         });
+    });
+});
+
+describe('notification validation schemas', () => {
+    it('validates notificationCategoryEnum values', () => {
+        expect(notificationCategoryEnum.safeParse('FLIGHT_STATUS').success).toBe(true);
+        expect(notificationCategoryEnum.safeParse('ACCOUNT_ACTIVITY').success).toBe(true);
+        expect(notificationCategoryEnum.safeParse('TRAVEL_GUIDES').success).toBe(true);
+        expect(notificationCategoryEnum.safeParse('PROMOTIONS').success).toBe(false);
+    });
+
+    it('validates notificationChannelEnum values', () => {
+        expect(notificationChannelEnum.safeParse('IN_APP').success).toBe(true);
+        expect(notificationChannelEnum.safeParse('EMAIL').success).toBe(true);
+        expect(notificationChannelEnum.safeParse('SMS').success).toBe(false);
+    });
+
+    it('validates notificationDeliveryStatusEnum values', () => {
+        expect(notificationDeliveryStatusEnum.safeParse('PENDING').success).toBe(true);
+        expect(notificationDeliveryStatusEnum.safeParse('SENT').success).toBe(true);
+        expect(notificationDeliveryStatusEnum.safeParse('FAILED').success).toBe(true);
+        expect(notificationDeliveryStatusEnum.safeParse('DELIVERED').success).toBe(false);
+    });
+
+    it('validates notificationPreferenceItemSchema', () => {
+        expect(notificationPreferenceItemSchema.safeParse({
+            category: 'FLIGHT_STATUS',
+            channel: 'IN_APP',
+            enabled: true,
+        }).success).toBe(true);
+
+        expect(notificationPreferenceItemSchema.safeParse({
+            category: 'INVALID',
+            channel: 'IN_APP',
+            enabled: true,
+        }).success).toBe(false);
+
+        expect(notificationPreferenceItemSchema.safeParse({
+            category: 'FLIGHT_STATUS',
+            channel: 'IN_APP',
+            enabled: 'yes',
+        }).success).toBe(false);
+    });
+
+    it('validates updateNotificationPreferencesSchema', () => {
+        expect(updateNotificationPreferencesSchema.safeParse([
+            { category: 'FLIGHT_STATUS', channel: 'IN_APP', enabled: true },
+            { category: 'TRAVEL_GUIDES', channel: 'EMAIL', enabled: false },
+        ]).success).toBe(true);
+
+        // Min 1 required
+        expect(updateNotificationPreferencesSchema.safeParse([]).success).toBe(false);
+
+        // Max 10 allowed
+        const elevenItems = Array(11).fill({
+            category: 'FLIGHT_STATUS',
+            channel: 'IN_APP',
+            enabled: true,
+        });
+        expect(updateNotificationPreferencesSchema.safeParse(elevenItems).success).toBe(false);
+    });
+
+    it('validates adminNotificationDeliveriesQuerySchema with defaults and bounds', () => {
+        const parsedDefault = adminNotificationDeliveriesQuerySchema.parse({});
+        expect(parsedDefault).toEqual({
+            page: 1,
+            pageSize: 25,
+        });
+
+        const parsedCustom = adminNotificationDeliveriesQuerySchema.parse({
+            status: 'FAILED',
+            channel: 'EMAIL',
+            page: '3',
+            pageSize: '50',
+            search: 'flight',
+        });
+        expect(parsedCustom).toEqual({
+            status: 'FAILED',
+            channel: 'EMAIL',
+            page: 3,
+            pageSize: 50,
+            search: 'flight',
+        });
+
+        // Rejects page < 1
+        expect(adminNotificationDeliveriesQuerySchema.safeParse({ page: 0 }).success).toBe(false);
+        // Rejects pageSize > 100
+        expect(adminNotificationDeliveriesQuerySchema.safeParse({ pageSize: 101 }).success).toBe(false);
     });
 });
 
