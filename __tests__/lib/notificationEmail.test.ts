@@ -35,6 +35,7 @@ describe('notification email delivery', () => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: expect.any(String),
+            signal: expect.any(AbortSignal),
         });
 
         const payload = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
@@ -44,6 +45,15 @@ describe('notification email delivery', () => {
             Subject: 'Mona Airways: Flight Delay Alert',
             Text: expect.stringContaining('Flight Delay Alert\n\nYour flight MO-123 is delayed by 45 minutes.\n\n---\nManage your notification preferences at: http://localhost:3000/profile/notifications'),
         });
+    });
+
+    it('normalizes NEXTAUTH_URL with trailing slash without duplicating slashes', async () => {
+        process.env.NEXTAUTH_URL = 'http://localhost:3000/';
+        await sendNotificationEmail(sampleInput);
+
+        const payload = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+        expect(payload.Text).toContain('http://localhost:3000/profile/notifications');
+        expect(payload.Text).not.toContain('http://localhost:3000//profile/notifications');
     });
 
     it('handles simple email address without display name in AUTH_EMAIL_FROM for Mailpit', async () => {
@@ -80,6 +90,7 @@ describe('notification email delivery', () => {
                 'X-Postmark-Server-Token': 'pm-server-token-123',
             },
             body: expect.any(String),
+            signal: expect.any(AbortSignal),
         });
 
         const payload = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);

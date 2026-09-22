@@ -1,6 +1,7 @@
 import { prisma } from './prisma';
 import { logger } from './logger';
 import { sendNotificationEmail } from './notificationEmail';
+import { updateNotificationPreferencesSchema } from './validation';
 import type {
     NotificationCategory,
     NotificationChannel,
@@ -48,8 +49,10 @@ export class NotificationService {
         userId: string,
         updates: Array<{ category: NotificationCategory; channel: NotificationChannel; enabled: boolean }>
     ): Promise<void> {
+        const validatedUpdates = updateNotificationPreferencesSchema.parse(updates);
+
         await prisma.$transaction(
-            updates.map(u =>
+            validatedUpdates.map(u =>
                 prisma.notificationPreference.upsert({
                     where: {
                         userId_category_channel: {
@@ -87,7 +90,10 @@ export class NotificationService {
             this.getEffectivePreferences(input.userId),
         ]);
 
-        if (!user) return;
+        if (!user) {
+            logger.warn(`User not found when dispatching notification: ${input.userId}`, { userId: input.userId });
+            return;
+        }
 
         const categoryPref = preferences[input.category] || DEFAULT_NOTIFICATION_PREFERENCES[input.category];
         let notificationId: string | null = null;
@@ -186,6 +192,10 @@ export class NotificationService {
 
         if (delivery.channel !== 'EMAIL') {
             throw new Error('Only email deliveries can be retried.');
+        }
+
+        if (delivery.status === 'SENT') {
+            throw new Error('Cannot retry a delivery that has already been sent.');
         }
 
         try {

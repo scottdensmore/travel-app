@@ -38,6 +38,7 @@ export async function sendNotificationEmail(input: NotificationEmailInput): Prom
     const endpoint = requireSetting('AUTH_EMAIL_API_URL');
     const sender = process.env.AUTH_EMAIL_FROM?.trim() || 'Mona Airways <no-reply@localhost>';
     const appUrl = process.env.NEXTAUTH_URL?.trim() || 'http://localhost:3000';
+    const notificationsUrl = new URL('/profile/notifications', appUrl).toString();
 
     const subject = `Mona Airways: ${input.title}`;
     const textBody = [
@@ -46,7 +47,7 @@ export async function sendNotificationEmail(input: NotificationEmailInput): Prom
         input.message,
         '',
         '---',
-        `Manage your notification preferences at: ${appUrl}/profile/notifications`,
+        `Manage your notification preferences at: ${notificationsUrl}`,
     ].join('\n');
 
     if (selectedProvider === 'mailpit') {
@@ -59,6 +60,7 @@ export async function sendNotificationEmail(input: NotificationEmailInput): Prom
                 Subject: subject,
                 Text: textBody,
             }),
+            signal: AbortSignal.timeout(10_000),
         });
         if (!response.ok) {
             throw new Error(`Mailpit delivery failed with HTTP ${response.status}`);
@@ -81,6 +83,7 @@ export async function sendNotificationEmail(input: NotificationEmailInput): Prom
                 TextBody: textBody,
                 MessageStream: 'outbound',
             }),
+            signal: AbortSignal.timeout(10_000),
         });
         if (!response.ok) {
             const body = await response.text();

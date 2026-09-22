@@ -100,10 +100,20 @@ describe('NotificationService', () => {
                 },
             });
         });
+
+        it('throws ZodError when updates array is empty or contains invalid items', async () => {
+            await expect(service.updatePreferences('user-1', [])).rejects.toThrow();
+
+            await expect(
+                service.updatePreferences('user-1', [
+                    { category: 'INVALID' as any, channel: 'EMAIL', enabled: true },
+                ])
+            ).rejects.toThrow();
+        });
     });
 
     describe('dispatchNotification', () => {
-        it('returns early if user is not found', async () => {
+        it('returns early and logs warning if user is not found', async () => {
             jest.spyOn(prisma.user, 'findUnique').mockResolvedValue(null);
             jest.spyOn(service, 'getEffectivePreferences').mockResolvedValue(DEFAULT_NOTIFICATION_PREFERENCES);
             jest.spyOn(prisma.notification, 'create');
@@ -117,6 +127,10 @@ describe('NotificationService', () => {
 
             expect(prisma.notification.create).not.toHaveBeenCalled();
             expect(notificationEmail.sendNotificationEmail).not.toHaveBeenCalled();
+            expect(logger.warn).toHaveBeenCalledWith(
+                expect.stringContaining('User not found when dispatching notification: user-unknown'),
+                expect.objectContaining({ userId: 'user-unknown' })
+            );
         });
 
         it('creates in-app notification and delivery when IN_APP is enabled', async () => {
@@ -356,6 +370,7 @@ describe('NotificationService', () => {
             jest.spyOn(prisma.notificationDelivery, 'findUniqueOrThrow').mockResolvedValue({
                 id: 'del-inapp',
                 channel: 'IN_APP',
+                status: 'FAILED',
                 recipient: 'user-1',
                 notification: { title: 'Test', message: 'Hello' },
             } as any);
@@ -366,10 +381,26 @@ describe('NotificationService', () => {
             expect(notificationEmail.sendNotificationEmail).not.toHaveBeenCalled();
         });
 
+        it('throws error if delivery has already been sent', async () => {
+            jest.spyOn(prisma.notificationDelivery, 'findUniqueOrThrow').mockResolvedValue({
+                id: 'del-already-sent',
+                channel: 'EMAIL',
+                status: 'SENT',
+                recipient: 'user@example.com',
+                notification: { title: 'Test', message: 'Hello' },
+            } as any);
+
+            await expect(service.retryDelivery('del-already-sent')).rejects.toThrow(
+                'Cannot retry a delivery that has already been sent.'
+            );
+            expect(notificationEmail.sendNotificationEmail).not.toHaveBeenCalled();
+        });
+
         it('re-sends email and updates delivery to SENT with incremented attempts', async () => {
             jest.spyOn(prisma.notificationDelivery, 'findUniqueOrThrow').mockResolvedValue({
                 id: 'del-email-1',
                 channel: 'EMAIL',
+                status: 'FAILED',
                 recipient: 'user@example.com',
                 notification: { title: 'Flight Alert', message: 'Gate changed' },
             } as any);
