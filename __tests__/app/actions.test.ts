@@ -94,6 +94,13 @@ jest.mock('@/lib/flightStatusService', () => ({
     },
 }));
 
+const mockDispatchNotification = jest.fn().mockResolvedValue(undefined);
+jest.mock('@/lib/notificationService', () => ({
+    NotificationService: jest.fn().mockImplementation(() => ({
+        dispatchNotification: mockDispatchNotification,
+    })),
+}));
+
 jest.mock('@/lib/FlightBookingService', () => {
     const bookFlight = jest.fn();
     return jest.fn().mockImplementation(() => ({ bookFlight }));
@@ -1009,14 +1016,14 @@ describe('bookFlightAction', () => {
             wasCreated: true
         });
 
-        expect(mockedNotificationCreate).toHaveBeenCalledWith({
-            data: {
-                userId: 'user-123',
-                title: 'Booking Confirmed: Gemini Airways GA101',
-                message: 'Successfully booked flight GA101 from A to B. Earned +200 status points.',
-                type: 'POINTS'
-            }
+        expect(mockDispatchNotification).toHaveBeenCalledWith({
+            userId: 'user-123',
+            title: 'Booking Confirmed: Gemini Airways GA101',
+            message: 'Successfully booked flight GA101 from A to B. Earned +200 status points.',
+            category: 'ACCOUNT_ACTIVITY',
+            type: 'POINTS',
         });
+        expect(mockedNotificationCreate).not.toHaveBeenCalled();
     });
 
     it('rejects oversized passenger arrays before calling the booking service', async () => {
@@ -1066,6 +1073,7 @@ describe('bookFlightAction', () => {
                 },
             },
         });
+        expect(mockDispatchNotification).not.toHaveBeenCalled();
         expect(mockedNotificationCreate).not.toHaveBeenCalled();
         expect(JSON.stringify(outcome)).not.toContain('sensitive data');
         expect(mockCancelPayment).toHaveBeenCalledWith({
@@ -1246,6 +1254,7 @@ describe('bookFlightAction', () => {
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
         });
 
+        expect(mockDispatchNotification).not.toHaveBeenCalled();
         expect(mockedNotificationCreate).not.toHaveBeenCalled();
     });
 
@@ -1276,7 +1285,8 @@ describe('bookFlightAction', () => {
             idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
         });
 
-        expect(mockedNotificationCreate).toHaveBeenCalledTimes(1);
+        expect(mockDispatchNotification).toHaveBeenCalledTimes(1);
+        expect(mockedNotificationCreate).not.toHaveBeenCalled();
     });
 
     it('forwards ancillariesByPassenger to FlightBookingService.bookFlight and paymentService', async () => {
@@ -1946,13 +1956,12 @@ describe('cancelBookingAction', () => {
         });
         expect(result).toEqual({ id: 1 });
         expect(mockTx.$queryRaw).toHaveBeenCalled();
-        expect(mockTx.notification.create).toHaveBeenCalledWith({
-            data: {
-                userId: 'user-123',
-                title: 'Booking Cancelled: Gemini Airways GA101',
-                message: 'Booking for flight GA101 has been cancelled. Deducted -69 status points.',
-                type: 'POINTS'
-            }
+        expect(mockDispatchNotification).toHaveBeenCalledWith({
+            userId: 'user-123',
+            title: 'Booking Cancelled: Gemini Airways GA101',
+            message: 'Booking for flight GA101 has been cancelled. Deducted -69 status points.',
+            category: 'ACCOUNT_ACTIVITY',
+            type: 'POINTS',
         });
         expect(mockedNotificationCreate).not.toHaveBeenCalled();
     });
@@ -2235,6 +2244,7 @@ describe('cancelBookingAction', () => {
             error: { code: 'VALIDATION_ERROR', message: expect.stringMatching(/already departed/i) },
         });
         expect(mockTx.booking.update).not.toHaveBeenCalled();
+        expect(mockDispatchNotification).not.toHaveBeenCalled();
         expect(mockTx.notification.create).not.toHaveBeenCalled();
         expect(mockedNotificationCreate).not.toHaveBeenCalled();
     });
@@ -2284,13 +2294,12 @@ describe('cancelBookingAction', () => {
         });
         expect(result).toEqual({ id: 1 });
 
-        expect(mockTx.notification.create).toHaveBeenCalledWith({
-            data: {
-                userId: 'some-user',
-                title: 'Booking Cancelled: Gemini Airways GA101',
-                message: 'Booking for flight GA101 has been cancelled. Deducted -200 status points.',
-                type: 'POINTS'
-            }
+        expect(mockDispatchNotification).toHaveBeenCalledWith({
+            userId: 'some-user',
+            title: 'Booking Cancelled: Gemini Airways GA101',
+            message: 'Booking for flight GA101 has been cancelled. Deducted -200 status points.',
+            category: 'ACCOUNT_ACTIVITY',
+            type: 'POINTS',
         });
         expect(mockedNotificationCreate).not.toHaveBeenCalled();
     });
@@ -3250,21 +3259,20 @@ describe('admin flight schedule actions', () => {
             // A delay moves nobody's booking status.
             expect(mockTx.booking.update).not.toHaveBeenCalled();
 
-            expect(mockTx.notification.createMany).toHaveBeenCalledWith({
-                data: [
-                    {
-                        userId: 'user-1',
-                        title: 'Flight Update: Gemini Airways GA101',
-                        message: 'Your upcoming flight GA101 from Seattle, USA to Detroit, USA is now DELAYED.',
-                        type: 'FLIGHT_STATUS'
-                    },
-                    {
-                        userId: 'user-2',
-                        title: 'Flight Update: Gemini Airways GA101',
-                        message: 'Your upcoming flight GA101 from Seattle, USA to Detroit, USA is now DELAYED.',
-                        type: 'FLIGHT_STATUS'
-                    }
-                ]
+            expect(mockDispatchNotification).toHaveBeenCalledTimes(2);
+            expect(mockDispatchNotification).toHaveBeenNthCalledWith(1, {
+                userId: 'user-1',
+                title: 'Flight Update: Gemini Airways GA101',
+                message: 'Your upcoming flight GA101 from Seattle, USA to Detroit, USA is now DELAYED.',
+                category: 'FLIGHT_STATUS',
+                type: 'FLIGHT_STATUS',
+            });
+            expect(mockDispatchNotification).toHaveBeenNthCalledWith(2, {
+                userId: 'user-2',
+                title: 'Flight Update: Gemini Airways GA101',
+                message: 'Your upcoming flight GA101 from Seattle, USA to Detroit, USA is now DELAYED.',
+                category: 'FLIGHT_STATUS',
+                type: 'FLIGHT_STATUS',
             });
             expect(mockedNotificationCreateMany).not.toHaveBeenCalled();
         });
@@ -3295,15 +3303,12 @@ describe('admin flight schedule actions', () => {
                 where: { id: 1 },
                 data: { status: 'DISRUPTED' },
             });
-            expect(mockTx.notification.createMany).toHaveBeenCalledWith({
-                data: [
-                    {
-                        userId: 'user-1',
-                        title: 'Flight Update: Gemini Airways GA101',
-                        message: 'Your flight GA101 from Seattle, USA to Detroit, USA has been cancelled by the airline. Your seat is held while you decide; cancel the booking from your profile for a full refund.',
-                        type: 'FLIGHT_STATUS'
-                    }
-                ]
+            expect(mockDispatchNotification).toHaveBeenCalledWith({
+                userId: 'user-1',
+                title: 'Flight Update: Gemini Airways GA101',
+                message: 'Your flight GA101 from Seattle, USA to Detroit, USA has been cancelled by the airline. Your seat is held while you decide; cancel the booking from your profile for a full refund.',
+                category: 'FLIGHT_STATUS',
+                type: 'FLIGHT_STATUS',
             });
             expect(mockedNotificationCreateMany).not.toHaveBeenCalled();
         });
