@@ -167,6 +167,36 @@ describe('Notification Server Actions', () => {
             expect(prisma.notificationDelivery.findMany).toHaveBeenCalled();
             expect(prisma.notificationDelivery.count).toHaveBeenCalled();
         });
+        it('supports empty/undefined input and applies case-insensitive search', async () => {
+            (getServerSession as jest.Mock).mockResolvedValue({ user: { id: 'admin-1', role: 'ADMIN' } });
+            (hasVerifiedStaffAccess as jest.Mock).mockResolvedValue(true);
+
+            (prisma.notificationDelivery.findMany as jest.Mock).mockResolvedValue([]);
+            (prisma.notificationDelivery.count as jest.Mock).mockResolvedValue(0);
+
+            const resDefault = await getAdminNotificationDeliveriesAction();
+            expect(resDefault).toEqual({ ok: true, data: { deliveries: [], totalCount: 0 } });
+
+            await getAdminNotificationDeliveriesAction({ search: 'delay' });
+            expect(prisma.notificationDelivery.findMany).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    where: expect.objectContaining({
+                        OR: [
+                            { recipient: { contains: 'delay', mode: 'insensitive' } },
+                            { error: { contains: 'delay', mode: 'insensitive' } },
+                            {
+                                notification: {
+                                    OR: [
+                                        { title: { contains: 'delay', mode: 'insensitive' } },
+                                        { message: { contains: 'delay', mode: 'insensitive' } },
+                                    ],
+                                },
+                            },
+                        ],
+                    }),
+                })
+            );
+        });
     });
 
     describe('retryNotificationDeliveryAction', () => {
@@ -212,7 +242,7 @@ describe('Notification Server Actions', () => {
             expect(revalidatePath).toHaveBeenCalledWith('/admin/notifications');
         });
 
-        it('handles retry error gracefully', async () => {
+        it('handles retry error gracefully and revalidates admin notifications path on failure', async () => {
             (getServerSession as jest.Mock).mockResolvedValue({ user: { id: 'admin-1', role: 'ADMIN' } });
             (hasVerifiedStaffAccess as jest.Mock).mockResolvedValue(true);
 
@@ -220,6 +250,7 @@ describe('Notification Server Actions', () => {
 
             const result = await retryNotificationDeliveryAction('del-1');
             expect(result).toEqual(expect.objectContaining({ ok: false }));
+            expect(revalidatePath).toHaveBeenCalledWith('/admin/notifications');
         });
     });
 });

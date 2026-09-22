@@ -74,7 +74,7 @@ export async function updateNotificationPreferencesAction(
 }
 
 export async function getAdminNotificationDeliveriesAction(
-    input: unknown
+    input?: unknown
 ): Promise<ActionResult<{ deliveries: NotificationDeliveryWithNotification[]; totalCount: number }>> {
     const session = await getServerSession(authOptions);
     const isStaff = await hasVerifiedStaffAccess(session);
@@ -100,13 +100,13 @@ export async function getAdminNotificationDeliveriesAction(
         if (search?.trim()) {
             const query = search.trim();
             where.OR = [
-                { recipient: { contains: query } },
-                { error: { contains: query } },
+                { recipient: { contains: query, mode: 'insensitive' } },
+                { error: { contains: query, mode: 'insensitive' } },
                 {
                     notification: {
                         OR: [
-                            { title: { contains: query } },
-                            { message: { contains: query } },
+                            { title: { contains: query, mode: 'insensitive' } },
+                            { message: { contains: query, mode: 'insensitive' } },
                         ],
                     },
                 },
@@ -157,7 +157,6 @@ export async function retryNotificationDeliveryAction(
     try {
         const service = new NotificationService();
         await service.retryDelivery(deliveryId);
-        revalidatePath('/admin/notifications');
 
         const delivery = await prisma.notificationDelivery.findUnique({
             where: { id: deliveryId },
@@ -174,5 +173,7 @@ export async function retryNotificationDeliveryAction(
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Failed to retry notification delivery.';
         return actionValidationFailure(message);
+    } finally {
+        revalidatePath('/admin/notifications');
     }
 }
