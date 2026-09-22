@@ -796,7 +796,7 @@ export const notificationPreferenceItemSchema = z.object({
     enabled: z.boolean(),
 });
 
-export const updateNotificationPreferencesSchema = z.array(notificationPreferenceItemSchema).min(1);
+export const updateNotificationPreferencesSchema = z.array(notificationPreferenceItemSchema).min(1).max(10);
 
 export const adminNotificationDeliveriesQuerySchema = z.object({
     status: notificationDeliveryStatusEnum.optional(),

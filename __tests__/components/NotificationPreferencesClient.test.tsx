@@ -95,7 +95,7 @@ describe('NotificationPreferencesClient', () => {
         });
     });
 
-    it('handles keyboard toggle via Space or Enter', async () => {
+    it('uses native button switch allowing keyboard activation via click', async () => {
         (actions.updateNotificationPreferencesAction as jest.Mock).mockResolvedValue({
             ok: true,
             data: { success: true },
@@ -109,9 +109,12 @@ describe('NotificationPreferencesClient', () => {
         );
 
         const inAppGuideToggle = screen.getByLabelText(/Travel Guides & Tips In-App/i);
+        expect(inAppGuideToggle.tagName).toBe('BUTTON');
+        expect(inAppGuideToggle).toHaveAttribute('type', 'button');
+        expect(inAppGuideToggle).toHaveAttribute('role', 'switch');
         expect(inAppGuideToggle).toHaveAttribute('aria-checked', 'true');
 
-        fireEvent.keyDown(inAppGuideToggle, { key: 'Enter' });
+        fireEvent.click(inAppGuideToggle);
 
         await waitFor(() => {
             expect(actions.updateNotificationPreferencesAction).toHaveBeenCalledWith([

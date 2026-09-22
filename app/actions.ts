@@ -2046,23 +2046,25 @@ export async function updateFlightStatusAction(flightId: number, status: FlightS
     if (outcomes.length > 0) {
         const route = `${withAirports.flightNumber} from ${withAirports.fromAirport.label} to ${withAirports.toAirport.label}`;
         const notificationService = new NotificationService();
-        for (const { userId: targetUserId, stillGrounded } of outcomes) {
-            try {
-                await notificationService.dispatchNotification({
-                    userId: targetUserId,
-                    title: `Flight Update: ${withAirports.airline} ${withAirports.flightNumber}`,
-                    message: status === 'CANCELLED'
-                        ? `Your flight ${route} has been cancelled by the airline. Your seat is held while you decide; cancel the booking from your profile for a full refund.`
-                        : stillGrounded
-                            ? `Your flight ${route} is operating again, but another flight in this booking is still cancelled.`
-                            : `Your upcoming flight ${route} is now ${status.replace('_', ' ')}.`,
-                    category: 'FLIGHT_STATUS',
-                    type: 'FLIGHT_STATUS',
-                });
-            } catch (err) {
-                console.error("Failed to generate flight status notification:", err);
-            }
-        }
+        await Promise.allSettled(
+            outcomes.map(async ({ userId: targetUserId, stillGrounded }) => {
+                try {
+                    await notificationService.dispatchNotification({
+                        userId: targetUserId,
+                        title: `Flight Update: ${withAirports.airline} ${withAirports.flightNumber}`,
+                        message: status === 'CANCELLED'
+                            ? `Your flight ${route} has been cancelled by the airline. Your seat is held while you decide; cancel the booking from your profile for a full refund.`
+                            : stillGrounded
+                                ? `Your flight ${route} is operating again, but another flight in this booking is still cancelled.`
+                                : `Your upcoming flight ${route} is now ${status.replace('_', ' ')}.`,
+                        category: 'FLIGHT_STATUS',
+                        type: 'FLIGHT_STATUS',
+                    });
+                } catch (err) {
+                    console.error("Failed to generate flight status notification:", err);
+                }
+            })
+        );
     }
 
     // The relation objects would otherwise ride this return value across to
@@ -2083,7 +2085,13 @@ export async function getUserNotificationsAction() {
     if (!userId) return [];
 
     return await prisma.notification.findMany({
-        where: { userId },
+        where: {
+            userId,
+            OR: [
+                { deliveries: { none: {} } }, // legacy notifications
+                { deliveries: { some: { channel: 'IN_APP' } } },
+            ],
+        },
         orderBy: { createdAt: 'desc' },
         take: 50
     });

@@ -227,12 +227,6 @@ export default function NotificationPreferencesClient({
                                                 aria-label={switchLabel}
                                                 disabled={isPending}
                                                 onClick={() => handleToggle(cat.key, ch.key)}
-                                                onKeyDown={e => {
-                                                    if (e.key === ' ' || e.key === 'Enter') {
-                                                        e.preventDefault();
-                                                        handleToggle(cat.key, ch.key);
-                                                    }
-                                                }}
                                                 style={{
                                                     position: 'relative',
                                                     display: 'inline-flex',

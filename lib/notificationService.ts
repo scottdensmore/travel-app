@@ -185,6 +185,15 @@ export class NotificationService {
     }
 
     async retryDelivery(deliveryId: string): Promise<void> {
+        const updated = await prisma.notificationDelivery.updateMany({
+            where: { id: deliveryId, status: { notIn: ['SENT', 'PENDING'] } },
+            data: { status: 'PENDING', attempts: { increment: 1 }, lastAttemptAt: new Date() },
+        });
+
+        if (updated.count === 0) {
+            throw new Error('Delivery is already being sent or has already succeeded.');
+        }
+
         const delivery = await prisma.notificationDelivery.findUniqueOrThrow({
             where: { id: deliveryId },
             include: { notification: true },
@@ -192,10 +201,6 @@ export class NotificationService {
 
         if (delivery.channel !== 'EMAIL') {
             throw new Error('Only email deliveries can be retried.');
-        }
-
-        if (delivery.status === 'SENT') {
-            throw new Error('Cannot retry a delivery that has already been sent.');
         }
 
         try {
@@ -210,8 +215,6 @@ export class NotificationService {
                 data: {
                     status: 'SENT',
                     sentAt: new Date(),
-                    attempts: { increment: 1 },
-                    lastAttemptAt: new Date(),
                     error: null,
                 },
             });
@@ -222,8 +225,6 @@ export class NotificationService {
                 data: {
                     status: 'FAILED',
                     error: errMessage,
-                    attempts: { increment: 1 },
-                    lastAttemptAt: new Date(),
                 },
             });
             throw error;

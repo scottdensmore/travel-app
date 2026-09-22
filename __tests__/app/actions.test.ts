@@ -3332,7 +3332,13 @@ describe('admin flight schedule actions', () => {
                 const result = await getUserNotificationsAction();
 
                 expect(mockedNotificationFindMany).toHaveBeenCalledWith({
-                    where: { userId: 'user-123' },
+                    where: {
+                        userId: 'user-123',
+                        OR: [
+                            { deliveries: { none: {} } },
+                            { deliveries: { some: { channel: 'IN_APP' } } },
+                        ],
+                    },
                     orderBy: { createdAt: 'desc' },
                     take: 50
                 });

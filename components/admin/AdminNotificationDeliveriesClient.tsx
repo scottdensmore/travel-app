@@ -35,6 +35,11 @@ export default function AdminNotificationDeliveriesClient({
     const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const [isPending, startTransition] = useTransition();
 
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalDeliveries, setTotalDeliveries] = useState(totalCount);
+    const pageSize = 50;
+    const totalPages = Math.max(1, Math.ceil(totalDeliveries / pageSize));
+
     const [counts, setCounts] = useState({
         total: totalCount,
         sent: sentCount ?? initialDeliveries.filter(d => d.status === 'SENT').length,
@@ -42,7 +47,7 @@ export default function AdminNotificationDeliveriesClient({
         pending: pendingCount ?? initialDeliveries.filter(d => d.status === 'PENDING').length,
     });
 
-    const fetchDeliveries = async (tab: StatusTab, channel: ChannelFilter, search: string) => {
+    const fetchDeliveries = async (tab: StatusTab, channel: ChannelFilter, search: string, page: number = 1) => {
         setFeedback(null);
         startTransition(async () => {
             try {
@@ -54,12 +59,14 @@ export default function AdminNotificationDeliveriesClient({
                     status: queryStatus,
                     channel: queryChannel,
                     search: querySearch,
-                    page: 1,
-                    pageSize: 50,
+                    page,
+                    pageSize,
                 });
 
                 if (result.ok) {
                     setDeliveries(result.data.deliveries);
+                    setTotalDeliveries(result.data.totalCount);
+                    setCurrentPage(page);
                 } else {
                     setFeedback({ type: 'error', message: result.error?.message || 'Failed to fetch deliveries.' });
                 }
@@ -72,18 +79,32 @@ export default function AdminNotificationDeliveriesClient({
 
     const handleTabChange = (tab: StatusTab) => {
         setActiveTab(tab);
-        fetchDeliveries(tab, selectedChannel, searchQuery);
+        fetchDeliveries(tab, selectedChannel, searchQuery, 1);
     };
 
     const handleChannelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const channel = e.target.value as ChannelFilter;
         setSelectedChannel(channel);
-        fetchDeliveries(activeTab, channel, searchQuery);
+        fetchDeliveries(activeTab, channel, searchQuery, 1);
     };
 
     const handleSearchSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        fetchDeliveries(activeTab, selectedChannel, searchQuery);
+        fetchDeliveries(activeTab, selectedChannel, searchQuery, 1);
+    };
+
+    const handlePreviousPage = () => {
+        if (currentPage > 1) {
+            const newPage = currentPage - 1;
+            fetchDeliveries(activeTab, selectedChannel, searchQuery, newPage);
+        }
+    };
+
+    const handleNextPage = () => {
+        if (currentPage < totalPages) {
+            const newPage = currentPage + 1;
+            fetchDeliveries(activeTab, selectedChannel, searchQuery, newPage);
+        }
     };
 
     const handleRetry = async (deliveryId: string) => {
@@ -367,6 +388,40 @@ export default function AdminNotificationDeliveriesClient({
                             )}
                         </tbody>
                     </table>
+                </div>
+
+                {/* Pagination controls */}
+                <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3 border-t border-gray-700/80 bg-gray-900/40">
+                    <div className="text-xs text-gray-400">
+                        Showing <span className="font-semibold text-gray-200">{deliveries.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}</span> to{' '}
+                        <span className="font-semibold text-gray-200">{Math.min(currentPage * pageSize, totalDeliveries)}</span> of{' '}
+                        <span className="font-semibold text-gray-200">{totalDeliveries}</span> deliveries
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <span className="text-xs text-gray-300 font-medium">
+                            Page {currentPage} of {totalPages}
+                        </span>
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={handlePreviousPage}
+                                disabled={currentPage <= 1 || isPending}
+                                aria-label="Previous page"
+                                className="px-3 py-1.5 text-xs font-semibold rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors"
+                            >
+                                Previous
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleNextPage}
+                                disabled={currentPage >= totalPages || isPending}
+                                aria-label="Next page"
+                                className="px-3 py-1.5 text-xs font-semibold rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors"
+                            >
+                                Next
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

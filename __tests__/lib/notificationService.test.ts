@@ -366,11 +366,21 @@ describe('NotificationService', () => {
     });
 
     describe('retryDelivery', () => {
+        it('throws error if delivery is already being sent or has already succeeded', async () => {
+            jest.spyOn(prisma.notificationDelivery, 'updateMany').mockResolvedValue({ count: 0 });
+
+            await expect(service.retryDelivery('del-already-sent')).rejects.toThrow(
+                'Delivery is already being sent or has already succeeded.'
+            );
+            expect(notificationEmail.sendNotificationEmail).not.toHaveBeenCalled();
+        });
+
         it('throws error if delivery channel is not EMAIL', async () => {
+            jest.spyOn(prisma.notificationDelivery, 'updateMany').mockResolvedValue({ count: 1 });
             jest.spyOn(prisma.notificationDelivery, 'findUniqueOrThrow').mockResolvedValue({
                 id: 'del-inapp',
                 channel: 'IN_APP',
-                status: 'FAILED',
+                status: 'PENDING',
                 recipient: 'user-1',
                 notification: { title: 'Test', message: 'Hello' },
             } as any);
@@ -381,26 +391,12 @@ describe('NotificationService', () => {
             expect(notificationEmail.sendNotificationEmail).not.toHaveBeenCalled();
         });
 
-        it('throws error if delivery has already been sent', async () => {
-            jest.spyOn(prisma.notificationDelivery, 'findUniqueOrThrow').mockResolvedValue({
-                id: 'del-already-sent',
-                channel: 'EMAIL',
-                status: 'SENT',
-                recipient: 'user@example.com',
-                notification: { title: 'Test', message: 'Hello' },
-            } as any);
-
-            await expect(service.retryDelivery('del-already-sent')).rejects.toThrow(
-                'Cannot retry a delivery that has already been sent.'
-            );
-            expect(notificationEmail.sendNotificationEmail).not.toHaveBeenCalled();
-        });
-
-        it('re-sends email and updates delivery to SENT with incremented attempts', async () => {
+        it('atomically transitions to PENDING, re-sends email, and updates delivery to SENT', async () => {
+            jest.spyOn(prisma.notificationDelivery, 'updateMany').mockResolvedValue({ count: 1 });
             jest.spyOn(prisma.notificationDelivery, 'findUniqueOrThrow').mockResolvedValue({
                 id: 'del-email-1',
                 channel: 'EMAIL',
-                status: 'FAILED',
+                status: 'PENDING',
                 recipient: 'user@example.com',
                 notification: { title: 'Flight Alert', message: 'Gate changed' },
             } as any);
@@ -409,6 +405,15 @@ describe('NotificationService', () => {
             jest.spyOn(prisma.notificationDelivery, 'update').mockResolvedValue({} as any);
 
             await service.retryDelivery('del-email-1');
+
+            expect(prisma.notificationDelivery.updateMany).toHaveBeenCalledWith({
+                where: { id: 'del-email-1', status: { notIn: ['SENT', 'PENDING'] } },
+                data: expect.objectContaining({
+                    status: 'PENDING',
+                    attempts: { increment: 1 },
+                    lastAttemptAt: expect.any(Date),
+                }),
+            });
 
             expect(notificationEmail.sendNotificationEmail).toHaveBeenCalledWith({
                 to: 'user@example.com',
@@ -420,16 +425,18 @@ describe('NotificationService', () => {
                 where: { id: 'del-email-1' },
                 data: expect.objectContaining({
                     status: 'SENT',
-                    attempts: { increment: 1 },
+                    sentAt: expect.any(Date),
                     error: null,
                 }),
             });
         });
 
         it('updates delivery to FAILED and re-throws error if retry fails', async () => {
+            jest.spyOn(prisma.notificationDelivery, 'updateMany').mockResolvedValue({ count: 1 });
             jest.spyOn(prisma.notificationDelivery, 'findUniqueOrThrow').mockResolvedValue({
                 id: 'del-email-fail',
                 channel: 'EMAIL',
+                status: 'PENDING',
                 recipient: 'user@example.com',
                 notification: { title: 'Flight Alert', message: 'Gate changed' },
             } as any);
@@ -444,7 +451,6 @@ describe('NotificationService', () => {
                 data: expect.objectContaining({
                     status: 'FAILED',
                     error: 'SMTP down',
-                    attempts: { increment: 1 },
                 }),
             });
         });

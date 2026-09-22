@@ -225,4 +225,56 @@ describe('AdminNotificationDeliveriesClient', () => {
             );
         });
     });
+
+    it('renders pagination controls and navigates between pages', async () => {
+        (actions.getAdminNotificationDeliveriesAction as jest.Mock).mockResolvedValue({
+            ok: true,
+            data: {
+                deliveries: [mockDeliveries[0]],
+                totalCount: 120,
+            },
+        });
+
+        render(
+            <AdminNotificationDeliveriesClient
+                initialDeliveries={mockDeliveries as any}
+                totalCount={120}
+            />
+        );
+
+        expect(screen.getByText('Page 1 of 3')).toBeInTheDocument();
+        const prevButton = screen.getByRole('button', { name: /Previous page/i });
+        const nextButton = screen.getByRole('button', { name: /Next page/i });
+
+        expect(prevButton).toBeDisabled();
+        expect(nextButton).not.toBeDisabled();
+
+        fireEvent.click(nextButton);
+
+        await waitFor(() => {
+            expect(actions.getAdminNotificationDeliveriesAction).toHaveBeenCalledWith(
+                expect.objectContaining({ page: 2, pageSize: 50 })
+            );
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('Page 2 of 3')).toBeInTheDocument();
+        });
+
+        (actions.getAdminNotificationDeliveriesAction as jest.Mock).mockResolvedValueOnce({
+            ok: true,
+            data: {
+                deliveries: [mockDeliveries[1]],
+                totalCount: 120,
+            },
+        });
+
+        fireEvent.click(prevButton);
+
+        await waitFor(() => {
+            expect(actions.getAdminNotificationDeliveriesAction).toHaveBeenCalledWith(
+                expect.objectContaining({ page: 1, pageSize: 50 })
+            );
+        });
+    });
 });

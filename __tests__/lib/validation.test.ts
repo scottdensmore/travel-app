@@ -1145,6 +1145,14 @@ describe('notification validation schemas', () => {
 
         // Min 1 required
         expect(updateNotificationPreferencesSchema.safeParse([]).success).toBe(false);
+
+        // Max 10 allowed
+        const elevenItems = Array(11).fill({
+            category: 'FLIGHT_STATUS',
+            channel: 'IN_APP',
+            enabled: true,
+        });
+        expect(updateNotificationPreferencesSchema.safeParse(elevenItems).success).toBe(false);
     });
 
     it('validates adminNotificationDeliveriesQuerySchema with defaults and bounds', () => {
