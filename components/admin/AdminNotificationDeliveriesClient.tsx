@@ -254,6 +254,7 @@ export default function AdminNotificationDeliveriesClient({
                     <div className="flex flex-1 min-w-[240px] items-center gap-2">
                         <input
                             type="text"
+                            aria-label="Search notification deliveries"
                             placeholder="Search by recipient, error, title, message..."
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}

@@ -81,8 +81,26 @@ export interface ExportedUserData {
         title: string;
         message: string;
         type: string;
+        category?: string | null;
         isRead: boolean;
         createdAt: Date;
+        deliveries?: Array<{
+            id: string;
+            channel: string;
+            status: string;
+            recipient: string;
+            attempts: number;
+            lastAttemptAt: Date | null;
+            error: string | null;
+            createdAt: Date;
+        }>;
+    }>;
+    notificationPreferences: Array<{
+        category: string;
+        channel: string;
+        enabled: boolean;
+        createdAt: Date;
+        updatedAt: Date;
     }>;
     favorites: Array<{
         id: string;
@@ -302,8 +320,22 @@ export async function exportUserData(userId: string): Promise<ExportedUserData> 
             title: true,
             message: true,
             type: true,
+            category: true,
             isRead: true,
             createdAt: true,
+            deliveries: {
+                orderBy: { createdAt: 'desc' },
+                select: {
+                    id: true,
+                    channel: true,
+                    status: true,
+                    recipient: true,
+                    attempts: true,
+                    lastAttemptAt: true,
+                    error: true,
+                    createdAt: true,
+                },
+            },
         },
     });
 
@@ -323,6 +355,18 @@ export async function exportUserData(userId: string): Promise<ExportedUserData> 
         },
     });
 
+    const notificationPreferences = await prisma.notificationPreference.findMany({
+        where: { userId },
+        orderBy: [{ category: 'asc' }, { channel: 'asc' }],
+        select: {
+            category: true,
+            channel: true,
+            enabled: true,
+            createdAt: true,
+            updatedAt: true,
+        },
+    });
+
     const exportData: ExportedUserData = {
         user: {
             id: user.id,
@@ -337,6 +381,7 @@ export async function exportUserData(userId: string): Promise<ExportedUserData> 
         reviews,
         notifications,
         favorites,
+        notificationPreferences,
         pointsActivity: {
             currentPoints,
             currentStatus,
@@ -426,7 +471,7 @@ export interface DeleteUserAccountResult {
  * - Anonymizes passenger names on bookings.
  * - Scrambles/nullifies email, name, personal identifiers; increments authVersion to invalidate JWT sessions.
  * - Deletes active database sessions and OAuth accounts.
- * - Cleans up user favorites and notifications.
+ * - Cleans up user favorites, notifications, and notification preferences.
  */
 export async function deleteUserAccount(
     userId: string,
@@ -479,9 +524,10 @@ export async function deleteUserAccount(
     await prisma.session.deleteMany({ where: { userId } });
     await prisma.account.deleteMany({ where: { userId } });
 
-    // 6. Delete personal favorites and notifications
+    // 6. Delete personal favorites, notifications, and notification preferences
     await prisma.userFavorite.deleteMany({ where: { userId } });
     await prisma.notification.deleteMany({ where: { userId } });
+    await prisma.notificationPreference.deleteMany({ where: { userId } });
 
     return {
         success: true,

@@ -20,7 +20,7 @@ describe('Notification Preferences & Deliveries Database Constraints', () => {
     });
 
     it('enforces unique constraint on (userId, category, channel)', async () => {
-        await (prisma as any).notificationPreference.create({
+        await prisma.notificationPreference.create({
             data: {
                 userId: testUserId,
                 category: 'FLIGHT_STATUS',
@@ -30,7 +30,7 @@ describe('Notification Preferences & Deliveries Database Constraints', () => {
         });
 
         await expect(
-            (prisma as any).notificationPreference.create({
+            prisma.notificationPreference.create({
                 data: {
                     userId: testUserId,
                     category: 'FLIGHT_STATUS',
@@ -49,7 +49,7 @@ describe('Notification Preferences & Deliveries Database Constraints', () => {
             },
         });
 
-        const pref = await (prisma as any).notificationPreference.create({
+        const pref = await prisma.notificationPreference.create({
             data: {
                 userId: tempUser.id,
                 category: 'ACCOUNT_ACTIVITY',
@@ -65,10 +65,10 @@ describe('Notification Preferences & Deliveries Database Constraints', () => {
                 message: 'Will be deleted',
                 type: 'SYSTEM',
                 category: 'ACCOUNT_ACTIVITY',
-            } as any,
+            },
         });
 
-        const delivery = await (prisma as any).notificationDelivery.create({
+        const delivery = await prisma.notificationDelivery.create({
             data: {
                 notificationId: notif.id,
                 channel: 'IN_APP',
@@ -79,9 +79,9 @@ describe('Notification Preferences & Deliveries Database Constraints', () => {
 
         await prisma.user.delete({ where: { id: tempUser.id } });
 
-        const prefAfter = await (prisma as any).notificationPreference.findUnique({ where: { id: pref.id } });
+        const prefAfter = await prisma.notificationPreference.findUnique({ where: { id: pref.id } });
         const notifAfter = await prisma.notification.findUnique({ where: { id: notif.id } });
-        const deliveryAfter = await (prisma as any).notificationDelivery.findUnique({ where: { id: delivery.id } });
+        const deliveryAfter = await prisma.notificationDelivery.findUnique({ where: { id: delivery.id } });
 
         expect(prefAfter).toBeNull();
         expect(notifAfter).toBeNull();
