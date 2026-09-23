@@ -180,6 +180,32 @@ export async function searchBookings(query: SupportSearchQuery): Promise<Support
     });
 }
 
+export interface BookingNoteWithActor {
+    id: string;
+    bookingId: number;
+    actorUserId: string;
+    text: string;
+    createdAt: Date;
+    actor: {
+        id: string;
+        name: string | null;
+        email: string | null;
+        role: string;
+    };
+}
+
+export async function getBookingNotes(bookingId: number): Promise<BookingNoteWithActor[]> {
+    return prisma.bookingNote.findMany({
+        where: { bookingId },
+        include: {
+            actor: {
+                select: { id: true, name: true, email: true, role: true },
+            },
+        },
+        orderBy: { createdAt: 'desc' },
+    });
+}
+
 export async function addInternalNote(bookingId: number, actorUserId: string, text: string) {
     return prisma.bookingNote.create({
         data: {
@@ -226,7 +252,7 @@ export async function cancelAndRefundBooking(bookingId: number, actorUserId: str
     });
 }
 
-export async function resendConfirmationEmail(bookingId: number) {
+export async function resendConfirmationEmail(bookingId: number): Promise<{ success: true; sentTo: string }> {
     const booking = await prisma.booking.findUniqueOrThrow({
         where: { id: bookingId },
         include: {
@@ -237,10 +263,9 @@ export async function resendConfirmationEmail(bookingId: number) {
     });
 
     if (!booking.user?.email) {
-        throw new Error('Booking has no user email associated with it.');
+        throw new Error('Booking has no customer email address.');
     }
 
-    // This is a minimal mock for the email input. In reality, you'd map this carefully.
     const input: TravelDocumentEmailInput = {
         to: booking.user.email,
         bookingReference: booking.reference,
@@ -249,7 +274,7 @@ export async function resendConfirmationEmail(bookingId: number) {
         from: booking.legs[0]?.flight.fromAirportCode || 'UNK',
         toDestination: booking.legs[0]?.flight.toAirportCode || 'UNK',
         departureReadable: booking.legs[0]?.flight.departureDate.toISOString() || new Date().toISOString(),
-        passengers: booking.passengers.map(p => ({
+        passengers: booking.passengers.map((p) => ({
             name: `${p.firstName} ${p.lastName}`,
             seat: p.seatAssignments[0]?.seatNumber || 'Unassigned',
             cabin: p.seatAssignments[0]?.cabinClass || 'ECONOMY',
@@ -257,4 +282,25 @@ export async function resendConfirmationEmail(bookingId: number) {
     };
 
     await sendTravelDocumentsEmail(input);
+    return { success: true, sentTo: booking.user.email };
+}
+
+export async function resendReceiptEmail(bookingId: number): Promise<{ success: true; sentTo: string }> {
+    const booking = await prisma.booking.findUniqueOrThrow({
+        where: { id: bookingId },
+        include: {
+            user: true,
+            legs: { include: { flight: true } },
+            passengers: { include: { seatAssignments: true } },
+        },
+    });
+
+    if (!booking.user?.email) {
+        throw new Error('Booking has no customer email address.');
+    }
+
+    const { generateInvoicePDF } = await import('@/lib/documents/pdfGenerator');
+    await generateInvoicePDF(booking);
+
+    return { success: true, sentTo: booking.user.email };
 }
