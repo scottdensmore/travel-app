@@ -10,6 +10,7 @@ declare module 'next-auth' {
             role: Role;
             staffMfaVerified: boolean;
             staffMfaEnrollmentRequired: boolean;
+            staffMfaStepUpVerifiedAt?: number;
         } & NonNullable<DefaultSession['user']>;
     }
 
@@ -20,6 +21,7 @@ declare module 'next-auth' {
         staffMfaVerified: boolean;
         staffMfaEnrollmentRequired: boolean;
         staffMfaVerifiedAt?: number;
+        staffMfaStepUpVerifiedAt?: number;
     }
 }
 
@@ -32,5 +34,7 @@ declare module 'next-auth/jwt' {
         staffMfaVerified: boolean;
         staffMfaEnrollmentRequired: boolean;
         staffMfaVerifiedAt?: number;
+        staffMfaStepUpVerifiedAt?: number;
     }
 }
+

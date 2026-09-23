@@ -5,7 +5,16 @@ import {
     randomBytes,
     timingSafeEqual,
 } from 'node:crypto';
+import { Session } from 'next-auth';
+import { Role } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { StaffPermission } from './staffPermissions';
+import { hasStaffPermission } from './staffAuthorization';
+
+export { hasVerifiedStaffAccess } from './staffAuthorization';
+
+
+
 
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 const ALGORITHM = 'aes-256-gcm';
@@ -220,12 +229,6 @@ export async function verifyAndConsumeStaffTotp(
     }
 }
 
-export { hasVerifiedStaffAccess } from './staffAuthorization';
-import { Session } from 'next-auth';
-import { Role } from '@prisma/client';
-import { StaffPermission } from './staffPermissions';
-import { hasStaffPermission } from './staffAuthorization';
-
 export class StaffUnauthorizedError extends Error {
     constructor(message = 'Unauthorized staff operation.') {
         super(message);
@@ -269,7 +272,7 @@ export async function assertPrivilegedStaffOperation(options: {
         };
     }
 
-    const stepUpVerifiedAt = (session.user as { staffMfaStepUpVerifiedAt?: number }).staffMfaStepUpVerifiedAt;
+    const stepUpVerifiedAt = session.user.staffMfaStepUpVerifiedAt;
     const isWithinWindow = stepUpVerifiedAt && (Date.now() - stepUpVerifiedAt < maxStepUpAgeMs);
 
     if (!isWithinWindow) {
