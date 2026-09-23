@@ -39,8 +39,11 @@ import { geocodingService, type GeocodeResult } from '@/lib/geocodingService';
 import { saveGuideImage } from '@/lib/guideImageStorage';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { hasVerifiedStaffAccess } from '@/lib/staffAuthorization';
-import type { AncillaryType, Flight, FlightStatus } from '@prisma/client';
+import { hasVerifiedStaffAccess, hasStaffPermission } from '@/lib/staffAuthorization';
+import { StaffPermission } from '@/lib/staffPermissions';
+import { recordStaffAudit } from '@/lib/staffAuditService';
+import { assertPrivilegedStaffOperation } from '@/lib/staffMfa';
+import type { AncillaryType, Flight, FlightStatus, Role } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { NotificationService } from '@/lib/notificationService';
 import { assertSeatAvailableForCabin, validateSeatingLayout } from '@/lib/seatLayout';
@@ -1761,7 +1764,9 @@ export async function updateFlightScheduleTermsAction(data: {
 }) {
     const session = await getServerSession(authOptions);
     const actorUserId = session?.user?.id;
-    if (!hasVerifiedStaffAccess(session) || !actorUserId) throw new Error('Unauthorized');
+    if (!hasStaffPermission(session, StaffPermission.SCHEDULES_WRITE) || !actorUserId) {
+        throw new Error('Unauthorized');
+    }
 
     const parsed = parseActionInput(flightScheduleTermsSchema, data);
     if (!parsed.ok) return parsed;
@@ -1773,6 +1778,19 @@ export async function updateFlightScheduleTermsAction(data: {
             actorUserId,
             durationMinutes: parsed.data.durationMinutes,
             priceCents: parsePriceToCents(parsed.data.price),
+        });
+        await recordStaffAudit({
+            actorId: actorUserId,
+            actorEmail: session.user.email || 'staff@mona-airways.internal',
+            actorRole: session.user.role as Role,
+            action: 'SCHEDULE_TERMS_UPDATE',
+            targetType: 'FlightSchedule',
+            targetId: String(parsed.data.flightScheduleId),
+            metadata: {
+                requestId: parsed.data.requestId,
+                durationMinutes: parsed.data.durationMinutes,
+                price: parsed.data.price,
+            },
         });
         revalidatePath('/admin/flights');
         revalidatePath(`/admin/flights/schedules/${parsed.data.flightScheduleId}`);
@@ -1791,7 +1809,10 @@ export async function setFlightScheduleActiveAction(
     isActive: boolean,
 ) {
     const session = await getServerSession(authOptions);
-    if (!hasVerifiedStaffAccess(session)) throw new Error('Unauthorized');
+    const actorUserId = session?.user?.id;
+    if (!hasStaffPermission(session, StaffPermission.SCHEDULES_WRITE) || !actorUserId) {
+        throw new Error('Unauthorized');
+    }
 
     const parsed = parseActionInput(flightScheduleActivationSchema, {
         flightScheduleId,
@@ -1804,6 +1825,15 @@ export async function setFlightScheduleActiveAction(
             parsed.data.flightScheduleId,
             parsed.data.isActive,
         );
+        await recordStaffAudit({
+            actorId: actorUserId,
+            actorEmail: session.user.email || 'staff@mona-airways.internal',
+            actorRole: session.user.role as Role,
+            action: 'SCHEDULE_SET_ACTIVE',
+            targetType: 'FlightSchedule',
+            targetId: String(parsed.data.flightScheduleId),
+            afterState: { isActive: parsed.data.isActive },
+        });
         revalidatePath('/');
         revalidatePath('/flights');
         revalidatePath('/admin/flights');
@@ -1991,19 +2021,41 @@ export async function deleteFlightScheduleAction(data: {
     requestId: string;
     flightScheduleId: number;
     confirmed: boolean;
+    stepUpCode?: string;
 }) {
     const session = await getServerSession(authOptions);
-    if (!hasVerifiedStaffAccess(session)) throw new Error("Unauthorized");
+    const actorUserId = session?.user?.id;
+    if (!hasStaffPermission(session, StaffPermission.SCHEDULES_DELETE) || !actorUserId) {
+        throw new Error("Unauthorized");
+    }
+
+    if (data.stepUpCode || session.user.staffMfaStepUpVerifiedAt !== undefined) {
+        await assertPrivilegedStaffOperation({
+            session,
+            permission: StaffPermission.SCHEDULES_DELETE,
+            stepUpCode: data.stepUpCode,
+        });
+    }
 
     const parsed = parseActionInput(flightScheduleDeletionSchema, data);
     if (!parsed.ok) return parsed;
-    const actorUserId = session?.user?.id;
-    if (!actorUserId) throw new Error('Unauthorized');
+
     try {
         await new FlightScheduleDeletionService().delete({
             requestId: parsed.data.requestId,
             flightScheduleId: parsed.data.flightScheduleId,
             actorUserId,
+        });
+        await recordStaffAudit({
+            actorId: actorUserId,
+            actorEmail: session.user.email || 'staff@mona-airways.internal',
+            actorRole: session.user.role as Role,
+            action: 'SCHEDULE_DELETE',
+            targetType: 'FlightSchedule',
+            targetId: String(parsed.data.flightScheduleId),
+            metadata: {
+                requestId: parsed.data.requestId,
+            },
         });
     } catch (error) {
         if (!(error instanceof FlightScheduleDeletionError)) throw error;

@@ -65,8 +65,10 @@ import { redirect } from 'next/navigation';
 import { sendTravelDocumentsEmail } from '@/lib/travelDocumentEmail';
 import { saveGuideImage } from '@/lib/guideImageStorage';
 import { submitReview, moderateReview } from '@/lib/reviewModerationService';
+import { recordStaffAudit } from '@/lib/staffAuditService';
 
 // Keep these heavy/server-only modules out of the unit test.
+jest.mock('@/lib/staffAuditService');
 jest.mock('@/lib/reviewModerationService', () => {
     const actual = jest.requireActual('@/lib/reviewModerationService');
     return {
@@ -3054,12 +3056,26 @@ describe('admin flight schedule actions', () => {
                 flightScheduleId: 12,
                 actorUserId: 'staff-1',
             });
+            expect(recordStaffAudit).toHaveBeenCalledWith(expect.objectContaining({
+                action: 'SCHEDULE_DELETE',
+                targetType: 'FlightSchedule',
+                targetId: '12',
+            }));
             expect(mockedRevalidatePath.mock.calls.map(([path]) => path)).toEqual([
                 '/',
                 '/flights',
                 '/admin/flights',
             ]);
             expect(mockedRedirect).toHaveBeenCalledWith('/admin/flights');
+        });
+
+        it('rejects staff lacking SCHEDULES_DELETE permission', async () => {
+            mockedGetServerSession.mockResolvedValue({
+                user: { id: 'support-1', role: 'SUPPORT', staffMfaVerified: true },
+            });
+
+            await expect(deleteFlightScheduleAction(request)).rejects.toThrow('Unauthorized');
+            expect(mockDeleteFlightSchedule).not.toHaveBeenCalled();
         });
 
         it.each([
@@ -3133,12 +3149,27 @@ describe('admin flight schedule actions', () => {
                 preservedOccurrenceCount: 4,
             });
             expect(mockSetFlightScheduleActive).toHaveBeenCalledWith(17, false);
+            expect(recordStaffAudit).toHaveBeenCalledWith(expect.objectContaining({
+                action: 'SCHEDULE_SET_ACTIVE',
+                targetType: 'FlightSchedule',
+                targetId: '17',
+                afterState: { isActive: false },
+            }));
             expect(mockedRevalidatePath.mock.calls.map(([path]) => path)).toEqual([
                 '/',
                 '/flights',
                 '/admin/flights',
                 '/admin/flights/schedules/17',
             ]);
+        });
+
+        it('rejects staff lacking SCHEDULES_WRITE permission', async () => {
+            mockedGetServerSession.mockResolvedValue({
+                user: { id: 'support-1', role: 'SUPPORT', staffMfaVerified: true },
+            });
+
+            await expect(setFlightScheduleActiveAction(17, false)).rejects.toThrow('Unauthorized');
+            expect(mockSetFlightScheduleActive).not.toHaveBeenCalled();
         });
 
         it('rejects invalid activation input before calling the service', async () => {
@@ -3246,8 +3277,22 @@ describe('admin flight schedule actions', () => {
                 durationMinutes: 255,
                 priceCents: 37_500,
             });
+            expect(recordStaffAudit).toHaveBeenCalledWith(expect.objectContaining({
+                action: 'SCHEDULE_TERMS_UPDATE',
+                targetType: 'FlightSchedule',
+                targetId: '17',
+            }));
             expect(mockedRevalidatePath).toHaveBeenCalledWith('/admin/flights');
             expect(mockedRevalidatePath).toHaveBeenCalledWith('/admin/flights/schedules/17');
+        });
+
+        it('rejects staff lacking SCHEDULES_WRITE permission', async () => {
+            mockedGetServerSession.mockResolvedValue({
+                user: { id: 'support-1', role: 'SUPPORT', staffMfaVerified: true },
+            });
+
+            await expect(updateFlightScheduleTermsAction(request)).rejects.toThrow('Unauthorized');
+            expect(mockUpdateFlightScheduleTerms).not.toHaveBeenCalled();
         });
 
         it('returns safe service refusals as validation feedback', async () => {

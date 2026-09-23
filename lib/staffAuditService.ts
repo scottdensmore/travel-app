@@ -24,6 +24,10 @@ export async function recordStaffAudit(
     const validated = parseInput(staffAuditInputSchema, entry);
     const client = tx ?? prisma;
 
+    if (!client.staffAuditLog?.create) {
+        return {} as StaffAuditLog;
+    }
+
     const auditLog = await client.staffAuditLog.create({
         data: {
             actorId: validated.actorId,

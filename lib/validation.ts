@@ -323,6 +323,7 @@ export const flightScheduleDeletionSchema = z.object({
     requestId: z.uuid('Schedule deletion request ID must be a UUID.'),
     flightScheduleId: positiveId('Schedule ID'),
     confirmed: z.boolean().refine(confirmed => confirmed, 'Confirm permanent deletion.'),
+    stepUpCode: z.string().optional(),
 }).strict();
 
 const seatNumberSchema = requiredText('Seat number', 6)
