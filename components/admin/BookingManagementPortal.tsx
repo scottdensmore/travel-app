@@ -17,7 +17,7 @@ type Props = {
     searchAction: (query: { reference?: string; emailOrName?: string; flightNumber?: string; status?: BookingStatus }) => Promise<BookingResult[]>;
     cancelAction: (bookingId: number, reason: string) => Promise<void>;
     noteAction: (bookingId: number, note: string) => Promise<void>;
-    emailAction: (bookingId: number) => Promise<void>;
+    emailAction: (bookingId: number) => Promise<unknown>;
 };
 
 export default function BookingManagementPortal({ initialBookings, searchAction, cancelAction, noteAction, emailAction }: Props) {
