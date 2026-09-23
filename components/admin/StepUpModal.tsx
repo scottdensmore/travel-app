@@ -40,8 +40,10 @@ export default function StepUpModal({
 
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
-                e.preventDefault();
-                onClose();
+                if (!isSubmitting) {
+                    e.preventDefault();
+                    onClose();
+                }
                 return;
             }
 
@@ -74,13 +76,13 @@ export default function StepUpModal({
         return () => {
             document.removeEventListener('keydown', handleKeyDown);
         };
-    }, [isOpen, onClose]);
+    }, [isOpen, onClose, isSubmitting]);
 
     if (!isOpen) return null;
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (code.trim().length > 0) {
+        if (code.trim().length === 6 && !isSubmitting) {
             onSubmit(code.trim());
         }
     };

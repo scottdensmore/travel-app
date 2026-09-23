@@ -80,7 +80,7 @@ describe('/admin/users page', () => {
         (hasStaffPermission as jest.Mock).mockReturnValue(true);
 
         const mockUsers = [
-            { id: 'u1', name: 'User 1', email: 'u1@example.com', role: 'ADMIN', createdAt: new Date() },
+            { id: 'u1', name: 'User 1', email: 'u1@example.com', role: 'ADMIN' },
         ];
         (prisma.user.findMany as jest.Mock).mockResolvedValue(mockUsers);
 

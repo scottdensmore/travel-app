@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import StepUpModal from './StepUpModal';
 import { updateUserRoleAction } from '@/app/actions/userRoleActions';
 import { Role } from '@prisma/client';
@@ -33,6 +33,8 @@ export default function UserRoleManagementClient({
     } | null>(null);
     const [reason, setReason] = useState<string>('');
     const [reasonError, setReasonError] = useState<string | null>(null);
+    const reasonModalRef = useRef<HTMLDivElement | null>(null);
+    const reasonInputRef = useRef<HTMLTextAreaElement | null>(null);
 
     // Step-up modal state
     const [isStepUpOpen, setIsStepUpOpen] = useState<boolean>(false);
@@ -57,10 +59,57 @@ export default function UserRoleManagementClient({
     };
 
     const handleCancelPending = () => {
+        setIsStepUpOpen(false);
         setPendingChange(null);
         setReason('');
         setReasonError(null);
+        setStepUpError(null);
     };
+
+    useEffect(() => {
+        if (pendingChange && !isStepUpOpen) {
+            setTimeout(() => {
+                reasonInputRef.current?.focus();
+            }, 50);
+
+            const handleKeyDown = (e: KeyboardEvent) => {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    handleCancelPending();
+                    return;
+                }
+
+                if (e.key !== 'Tab' || !reasonModalRef.current) return;
+
+                const focusableElements = Array.from(
+                    reasonModalRef.current.querySelectorAll<HTMLElement>(
+                        'button:not(:disabled), textarea:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])'
+                    )
+                );
+                if (focusableElements.length === 0) return;
+
+                const firstElement = focusableElements[0];
+                const lastElement = focusableElements[focusableElements.length - 1];
+
+                if (e.shiftKey) {
+                    if (document.activeElement === firstElement || !reasonModalRef.current.contains(document.activeElement)) {
+                        e.preventDefault();
+                        lastElement.focus();
+                    }
+                } else {
+                    if (document.activeElement === lastElement || !reasonModalRef.current.contains(document.activeElement)) {
+                        e.preventDefault();
+                        firstElement.focus();
+                    }
+                }
+            };
+
+            document.addEventListener('keydown', handleKeyDown);
+            return () => {
+                document.removeEventListener('keydown', handleKeyDown);
+            };
+        }
+    }, [pendingChange, isStepUpOpen]);
 
     const handleContinueToStepUp = (e: React.FormEvent) => {
         e.preventDefault();
@@ -200,9 +249,6 @@ export default function UserRoleManagementClient({
                                 <th style={{ padding: '12px 16px', color: '#a78bfa', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                                     Current Role
                                 </th>
-                                <th style={{ padding: '12px 16px', color: '#a78bfa', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                    Registered
-                                </th>
                                 <th style={{ padding: '12px 16px', color: '#a78bfa', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>
                                     Modify Role
                                 </th>
@@ -238,9 +284,6 @@ export default function UserRoleManagementClient({
                                                 {user.role}
                                             </span>
                                         </td>
-                                        <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.6)' }}>
-                                            {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—'}
-                                        </td>
                                         <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                                             <select
                                                 aria-label={`Change role for ${user.email}`}
@@ -268,7 +311,7 @@ export default function UserRoleManagementClient({
                             })}
                             {filteredUsers.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} style={{ padding: '36px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.4)' }}>
+                                    <td colSpan={4} style={{ padding: '36px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.4)' }}>
                                         No users found matching &quot;{search}&quot;.
                                     </td>
                                 </tr>
@@ -302,6 +345,7 @@ export default function UserRoleManagementClient({
                     }}
                 >
                     <div
+                        ref={reasonModalRef}
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="role-reason-title"
@@ -370,6 +414,7 @@ export default function UserRoleManagementClient({
                                 </label>
                                 <textarea
                                     id="role-change-reason"
+                                    ref={reasonInputRef}
                                     rows={3}
                                     placeholder="Explain the justification for this role assignment..."
                                     value={reason}
@@ -433,7 +478,7 @@ export default function UserRoleManagementClient({
                     isOpen={isStepUpOpen}
                     title="Authorize Role Change"
                     description={`Enter 6-digit TOTP code to confirm updating role for ${pendingChange.user.email} to ${pendingChange.newRole}.`}
-                    onClose={() => setIsStepUpOpen(false)}
+                    onClose={handleCancelPending}
                     onSubmit={handleStepUpSubmit}
                     error={stepUpError}
                     isSubmitting={isSubmitting}

@@ -56,4 +56,40 @@ describe('StepUpModal', () => {
         fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
         expect(handleClose).toHaveBeenCalledTimes(2);
     });
+
+    it('does not submit code when fewer than 6 digits are entered and form submitted', () => {
+        const handleSubmit = jest.fn();
+        render(
+            <StepUpModal
+                isOpen={true}
+                title="Authorize Action"
+                description="Enter 6-digit code"
+                onClose={jest.fn()}
+                onSubmit={handleSubmit}
+            />
+        );
+
+        const input = screen.getByLabelText(/security code/i);
+        fireEvent.change(input, { target: { value: '123' } });
+        fireEvent.submit(input.closest('form')!);
+
+        expect(handleSubmit).not.toHaveBeenCalled();
+    });
+
+    it('does not close on Escape key when isSubmitting is true', () => {
+        const handleClose = jest.fn();
+        render(
+            <StepUpModal
+                isOpen={true}
+                title="Authorize Action"
+                description="Enter 6-digit code"
+                onClose={handleClose}
+                onSubmit={jest.fn()}
+                isSubmitting={true}
+            />
+        );
+
+        fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+        expect(handleClose).not.toHaveBeenCalled();
+    });
 });
