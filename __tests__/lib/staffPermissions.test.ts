@@ -14,6 +14,7 @@ describe('Staff Permissions Matrix', () => {
     it('grants SUPPORT bookings, notifications, and user read permissions only', () => {
         expect(ROLE_PERMISSIONS.SUPPORT).toContain(StaffPermission.BOOKINGS_READ);
         expect(ROLE_PERMISSIONS.SUPPORT).toContain(StaffPermission.BOOKINGS_WRITE);
+        expect(ROLE_PERMISSIONS.SUPPORT).toContain(StaffPermission.BOOKINGS_WRITE_NOTES);
         expect(ROLE_PERMISSIONS.SUPPORT).toContain(StaffPermission.BOOKINGS_REFUND);
         expect(ROLE_PERMISSIONS.SUPPORT).toContain(StaffPermission.BOOKINGS_CANCEL);
         expect(ROLE_PERMISSIONS.SUPPORT).toContain(StaffPermission.NOTIFICATIONS_READ);

@@ -2,7 +2,8 @@ import React from 'react';
 import { getServerSession } from 'next-auth';
 import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
-import { hasVerifiedStaffAccess } from '@/lib/staffAuthorization';
+import { hasStaffPermission } from '@/lib/staffAuthorization';
+import { StaffPermission } from '@/lib/staffPermissions';
 import { prisma } from '@/lib/prisma';
 import AdminNotificationDeliveriesClient from '@/components/admin/AdminNotificationDeliveriesClient';
 import Link from 'next/link';
@@ -11,8 +12,9 @@ export const dynamic = 'force-dynamic';
 
 export default async function AdminNotificationsPage() {
     const session = await getServerSession(authOptions);
-    if (!hasVerifiedStaffAccess(session)) {
-        redirect('/login');
+    if (!hasStaffPermission(session, StaffPermission.NOTIFICATIONS_READ)) {
+        redirect(session ? '/admin' : '/login');
+        return null;
     }
 
     const [totalCount, sentCount, failedCount, pendingCount, initialDeliveries] = await Promise.all([

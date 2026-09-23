@@ -5,7 +5,8 @@ import AdminNotificationsPage from '@/app/admin/notifications/page';
 import AdminNotificationDeliveriesClient from '@/components/admin/AdminNotificationDeliveriesClient';
 import { getServerSession } from 'next-auth';
 import { redirect } from 'next/navigation';
-import { hasVerifiedStaffAccess } from '@/lib/staffAuthorization';
+import { hasStaffPermission } from '@/lib/staffAuthorization';
+import { StaffPermission } from '@/lib/staffPermissions';
 import { prisma } from '@/lib/prisma';
 
 jest.mock('next-auth', () => ({
@@ -21,7 +22,7 @@ jest.mock('@/lib/auth', () => ({
 }));
 
 jest.mock('@/lib/staffAuthorization', () => ({
-    hasVerifiedStaffAccess: jest.fn(),
+    hasStaffPermission: jest.fn(),
 }));
 
 jest.mock('@/lib/prisma', () => ({
@@ -58,18 +59,31 @@ describe('/admin/notifications page', () => {
         jest.clearAllMocks();
     });
 
-    it('redirects to /login if user is not verified staff', async () => {
+    it('redirects to /login if user is not authenticated', async () => {
         (getServerSession as jest.Mock).mockResolvedValue(null);
-        (hasVerifiedStaffAccess as jest.Mock).mockReturnValue(false);
+        (hasStaffPermission as jest.Mock).mockReturnValue(false);
 
         await AdminNotificationsPage();
 
+        expect(hasStaffPermission).toHaveBeenCalledWith(null, StaffPermission.NOTIFICATIONS_READ);
         expect(redirect).toHaveBeenCalledWith('/login');
     });
 
-    it('loads initial deliveries and counts, then renders AdminNotificationDeliveriesClient', async () => {
-        (getServerSession as jest.Mock).mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
-        (hasVerifiedStaffAccess as jest.Mock).mockReturnValue(true);
+    it('redirects to /admin if authenticated staff lacks NOTIFICATIONS_READ permission', async () => {
+        const session = { user: { role: 'MODERATOR', staffMfaVerified: true } };
+        (getServerSession as jest.Mock).mockResolvedValue(session);
+        (hasStaffPermission as jest.Mock).mockReturnValue(false);
+
+        await AdminNotificationsPage();
+
+        expect(hasStaffPermission).toHaveBeenCalledWith(session, StaffPermission.NOTIFICATIONS_READ);
+        expect(redirect).toHaveBeenCalledWith('/admin');
+    });
+
+    it('loads initial deliveries and counts, then renders AdminNotificationDeliveriesClient when user has NOTIFICATIONS_READ', async () => {
+        const session = { user: { role: 'ADMIN', staffMfaVerified: true } };
+        (getServerSession as jest.Mock).mockResolvedValue(session);
+        (hasStaffPermission as jest.Mock).mockReturnValue(true);
 
         const mockDeliveries = [
             {
@@ -99,6 +113,7 @@ describe('/admin/notifications page', () => {
         const result = await AdminNotificationsPage();
         const clientComponent = findElement(result, AdminNotificationDeliveriesClient);
 
+        expect(hasStaffPermission).toHaveBeenCalledWith(session, StaffPermission.NOTIFICATIONS_READ);
         expect(clientComponent).not.toBeNull();
         expect(clientComponent!.props).toMatchObject({
             initialDeliveries: mockDeliveries,

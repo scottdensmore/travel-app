@@ -254,7 +254,7 @@ export async function assertPrivilegedStaffOperation(options: {
     permission: StaffPermission;
     stepUpCode?: string;
     maxStepUpAgeMs?: number;
-}): Promise<{ actorId: string; actorEmail: string; actorRole: Role }> {
+}): Promise<{ actorId: string; userId: string; actorEmail: string; actorRole: Role }> {
     const { session, permission, stepUpCode, maxStepUpAgeMs = 15 * 60 * 1000 } = options;
     if (!session?.user?.id || !session.user.email || !session.user.role || !hasStaffPermission(session, permission)) {
         throw new StaffUnauthorizedError();
@@ -264,6 +264,7 @@ export async function assertPrivilegedStaffOperation(options: {
     if (!isPrivileged) {
         return {
             actorId: session.user.id,
+            userId: session.user.id,
             actorEmail: session.user.email,
             actorRole: session.user.role,
         };
@@ -300,6 +301,7 @@ export async function assertPrivilegedStaffOperation(options: {
 
     return {
         actorId: session.user.id,
+        userId: session.user.id,
         actorEmail: session.user.email,
         actorRole: session.user.role,
     };

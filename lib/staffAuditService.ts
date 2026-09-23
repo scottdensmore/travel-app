@@ -5,6 +5,7 @@ import logger from './logger';
 
 export interface StaffAuditInput {
     actorId: string;
+    actorUserId?: string;
     actorEmail: string;
     actorRole: Role;
     action: string;
@@ -21,7 +22,13 @@ export async function recordStaffAudit(
     entry: StaffAuditInput,
     tx?: Prisma.TransactionClient
 ): Promise<StaffAuditLog> {
-    const validated = parseInput(staffAuditInputSchema, entry);
+    const actorId = entry.actorId || entry.actorUserId || '';
+    const cleanEntry = {
+        ...entry,
+        actorId,
+    };
+    delete (cleanEntry as Record<string, unknown>).actorUserId;
+    const validated = parseInput(staffAuditInputSchema, cleanEntry);
     const client = tx ?? prisma;
 
     if (!client.staffAuditLog?.create) {

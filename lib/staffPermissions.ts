@@ -3,6 +3,7 @@ import { Role } from '@prisma/client';
 export enum StaffPermission {
     BOOKINGS_READ = 'BOOKINGS_READ',
     BOOKINGS_WRITE = 'BOOKINGS_WRITE',
+    BOOKINGS_WRITE_NOTES = 'BOOKINGS_WRITE_NOTES',
     BOOKINGS_REFUND = 'BOOKINGS_REFUND',
     BOOKINGS_CANCEL = 'BOOKINGS_CANCEL',
     SCHEDULES_READ = 'SCHEDULES_READ',
@@ -25,6 +26,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly StaffPermission[]> = {
     SUPPORT: [
         StaffPermission.BOOKINGS_READ,
         StaffPermission.BOOKINGS_WRITE,
+        StaffPermission.BOOKINGS_WRITE_NOTES,
         StaffPermission.BOOKINGS_REFUND,
         StaffPermission.BOOKINGS_CANCEL,
         StaffPermission.NOTIFICATIONS_READ,
