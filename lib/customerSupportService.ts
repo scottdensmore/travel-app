@@ -1,55 +1,182 @@
 import { prisma } from '@/lib/prisma';
-import { BookingStatus } from '@prisma/client';
+import { BookingStatus, Prisma } from '@prisma/client';
 import { sendTravelDocumentsEmail, TravelDocumentEmailInput } from '@/lib/travelDocumentEmail';
 import { heldSeats } from '@/lib/seatOccupancy';
-// We need formatting functions but can just mock the email input for now or fetch basic data.
 
-import { Prisma } from '@prisma/client';
-
-export async function searchBookings(query: {
+export interface SupportSearchQuery {
     reference?: string;
     emailOrName?: string;
     flightNumber?: string;
     status?: BookingStatus;
-}) {
+    dateFrom?: string;
+    dateTo?: string;
+    page?: number;
+    pageSize?: number;
+}
+
+export interface SupportBookingItem {
+    id: number;
+    reference: string;
+    status: BookingStatus;
+    totalPriceCents: number;
+    currency: string;
+    createdAt: Date;
+    user: {
+        id: string;
+        name: string | null;
+        email: string | null;
+    } | null;
+    legs: Array<{
+        id: number;
+        sequence: number;
+        flight: {
+            id: string;
+            flightNumber: string;
+            airline: string;
+            fromAirportCode: string;
+            toAirportCode: string;
+            departureDate: Date;
+            status: string;
+        };
+    }>;
+    passengers: Array<{
+        id: string;
+        firstName: string;
+        lastName: string;
+        seatAssignments: Array<{
+            id: string;
+            flightId: string;
+            seatNumber: string;
+            cabinClass: string;
+            releasedAt: Date | null;
+        }>;
+    }>;
+    notesCount: number;
+}
+
+export interface SupportSearchResult extends Array<SupportBookingItem> {
+    bookings: SupportBookingItem[];
+    totalCount: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+}
+
+export async function searchBookings(query: SupportSearchQuery): Promise<SupportSearchResult> {
+    const page = Math.max(1, query.page ?? 1);
+    const pageSize = Math.max(1, Math.min(100, query.pageSize ?? 25));
+    const skip = (page - 1) * pageSize;
+
     const where: Prisma.BookingWhereInput = {};
 
-    if (query.reference) {
-        where.reference = { contains: query.reference, mode: 'insensitive' };
+    if (query.reference?.trim()) {
+        where.reference = { contains: query.reference.trim(), mode: 'insensitive' };
     }
     if (query.status) {
         where.status = query.status;
     }
-    if (query.emailOrName) {
-        where.user = {
-            OR: [
-                { email: { contains: query.emailOrName, mode: 'insensitive' } },
-                { name: { contains: query.emailOrName, mode: 'insensitive' } },
-            ],
-        };
+    if (query.emailOrName?.trim()) {
+        const term = query.emailOrName.trim();
+        where.OR = [
+            { user: { email: { contains: term, mode: 'insensitive' } } },
+            { user: { name: { contains: term, mode: 'insensitive' } } },
+            { passengers: { some: { firstName: { contains: term, mode: 'insensitive' } } } },
+            { passengers: { some: { lastName: { contains: term, mode: 'insensitive' } } } },
+        ];
     }
-    if (query.flightNumber) {
+
+    const flightConditions: Prisma.FlightWhereInput = {};
+    if (query.flightNumber?.trim()) {
+        flightConditions.flightNumber = { contains: query.flightNumber.trim(), mode: 'insensitive' };
+    }
+    if (query.dateFrom || query.dateTo) {
+        const departureDateFilter: Prisma.DateTimeFilter = {};
+        if (query.dateFrom) {
+            departureDateFilter.gte = new Date(`${query.dateFrom}T00:00:00.000Z`);
+        }
+        if (query.dateTo) {
+            departureDateFilter.lte = new Date(`${query.dateTo}T23:59:59.999Z`);
+        }
+        flightConditions.departureDate = departureDateFilter;
+    }
+
+    if (Object.keys(flightConditions).length > 0) {
         where.legs = {
             some: {
-                flight: {
-                    flightNumber: { contains: query.flightNumber, mode: 'insensitive' },
-                },
+                flight: flightConditions,
             },
         };
     }
 
-    return prisma.booking.findMany({
-        where,
-        include: {
-            user: true,
-            legs: {
-                include: { flight: true },
-                orderBy: { sequence: 'asc' },
+    const [rawBookings, totalCount] = await Promise.all([
+        prisma.booking.findMany({
+            where,
+            include: {
+                user: {
+                    select: { id: true, name: true, email: true },
+                },
+                legs: {
+                    include: { flight: true },
+                    orderBy: { sequence: 'asc' },
+                },
+                passengers: {
+                    include: { seatAssignments: true },
+                },
+                _count: {
+                    select: { notes: true },
+                },
             },
-            passengers: true,
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 50,
+            orderBy: { createdAt: 'desc' },
+            skip,
+            take: pageSize,
+        }),
+        prisma.booking.count({ where }),
+    ]);
+
+    const bookings: SupportBookingItem[] = rawBookings.map((b) => ({
+        id: b.id,
+        reference: b.reference,
+        status: b.status,
+        totalPriceCents: b.totalPriceCents ?? 0,
+        currency: b.currency,
+        createdAt: b.createdAt,
+        user: b.user,
+        legs: b.legs.map((leg) => ({
+            id: leg.id,
+            sequence: leg.sequence,
+            flight: {
+                id: String(leg.flight.id),
+                flightNumber: leg.flight.flightNumber,
+                airline: leg.flight.airline,
+                fromAirportCode: leg.flight.fromAirportCode,
+                toAirportCode: leg.flight.toAirportCode,
+                departureDate: leg.flight.departureDate,
+                status: leg.flight.status,
+            },
+        })),
+        passengers: b.passengers.map((p) => ({
+            id: p.id,
+            firstName: p.firstName,
+            lastName: p.lastName,
+            seatAssignments: p.seatAssignments.map((sa) => ({
+                id: sa.id,
+                flightId: String(sa.flightId),
+                seatNumber: sa.seatNumber,
+                cabinClass: sa.cabinClass,
+                releasedAt: sa.releasedAt,
+            })),
+        })),
+        notesCount: b._count?.notes ?? 0,
+    }));
+
+    const totalPages = Math.ceil(totalCount / pageSize) || 1;
+
+    return Object.assign([...bookings], {
+        bookings,
+        totalCount,
+        page,
+        pageSize,
+        totalPages,
     });
 }
 
