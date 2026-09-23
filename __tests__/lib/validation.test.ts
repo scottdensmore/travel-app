@@ -35,8 +35,7 @@ import {
     notificationPreferenceItemSchema,
     updateNotificationPreferencesSchema,
     adminNotificationDeliveriesQuerySchema,
-    searchMultiCityFlightsSchema,
-    MAX_ITINERARY_LEGS
+    searchMultiCityFlightsSchema
 } from '@/lib/validation';
 
 describe('account timezone validation', () => {

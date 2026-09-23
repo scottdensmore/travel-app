@@ -79,19 +79,19 @@ afterAll(async () => {
                 ],
             },
         });
-        await prisma.itineraryLeg.deleteMany({
-            where: {
-                OR: [
-                    { flightId: { in: created.flightIds } },
-                    { bookingId: { in: created.bookingIds } },
-                ],
-            },
-        });
         await prisma.booking.deleteMany({
             where: {
                 OR: [
                     { userId: { in: created.userIds } },
                     { id: { in: created.bookingIds } },
+                ],
+            },
+        });
+        await prisma.itineraryLeg.deleteMany({
+            where: {
+                OR: [
+                    { flightId: { in: created.flightIds } },
+                    { bookingId: { in: created.bookingIds } },
                 ],
             },
         });
