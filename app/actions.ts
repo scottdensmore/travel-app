@@ -2024,18 +2024,12 @@ export async function deleteFlightScheduleAction(data: {
     stepUpCode?: string;
 }) {
     const session = await getServerSession(authOptions);
-    const actorUserId = session?.user?.id;
-    if (!hasStaffPermission(session, StaffPermission.SCHEDULES_DELETE) || !actorUserId) {
-        throw new Error("Unauthorized");
-    }
-
-    if (data.stepUpCode || session.user.staffMfaStepUpVerifiedAt !== undefined) {
-        await assertPrivilegedStaffOperation({
-            session,
-            permission: StaffPermission.SCHEDULES_DELETE,
-            stepUpCode: data.stepUpCode,
-        });
-    }
+    const actor = await assertPrivilegedStaffOperation({
+        session,
+        permission: StaffPermission.SCHEDULES_DELETE,
+        stepUpCode: data.stepUpCode,
+    });
+    const actorUserId = actor.actorId;
 
     const parsed = parseActionInput(flightScheduleDeletionSchema, data);
     if (!parsed.ok) return parsed;
@@ -2047,9 +2041,9 @@ export async function deleteFlightScheduleAction(data: {
             actorUserId,
         });
         await recordStaffAudit({
-            actorId: actorUserId,
-            actorEmail: session.user.email || 'staff@mona-airways.internal',
-            actorRole: session.user.role as Role,
+            actorId: actor.actorId,
+            actorEmail: actor.actorEmail,
+            actorRole: actor.actorRole,
             action: 'SCHEDULE_DELETE',
             targetType: 'FlightSchedule',
             targetId: String(parsed.data.flightScheduleId),

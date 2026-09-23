@@ -52,7 +52,7 @@ export async function purgeExpiredAuditLogsAction(input: {
             actor: { id: actor.actorId, email: actor.actorEmail, role: actor.actorRole },
             reason: input.reason,
         });
-        if (!input.dryRun) {
+        if (!result.dryRun) {
             revalidatePath('/admin/audit');
         }
         return { success: true as const, ...result };

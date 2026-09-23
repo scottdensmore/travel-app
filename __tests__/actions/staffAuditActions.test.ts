@@ -131,6 +131,37 @@ describe('staffAuditActions', () => {
             }
         });
 
+        it('returns count preview without revalidating path in dry-run mode', async () => {
+            const { revalidatePath } = require('next/cache');
+            (getServerSession as jest.Mock).mockResolvedValue({
+                user: { id: 'admin1', email: 'admin@example.com', role: 'ADMIN', staffMfaVerified: true },
+            });
+            (staffMfaModule.assertPrivilegedStaffOperation as jest.Mock).mockResolvedValue({
+                actorId: 'admin1',
+                actorEmail: 'admin@example.com',
+                actorRole: 'ADMIN',
+            });
+            (staffAuditRetentionService.purgeExpiredAuditLogs as jest.Mock).mockResolvedValue({
+                dryRun: true,
+                eligibleCount: 8,
+                cutoffDate: new Date(),
+            });
+
+            const res = await purgeExpiredAuditLogsAction({
+                retentionDays: 365,
+                dryRun: true,
+                reason: 'Dry run preview',
+                stepUpCode: '123456',
+            });
+
+            expect(res.success).toBe(true);
+            if (res.success) {
+                expect(res.dryRun).toBe(true);
+                expect(res.eligibleCount).toBe(8);
+            }
+            expect(revalidatePath).not.toHaveBeenCalled();
+        });
+
         it('handles purge service errors gracefully', async () => {
             (getServerSession as jest.Mock).mockResolvedValue({
                 user: { id: 'admin1', email: 'admin@example.com', role: 'ADMIN', staffMfaVerified: true },

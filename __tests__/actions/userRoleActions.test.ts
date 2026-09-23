@@ -91,6 +91,27 @@ describe('updateUserRoleAction', () => {
             where: { id: 'target-1' },
             data: expect.objectContaining({ role: 'SUPPORT', authVersion: { increment: 1 } }),
         }));
+        expect(prisma.staffAuditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({
+                action: 'USER_ROLE_UPDATE',
+                targetType: 'User',
+                targetId: 'target-1',
+                beforeState: { role: 'USER', email: 'target@example.com' },
+                afterState: { role: 'SUPPORT', email: 'target@example.com' },
+                reason: 'Promoted to support',
+            }),
+        }));
+    });
+
+    it('rejects invalid inputs before reaching auth or database', async () => {
+        const result = await updateUserRoleAction({
+            userId: '',
+            newRole: 'INVALID_ROLE' as never,
+            reason: '',
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
     });
 
     it('returns error when target user is not found', async () => {

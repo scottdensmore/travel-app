@@ -913,8 +913,16 @@ export const auditRetentionPurgeSchema = z.object({
     stepUpCode: stepUpCodeSchema.optional(),
 }).strict();
 
+export const updateUserRoleSchema = z.object({
+    userId: stringIdSchema,
+    newRole: roleSchema,
+    reason: z.string().trim().min(1, 'Reason is required.').max(500, 'Reason is too long.'),
+    stepUpCode: stepUpCodeSchema.optional(),
+}).strict();
+
 export type StaffAuditInputSchemaType = z.infer<typeof staffAuditInputSchema>;
 export type StaffAuditQuerySchemaType = z.infer<typeof staffAuditQuerySchema>;
 export type AuditRetentionPurgeSchemaType = z.infer<typeof auditRetentionPurgeSchema>;
+export type UpdateUserRoleInput = z.infer<typeof updateUserRoleSchema>;
 
 

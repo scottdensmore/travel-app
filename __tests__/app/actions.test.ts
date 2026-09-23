@@ -3045,8 +3045,19 @@ describe('admin flight schedule actions', () => {
             expect(mockDeleteFlightSchedule).not.toHaveBeenCalled();
         });
 
+        it('requires step-up TOTP verification when not within step-up window', async () => {
+            mockedGetServerSession.mockResolvedValue({
+                user: { id: 'staff-1', email: 'staff@example.com', role: 'ADMIN', staffMfaVerified: true },
+            });
+
+            await expect(deleteFlightScheduleAction(request)).rejects.toThrow();
+            expect(mockDeleteFlightSchedule).not.toHaveBeenCalled();
+        });
+
         it('deletes through the retryable service and refreshes every consumer', async () => {
-            mockedGetServerSession.mockResolvedValue({ user: { id: 'staff-1', role: 'ADMIN', staffMfaVerified: true } });
+            mockedGetServerSession.mockResolvedValue({
+                user: { id: 'staff-1', email: 'staff@example.com', role: 'ADMIN', staffMfaVerified: true, staffMfaStepUpVerifiedAt: Date.now() },
+            });
             mockDeleteFlightSchedule.mockResolvedValue({ deletionId: 'delete-1', wasDeleted: true });
 
             await deleteFlightScheduleAction(request);
@@ -3071,7 +3082,7 @@ describe('admin flight schedule actions', () => {
 
         it('rejects staff lacking SCHEDULES_DELETE permission', async () => {
             mockedGetServerSession.mockResolvedValue({
-                user: { id: 'support-1', role: 'SUPPORT', staffMfaVerified: true },
+                user: { id: 'support-1', email: 'support@example.com', role: 'SUPPORT', staffMfaVerified: true, staffMfaStepUpVerifiedAt: Date.now() },
             });
 
             await expect(deleteFlightScheduleAction(request)).rejects.toThrow('Unauthorized');
@@ -3084,7 +3095,7 @@ describe('admin flight schedule actions', () => {
             [{ ...request, flightScheduleId: 0 }, 'Schedule ID must be positive.'],
         ])('rejects invalid deletion input before calling the service', async (invalid, message) => {
             mockedGetServerSession.mockResolvedValue({
-                user: { id: 'staff-1', role: 'ADMIN', staffMfaVerified: true },
+                user: { id: 'staff-1', email: 'staff@example.com', role: 'ADMIN', staffMfaVerified: true, staffMfaStepUpVerifiedAt: Date.now() },
             });
 
             await expect(deleteFlightScheduleAction(invalid)).resolves.toMatchObject({
@@ -3096,7 +3107,7 @@ describe('admin flight schedule actions', () => {
 
         it('returns a safe typed service refusal as validation feedback', async () => {
             mockedGetServerSession.mockResolvedValue({
-                user: { id: 'staff-1', role: 'ADMIN', staffMfaVerified: true },
+                user: { id: 'staff-1', email: 'staff@example.com', role: 'ADMIN', staffMfaVerified: true, staffMfaStepUpVerifiedAt: Date.now() },
             });
             mockDeleteFlightSchedule.mockRejectedValue(new FlightScheduleDeletionError(
                 'ACTIVE',
@@ -3114,7 +3125,7 @@ describe('admin flight schedule actions', () => {
 
         it('rethrows unexpected errors instead of exposing private details as feedback', async () => {
             mockedGetServerSession.mockResolvedValue({
-                user: { id: 'staff-1', role: 'ADMIN', staffMfaVerified: true },
+                user: { id: 'staff-1', email: 'staff@example.com', role: 'ADMIN', staffMfaVerified: true, staffMfaStepUpVerifiedAt: Date.now() },
             });
             const internal = new Error('postgresql://private-host/schedule_delete');
             mockDeleteFlightSchedule.mockRejectedValue(internal);
