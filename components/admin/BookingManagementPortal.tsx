@@ -15,7 +15,7 @@ export type BookingResult = {
 type Props = {
     initialBookings: BookingResult[];
     searchAction: (query: { reference?: string; emailOrName?: string; flightNumber?: string; status?: BookingStatus }) => Promise<BookingResult[]>;
-    cancelAction: (bookingId: number, reason: string) => Promise<void>;
+    cancelAction: (bookingId: number, reason: string, stepUpCode?: string) => Promise<unknown>;
     noteAction: (bookingId: number, note: string) => Promise<void>;
     emailAction: (bookingId: number) => Promise<unknown>;
 };
