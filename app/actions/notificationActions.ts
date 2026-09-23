@@ -3,7 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { hasVerifiedStaffAccess } from '@/lib/staffMfa';
+import { hasStaffPermission } from '@/lib/staffAuthorization';
+import { StaffPermission } from '@/lib/staffPermissions';
+import { recordStaffAudit } from '@/lib/staffAuditService';
 import { prisma } from '@/lib/prisma';
 import { NotificationService, EffectivePreferences } from '@/lib/notificationService';
 import {
@@ -15,7 +17,7 @@ import {
     actionValidationFailure,
     ActionValidationFailure,
 } from '@/lib/actionResult';
-import type { Prisma, NotificationDelivery, Notification } from '@prisma/client';
+import type { Prisma, NotificationDelivery, Notification, Role } from '@prisma/client';
 import { z } from 'zod';
 
 export type ActionResult<T, E = ActionValidationFailure> = { ok: true; data: T } | E;
@@ -77,9 +79,8 @@ export async function getAdminNotificationDeliveriesAction(
     input?: unknown
 ): Promise<ActionResult<{ deliveries: NotificationDeliveryWithNotification[]; totalCount: number }>> {
     const session = await getServerSession(authOptions);
-    const isStaff = await hasVerifiedStaffAccess(session);
-    if (!isStaff) {
-        return actionValidationFailure('Unauthorized: Staff access with verified MFA required.');
+    if (!hasStaffPermission(session, StaffPermission.NOTIFICATIONS_READ)) {
+        return actionValidationFailure('Unauthorized: Staff access with NOTIFICATIONS_READ permission required.');
     }
 
     const parsed = parseActionInput(adminNotificationDeliveriesQuerySchema, input ?? {});
@@ -142,9 +143,8 @@ export async function retryNotificationDeliveryAction(
     input: unknown
 ): Promise<ActionResult<{ success: true; delivery: NotificationDeliveryWithNotification | null }>> {
     const session = await getServerSession(authOptions);
-    const isStaff = await hasVerifiedStaffAccess(session);
-    if (!isStaff) {
-        return actionValidationFailure('Unauthorized: Staff access with verified MFA required.');
+    if (!hasStaffPermission(session, StaffPermission.NOTIFICATIONS_RESEND) || !session?.user?.id) {
+        return actionValidationFailure('Unauthorized: Staff access with NOTIFICATIONS_RESEND permission required.');
     }
 
     const parsed = parseActionInput(retryNotificationDeliverySchema, input);
@@ -161,6 +161,18 @@ export async function retryNotificationDeliveryAction(
         const delivery = await prisma.notificationDelivery.findUnique({
             where: { id: deliveryId },
             include: { notification: true },
+        });
+
+        await recordStaffAudit({
+            actorId: session.user.id,
+            actorUserId: session.user.id,
+            actorEmail: session.user.email || 'staff@mona-airways.internal',
+            actorRole: (session.user.role as Role) || 'SUPPORT',
+            action: 'NOTIFICATION_DELIVERY_RETRY',
+            targetType: 'NotificationDelivery',
+            targetId: deliveryId,
+            reason: 'Staff initiated notification delivery retry',
+            afterState: { status: delivery?.status },
         });
 
         return {

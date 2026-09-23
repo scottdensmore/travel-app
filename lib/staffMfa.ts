@@ -5,7 +5,13 @@ import {
     randomBytes,
     timingSafeEqual,
 } from 'node:crypto';
+import { Session } from 'next-auth';
+import { Role } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { StaffPermission } from './staffPermissions';
+import { hasStaffPermission } from './staffAuthorization';
+
+export { hasVerifiedStaffAccess } from './staffAuthorization';
 
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 const ALGORITHM = 'aes-256-gcm';
@@ -220,4 +226,83 @@ export async function verifyAndConsumeStaffTotp(
     }
 }
 
-export { hasVerifiedStaffAccess } from './staffAuthorization';
+export class StaffUnauthorizedError extends Error {
+    constructor(message = 'Unauthorized staff operation.') {
+        super(message);
+        this.name = 'StaffUnauthorizedError';
+    }
+}
+
+export class StaffStepUpRequiredError extends Error {
+    readonly permission: StaffPermission;
+    constructor(permission: StaffPermission, message = 'Step-up TOTP authentication required.') {
+        super(message);
+        this.name = 'StaffStepUpRequiredError';
+        this.permission = permission;
+    }
+}
+
+export const PRIVILEGED_PERMISSIONS: readonly StaffPermission[] = [
+    StaffPermission.USERS_MANAGE_ROLES,
+    StaffPermission.SCHEDULES_DELETE,
+    StaffPermission.AUDIT_LOGS_PURGE,
+    StaffPermission.BOOKINGS_REFUND,
+];
+
+export async function assertPrivilegedStaffOperation(options: {
+    session: Session | null;
+    permission: StaffPermission;
+    stepUpCode?: string;
+    maxStepUpAgeMs?: number;
+}): Promise<{ actorId: string; userId: string; actorEmail: string; actorRole: Role }> {
+    const { session, permission, stepUpCode, maxStepUpAgeMs = 15 * 60 * 1000 } = options;
+    if (!session?.user?.id || !session.user.email || !session.user.role || !hasStaffPermission(session, permission)) {
+        throw new StaffUnauthorizedError();
+    }
+
+    const isPrivileged = PRIVILEGED_PERMISSIONS.includes(permission);
+    if (!isPrivileged) {
+        return {
+            actorId: session.user.id,
+            userId: session.user.id,
+            actorEmail: session.user.email,
+            actorRole: session.user.role,
+        };
+    }
+
+    const stepUpVerifiedAt = session.user.staffMfaStepUpVerifiedAt;
+    const isWithinWindow = stepUpVerifiedAt && (Date.now() - stepUpVerifiedAt < maxStepUpAgeMs);
+
+    if (!isWithinWindow) {
+        if (!stepUpCode || !/^\d{6}$/.test(stepUpCode.trim())) {
+            throw new StaffStepUpRequiredError(permission);
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { id: session.user.id },
+            select: { staffMfaSecretEncrypted: true },
+        });
+
+        if (!user?.staffMfaSecretEncrypted) {
+            throw new StaffUnauthorizedError('Staff MFA is not configured.');
+        }
+
+        const staffMfa = await import('./staffMfa');
+        const isValid = await staffMfa.verifyAndConsumeStaffTotp(
+            session.user.id,
+            user.staffMfaSecretEncrypted,
+            stepUpCode.trim()
+        );
+
+        if (!isValid) {
+            throw new StaffStepUpRequiredError(permission, 'Invalid security code. Please check your authenticator.');
+        }
+    }
+
+    return {
+        actorId: session.user.id,
+        userId: session.user.id,
+        actorEmail: session.user.email,
+        actorRole: session.user.role,
+    };
+}

@@ -509,3 +509,6 @@ export function withServerActionLogging<TArgs extends unknown[], TResult>(
         });
     };
 }
+
+export default logger;
+

@@ -323,6 +323,7 @@ export const flightScheduleDeletionSchema = z.object({
     requestId: z.uuid('Schedule deletion request ID must be a UUID.'),
     flightScheduleId: positiveId('Schedule ID'),
     confirmed: z.boolean().refine(confirmed => confirmed, 'Confirm permanent deletion.'),
+    stepUpCode: z.string().optional(),
 }).strict();
 
 const seatNumberSchema = requiredText('Seat number', 6)
@@ -835,3 +836,93 @@ export const adminNotificationDeliveriesQuerySchema = z.object({
 export type NotificationPreferenceItem = z.infer<typeof notificationPreferenceItemSchema>;
 export type UpdateNotificationPreferencesInput = z.infer<typeof updateNotificationPreferencesSchema>;
 export type AdminNotificationDeliveriesQuery = z.infer<typeof adminNotificationDeliveriesQuerySchema>;
+
+export const stepUpCodeSchema = z.string().trim().regex(/^\d{6}$/, 'Security code must be exactly 6 digits');
+
+export const roleSchema = z.enum(['USER', 'ADMIN', 'SUPPORT', 'OPERATIONS', 'MODERATOR']);
+
+export const staffAuditInputSchema = z.object({
+    actorId: requiredText('Actor ID', 128),
+    actorEmail: emailAddressSchema,
+    actorRole: roleSchema,
+    action: requiredText('Action', 100),
+    targetType: requiredText('Target type', 100),
+    targetId: requiredText('Target ID', 128),
+    beforeState: z.record(z.string(), z.unknown()).nullable().optional(),
+    afterState: z.record(z.string(), z.unknown()).nullable().optional(),
+    reason: z.string().trim().max(1000, 'Reason is too long.').nullable().optional(),
+    metadata: z.record(z.string(), z.unknown()).nullable().optional(),
+    ipAddress: z.string().trim().max(100, 'IP address is too long.').nullable().optional(),
+}).strict();
+
+const emptyStringToUndefined = (val: unknown) => {
+    if (val === null || val === undefined) return undefined;
+    if (typeof val === 'string') {
+        const trimmed = val.trim();
+        return trimmed === '' ? undefined : trimmed;
+    }
+    return val;
+};
+
+export const staffAuditQuerySchema = z.object({
+    dateFrom: z.preprocess(
+        emptyStringToUndefined,
+        z.union([
+            z.string().refine(s => !Number.isNaN(Date.parse(s)), 'Invalid date format.'),
+            z.date(),
+        ]).optional()
+    ),
+    dateTo: z.preprocess(
+        emptyStringToUndefined,
+        z.union([
+            z.string().refine(s => !Number.isNaN(Date.parse(s)), 'Invalid date format.'),
+            z.date(),
+        ]).optional()
+    ),
+    actorId: z.preprocess(
+        emptyStringToUndefined,
+        z.string().max(128).optional()
+    ),
+    actorEmail: z.preprocess(
+        emptyStringToUndefined,
+        z.string().max(254).optional()
+    ),
+    action: z.preprocess(
+        emptyStringToUndefined,
+        z.string().max(100).optional()
+    ),
+    targetType: z.preprocess(
+        emptyStringToUndefined,
+        z.string().max(100).optional()
+    ),
+    targetId: z.preprocess(
+        emptyStringToUndefined,
+        z.string().max(128).optional()
+    ),
+    limit: z.coerce.number().int().min(1).max(100).default(25).optional(),
+    cursor: z.preprocess(
+        emptyStringToUndefined,
+        z.string().optional()
+    ),
+}).strict();
+
+export const auditRetentionPurgeSchema = z.object({
+    retentionDays: z.coerce.number().int().min(1).max(3650).default(365).optional(),
+    dryRun: z.boolean().default(true).optional(),
+    reason: z.string().trim().min(1, 'Reason is required.').max(500, 'Reason is too long.'),
+    stepUpCode: stepUpCodeSchema.optional(),
+}).strict();
+
+export const updateUserRoleSchema = z.object({
+    userId: stringIdSchema,
+    newRole: roleSchema,
+    reason: z.string().trim().min(1, 'Reason is required.').max(500, 'Reason is too long.'),
+    stepUpCode: stepUpCodeSchema.optional(),
+}).strict();
+
+export type StaffAuditInputSchemaType = z.infer<typeof staffAuditInputSchema>;
+export type StaffAuditQuerySchemaType = z.infer<typeof staffAuditQuerySchema>;
+export type AuditRetentionPurgeSchemaType = z.infer<typeof auditRetentionPurgeSchema>;
+export type UpdateUserRoleInput = z.infer<typeof updateUserRoleSchema>;
+
+

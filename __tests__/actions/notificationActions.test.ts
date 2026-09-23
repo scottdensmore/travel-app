@@ -5,7 +5,9 @@ import {
     retryNotificationDeliveryAction,
 } from '@/app/actions/notificationActions';
 import { getServerSession } from 'next-auth';
-import { hasVerifiedStaffAccess } from '@/lib/staffMfa';
+import { hasStaffPermission } from '@/lib/staffAuthorization';
+import { StaffPermission } from '@/lib/staffPermissions';
+import { recordStaffAudit } from '@/lib/staffAuditService';
 import { prisma } from '@/lib/prisma';
 import { NotificationService } from '@/lib/notificationService';
 import { revalidatePath } from 'next/cache';
@@ -16,7 +18,12 @@ jest.mock('next-auth', () => ({
 jest.mock('@/lib/auth', () => ({
     authOptions: {},
 }));
-jest.mock('@/lib/staffMfa');
+jest.mock('@/lib/staffAuthorization', () => ({
+    hasStaffPermission: jest.fn(),
+}));
+jest.mock('@/lib/staffAuditService', () => ({
+    recordStaffAudit: jest.fn(),
+}));
 jest.mock('next/cache', () => ({
     revalidatePath: jest.fn(),
 }));
@@ -120,23 +127,35 @@ describe('Notification Server Actions', () => {
     describe('getAdminNotificationDeliveriesAction', () => {
         it('rejects non-staff user from accessing admin delivery logs', async () => {
             (getServerSession as jest.Mock).mockResolvedValue({ user: { id: 'user-1' } });
-            (hasVerifiedStaffAccess as jest.Mock).mockResolvedValue(false);
+            (hasStaffPermission as jest.Mock).mockReturnValue(false);
 
             const result = await getAdminNotificationDeliveriesAction({});
-            expect(result).toEqual(expect.objectContaining({ ok: false }));
+            expect(result).toEqual(
+                expect.objectContaining({
+                    ok: false,
+                    error: expect.objectContaining({
+                        message: 'Unauthorized: Staff access with NOTIFICATIONS_READ permission required.',
+                    }),
+                })
+            );
+            expect(hasStaffPermission).toHaveBeenCalledWith(
+                { user: { id: 'user-1' } },
+                StaffPermission.NOTIFICATIONS_READ
+            );
         });
 
         it('rejects invalid query filters', async () => {
             (getServerSession as jest.Mock).mockResolvedValue({ user: { id: 'admin-1', role: 'ADMIN' } });
-            (hasVerifiedStaffAccess as jest.Mock).mockResolvedValue(true);
+            (hasStaffPermission as jest.Mock).mockReturnValue(true);
 
             const result = await getAdminNotificationDeliveriesAction({ page: -1 });
             expect(result).toEqual(expect.objectContaining({ ok: false }));
         });
 
         it('returns deliveries and total count for verified staff', async () => {
-            (getServerSession as jest.Mock).mockResolvedValue({ user: { id: 'admin-1', role: 'ADMIN' } });
-            (hasVerifiedStaffAccess as jest.Mock).mockResolvedValue(true);
+            const session = { user: { id: 'admin-1', role: 'ADMIN' } };
+            (getServerSession as jest.Mock).mockResolvedValue(session);
+            (hasStaffPermission as jest.Mock).mockReturnValue(true);
 
             const mockDeliveries = [
                 {
@@ -164,12 +183,14 @@ describe('Notification Server Actions', () => {
                     totalCount: 1,
                 },
             });
+            expect(hasStaffPermission).toHaveBeenCalledWith(session, StaffPermission.NOTIFICATIONS_READ);
             expect(prisma.notificationDelivery.findMany).toHaveBeenCalled();
             expect(prisma.notificationDelivery.count).toHaveBeenCalled();
         });
         it('supports empty/undefined input and applies case-insensitive search', async () => {
-            (getServerSession as jest.Mock).mockResolvedValue({ user: { id: 'admin-1', role: 'ADMIN' } });
-            (hasVerifiedStaffAccess as jest.Mock).mockResolvedValue(true);
+            const session = { user: { id: 'admin-1', role: 'ADMIN' } };
+            (getServerSession as jest.Mock).mockResolvedValue(session);
+            (hasStaffPermission as jest.Mock).mockReturnValue(true);
 
             (prisma.notificationDelivery.findMany as jest.Mock).mockResolvedValue([]);
             (prisma.notificationDelivery.count as jest.Mock).mockResolvedValue(0);
@@ -202,23 +223,38 @@ describe('Notification Server Actions', () => {
     describe('retryNotificationDeliveryAction', () => {
         it('rejects non-staff user', async () => {
             (getServerSession as jest.Mock).mockResolvedValue({ user: { id: 'user-1' } });
-            (hasVerifiedStaffAccess as jest.Mock).mockResolvedValue(false);
+            (hasStaffPermission as jest.Mock).mockReturnValue(false);
 
             const result = await retryNotificationDeliveryAction('del-1');
-            expect(result).toEqual(expect.objectContaining({ ok: false }));
+            expect(result).toEqual(
+                expect.objectContaining({
+                    ok: false,
+                    error: expect.objectContaining({
+                        message: 'Unauthorized: Staff access with NOTIFICATIONS_RESEND permission required.',
+                    }),
+                })
+            );
+            expect(hasStaffPermission).toHaveBeenCalledWith(
+                { user: { id: 'user-1' } },
+                StaffPermission.NOTIFICATIONS_RESEND
+            );
+            expect(recordStaffAudit).not.toHaveBeenCalled();
         });
 
         it('rejects empty delivery ID', async () => {
-            (getServerSession as jest.Mock).mockResolvedValue({ user: { id: 'admin-1', role: 'ADMIN' } });
-            (hasVerifiedStaffAccess as jest.Mock).mockResolvedValue(true);
+            const session = { user: { id: 'admin-1', role: 'ADMIN' } };
+            (getServerSession as jest.Mock).mockResolvedValue(session);
+            (hasStaffPermission as jest.Mock).mockReturnValue(true);
 
             const result = await retryNotificationDeliveryAction('');
             expect(result).toEqual(expect.objectContaining({ ok: false }));
+            expect(recordStaffAudit).not.toHaveBeenCalled();
         });
 
-        it('retries delivery, revalidates admin path, and returns updated delivery', async () => {
-            (getServerSession as jest.Mock).mockResolvedValue({ user: { id: 'admin-1', role: 'ADMIN' } });
-            (hasVerifiedStaffAccess as jest.Mock).mockResolvedValue(true);
+        it('retries delivery, revalidates admin path, logs staff audit, and returns updated delivery', async () => {
+            const session = { user: { id: 'admin-1', role: 'ADMIN', email: 'admin@example.com' } };
+            (getServerSession as jest.Mock).mockResolvedValue(session);
+            (hasStaffPermission as jest.Mock).mockReturnValue(true);
 
             mockNotificationService.retryDelivery.mockResolvedValue();
             const mockDelivery = {
@@ -238,18 +274,32 @@ describe('Notification Server Actions', () => {
                     delivery: mockDelivery,
                 },
             });
+            expect(hasStaffPermission).toHaveBeenCalledWith(
+                session,
+                StaffPermission.NOTIFICATIONS_RESEND
+            );
             expect(mockNotificationService.retryDelivery).toHaveBeenCalledWith('del-1');
+            expect(recordStaffAudit).toHaveBeenCalledWith(expect.objectContaining({
+                actorUserId: 'admin-1',
+                action: 'NOTIFICATION_DELIVERY_RETRY',
+                targetType: 'NotificationDelivery',
+                targetId: 'del-1',
+                reason: 'Staff initiated notification delivery retry',
+                afterState: { status: 'SENT' },
+            }));
             expect(revalidatePath).toHaveBeenCalledWith('/admin/notifications');
         });
 
         it('handles retry error gracefully and revalidates admin notifications path on failure', async () => {
-            (getServerSession as jest.Mock).mockResolvedValue({ user: { id: 'admin-1', role: 'ADMIN' } });
-            (hasVerifiedStaffAccess as jest.Mock).mockResolvedValue(true);
+            const session = { user: { id: 'admin-1', role: 'ADMIN' } };
+            (getServerSession as jest.Mock).mockResolvedValue(session);
+            (hasStaffPermission as jest.Mock).mockReturnValue(true);
 
             mockNotificationService.retryDelivery.mockRejectedValue(new Error('Retry failed'));
 
             const result = await retryNotificationDeliveryAction('del-1');
             expect(result).toEqual(expect.objectContaining({ ok: false }));
+            expect(recordStaffAudit).not.toHaveBeenCalled();
             expect(revalidatePath).toHaveBeenCalledWith('/admin/notifications');
         });
     });

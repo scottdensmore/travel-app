@@ -9,6 +9,7 @@ import * as moderationService from '@/lib/reviewModerationService';
 import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
+import { recordStaffAudit } from '@/lib/staffAuditService';
 
 jest.mock('next-auth', () => ({
     getServerSession: jest.fn(),
@@ -17,6 +18,8 @@ jest.mock('next-auth', () => ({
 jest.mock('@/lib/auth', () => ({
     authOptions: {},
 }));
+
+jest.mock('@/lib/staffAuditService');
 
 jest.mock('@/lib/reviewModerationService', () => {
     const actual = jest.requireActual('@/lib/reviewModerationService');
@@ -289,9 +292,29 @@ describe('Review Server Actions', () => {
                 action: 'APPROVE',
                 reason: 'Looks good',
             });
+            expect(recordStaffAudit).toHaveBeenCalledWith(expect.objectContaining({
+                actorId: 'staff-1',
+                action: 'REVIEW_MODERATE',
+                targetType: 'Review',
+                targetId: 'rev-1',
+                reason: 'Looks good',
+                metadata: { moderationAction: 'APPROVE' },
+            }));
             expect(revalidatePath).toHaveBeenCalledWith('/admin/reviews');
             expect(revalidatePath).toHaveBeenCalledWith('/travelguide');
             expect(revalidatePath).toHaveBeenCalledWith('/profile');
+        });
+
+        it('rejects staff lacking REVIEWS_MODERATE permission', async () => {
+            (getServerSession as jest.Mock).mockResolvedValue({
+                user: { id: 'staff-1', role: 'OPERATIONS', staffMfaVerified: true },
+            });
+
+            const result = await moderateReviewAction('rev-1', 'APPROVE');
+            expect(result.ok).toBe(false);
+            if (!result.ok) {
+                expect(result.error.message).toMatch(/staff access required/i);
+            }
         });
 
         it('returns validation failure for invalid action', async () => {

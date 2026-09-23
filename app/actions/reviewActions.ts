@@ -3,7 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { getServerSession, Session } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { hasVerifiedStaffAccess } from '@/lib/staffAuthorization';
+import { hasVerifiedStaffAccess, hasStaffPermission } from '@/lib/staffAuthorization';
+import { StaffPermission } from '@/lib/staffPermissions';
+import { recordStaffAudit } from '@/lib/staffAuditService';
 import { prisma } from '@/lib/prisma';
 import {
     parseActionInput,
@@ -23,7 +25,7 @@ import {
     reportReview,
     moderateReview,
 } from '@/lib/reviewModerationService';
-import { ModerationAction, Review } from '@prisma/client';
+import { ModerationAction, Review, Role } from '@prisma/client';
 
 export type ActionResult<T, E = ActionValidationFailure> = { ok: true; data: T } | E;
 
@@ -124,7 +126,12 @@ export async function moderateReviewAction(
 ): Promise<ActionResult<{ success: true }>> {
     const session = await getServerSession(authOptions);
     const moderatorId = session?.user?.id;
-    if (!isStaffSession(session) || !moderatorId) {
+    const user = session?.user as (Session['user'] & { mfaVerified?: boolean }) | undefined;
+    const normalizedSession = session && user?.mfaVerified && !user.staffMfaVerified
+        ? { ...session, user: { ...session.user, staffMfaVerified: true } }
+        : session;
+
+    if (!hasStaffPermission(normalizedSession, StaffPermission.REVIEWS_MODERATE) || !moderatorId) {
         return actionValidationFailure('Staff access required.');
     }
 
@@ -135,6 +142,16 @@ export async function moderateReviewAction(
 
     try {
         await moderateReview(moderatorId, parsed.data);
+        await recordStaffAudit({
+            actorId: moderatorId,
+            actorEmail: session?.user?.email || 'staff@mona-airways.internal',
+            actorRole: session?.user?.role as Role,
+            action: 'REVIEW_MODERATE',
+            targetType: 'Review',
+            targetId: reviewId,
+            reason: reason ?? null,
+            metadata: { moderationAction: action },
+        });
         revalidatePath('/admin/reviews');
         revalidatePath('/travelguide');
         revalidatePath('/profile');

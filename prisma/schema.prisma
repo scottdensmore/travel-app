@@ -41,6 +41,9 @@ model Session {
 enum Role {
   USER
   ADMIN
+  SUPPORT
+  OPERATIONS
+  MODERATOR
 }
 
 model User {
@@ -72,6 +75,7 @@ model User {
   flightScheduleTermsChanges FlightScheduleTermsChange[]
   flightScheduleDeletions    FlightScheduleDeletion[]
   notesWritten               BookingNote[]
+  staffAuditsInitiated    StaffAuditLog[]       @relation("StaffAuditActor")
 }
 
 model VerificationToken {
@@ -829,3 +833,26 @@ model BookingNote {
 
   @@index([bookingId, createdAt])
 }
+
+model StaffAuditLog {
+  id          String    @id @default(cuid())
+  actorId     String?
+  actor       User?     @relation("StaffAuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorEmail  String
+  actorRole   Role
+  action      String
+  targetType  String
+  targetId    String
+  beforeState Json?
+  afterState  Json?
+  reason      String?
+  metadata    Json?
+  ipAddress   String?
+  createdAt   DateTime  @default(now())
+
+  @@index([actorId])
+  @@index([action])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+}
+

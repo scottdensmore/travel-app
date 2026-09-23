@@ -4,29 +4,20 @@ import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
 import { hasStaffPermission } from '@/lib/staffAuthorization';
 import { StaffPermission } from '@/lib/staffPermissions';
-import { prisma } from '@/lib/prisma';
-import UserRoleManagementClient from '@/components/admin/UserRoleManagementClient';
+import { searchStaffAuditLogs } from '@/lib/staffAuditService';
+import StaffAuditPortalClient from '@/components/admin/StaffAuditPortalClient';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
-export default async function AdminUsersPage() {
+export default async function AdminAuditPage() {
     const session = await getServerSession(authOptions);
-    if (!hasStaffPermission(session, StaffPermission.USERS_READ)) {
+    if (!hasStaffPermission(session, StaffPermission.AUDIT_LOGS_VIEW)) {
         redirect(session ? '/admin' : '/login');
         return null;
     }
 
-    const users = await prisma.user.findMany({
-        select: {
-            id: true,
-            name: true,
-            email: true,
-            role: true,
-        },
-        orderBy: { email: 'asc' },
-        take: 100,
-    });
+    const initialData = await searchStaffAuditLogs({ limit: 25 });
 
     return (
         <div
@@ -39,7 +30,10 @@ export default async function AdminUsersPage() {
                 </Link>
             </div>
 
-            <UserRoleManagementClient initialUsers={users} />
+            <StaffAuditPortalClient
+                initialLogs={initialData.logs}
+                initialTotalCount={initialData.totalCount}
+            />
         </div>
     );
 }

@@ -13,6 +13,7 @@ import {
     STAFF_MFA_SESSION_MAX_AGE_MS,
     verifyAndConsumeStaffTotp,
 } from '@/lib/staffMfa';
+import { isStaffRole } from '@/lib/staffAuthorization';
 
 // A valid bcrypt hash of a throwaway value, used only to equalize response
 // timing when no matching user exists (anti-enumeration). It is never a real
@@ -72,7 +73,7 @@ export const authOptions: NextAuthOptions = {
                 let staffMfaVerified = false;
                 let staffMfaEnrollmentRequired = false;
                 let staffMfaVerifiedAt: number | undefined;
-                if (user.role === 'ADMIN') {
+                if (isStaffRole(user.role)) {
                     if (!user.staffMfaSecretEncrypted || !user.staffMfaEnrolledAt) {
                         staffMfaEnrollmentRequired = true;
                     } else {
@@ -137,7 +138,7 @@ export const authOptions: NextAuthOptions = {
                         staffMfaEnrolledAt: true,
                     },
                 });
-                const staffSessionExpired = token.role === 'ADMIN'
+                const staffSessionExpired = isStaffRole(token.role)
                     && token.staffMfaVerified === true
                     && (!token.staffMfaVerifiedAt
                         || Date.now() - token.staffMfaVerifiedAt > STAFF_MFA_SESSION_MAX_AGE_MS);
@@ -145,7 +146,7 @@ export const authOptions: NextAuthOptions = {
                     || !currentUser.emailVerified
                     || currentUser.authVersion !== token.authVersion
                     || staffSessionExpired
-                    || (token.role === 'ADMIN'
+                    || (isStaffRole(token.role)
                         && token.staffMfaVerified === true
                         && !currentUser.staffMfaEnrolledAt);
                 if (currentUser && !token.invalidated) {
@@ -156,7 +157,7 @@ export const authOptions: NextAuthOptions = {
                     if (currentUser.image !== undefined) {
                         token.picture = currentUser.image ?? undefined;
                     }
-                    if (currentUser.role !== 'ADMIN') {
+                    if (!isStaffRole(currentUser.role)) {
                         token.staffMfaVerified = false;
                         token.staffMfaEnrollmentRequired = false;
                         delete token.staffMfaVerifiedAt;
