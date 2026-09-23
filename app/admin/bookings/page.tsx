@@ -5,7 +5,16 @@ import { authOptions } from '@/lib/auth';
 import { hasStaffPermission } from '@/lib/staffAuthorization';
 import { StaffPermission } from '@/lib/staffPermissions';
 import BookingManagementPortal from '@/components/admin/BookingManagementPortal';
-import { searchBookingsAction, cancelBookingAction, addBookingNoteAction, resendEmailAction } from './actions';
+import {
+    searchBookingsAction,
+    cancelBookingAction,
+    addBookingNoteAction,
+    getBookingNotesAction,
+    resendEmailAction,
+    resendReceiptEmailAction,
+    staffChangeBookingSeatsAction,
+    staffRebookItineraryAction,
+} from './actions';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
@@ -17,7 +26,7 @@ export default async function AdminBookingsPage() {
         return null;
     }
 
-    const initialBookings = await searchBookingsAction({});
+    const initialData = await searchBookingsAction({});
 
     return (
         <div className="page-container admin p-8" style={{ marginTop: '100px', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -27,11 +36,15 @@ export default async function AdminBookingsPage() {
             </div>
             
             <BookingManagementPortal 
-                initialBookings={initialBookings}
+                initialData={initialData}
                 searchAction={searchBookingsAction}
                 cancelAction={cancelBookingAction}
-                noteAction={addBookingNoteAction}
+                addNoteAction={addBookingNoteAction}
+                getNotesAction={getBookingNotesAction}
                 emailAction={resendEmailAction}
+                receiptAction={resendReceiptEmailAction}
+                seatChangeAction={staffChangeBookingSeatsAction}
+                rebookAction={staffRebookItineraryAction}
             />
         </div>
     );

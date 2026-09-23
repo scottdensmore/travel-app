@@ -231,3 +231,100 @@ export function formatTravelDocumentsEmailHtml(input: TravelDocumentEmailInput):
         </div>
     `;
 }
+
+export interface ReceiptEmailInput {
+    to: string;
+    bookingReference: string;
+    pdfBuffer: Buffer;
+    customerName?: string | null;
+    totalAmountFormatted?: string;
+}
+
+export async function sendReceiptEmail(input: ReceiptEmailInput): Promise<void> {
+    const selectedProvider = provider();
+    const endpoint = requireSetting('AUTH_EMAIL_API_URL');
+    const endpointUrl = new URL(endpoint);
+    if (selectedProvider === 'postmark' && endpointUrl.protocol !== 'https:') {
+        throw new Error('Postmark delivery requires HTTPS.');
+    }
+    if (
+        selectedProvider === 'postmark' &&
+        (endpointUrl.hostname !== 'api.postmarkapp.com' || endpointUrl.pathname !== '/email')
+    ) {
+        throw new Error('Postmark delivery requires the official email API endpoint.');
+    }
+    const from = requireSetting('AUTH_EMAIL_FROM');
+    const subject = `Your Tax Invoice & Receipt: Mona Airways (${input.bookingReference})`;
+    const text = [
+        `Here is your receipt and tax invoice for booking ${input.bookingReference}.`,
+        input.totalAmountFormatted ? `Total Amount: ${input.totalAmountFormatted}` : '',
+        '',
+        'Your tax invoice PDF is attached to this email.',
+        '',
+        'Thank you for flying with Mona Airways.',
+    ]
+        .filter(Boolean)
+        .join('\n');
+
+    const html = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+            <h2>Tax Invoice & Receipt</h2>
+            <p>Here is your tax invoice and payment receipt for booking <strong>${input.bookingReference}</strong>.</p>
+            ${input.totalAmountFormatted ? `<p><strong>Total Paid:</strong> ${input.totalAmountFormatted}</p>` : ''}
+            <p>Your official tax invoice PDF has been attached to this email.</p>
+            <p style="margin-top: 20px; color: #666; font-size: 0.9em;">
+                Thank you for choosing Mona Airways.
+            </p>
+        </div>
+    `;
+
+    const base64Pdf = input.pdfBuffer.toString('base64');
+    const headers: Record<string, string> = {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+    };
+    const body =
+        selectedProvider === 'postmark'
+            ? {
+                  From: from,
+                  To: input.to,
+                  Subject: subject,
+                  TextBody: text,
+                  HtmlBody: html,
+                  MessageStream: 'outbound',
+                  Attachments: [
+                      {
+                          Name: `invoice-${input.bookingReference}.pdf`,
+                          Content: base64Pdf,
+                          ContentType: 'application/pdf',
+                      },
+                  ],
+              }
+            : {
+                  From: mailpitSender(from),
+                  To: [{ Email: input.to }],
+                  Subject: subject,
+                  Text: text,
+                  HTML: html,
+                  Attachments: [
+                      {
+                          Filename: `invoice-${input.bookingReference}.pdf`,
+                          Data: base64Pdf,
+                      },
+                  ],
+              };
+
+    if (selectedProvider === 'postmark') {
+        headers['X-Postmark-Server-Token'] = requireSetting('AUTH_EMAIL_API_TOKEN');
+    }
+    const response = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) {
+        throw new Error(`Email provider rejected delivery (${response.status}).`);
+    }
+}
+
