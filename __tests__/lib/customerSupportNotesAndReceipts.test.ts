@@ -1,7 +1,7 @@
 import { getBookingNotes, addInternalNote, resendReceiptEmail, resendConfirmationEmail } from '@/lib/customerSupportService';
 import { prisma } from '@/lib/prisma';
 import { generateInvoicePDF } from '@/lib/documents/pdfGenerator';
-import { sendTravelDocumentsEmail } from '@/lib/travelDocumentEmail';
+import { sendTravelDocumentsEmail, sendReceiptEmail } from '@/lib/travelDocumentEmail';
 
 jest.mock('@/lib/prisma', () => ({
     prisma: {
@@ -21,6 +21,7 @@ jest.mock('@/lib/documents/pdfGenerator', () => ({
 
 jest.mock('@/lib/travelDocumentEmail', () => ({
     sendTravelDocumentsEmail: jest.fn(),
+    sendReceiptEmail: jest.fn(),
 }));
 
 describe('customerSupportService notes & documents', () => {
@@ -54,16 +55,26 @@ describe('customerSupportService notes & documents', () => {
         const mockBooking = {
             id: 101,
             reference: 'MA-ABC123',
-            user: { email: 'customer@example.com' },
+            user: { name: 'John Doe', email: 'customer@example.com' },
+            totalPriceCents: 15000,
+            currency: 'USD',
             legs: [],
             passengers: [],
         };
+        const mockPdf = Buffer.from('mock-pdf');
         (prisma.booking.findUniqueOrThrow as jest.Mock).mockResolvedValue(mockBooking);
-        (generateInvoicePDF as jest.Mock).mockResolvedValue(Buffer.from('mock-pdf'));
+        (generateInvoicePDF as jest.Mock).mockResolvedValue(mockPdf);
 
         const result = await resendReceiptEmail(101);
         expect(result).toEqual({ success: true, sentTo: 'customer@example.com' });
         expect(generateInvoicePDF).toHaveBeenCalledWith(mockBooking);
+        expect(sendReceiptEmail).toHaveBeenCalledWith(expect.objectContaining({
+            to: 'customer@example.com',
+            bookingReference: 'MA-ABC123',
+            pdfBuffer: mockPdf,
+            customerName: 'John Doe',
+            totalAmountFormatted: '$150.00',
+        }));
     });
 
     it('throws error when booking has no customer email address in resendReceiptEmail', async () => {

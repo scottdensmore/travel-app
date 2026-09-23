@@ -2,7 +2,9 @@
 import {
     formatTravelDocumentsEmailText,
     sendTravelDocumentsEmail,
+    sendReceiptEmail,
     TravelDocumentEmailInput,
+    ReceiptEmailInput,
 } from '@/lib/travelDocumentEmail';
 
 describe('travel document email delivery', () => {
@@ -182,4 +184,76 @@ describe('travel document email delivery', () => {
             'rejected delivery (422)',
         );
     });
+
+    describe('sendReceiptEmail', () => {
+        const sampleReceipt: ReceiptEmailInput = {
+            to: 'ada@example.com',
+            bookingReference: 'BOOKING-123',
+            pdfBuffer: Buffer.from('PDF_CONTENT'),
+            customerName: 'Ada Lovelace',
+            totalAmountFormatted: '$350.00',
+        };
+
+        it('sends receipt email with PDF attachment via Postmark', async () => {
+            process.env.AUTH_EMAIL_PROVIDER = 'postmark';
+            process.env.AUTH_EMAIL_API_URL = 'https://api.postmarkapp.com/email';
+            process.env.AUTH_EMAIL_API_TOKEN = 'server-token';
+
+            await sendReceiptEmail(sampleReceipt);
+
+            expect(global.fetch).toHaveBeenCalledWith(
+                'https://api.postmarkapp.com/email',
+                expect.objectContaining({
+                    method: 'POST',
+                    headers: expect.objectContaining({
+                        'X-Postmark-Server-Token': 'server-token',
+                    }),
+                })
+            );
+
+            const payload = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+            expect(payload).toMatchObject({
+                From: 'Mona Airways <no-reply@travel.example.com>',
+                To: 'ada@example.com',
+                Subject: 'Your Tax Invoice & Receipt: Mona Airways (BOOKING-123)',
+                MessageStream: 'outbound',
+            });
+            expect(payload.TextBody).toContain('Total Amount: $350.00');
+            expect(payload.Attachments).toEqual([
+                {
+                    Name: 'invoice-BOOKING-123.pdf',
+                    Content: Buffer.from('PDF_CONTENT').toString('base64'),
+                    ContentType: 'application/pdf',
+                },
+            ]);
+        });
+
+        it('sends receipt email with PDF attachment via Mailpit', async () => {
+            process.env.AUTH_EMAIL_PROVIDER = 'mailpit';
+            process.env.AUTH_EMAIL_API_URL = 'http://localhost:8025/api/v1/send';
+
+            await sendReceiptEmail(sampleReceipt);
+
+            expect(global.fetch).toHaveBeenCalledWith(
+                'http://localhost:8025/api/v1/send',
+                expect.objectContaining({
+                    method: 'POST',
+                })
+            );
+
+            const payload = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+            expect(payload).toMatchObject({
+                From: { Email: 'no-reply@travel.example.com', Name: 'Mona Airways' },
+                To: [{ Email: 'ada@example.com' }],
+                Subject: 'Your Tax Invoice & Receipt: Mona Airways (BOOKING-123)',
+            });
+            expect(payload.Attachments).toEqual([
+                {
+                    Filename: 'invoice-BOOKING-123.pdf',
+                    Data: Buffer.from('PDF_CONTENT').toString('base64'),
+                },
+            ]);
+        });
+    });
 });
+

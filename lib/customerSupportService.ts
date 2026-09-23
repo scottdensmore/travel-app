@@ -306,7 +306,21 @@ export async function resendReceiptEmail(bookingId: number): Promise<{ success: 
     }
 
     const { generateInvoicePDF } = await import('@/lib/documents/pdfGenerator');
-    await generateInvoicePDF(booking);
+    const pdfBuffer = await generateInvoicePDF(booking);
+
+    const formattedTotal = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: booking.currency || 'USD',
+    }).format((booking.totalPriceCents ?? 0) / 100);
+
+    const { sendReceiptEmail } = await import('@/lib/travelDocumentEmail');
+    await sendReceiptEmail({
+        to: booking.user.email,
+        bookingReference: booking.reference,
+        pdfBuffer,
+        customerName: booking.user.name,
+        totalAmountFormatted: formattedTotal,
+    });
 
     return { success: true, sentTo: booking.user.email };
 }
