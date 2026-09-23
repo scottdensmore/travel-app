@@ -2,6 +2,12 @@ import { prisma } from '@/lib/prisma';
 import { BookingStatus, Prisma } from '@prisma/client';
 import { sendTravelDocumentsEmail, TravelDocumentEmailInput } from '@/lib/travelDocumentEmail';
 import { heldSeats } from '@/lib/seatOccupancy';
+import { activeItineraryLegWhere } from '@/lib/bookingItinerary';
+import {
+    ItineraryRebookingService,
+    RebookItineraryInput,
+    RebookItineraryResult,
+} from '@/lib/itineraryRebookingService';
 
 export interface SupportSearchQuery {
     reference?: string;
@@ -304,3 +310,102 @@ export async function resendReceiptEmail(bookingId: number): Promise<{ success: 
 
     return { success: true, sentTo: booking.user.email };
 }
+
+export type RebookItineraryRequest = Record<string, unknown>;
+export type RebookResult = RebookItineraryResult | { status: string; [key: string]: unknown };
+
+export async function staffChangeBookingSeats(
+    bookingId: number,
+    seatChanges: Array<{ passengerId: string; legId: number; seatNumber: string }>,
+    actorUserId: string,
+    reason: string
+): Promise<void> {
+    if (!reason?.trim()) {
+        throw new Error('A justification reason is required for staff seat changes.');
+    }
+
+    const booking = await prisma.booking.findUnique({
+        where: { id: bookingId },
+        include: {
+            legs: {
+                where: activeItineraryLegWhere,
+                include: { flight: true },
+                orderBy: { sequence: 'asc' },
+            },
+            passengers: true,
+        },
+    });
+
+    if (!booking) {
+        throw new Error(`Booking ${bookingId} not found.`);
+    }
+
+    const legsById = new Map(booking.legs.map((leg) => [leg.id, leg]));
+    const grounded = seatChanges
+        .map((c) => legsById.get(c.legId))
+        .filter((leg) => leg?.flight?.status === 'CANCELLED');
+
+    if (grounded.length > 0) {
+        throw new Error('That flight has been cancelled by the airline, so its seats cannot be changed.');
+    }
+
+    // Execute seat reassignment in a transaction
+    await prisma.$transaction(async (tx) => {
+        for (const change of seatChanges) {
+            const leg = legsById.get(change.legId);
+            if (!leg) {
+                throw new Error(`Leg ${change.legId} does not belong to booking ${bookingId}`);
+            }
+
+            // Release previous seat for this passenger & flight
+            await tx.seatAssignment.updateMany({
+                where: {
+                    passengerId: change.passengerId,
+                    flightId: leg.flight.id,
+                    releasedAt: null,
+                },
+                data: { releasedAt: new Date() },
+            });
+
+            // Assign new seat
+            await tx.seatAssignment.create({
+                data: {
+                    passengerId: change.passengerId,
+                    legId: leg.id,
+                    flightId: leg.flight.id,
+                    seatNumber: change.seatNumber,
+                    cabinClass: 'ECONOMY',
+                },
+            });
+        }
+    });
+}
+
+export async function staffRebookItinerary(
+    bookingId: number,
+    request: RebookItineraryRequest,
+    actorUserId: string,
+    reason: string
+): Promise<RebookResult> {
+    if (!reason?.trim()) {
+        throw new Error('A justification reason is required for staff rebooking.');
+    }
+
+    const booking = await prisma.booking.findUnique({
+        where: { id: bookingId },
+        select: { userId: true },
+    });
+
+    if (!booking) {
+        throw new Error(`Booking ${bookingId} not found.`);
+    }
+
+    const rebookingService = new ItineraryRebookingService();
+    return rebookingService.rebook({
+        ...request,
+        bookingId,
+        ownerUserId: booking.userId ?? undefined,
+        actorUserId,
+    } as unknown as RebookItineraryInput);
+}
+
