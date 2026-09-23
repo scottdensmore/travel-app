@@ -311,7 +311,9 @@ export async function resendReceiptEmail(bookingId: number): Promise<{ success: 
     return { success: true, sentTo: booking.user.email };
 }
 
-export type RebookItineraryRequest = Record<string, unknown>;
+export type RebookItineraryRequest = Partial<Omit<RebookItineraryInput, 'ownerUserId' | 'actorUserId' | 'bookingId'>> &
+    Partial<Pick<RebookItineraryInput, 'bookingId'>> &
+    Record<string, unknown>;
 export type RebookResult = RebookItineraryResult | { status: string; [key: string]: unknown };
 
 export async function staffChangeBookingSeats(
@@ -357,24 +359,15 @@ export async function staffChangeBookingSeats(
                 throw new Error(`Leg ${change.legId} does not belong to booking ${bookingId}`);
             }
 
-            // Release previous seat for this passenger & flight
+            // Update seat number in place for this passenger and leg, preserving cabin class and check-in
             await tx.seatAssignment.updateMany({
                 where: {
                     passengerId: change.passengerId,
-                    flightId: leg.flight.id,
-                    releasedAt: null,
+                    legId: change.legId,
                 },
-                data: { releasedAt: new Date() },
-            });
-
-            // Assign new seat
-            await tx.seatAssignment.create({
                 data: {
-                    passengerId: change.passengerId,
-                    legId: leg.id,
-                    flightId: leg.flight.id,
                     seatNumber: change.seatNumber,
-                    cabinClass: 'ECONOMY',
+                    releasedAt: null,
                 },
             });
         }
@@ -408,4 +401,5 @@ export async function staffRebookItinerary(
         actorUserId,
     } as unknown as RebookItineraryInput);
 }
+
 

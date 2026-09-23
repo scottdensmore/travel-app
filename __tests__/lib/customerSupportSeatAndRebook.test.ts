@@ -79,7 +79,7 @@ describe('staffChangeBookingSeats & staffRebookItinerary', () => {
         ).rejects.toThrow('Leg 99 does not belong to booking 101');
     });
 
-    it('successfully releases previous seat and creates new seat assignment', async () => {
+    it('successfully updates seat assignment in place', async () => {
         (prisma.booking.findUnique as jest.Mock).mockResolvedValue({
             id: 101,
             legs: [
@@ -98,19 +98,11 @@ describe('staffChangeBookingSeats & staffRebookItinerary', () => {
         expect(prisma.seatAssignment.updateMany).toHaveBeenCalledWith({
             where: {
                 passengerId: 'p1',
-                flightId: 10,
-                releasedAt: null,
-            },
-            data: { releasedAt: expect.any(Date) },
-        });
-
-        expect(prisma.seatAssignment.create).toHaveBeenCalledWith({
-            data: {
-                passengerId: 'p1',
                 legId: 1,
-                flightId: 10,
+            },
+            data: {
                 seatNumber: '14B',
-                cabinClass: 'ECONOMY',
+                releasedAt: null,
             },
         });
     });
