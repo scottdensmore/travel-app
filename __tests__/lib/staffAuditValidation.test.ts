@@ -121,6 +121,11 @@ describe('Staff Audit Validation Schemas', () => {
         it('rejects limit less than 1', () => {
             expect(() => staffAuditQuerySchema.parse({ limit: 0 })).toThrow();
         });
+
+        it('rejects invalid date format strings', () => {
+            expect(() => staffAuditQuerySchema.parse({ dateFrom: 'invalid-date' })).toThrow();
+            expect(() => staffAuditQuerySchema.parse({ dateTo: 'not-a-date' })).toThrow();
+        });
     });
 
     describe('auditRetentionPurgeSchema', () => {

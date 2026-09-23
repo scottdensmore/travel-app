@@ -17,6 +17,9 @@ export async function purgeExpiredAuditLogs(options: {
     reason: string;
 }): Promise<AuditRetentionPurgeResult> {
     const retentionDays = options.retentionDays ?? 365;
+    if (!Number.isInteger(retentionDays) || retentionDays < 1) {
+        throw new Error('retentionDays must be a positive integer.');
+    }
     const dryRun = options.dryRun ?? true;
     const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
 

@@ -84,7 +84,7 @@ export async function searchStaffAuditLogs(query: StaffAuditQuery) {
         prisma.staffAuditLog.count({ where }),
         prisma.staffAuditLog.findMany({
             where,
-            orderBy: { createdAt: 'desc' },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
             take: limit + 1,
             cursor: validated.cursor ? { id: validated.cursor } : undefined,
             skip: validated.cursor ? 1 : undefined,

@@ -866,11 +866,17 @@ const emptyStringToUndefined = (val: unknown) => {
 export const staffAuditQuerySchema = z.object({
     dateFrom: z.preprocess(
         emptyStringToUndefined,
-        z.union([z.string(), z.date()]).optional()
+        z.union([
+            z.string().refine(s => !Number.isNaN(Date.parse(s)), 'Invalid date format.'),
+            z.date(),
+        ]).optional()
     ),
     dateTo: z.preprocess(
         emptyStringToUndefined,
-        z.union([z.string(), z.date()]).optional()
+        z.union([
+            z.string().refine(s => !Number.isNaN(Date.parse(s)), 'Invalid date format.'),
+            z.date(),
+        ]).optional()
     ),
     actorId: z.preprocess(
         emptyStringToUndefined,
@@ -903,7 +909,7 @@ export const auditRetentionPurgeSchema = z.object({
     retentionDays: z.coerce.number().int().min(1).max(3650).default(365).optional(),
     dryRun: z.boolean().default(true).optional(),
     reason: z.string().trim().min(1, 'Reason is required.').max(500, 'Reason is too long.'),
-    stepUpCode: z.string().trim().regex(/^\d{6}$/, 'Security code must be exactly 6 digits.').optional(),
+    stepUpCode: stepUpCodeSchema.optional(),
 }).strict();
 
 export type StaffAuditInputSchemaType = z.infer<typeof staffAuditInputSchema>;

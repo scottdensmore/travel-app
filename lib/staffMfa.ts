@@ -13,9 +13,6 @@ import { hasStaffPermission } from './staffAuthorization';
 
 export { hasVerifiedStaffAccess } from './staffAuthorization';
 
-
-
-
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 const ALGORITHM = 'aes-256-gcm';
 const ENVELOPE_VERSION = 'v1';
