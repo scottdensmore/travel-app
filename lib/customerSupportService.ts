@@ -367,7 +367,6 @@ export async function staffChangeBookingSeats(
                 },
                 data: {
                     seatNumber: change.seatNumber,
-                    releasedAt: null,
                 },
             });
         }

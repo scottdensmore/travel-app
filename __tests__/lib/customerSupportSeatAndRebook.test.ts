@@ -102,7 +102,6 @@ describe('staffChangeBookingSeats & staffRebookItinerary', () => {
             },
             data: {
                 seatNumber: '14B',
-                releasedAt: null,
             },
         });
     });
