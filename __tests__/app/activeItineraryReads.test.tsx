@@ -146,6 +146,9 @@ describe('active itinerary page reads', () => {
     });
 
     it('loads only active legs for recent bookings on the admin dashboard', async () => {
+        mockedGetServerSession.mockResolvedValueOnce({
+            user: { id: 'admin-1', role: 'ADMIN', staffMfaVerified: true },
+        });
         await AdminDashboard();
 
         expect(bookingFindMany.mock.calls[0][0].include.legs.where)
