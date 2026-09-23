@@ -835,3 +835,5 @@ export const adminNotificationDeliveriesQuerySchema = z.object({
 export type NotificationPreferenceItem = z.infer<typeof notificationPreferenceItemSchema>;
 export type UpdateNotificationPreferencesInput = z.infer<typeof updateNotificationPreferencesSchema>;
 export type AdminNotificationDeliveriesQuery = z.infer<typeof adminNotificationDeliveriesQuerySchema>;
+
+export const stepUpCodeSchema = z.string().trim().regex(/^\d{6}$/, 'Security code must be exactly 6 digits');
