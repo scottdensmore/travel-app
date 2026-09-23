@@ -116,6 +116,7 @@ import {
     parseInput,
     scheduleSchema,
     searchFlightsSchema,
+    searchMultiCityFlightsSchema,
     seatChangesSchema,
     checkoutSeatClaimsSchema,
     checkoutPaymentRequestSchema,
@@ -279,6 +280,75 @@ const CABIN_ROW_COUNT: Record<CabinClass, (flight: Flight) => number | null> = {
 /** A search result, and whether the cabin that was searched exists on it. */
 export type SearchResultFlight = RoutedFlight & { cabinAvailable: boolean };
 
+export type MultiCityLegSearchResult =
+    | {
+        status: 'ok';
+        from: string;
+        to: string;
+        departureDate: string;
+        flights: SearchResultFlight[];
+        nearbyDates: string[];
+      }
+    | {
+        status: 'unavailable';
+        from: string;
+        to: string;
+        departureDate: string;
+        flights: [];
+        nearbyDates: [];
+      };
+
+export interface MultiCitySearchResponse {
+    legs: MultiCityLegSearchResult[];
+    cabinClass?: CabinClass;
+}
+
+export async function searchMultiCityFlightsAction(
+    input: unknown
+): Promise<(ActionValidationFailure & { validation?: ActionValidationFailure['error'] }) | MultiCitySearchResponse> {
+    const parsed = parseActionInput(searchMultiCityFlightsSchema, input);
+    if (!parsed.ok) {
+        return {
+            ...parsed,
+            validation: parsed.error,
+        };
+    }
+
+    const { legs, cabinClass } = parsed.data;
+    const now = new Date();
+
+    const legResults = await Promise.allSettled(
+        legs.map(leg => searchOneDirection(leg.from, leg.to, leg.departureDate, now, cabinClass ?? 'ECONOMY'))
+    );
+
+    const mappedLegs: MultiCityLegSearchResult[] = legResults.map((res, index) => {
+        const criteria = legs[index];
+        if (res.status === 'fulfilled' && res.value !== null) {
+            return {
+                status: 'ok',
+                from: criteria.from,
+                to: criteria.to,
+                departureDate: criteria.departureDate,
+                flights: res.value.flights,
+                nearbyDates: res.value.nearbyDates,
+            };
+        }
+        return {
+            status: 'unavailable',
+            from: criteria.from,
+            to: criteria.to,
+            departureDate: criteria.departureDate,
+            flights: [],
+            nearbyDates: [],
+        };
+    });
+
+    return {
+        legs: mappedLegs,
+        cabinClass,
+    };
+}
+
 /**
  * Results annotated for one cabin: priced at its fare where it operates, and
  * marked where it does not.
@@ -325,7 +395,7 @@ async function searchOneDirection(
     to: string,
     isoDate: string,
     now: Date,
-    cabin: CabinClass,
+    cabin: CabinClass = 'ECONOMY',
 ): Promise<{ flights: SearchResultFlight[]; nearbyDates: string[] }> {
     // The day the customer asked for, at the airport they are leaving from.
     // A UTC day is the wrong window once departures are instants: a 22:00 Miami
