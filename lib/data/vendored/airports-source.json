@@ -1,0 +1,127 @@
+{
+  "$comment": "Vendored snapshot of airport reference data sourced from OurAirports (https://ourairports.com/data/, Public Domain / CC0) with curated IANA Time Zone Database (tzdb) mappings. Run 'npm run airports:generate' to update lib/data/AirportData.ts.",
+  "source": "OurAirports (Public Domain / CC0) + IANA Time Zone Database (tzdb)",
+  "snapshotDate": "2026-09-23",
+  "airports": [
+    {
+      "iataCode": "SEA",
+      "name": "Seattle-Tacoma International Airport",
+      "city": "Seattle",
+      "country": "United States",
+      "coordinates": {
+        "latitude": 47.4502,
+        "longitude": -122.3088
+      },
+      "timeZone": "America/Los_Angeles",
+      "label": "Seattle, USA"
+    },
+    {
+      "iataCode": "DTW",
+      "name": "Detroit Metropolitan Wayne County Airport",
+      "city": "Detroit",
+      "country": "United States",
+      "coordinates": {
+        "latitude": 42.2124,
+        "longitude": -83.3534
+      },
+      "timeZone": "America/Detroit",
+      "label": "Detroit, USA"
+    },
+    {
+      "iataCode": "JFK",
+      "name": "John F. Kennedy International Airport",
+      "city": "New York",
+      "country": "United States",
+      "coordinates": {
+        "latitude": 40.6413,
+        "longitude": -73.7781
+      },
+      "timeZone": "America/New_York",
+      "label": "New York, USA"
+    },
+    {
+      "iataCode": "LHR",
+      "name": "London Heathrow Airport",
+      "city": "London",
+      "country": "United Kingdom",
+      "coordinates": {
+        "latitude": 51.47,
+        "longitude": -0.4543
+      },
+      "timeZone": "Europe/London",
+      "label": "London, UK"
+    },
+    {
+      "iataCode": "SFO",
+      "name": "San Francisco International Airport",
+      "city": "San Francisco",
+      "country": "United States",
+      "coordinates": {
+        "latitude": 37.6213,
+        "longitude": -122.379
+      },
+      "timeZone": "America/Los_Angeles",
+      "label": "San Francisco, USA"
+    },
+    {
+      "iataCode": "HND",
+      "name": "Tokyo Haneda International Airport",
+      "city": "Tokyo",
+      "country": "Japan",
+      "coordinates": {
+        "latitude": 35.5494,
+        "longitude": 139.7798
+      },
+      "timeZone": "Asia/Tokyo",
+      "label": "Tokyo, Japan"
+    },
+    {
+      "iataCode": "ORD",
+      "name": "Chicago O'Hare International Airport",
+      "city": "Chicago",
+      "country": "United States",
+      "coordinates": {
+        "latitude": 41.9742,
+        "longitude": -87.9073
+      },
+      "timeZone": "America/Chicago",
+      "label": "Chicago, USA"
+    },
+    {
+      "iataCode": "CDG",
+      "name": "Charles de Gaulle International Airport",
+      "city": "Paris",
+      "country": "France",
+      "coordinates": {
+        "latitude": 49.0097,
+        "longitude": 2.5479
+      },
+      "timeZone": "Europe/Paris",
+      "label": "Paris, France"
+    },
+    {
+      "iataCode": "MIA",
+      "name": "Miami International Airport",
+      "city": "Miami",
+      "country": "United States",
+      "coordinates": {
+        "latitude": 25.7959,
+        "longitude": -80.287
+      },
+      "timeZone": "America/New_York",
+      "label": "Miami, USA"
+    },
+    {
+      "iataCode": "GIG",
+      "name": "Rio de Janeiro/Galeão – Antonio Carlos Jobim International Airport",
+      "city": "Rio de Janeiro",
+      "country": "Brazil",
+      "coordinates": {
+        "latitude": -22.8134,
+        "longitude": -43.2494
+      },
+      "timeZone": "America/Sao_Paulo",
+      "label": "Rio de Janeiro, Brazil"
+    }
+  ]
+}

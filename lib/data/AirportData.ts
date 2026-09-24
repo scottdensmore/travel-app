@@ -1,3 +1,14 @@
+/**
+ * AUTO-GENERATED FILE -- DO NOT EDIT DIRECTLY.
+ *
+ * Generated from vendored dataset snapshot: lib/data/vendored/airports-source.json
+ * Sourced from OurAirports public-domain data with curated IANA timezones.
+ *
+ * To regenerate or check for drift:
+ *   npm run airports:generate
+ *   npm run airports:check
+ */
+
 export interface AirportRecord {
     /** IATA station code, the stable identifier for the airport. */
     iataCode: string;
