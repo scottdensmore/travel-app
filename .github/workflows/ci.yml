@@ -59,6 +59,9 @@ jobs:
       - name: Run npm audit
         run: npm audit --audit-level=high
 
+      - name: Verify repository policy
+        run: npm run verify:repo
+
       - name: Secret scanning check
         run: |
           echo "Scanning repository for committed secrets..."
