@@ -434,6 +434,7 @@ export const checkoutPaymentRequestSchema = z.object({
         error: 'At least one passenger is required.',
     }).min(1, 'At least one passenger is required.').max(MAX_PASSENGERS_PER_BOOKING),
     ancillariesByPassenger: bookingAncillariesMapSchema.optional(),
+    isRewardBooking: z.boolean().optional(),
 }).strict().superRefine(({ flightIds, passengers }, context) => {
     if (new Set(flightIds).size !== flightIds.length) {
         context.addIssue({
@@ -508,6 +509,7 @@ export const bookingRequestSchema = z.object({
         .max(MAX_PASSENGERS_PER_BOOKING),
     idempotencyKey: bookingRequestIdSchema,
     ancillariesByPassenger: bookingAncillariesMapSchema.optional(),
+    isRewardBooking: z.boolean().optional(),
 }).strict().superRefine(({ flightIds, passengers }, context) => {
     if (new Set(flightIds).size !== flightIds.length) {
         context.addIssue({

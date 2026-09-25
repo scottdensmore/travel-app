@@ -22,6 +22,7 @@ import type {
     PaymentProvider,
 } from '@/lib/stripePaymentProvider';
 import { checkoutPaymentServiceSchema, parseInput } from '@/lib/validation';
+import { MANDATORY_AWARD_TAX_CENTS_PER_LEG } from '@/lib/rewardPricing';
 
 interface CheckoutPaymentInput {
     userId: string;
@@ -32,6 +33,7 @@ interface CheckoutPaymentInput {
         cabinClass: 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST';
     }>;
     ancillariesByPassenger?: Record<string | number, AncillaryType[]>;
+    isRewardBooking?: boolean;
 }
 
 interface CheckoutPaymentResult {
@@ -87,6 +89,9 @@ function requestFingerprint(input: Omit<CheckoutPaymentInput, 'userId'>): string
     ];
     if (sortedAncillaries.length > 0) {
         payload.push(sortedAncillaries);
+    }
+    if (input.isRewardBooking) {
+        payload.push(true);
     }
     return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }
@@ -191,13 +196,17 @@ export class CheckoutPaymentService {
                 )
                 : 0;
 
+            const fareAmountCents = input.isRewardBooking
+                ? input.passengers.length * flights.length * MANDATORY_AWARD_TAX_CENTS_PER_LEG
+                : total.cents;
+
             return tx.paymentAttempt.create({
                 data: {
                     id: randomUUID(),
                     userId: input.userId,
                     checkoutId: input.checkoutId,
                     requestFingerprint: fingerprint,
-                    amountCents: total.cents + ancillariesTotalCents,
+                    amountCents: fareAmountCents + ancillariesTotalCents,
                     currency: 'USD',
                     status: 'CREATING',
                 },

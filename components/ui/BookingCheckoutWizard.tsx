@@ -12,6 +12,7 @@ import type { AncillaryType, CabinClass } from '@prisma/client';
 import { bookFlightAction, holdChosenSeatsAction, startCheckoutPaymentAction } from '@/app/actions';
 import { isActionValidationFailure, type ActionValidationFailure } from '@/lib/actionResult';
 import { CABIN_FARE_PERCENT, calculateBookingAncillariesTotalCents, calculatePassengerFareCents, flightFareCents, formatPrice, getAncillaryPriceCents, calculateFareBreakdown, calculatePassengerAncillaries } from '@/lib/bookingPricing';
+import { CABIN_AWARD_POINTS, MANDATORY_AWARD_TAX_CENTS_PER_LEG } from '@/lib/rewardPricing';
 import { BRAND } from '@/lib/brand';
 import { cabinLabel, legDirectionLabel, legFlightClause } from '@/lib/bookingItinerary';
 import { durationLabel, flightArrival, flightDeparture } from '@/lib/flightTime';
@@ -48,6 +49,8 @@ interface BookingCheckoutWizardProps {
     cabinClass?: PassengerFormState['cabinClass'];
     /// Saved customer zone for account events such as ticket issuance.
     accountTimeZone?: string;
+    isRewardBooking?: boolean;
+    spendablePointsBalance?: number;
 }
 
 interface PassengerFormState {
@@ -159,6 +162,8 @@ export default function BookingCheckoutWizard({
     occupiedSeats: initialOccupiedSeats,
     cabinClass: searchedCabin,
     accountTimeZone = DEFAULT_ACCOUNT_TIME_ZONE,
+    isRewardBooking = false,
+    spendablePointsBalance,
 }: BookingCheckoutWizardProps) {
     const ticketTimeZone = normalizeAccountTimeZone(accountTimeZone)
         ?? DEFAULT_ACCOUNT_TIME_ZONE;
@@ -264,6 +269,8 @@ export default function BookingCheckoutWizard({
         createdAt: Date | string;
         totalPriceCents: number | null;
         passengers: ConfirmedPassenger[];
+        isRewardBooking?: boolean;
+        pointsRedeemed?: number | null;
     } | null>(null);
     const idempotencyKeyRef = useRef<string | null>(null);
     const [autoAllocateGroup, setAutoAllocateGroup] = useState<boolean>(true);
@@ -285,8 +292,30 @@ export default function BookingCheckoutWizard({
             ancillaries: ancillariesByPassenger[index] || ['CARRY_ON'],
         }))
     );
-    const grandTotalPriceCents = totalPriceCents + ancillariesTotalCents;
-    const grandTotalPriceDisplay = formatPrice(grandTotalPriceCents);
+
+    const totalPointsRequired = isRewardBooking
+        ? passengers.reduce((sum, p) => sum + (CABIN_AWARD_POINTS[p.cabinClass] ?? CABIN_AWARD_POINTS.ECONOMY) * flights.length, 0)
+        : 0;
+
+    const totalTaxesCents = isRewardBooking
+        ? passengers.length * flights.length * MANDATORY_AWARD_TAX_CENTS_PER_LEG
+        : 0;
+
+    const grandTotalPriceCents = isRewardBooking
+        ? totalTaxesCents + ancillariesTotalCents
+        : totalPriceCents + ancillariesTotalCents;
+
+    const grandTotalPriceDisplay = isRewardBooking
+        ? `${totalPointsRequired.toLocaleString('en-US')} pts + ${formatPrice(totalTaxesCents + ancillariesTotalCents)}`
+        : formatPrice(grandTotalPriceCents);
+
+    const estimatedTotalDisplay = isRewardBooking
+        ? `${totalPointsRequired.toLocaleString('en-US')} pts + ${formatPrice(totalTaxesCents)}`
+        : totalPriceDisplay;
+
+    const hasInsufficientPoints = Boolean(
+        isRewardBooking && (spendablePointsBalance !== undefined) && (spendablePointsBalance < totalPointsRequired)
+    );
 
     const handleToggleAncillary = (passengerIndex: number, type: AncillaryType) => {
         if (type === 'CARRY_ON') return;
@@ -1014,11 +1043,14 @@ export default function BookingCheckoutWizard({
             cabinClass: passenger.cabinClass,
         })),
         ancillariesByPassenger,
+        ...(isRewardBooking ? { isRewardBooking: true } : {}),
     });
 
     const handlePreparePayment = async () => {
-        if (holdDeadline === null || holdDeadline <= Date.now() || isPreparingPayment) {
-            setHoldSecondsRemaining(0);
+        if (holdDeadline === null || holdDeadline <= Date.now() || isPreparingPayment || hasInsufficientPoints) {
+            if (holdDeadline !== null && holdDeadline <= Date.now()) {
+                setHoldSecondsRemaining(0);
+            }
             return;
         }
 
@@ -1046,6 +1078,7 @@ export default function BookingCheckoutWizard({
     };
 
     const handleSubmitBooking = async () => {
+        if (hasInsufficientPoints) return;
         if (!bookingSecured && (holdDeadline === null || holdDeadline <= Date.now())) {
             setHoldSecondsRemaining(0);
             return;
@@ -1104,6 +1137,7 @@ export default function BookingCheckoutWizard({
                 passengers: formattedPassengers,
                 idempotencyKey: idempotencyKeyRef.current,
                 ancillariesByPassenger,
+                ...(isRewardBooking ? { isRewardBooking: true } : {}),
             });
 
             if (isActionValidationFailure(result)) {
@@ -1216,6 +1250,24 @@ export default function BookingCheckoutWizard({
                         </span>
                         <h2 style={{ fontSize: '1.8rem', color: '#c084fc', marginBottom: '0.5rem', fontWeight: 'bold' }}>Traveler Information</h2>
                         <p style={{ color: 'rgba(255,255,255,0.5)', marginBottom: '2rem' }}>Please enter details exactly as they appear on passenger passports.</p>
+
+                        {hasInsufficientPoints && (
+                            <div
+                                role="alert"
+                                data-testid="insufficient-points-warning"
+                                style={{
+                                    margin: '0 0 1.5rem',
+                                    padding: '0.85rem 1rem',
+                                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                                    borderRadius: '10px',
+                                    background: 'rgba(239, 68, 68, 0.1)',
+                                    color: '#fca5a5',
+                                    fontWeight: 600,
+                                }}
+                            >
+                                Insufficient points: You need {totalPointsRequired.toLocaleString('en-US')} points for this award booking, but you have {(spendablePointsBalance ?? 0).toLocaleString('en-US')} points in your account.
+                            </div>
+                        )}
 
                         {passengers.map((passenger, index) => (
                             <div
@@ -1516,11 +1568,21 @@ export default function BookingCheckoutWizard({
                             </button>
 
                             <div className="booking-traveler-primary-actions">
-                                <span style={{ fontSize: '1.1rem', color: '#34d399', fontWeight: 'bold' }}>Estimated total: {totalPriceDisplay}</span>
+                                <span style={{ fontSize: '1.1rem', color: '#34d399', fontWeight: 'bold' }}>Estimated total: {estimatedTotalDisplay}</span>
                                 <button
                                     type="button"
                                     onClick={handleNextStep}
-                                    style={{ backgroundColor: '#8b5cf6', color: '#fff', border: 'none', padding: '10px 28px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
+                                    disabled={hasInsufficientPoints}
+                                    style={{
+                                        backgroundColor: '#8b5cf6',
+                                        color: '#fff',
+                                        border: 'none',
+                                        padding: '10px 28px',
+                                        borderRadius: '8px',
+                                        cursor: hasInsufficientPoints ? 'not-allowed' : 'pointer',
+                                        opacity: hasInsufficientPoints ? 0.65 : 1,
+                                        fontWeight: 'bold',
+                                    }}>
                                     Select Seats →
                                 </button>
                             </div>
@@ -2232,6 +2294,24 @@ export default function BookingCheckoutWizard({
                         <h2 style={{ fontSize: '1.8rem', color: '#c084fc', marginBottom: '0.5rem', fontWeight: 'bold' }}>Review Booking</h2>
                         <p style={{ color: 'rgba(255,255,255,0.5)', marginBottom: '2rem' }}>Verify the itinerary and traveler details before confirming.</p>
 
+                        {hasInsufficientPoints && (
+                            <div
+                                role="alert"
+                                data-testid="insufficient-points-warning-step4"
+                                style={{
+                                    margin: '0 0 1.5rem',
+                                    padding: '0.85rem 1rem',
+                                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                                    borderRadius: '10px',
+                                    background: 'rgba(239, 68, 68, 0.1)',
+                                    color: '#fca5a5',
+                                    fontWeight: 600,
+                                }}
+                            >
+                                Insufficient spendable points balance. You have {(spendablePointsBalance ?? 0).toLocaleString('en-US')} points, but this redemption requires {totalPointsRequired.toLocaleString('en-US')} points.
+                            </div>
+                        )}
+
                         <p
                             id="seat-hold-timer"
                             role={bookingSecured ? 'status' : 'timer'}
@@ -2311,7 +2391,7 @@ export default function BookingCheckoutWizard({
                                                                step; a missing seat is not a success. */
                                                             <span style={{ color: 'rgba(255,255,255,0.5)', flexShrink: 0, whiteSpace: 'nowrap' }}>
                                                                 No seat chosen
-                                                            </span>
+                              </span>
                                                         )}
                                                     </li>
                                                 ))}
@@ -2339,7 +2419,11 @@ export default function BookingCheckoutWizard({
                                                         <strong>{p.firstName} {p.lastName}</strong>
                                                         <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)' }}>Class: {cabinLabel(p.cabinClass)}</div>
                                                     </div>
-                                                    <span style={{ fontWeight: 'bold', flexShrink: 0, whiteSpace: 'nowrap' }}>{formatPrice(calculatePassengerPrice(p.cabinClass))}</span>
+                                                    <span style={{ fontWeight: 'bold', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                                                        {isRewardBooking
+                                                            ? `${((CABIN_AWARD_POINTS[p.cabinClass] ?? CABIN_AWARD_POINTS.ECONOMY) * flights.length).toLocaleString('en-US')} pts + ${formatPrice(flights.length * MANDATORY_AWARD_TAX_CENTS_PER_LEG)}`
+                                                            : formatPrice(calculatePassengerPrice(p.cabinClass))}
+                                                    </span>
                                                 </li>
                                             ))}
                                         </ul>
@@ -2350,7 +2434,20 @@ export default function BookingCheckoutWizard({
                                     </div>
                                 )}
 
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'rgba(255,255,255,0.75)', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                                {isRewardBooking && (
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'rgba(255,255,255,0.75)', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                                        <span>Points Redemption</span>
+                                        <span>{totalPointsRequired.toLocaleString('en-US')} pts</span>
+                                    </div>
+                                )}
+                                {isRewardBooking && (
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'rgba(255,255,255,0.75)', marginTop: '0.5rem' }}>
+                                        <span>Mandatory Taxes &amp; Fees</span>
+                                        <span>{formatPrice(totalTaxesCents)}</span>
+                                    </div>
+                                )}
+
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'rgba(255,255,255,0.75)', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: isRewardBooking ? 'none' : '1px solid rgba(255,255,255,0.08)' }}>
                                     <span>Bags &amp; Extras</span>
                                     <span>Extras total: {formatPrice(ancillariesTotalCents)}</span>
                                 </div>
@@ -2366,6 +2463,20 @@ export default function BookingCheckoutWizard({
                                                 <div key={i} style={{ borderBottom: i < passengers.length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none', paddingBottom: i < passengers.length - 1 ? '0.75rem' : '0' }}>
                                                     <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>Traveler {i + 1}: {p.firstName} {p.lastName}</div>
                                                     {flights.map((leg) => {
+                                                        if (isRewardBooking) {
+                                                            const awardPts = CABIN_AWARD_POINTS[p.cabinClass] ?? CABIN_AWARD_POINTS.ECONOMY;
+                                                            return (
+                                                                <div key={leg.id} style={{ marginLeft: '0.5rem', marginBottom: '0.5rem' }}>
+                                                                    <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.8rem', marginBottom: '0.25rem' }}>{leg.from} → {leg.to}</div>
+                                                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                        <span>Award Points</span><span>{awardPts.toLocaleString('en-US')} pts</span>
+                                                                    </div>
+                                                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                        <span>Mandatory Government Taxes &amp; Fees</span><span>{formatPrice(MANDATORY_AWARD_TAX_CENTS_PER_LEG)}</span>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        }
                                                         const legFare = calculatePassengerFareCents(flightFareCents(leg), p.cabinClass as CabinClass);
                                                         const breakdown = calculateFareBreakdown(legFare);
                                                         return (
@@ -2426,7 +2537,7 @@ export default function BookingCheckoutWizard({
                                     publishableKey={paymentSession.publishableKey}
                                     clientSecret={paymentSession.clientSecret}
                                     amountDisplay={formatPrice(paymentSession.amountCents)}
-                                    disabled={!bookingSecured && holdSecondsRemaining === 0}
+                                    disabled={(!bookingSecured && holdSecondsRemaining === 0) || hasInsufficientPoints}
                                     submitting={isSubmitting}
                                     onConfirmed={handleSubmitBooking}
                                 />
@@ -2443,10 +2554,19 @@ export default function BookingCheckoutWizard({
                                 <button
                                     type="button"
                                     onClick={handlePreparePayment}
-                                    disabled={isPreparingPayment || holdSecondsRemaining === 0}
+                                    disabled={isPreparingPayment || holdSecondsRemaining === 0 || hasInsufficientPoints}
                                     aria-busy={isPreparingPayment}
                                     aria-describedby="seat-hold-timer"
-                                    style={{ backgroundColor: '#8b5cf6', color: '#fff', border: 'none', padding: '12px 32px', borderRadius: '8px', cursor: isPreparingPayment || holdSecondsRemaining === 0 ? 'not-allowed' : 'pointer', opacity: isPreparingPayment || holdSecondsRemaining === 0 ? 0.65 : 1, fontWeight: 'bold' }}>
+                                    style={{
+                                        backgroundColor: '#8b5cf6',
+                                        color: '#fff',
+                                        border: 'none',
+                                        padding: '12px 32px',
+                                        borderRadius: '8px',
+                                        cursor: isPreparingPayment || holdSecondsRemaining === 0 || hasInsufficientPoints ? 'not-allowed' : 'pointer',
+                                        opacity: isPreparingPayment || holdSecondsRemaining === 0 || hasInsufficientPoints ? 0.65 : 1,
+                                        fontWeight: 'bold',
+                                    }}>
                                     {isPreparingPayment ? 'Preparing secure payment…' : 'Continue to secure payment'}
                                 </button>
                             </div>
@@ -2486,7 +2606,11 @@ export default function BookingCheckoutWizard({
                         <p style={{ color: '#f3f0ff', marginBottom: '0.5rem', fontWeight: 600, overflowWrap: 'anywhere' }}>
                             Confirmation {bookingResult.reference}
                         </p>
-                        <p style={{ color: '#34d399', marginBottom: '2rem', fontWeight: 'bold' }}>Confirmed total: {bookingResult.totalPriceCents !== null ? formatPrice(bookingResult.totalPriceCents) : grandTotalPriceDisplay}</p>
+                        <p style={{ color: '#34d399', marginBottom: '2rem', fontWeight: 'bold' }}>
+                            Confirmed total: {isRewardBooking
+                                ? `${(bookingResult.pointsRedeemed ?? totalPointsRequired).toLocaleString('en-US')} pts + ${formatPrice(bookingResult.totalPriceCents ?? (totalTaxesCents + ancillariesTotalCents))}`
+                                : (bookingResult.totalPriceCents !== null ? formatPrice(bookingResult.totalPriceCents) : grandTotalPriceDisplay)}
+                        </p>
 
                         {/* Payment receipt breakdown */}
                         <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginBottom: '2rem' }}>
@@ -2508,10 +2632,23 @@ export default function BookingCheckoutWizard({
                             textAlign: 'left'
                         }}>
                             <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#fff', marginBottom: '0.75rem' }}>Receipt summary</h3>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'rgba(255,255,255,0.75)', marginBottom: '0.5rem' }}>
-                                <span>Flights ({bookingResult.passengers.length} traveller{bookingResult.passengers.length > 1 ? 's' : ''})</span>
-                                <span>{totalPriceDisplay}</span>
-                            </div>
+                            {isRewardBooking ? (
+                                <>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'rgba(255,255,255,0.75)', marginBottom: '0.5rem' }}>
+                                        <span>Points Redeemed ({bookingResult.passengers.length} traveller{bookingResult.passengers.length > 1 ? 's' : ''})</span>
+                                        <span>{(bookingResult.pointsRedeemed ?? totalPointsRequired).toLocaleString('en-US')} pts</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'rgba(255,255,255,0.75)', marginBottom: '0.5rem' }}>
+                                        <span>Mandatory Taxes &amp; Fees</span>
+                                        <span>{formatPrice(totalTaxesCents)}</span>
+                                    </div>
+                                </>
+                            ) : (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'rgba(255,255,255,0.75)', marginBottom: '0.5rem' }}>
+                                    <span>Flights ({bookingResult.passengers.length} traveller{bookingResult.passengers.length > 1 ? 's' : ''})</span>
+                                    <span>{totalPriceDisplay}</span>
+                                </div>
+                            )}
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'rgba(255,255,255,0.75)', marginBottom: '0.5rem' }}>
                                 <span>Bags &amp; Extras</span>
                                 <span>{formatPrice(ancillariesTotalCents)}</span>
@@ -2527,6 +2664,20 @@ export default function BookingCheckoutWizard({
                                             <div key={i} style={{ borderBottom: i < bookingResult.passengers.length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none', paddingBottom: i < bookingResult.passengers.length - 1 ? '0.75rem' : '0' }}>
                                                 <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>Traveler {i + 1}: {p.firstName} {p.lastName}</div>
                                                 {flights.map((leg) => {
+                                                    if (isRewardBooking) {
+                                                        const awardPts = CABIN_AWARD_POINTS[p.cabinClass as CabinClass] ?? CABIN_AWARD_POINTS.ECONOMY;
+                                                        return (
+                                                            <div key={leg.id} style={{ marginLeft: '0.5rem', marginBottom: '0.5rem' }}>
+                                                                <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.8rem', marginBottom: '0.25rem' }}>{leg.from} → {leg.to}</div>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                    <span>Award Points</span><span>{awardPts.toLocaleString('en-US')} pts</span>
+                                                                </div>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                    <span>Mandatory Government Taxes &amp; Fees</span><span>{formatPrice(MANDATORY_AWARD_TAX_CENTS_PER_LEG)}</span>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    }
                                                     const legFare = calculatePassengerFareCents(flightFareCents(leg), p.cabinClass as CabinClass);
                                                     const breakdown = calculateFareBreakdown(legFare);
                                                     return (
@@ -2560,7 +2711,9 @@ export default function BookingCheckoutWizard({
 
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.1rem', fontWeight: 'bold', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '0.75rem', marginTop: '0.5rem', color: '#34d399' }}>
                                 <span>Confirmed total</span>
-                                <span>{bookingResult.totalPriceCents !== null ? formatPrice(bookingResult.totalPriceCents) : grandTotalPriceDisplay}</span>
+                                <span>{isRewardBooking
+                                    ? `${(bookingResult.pointsRedeemed ?? totalPointsRequired).toLocaleString('en-US')} pts + ${formatPrice(bookingResult.totalPriceCents ?? (totalTaxesCents + ancillariesTotalCents))}`
+                                    : (bookingResult.totalPriceCents !== null ? formatPrice(bookingResult.totalPriceCents) : grandTotalPriceDisplay)}</span>
                             </div>
                         </div>
 

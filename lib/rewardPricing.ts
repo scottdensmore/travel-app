@@ -19,7 +19,7 @@ export const DEFAULT_AWARD_SEATS: Record<CabinClass, number> = {
     FIRST: 1,
 };
 
-const CABIN_AWARD_SEAT_KEYS: Record<
+export const CABIN_AWARD_SEAT_KEYS: Record<
     CabinClass,
     'awardSeatsEconomy' | 'awardSeatsPremiumEconomy' | 'awardSeatsBusiness' | 'awardSeatsFirst'
 > = {

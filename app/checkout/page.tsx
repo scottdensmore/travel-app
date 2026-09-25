@@ -12,6 +12,7 @@ import {
     DEFAULT_ACCOUNT_TIME_ZONE,
     normalizeAccountTimeZone,
 } from '@/lib/accountTimeZone';
+import { getUserSpendablePointsBalance } from '@/lib/pointsLedgerService';
 
 export const metadata: Metadata = {
     title: 'Checkout',
@@ -26,6 +27,7 @@ interface PageProps {
         outbound?: string | string[];
         inbound?: string | string[];
         cabin?: string | string[];
+        reward?: string | string[];
     }>;
 }
 
@@ -66,7 +68,8 @@ export default async function CheckoutPage({ searchParams }: PageProps) {
         redirect('/login');
     }
 
-    const { flights: flightsParam, outbound, inbound, cabin } = await searchParams;
+    const { flights: flightsParam, outbound, inbound, cabin, reward } = await searchParams;
+    const isRewardBooking = reward === 'true' || (Array.isArray(reward) && reward.includes('true'));
     // An unrecognised cabin is ignored rather than rejected: the itinerary is
     // still valid, and the wizard falls back to what the legs actually offer.
     const searchedCabin = typeof cabin === 'string' && CABINS.includes(cabin as Cabin)
@@ -108,7 +111,7 @@ export default async function CheckoutPage({ searchParams }: PageProps) {
         }
     }
 
-    const [found, account] = await Promise.all([
+    const [found, account, spendablePointsBalance] = await Promise.all([
         prisma.flight.findMany({
             where: { id: { in: flightIds } },
             include: flightRouteInclude,
@@ -117,6 +120,7 @@ export default async function CheckoutPage({ searchParams }: PageProps) {
             where: { id: session.user.id },
             select: { timeZone: true },
         }),
+        getUserSpendablePointsBalance(session.user.id),
     ]);
     const flightsById = new Map(found.map(flight => [flight.id, flight]));
     if (flightsById.size !== flightIds.length) {
@@ -140,6 +144,10 @@ export default async function CheckoutPage({ searchParams }: PageProps) {
             premiumEconomyRows: flight.premiumEconomyRows,
             economyRows: flight.economyRows,
             seatPattern: flight.seatPattern,
+            awardSeatsEconomy: flight.awardSeatsEconomy,
+            awardSeatsPremiumEconomy: flight.awardSeatsPremiumEconomy,
+            awardSeatsBusiness: flight.awardSeatsBusiness,
+            awardSeatsFirst: flight.awardSeatsFirst,
         };
     });
 
@@ -152,6 +160,8 @@ export default async function CheckoutPage({ searchParams }: PageProps) {
             cabinClass={searchedCabin}
             accountTimeZone={normalizeAccountTimeZone(account.timeZone)
                 ?? DEFAULT_ACCOUNT_TIME_ZONE}
+            isRewardBooking={isRewardBooking}
+            spendablePointsBalance={spendablePointsBalance}
         />
     );
 }

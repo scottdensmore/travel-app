@@ -95,6 +95,10 @@ import {
     isAwardAvailableForFlight,
     type AwardFareQuote,
 } from '@/lib/rewardPricing';
+import {
+    getUserSpendablePointsBalance,
+    accruePointsForCashBooking,
+} from '@/lib/pointsLedgerService';
 
 export type ActionServerError = {
     ok: false;
@@ -534,6 +538,7 @@ export async function bookFlightAction(bookingData: {
     passengers: PassengerInput[];
     idempotencyKey: string;
     ancillariesByPassenger?: Record<string | number, AncillaryType[]>;
+    isRewardBooking?: boolean;
 }) {
     const session = await getServerSession(authOptions);
     const userId = session?.user?.id;
@@ -555,6 +560,7 @@ export async function bookFlightAction(bookingData: {
             })),
             userId,
             ancillariesByPassenger: bookingData.ancillariesByPassenger,
+            isRewardBooking: bookingData.isRewardBooking,
         });
         if (payment.status !== 'AUTHORIZED' && payment.status !== 'CAPTURED') {
             return actionValidationFailure('Payment authorization is required before booking.');
@@ -583,6 +589,7 @@ export async function bookFlightAction(bookingData: {
             idempotencyKey: bookingData.idempotencyKey,
             paymentIntentId: payment.providerIntentId,
             ancillariesByPassenger: bookingData.ancillariesByPassenger,
+            isRewardBooking: bookingData.isRewardBooking,
         });
         try {
             capture = await paymentService.capturePayment({
@@ -648,6 +655,9 @@ export async function bookFlightAction(bookingData: {
             include: flightRouteInclude,
         });
         if (flight && (result.wasCreated || capture.wasCaptured)) {
+            if (!bookingData.isRewardBooking) {
+                await accruePointsForCashBooking(result.id);
+            }
             const points = Math.floor(bookingTotalCents(result, flight) / 100);
             await new NotificationService().dispatchNotification({
                 userId,
@@ -665,6 +675,13 @@ export async function bookFlightAction(bookingData: {
     return result;
 }
 
+export async function getUserSpendablePointsBalanceAction(): Promise<number> {
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.id;
+    if (!userId) throw new Error('Unauthorized');
+    return getUserSpendablePointsBalance(userId);
+}
+
 export async function startCheckoutPaymentAction(paymentData: {
     checkoutId: string;
     flightIds: number[];
@@ -673,6 +690,7 @@ export async function startCheckoutPaymentAction(paymentData: {
         cabinClass: 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST';
     }>;
     ancillariesByPassenger?: Record<string | number, AncillaryType[]>;
+    isRewardBooking?: boolean;
 }) {
     const session = await getServerSession(authOptions);
     const userId = session?.user?.id;
@@ -720,6 +738,7 @@ export async function createPaymentAttemptAction(paymentData: {
         cabinClass: 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST';
     }>;
     ancillariesByPassenger?: Record<string | number, AncillaryType[]>;
+    isRewardBooking?: boolean;
 }) {
     if (paymentData.ancillariesByPassenger) {
         const parsedAncillaries = parseActionInput(
