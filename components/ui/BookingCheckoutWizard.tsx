@@ -1150,6 +1150,8 @@ export default function BookingCheckoutWizard({
                 reference: result.reference,
                 createdAt: result.createdAt,
                 totalPriceCents: result.totalPriceCents,
+                isRewardBooking: result.isRewardBooking,
+                pointsRedeemed: result.pointsRedeemed,
                 // The confirmation prints the seat held on each leg, in leg
                 // order, rather than one seat for the whole trip (#137).
                 //
@@ -1251,22 +1253,39 @@ export default function BookingCheckoutWizard({
                         <h2 style={{ fontSize: '1.8rem', color: '#c084fc', marginBottom: '0.5rem', fontWeight: 'bold' }}>Traveler Information</h2>
                         <p style={{ color: 'rgba(255,255,255,0.5)', marginBottom: '2rem' }}>Please enter details exactly as they appear on passenger passports.</p>
 
-                        {hasInsufficientPoints && (
-                            <div
-                                role="alert"
-                                data-testid="insufficient-points-warning"
-                                style={{
-                                    margin: '0 0 1.5rem',
-                                    padding: '0.85rem 1rem',
-                                    border: '1px solid rgba(239, 68, 68, 0.35)',
-                                    borderRadius: '10px',
-                                    background: 'rgba(239, 68, 68, 0.1)',
-                                    color: '#fca5a5',
-                                    fontWeight: 600,
-                                }}
-                            >
-                                Insufficient points: You need {totalPointsRequired.toLocaleString('en-US')} points for this award booking, but you have {(spendablePointsBalance ?? 0).toLocaleString('en-US')} points in your account.
-                            </div>
+                        {isRewardBooking && spendablePointsBalance !== undefined && (
+                            hasInsufficientPoints ? (
+                                <div
+                                    role="alert"
+                                    data-testid="insufficient-points-warning"
+                                    style={{
+                                        margin: '0 0 1.5rem',
+                                        padding: '0.85rem 1rem',
+                                        border: '1px solid rgba(239, 68, 68, 0.35)',
+                                        borderRadius: '10px',
+                                        background: 'rgba(239, 68, 68, 0.1)',
+                                        color: '#fca5a5',
+                                        fontWeight: 600,
+                                    }}
+                                >
+                                    Insufficient points: You need {totalPointsRequired.toLocaleString('en-US')} points for this award booking, but you have {spendablePointsBalance.toLocaleString('en-US')} points in your account.
+                                </div>
+                            ) : (
+                                <div
+                                    data-testid="spendable-points-balance"
+                                    style={{
+                                        margin: '0 0 1.5rem',
+                                        padding: '0.85rem 1rem',
+                                        border: '1px solid rgba(139, 92, 246, 0.35)',
+                                        borderRadius: '10px',
+                                        background: 'rgba(139, 92, 246, 0.1)',
+                                        color: '#c4b5fd',
+                                        fontWeight: 600,
+                                    }}
+                                >
+                                    Available balance: {spendablePointsBalance.toLocaleString('en-US')} pts
+                                </div>
+                            )
                         )}
 
                         {passengers.map((passenger, index) => (
@@ -2294,22 +2313,39 @@ export default function BookingCheckoutWizard({
                         <h2 style={{ fontSize: '1.8rem', color: '#c084fc', marginBottom: '0.5rem', fontWeight: 'bold' }}>Review Booking</h2>
                         <p style={{ color: 'rgba(255,255,255,0.5)', marginBottom: '2rem' }}>Verify the itinerary and traveler details before confirming.</p>
 
-                        {hasInsufficientPoints && (
-                            <div
-                                role="alert"
-                                data-testid="insufficient-points-warning-step4"
-                                style={{
-                                    margin: '0 0 1.5rem',
-                                    padding: '0.85rem 1rem',
-                                    border: '1px solid rgba(239, 68, 68, 0.35)',
-                                    borderRadius: '10px',
-                                    background: 'rgba(239, 68, 68, 0.1)',
-                                    color: '#fca5a5',
-                                    fontWeight: 600,
-                                }}
-                            >
-                                Insufficient spendable points balance. You have {(spendablePointsBalance ?? 0).toLocaleString('en-US')} points, but this redemption requires {totalPointsRequired.toLocaleString('en-US')} points.
-                            </div>
+                        {isRewardBooking && spendablePointsBalance !== undefined && (
+                            hasInsufficientPoints ? (
+                                <div
+                                    role="alert"
+                                    data-testid="insufficient-points-warning-step4"
+                                    style={{
+                                        margin: '0 0 1.5rem',
+                                        padding: '0.85rem 1rem',
+                                        border: '1px solid rgba(239, 68, 68, 0.35)',
+                                        borderRadius: '10px',
+                                        background: 'rgba(239, 68, 68, 0.1)',
+                                        color: '#fca5a5',
+                                        fontWeight: 600,
+                                    }}
+                                >
+                                    Insufficient spendable points balance. You have {spendablePointsBalance.toLocaleString('en-US')} points, but this redemption requires {totalPointsRequired.toLocaleString('en-US')} points.
+                                </div>
+                            ) : (
+                                <div
+                                    data-testid="spendable-points-balance-step4"
+                                    style={{
+                                        margin: '0 0 1.5rem',
+                                        padding: '0.85rem 1rem',
+                                        border: '1px solid rgba(139, 92, 246, 0.35)',
+                                        borderRadius: '10px',
+                                        background: 'rgba(139, 92, 246, 0.1)',
+                                        color: '#c4b5fd',
+                                        fontWeight: 600,
+                                    }}
+                                >
+                                    Available balance: {spendablePointsBalance.toLocaleString('en-US')} pts
+                                </div>
+                            )
                         )}
 
                         <p

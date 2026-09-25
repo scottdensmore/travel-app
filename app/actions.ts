@@ -98,6 +98,7 @@ import {
 import {
     getUserSpendablePointsBalance,
     accruePointsForCashBooking,
+    InsufficientPointsError,
 } from '@/lib/pointsLedgerService';
 
 export type ActionServerError = {
@@ -582,15 +583,28 @@ export async function bookFlightAction(bookingData: {
             );
         }
 
-        result = await flightBookingService.bookFlight({
-            flightIds: bookingData.flightIds,
-            userId,
-            passengers: bookingData.passengers,
-            idempotencyKey: bookingData.idempotencyKey,
-            paymentIntentId: payment.providerIntentId,
-            ancillariesByPassenger: bookingData.ancillariesByPassenger,
-            isRewardBooking: bookingData.isRewardBooking,
-        });
+        try {
+            result = await flightBookingService.bookFlight({
+                flightIds: bookingData.flightIds,
+                userId,
+                passengers: bookingData.passengers,
+                idempotencyKey: bookingData.idempotencyKey,
+                paymentIntentId: payment.providerIntentId,
+                ancillariesByPassenger: bookingData.ancillariesByPassenger,
+                isRewardBooking: bookingData.isRewardBooking,
+            });
+        } catch (bookingError) {
+            try {
+                await paymentService.cancelPayment({
+                    userId,
+                    checkoutId: bookingData.idempotencyKey,
+                });
+            } catch {
+                // best effort cancellation
+            }
+            throw bookingError;
+        }
+
         try {
             capture = await paymentService.capturePayment({
                 userId,
@@ -615,6 +629,9 @@ export async function bookFlightAction(bookingData: {
                 'Payment attempt does not match the current booking request.',
                 'payment',
             );
+        }
+        if (error instanceof InsufficientPointsError || (error instanceof Error && error.message.includes('Insufficient award seats'))) {
+            return actionValidationFailure(error.message);
         }
         if (!(error instanceof SeatHoldUnavailableError)) throw error;
 
@@ -657,15 +674,15 @@ export async function bookFlightAction(bookingData: {
         if (flight && (result.wasCreated || capture.wasCaptured)) {
             if (!bookingData.isRewardBooking) {
                 await accruePointsForCashBooking(result.id);
+                const points = Math.floor(bookingTotalCents(result, flight) / 100);
+                await new NotificationService().dispatchNotification({
+                    userId,
+                    title: `Booking Confirmed: ${flight.airline} ${flight.flightNumber}`,
+                    message: `Successfully booked flight ${flight.flightNumber} from ${flight.fromAirport.label} to ${flight.toAirport.label}. Earned +${points} status points.`,
+                    category: 'ACCOUNT_ACTIVITY',
+                    type: 'POINTS',
+                });
             }
-            const points = Math.floor(bookingTotalCents(result, flight) / 100);
-            await new NotificationService().dispatchNotification({
-                userId,
-                title: `Booking Confirmed: ${flight.airline} ${flight.flightNumber}`,
-                message: `Successfully booked flight ${flight.flightNumber} from ${flight.fromAirport.label} to ${flight.toAirport.label}. Earned +${points} status points.`,
-                category: 'ACCOUNT_ACTIVITY',
-                type: 'POINTS',
-            });
         }
     } catch (err) {
         console.error("Failed to generate points notification:", err);
@@ -710,6 +727,9 @@ export async function startCheckoutPaymentAction(paymentData: {
             publishableKey: getStripePublishableKey(),
         };
     } catch (error) {
+        if (error instanceof Error && error.message.includes('Insufficient award seats')) {
+            return actionValidationFailure(error.message);
+        }
         if (!(error instanceof SeatHoldUnavailableError)) throw error;
 
         const legIndex = parsed.data.flightIds.indexOf(error.claim.flightId);

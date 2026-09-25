@@ -104,6 +104,8 @@ describe('BookingCheckoutWizard - Reward Flight Redemption (#130)', () => {
         expect(screen.getByText('Traveler Information')).toBeInTheDocument();
         // Economy is 15,000 pts and mandatory taxes are $10.10
         expect(screen.getByText('Estimated total: 15,000 pts + $10.10')).toBeInTheDocument();
+        // Available balance is shown
+        expect(screen.getByTestId('spendable-points-balance')).toHaveTextContent(/Available balance: 50,000 pts/i);
         // Warning should not appear
         expect(screen.queryByTestId('insufficient-points-warning')).not.toBeInTheDocument();
         // Proceed button should not be disabled
@@ -180,6 +182,7 @@ describe('BookingCheckoutWizard - Reward Flight Redemption (#130)', () => {
         // Proceed through Step 3 (Bags & Extras) to Step 4 (Review)
         await advanceFromSeatsToReview();
         expect(screen.getByText('Review Booking')).toBeInTheDocument();
+        expect(screen.getByTestId('spendable-points-balance-step4')).toHaveTextContent(/Available balance: 50,000 pts/i);
 
         // Trip summary should show Points Redemption and Mandatory Taxes & Fees
         expect(screen.getByText('Points Redemption')).toBeInTheDocument();

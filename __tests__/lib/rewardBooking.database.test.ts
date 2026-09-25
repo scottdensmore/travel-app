@@ -11,6 +11,8 @@ import {
     createPointsLedgerEntry,
     InsufficientPointsError,
 } from '@/lib/pointsLedgerService';
+import { CheckoutPaymentService } from '@/lib/checkoutPaymentService';
+import type { PaymentProvider } from '@/lib/stripePaymentProvider';
 
 const created = {
     flightIds: [] as number[],
@@ -65,6 +67,29 @@ async function holdBookingSeats(flightId: number, seatNumbers: string[], idempot
     const holderKey = checkoutHolderKey(userId, idempotencyKey);
     await holdSeats(seatNumbers.map(seatNumber => ({ flightId, seatNumber, holderKey })));
     return { holderKey, idempotencyKey };
+}
+
+function mockPaymentProvider(): PaymentProvider {
+    return {
+        createAuthorization: jest.fn().mockResolvedValue({
+            providerIntentId: 'pi_reward_test',
+            status: 'AUTHORIZED',
+        }),
+        retrieveAuthorization: jest.fn().mockResolvedValue({
+            providerIntentId: 'pi_reward_test',
+            status: 'AUTHORIZED',
+            amountCents: 1010,
+        }),
+        captureAuthorization: jest.fn().mockResolvedValue({
+            providerIntentId: 'pi_reward_test',
+            status: 'CAPTURED',
+            amountCents: 1010,
+        }),
+        cancelAuthorization: jest.fn().mockResolvedValue({
+            providerIntentId: 'pi_reward_test',
+            status: 'CANCELLED',
+        }),
+    };
 }
 
 afterAll(async () => {
@@ -333,5 +358,24 @@ describe('FlightBookingService reward redemption', () => {
         });
         expect(updatedFlight.awardSeatsEconomy).toBe(3);
         expect(updatedFlight.awardSeatsBusiness).toBe(1);
+    });
+
+    it('rejects payment authorization when award seats are exhausted for the requested cabin', async () => {
+        const user = await createTestUser();
+        const flight = await createTestFlight({ awardSeatsEconomy: 0 });
+        const idempotencyKey = randomUUID();
+        await holdBookingSeats(flight.id, ['10A'], idempotencyKey, user.id);
+
+        const paymentService = new CheckoutPaymentService(mockPaymentProvider());
+        await expect(paymentService.startPayment({
+            userId: user.id,
+            checkoutId: idempotencyKey,
+            flightIds: [flight.id],
+            passengers: [{
+                seatNumbers: ['10A'],
+                cabinClass: 'ECONOMY',
+            }],
+            isRewardBooking: true,
+        })).rejects.toThrow(/Insufficient award seats/i);
     });
 });

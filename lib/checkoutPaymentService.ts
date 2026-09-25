@@ -21,8 +21,9 @@ import type {
     PaymentAuthorizationStatus,
     PaymentProvider,
 } from '@/lib/stripePaymentProvider';
+import type { CabinClass } from '@prisma/client';
 import { checkoutPaymentServiceSchema, parseInput } from '@/lib/validation';
-import { MANDATORY_AWARD_TAX_CENTS_PER_LEG } from '@/lib/rewardPricing';
+import { CABIN_AWARD_SEAT_KEYS, MANDATORY_AWARD_TAX_CENTS_PER_LEG } from '@/lib/rewardPricing';
 
 interface CheckoutPaymentInput {
     userId: string;
@@ -141,6 +142,23 @@ export class CheckoutPaymentService {
                 }
                 return flight;
             });
+
+            if (input.isRewardBooking) {
+                const cabinCounts = new Map<CabinClass, number>();
+                for (const passenger of input.passengers) {
+                    cabinCounts.set(passenger.cabinClass as CabinClass, (cabinCounts.get(passenger.cabinClass as CabinClass) ?? 0) + 1);
+                }
+
+                for (const flight of flights) {
+                    for (const [cabin, count] of cabinCounts.entries()) {
+                        const fieldKey = CABIN_AWARD_SEAT_KEYS[cabin];
+                        const available = flight[fieldKey] ?? 0;
+                        if (available < count) {
+                            throw new Error(`Insufficient award seats available in ${cabin} on flight ${flight.flightNumber}.`);
+                        }
+                    }
+                }
+            }
 
             const existing = await tx.paymentAttempt.findUnique({
                 where: {
