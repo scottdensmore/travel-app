@@ -398,4 +398,97 @@ describe('FlightBookingForm reward search toggle and badging', () => {
             });
         });
     });
+
+    describe('Round-trip reward search summary total', () => {
+        it('renders combined points and taxes total when both outbound and return flights are selected', async () => {
+            const outboundFlight = {
+                ...mockFlight,
+                id: 101,
+                flightNumber: 'GA101',
+                priceCents: 35000,
+                awardQuote: {
+                    cabinClass: 'ECONOMY',
+                    legCount: 1,
+                    passengerCount: 1,
+                    pointsPerPassengerLeg: 15000,
+                    totalPointsRequired: 15000,
+                    taxesPerPassengerLegCents: 1010,
+                    totalTaxesCents: 1010,
+                    formattedPoints: '15,000 pts',
+                    formattedTaxes: '$10.10',
+                },
+                remainingAwardSeats: 4,
+                awardAvailable: true,
+            };
+            const inboundFlight = {
+                ...mockFlight,
+                id: 102,
+                flightNumber: 'GA102',
+                from: 'Detroit, USA',
+                to: 'Seattle, USA',
+                departureDate: '2026-07-18T10:00:00Z',
+                priceCents: 35000,
+                awardQuote: {
+                    cabinClass: 'ECONOMY',
+                    legCount: 1,
+                    passengerCount: 1,
+                    pointsPerPassengerLeg: 15000,
+                    totalPointsRequired: 15000,
+                    taxesPerPassengerLegCents: 1010,
+                    totalTaxesCents: 1010,
+                    formattedPoints: '15,000 pts',
+                    formattedTaxes: '$10.10',
+                },
+                remainingAwardSeats: 4,
+                awardAvailable: true,
+            };
+
+            mockSearchFlights.mockResolvedValueOnce({
+                flights: [outboundFlight],
+                nearbyDates: [],
+                inbound: {
+                    status: 'ok',
+                    flights: [inboundFlight],
+                    nearbyDates: [],
+                },
+                isRewardSearch: true,
+            });
+
+            const initialSearch: FlightSearchCriteria = {
+                from: 'Seattle, USA',
+                to: 'Detroit, USA',
+                departureDate: '2026-07-15',
+                returnDate: '2026-07-18',
+                tripType: 'round-trip',
+                cabinClass: 'ECONOMY',
+                isRewardSearch: true,
+            };
+
+            render(
+                <FlightBookingForm
+                    routes={routes}
+                    minimumDepartureDate="2026-07-14"
+                    maximumDepartureDate="2027-07-14"
+                    initialSearch={initialSearch}
+                />
+            );
+
+            await waitFor(() => {
+                expect(screen.getByRole('button', { name: /Select flight GA101/i })).toBeInTheDocument();
+                expect(screen.getByRole('button', { name: /Select flight GA102/i })).toBeInTheDocument();
+            });
+
+            // Select outbound leg
+            fireEvent.click(screen.getByRole('button', { name: /Select flight GA101/i }));
+
+            // Select return leg
+            fireEvent.click(screen.getByRole('button', { name: /Select flight GA102/i }));
+
+            // Verify the round-trip summary displays points and taxes total, not cash fare
+            const summary = screen.getByTestId('round-trip-summary');
+            expect(summary).toHaveTextContent('GA101 and GA102 · 30,000 pts + $20.20 taxes total');
+            expect(summary).not.toHaveTextContent('$700');
+        });
+    });
 });
+

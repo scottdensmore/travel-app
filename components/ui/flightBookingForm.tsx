@@ -199,7 +199,7 @@ function getFlightAwardInfo(
     const awardAvailable = flight.awardAvailable !== undefined
         ? flight.awardAvailable
         : (remainingAwardSeats > 0);
-    const isSoldOut = remainingAwardSeats === 0 || !awardAvailable;
+    const isSoldOut = remainingAwardSeats <= 0 || !awardAvailable;
     const isLowInventory = !isSoldOut && remainingAwardSeats <= 2 && remainingAwardSeats > 0;
     const quote = flight.awardQuote ?? calculateAwardFareQuote({
         cabinClass: cabin,
@@ -1018,6 +1018,25 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
 
     const itineraryTotal = useMemo(() => {
         if (!selectedOutbound || !selectedInbound) return null;
+        if (isRewardSearch) {
+            try {
+                const outboundQuote = selectedOutbound.awardQuote;
+                const inboundQuote = selectedInbound.awardQuote;
+                if (outboundQuote && inboundQuote) {
+                    const totalPoints = outboundQuote.totalPointsRequired + inboundQuote.totalPointsRequired;
+                    const totalTaxesCents = outboundQuote.totalTaxesCents + inboundQuote.totalTaxesCents;
+                    return `${totalPoints.toLocaleString('en-US')} pts + ${formatPrice(totalTaxesCents)} taxes`;
+                }
+                const quote = calculateAwardFareQuote({
+                    cabinClass,
+                    legCount: 2,
+                    passengerCount: 1,
+                });
+                return `${quote.formattedPoints} + ${quote.formattedTaxes} taxes`;
+            } catch {
+                return null;
+            }
+        }
         try {
             return formatPrice(
                 flightFareCents(selectedOutbound) + flightFareCents(selectedInbound)
@@ -1027,7 +1046,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
             // server prices the booking authoritatively at checkout anyway.
             return null;
         }
-    }, [selectedOutbound, selectedInbound]);
+    }, [selectedOutbound, selectedInbound, isRewardSearch, cabinClass]);
 
     // Carried into checkout so the fare quoted there is the one that was shown.
     const cabinParam = cabinClass === 'ECONOMY' ? '' : `&cabin=${cabinClass}`;
