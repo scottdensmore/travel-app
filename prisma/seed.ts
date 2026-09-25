@@ -217,6 +217,31 @@ async function main() {
         console.log(`Updated active user avatar for ${devUserEmail}: ${updatedDevUser.image}`)
     }
 
+    // Seed initial PointsLedgerEntry welcome grants (50,000 pts for seed dev users, 10,000 for standard user)
+    console.log('Seeding points ledger welcome grants ...')
+    for (const [email, user] of usersByEmail.entries()) {
+        const isDevUser = email === devUserEmail || email === 'alex.traveler@example.com' || user.role === 'ADMIN'
+        const amount = isDevUser ? 50000 : 10000
+        const existingGrant = await prisma.pointsLedgerEntry.findFirst({
+            where: {
+                userId: user.id,
+                type: 'WELCOME_GRANT',
+            }
+        })
+        if (!existingGrant) {
+            await prisma.pointsLedgerEntry.create({
+                data: {
+                    userId: user.id,
+                    type: 'WELCOME_GRANT',
+                    amount,
+                    balanceAfter: amount,
+                    description: isDevUser ? 'Welcome grant (development account)' : 'Welcome grant',
+                }
+            })
+            console.log(`Granted ${amount} welcome points to ${user.name} (${user.email})`)
+        }
+    }
+
     const travelerUser = usersByEmail.get('alex.traveler@example.com')!
 
     // 2. Real-World Reviews across City Guides

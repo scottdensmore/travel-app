@@ -76,6 +76,7 @@ model User {
   flightScheduleDeletions    FlightScheduleDeletion[]
   notesWritten               BookingNote[]
   staffAuditsInitiated    StaffAuditLog[]       @relation("StaffAuditActor")
+  pointsLedgerEntries     PointsLedgerEntry[]
 }
 
 model VerificationToken {
@@ -204,15 +205,18 @@ model Booking {
   totalPriceCents Int?
   currency        String        @default("USD")
   idempotencyKey  String?
+  isRewardBooking Boolean       @default(false)
+  pointsRedeemed  Int?
 
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  passengers    Passenger[]
-  legs          ItineraryLeg[]
-  statusChanges BookingStatusChange[]
-  rebookings    BookingRebooking[]
-  notes         BookingNote[]
+  passengers          Passenger[]
+  legs                ItineraryLeg[]
+  statusChanges       BookingStatusChange[]
+  rebookings          BookingRebooking[]
+  notes               BookingNote[]
+  pointsLedgerEntries PointsLedgerEntry[]
 
   @@unique([userId, idempotencyKey])
 }
@@ -441,6 +445,11 @@ model Flight {
   economyRows        Int?
   seatPattern        String?
 
+  awardSeatsEconomy        Int @default(4)
+  awardSeatsPremiumEconomy Int @default(2)
+  awardSeatsBusiness       Int @default(2)
+  awardSeatsFirst          Int @default(1)
+
   itineraryLegs   ItineraryLeg[]
   seatAssignments SeatAssignment[]
   seatHolds       SeatHold[]
@@ -566,6 +575,11 @@ model FlightSchedule {
   premiumEconomyRows Int?
   economyRows        Int?
   seatPattern        String?
+
+  awardSeatsEconomy        Int @default(4)
+  awardSeatsPremiumEconomy Int @default(2)
+  awardSeatsBusiness       Int @default(2)
+  awardSeatsFirst          Int @default(1)
 
   flights Flight[]
 }
@@ -854,5 +868,29 @@ model StaffAuditLog {
   @@index([action])
   @@index([targetType, targetId])
   @@index([createdAt])
+}
+
+enum PointsTransactionType {
+  WELCOME_GRANT
+  FLIGHT_EARN
+  REWARD_REDEMPTION
+  REWARD_REFUND
+  ADMIN_ADJUSTMENT
+}
+
+model PointsLedgerEntry {
+  id           String                @id @default(cuid())
+  userId       String
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         PointsTransactionType
+  amount       Int
+  balanceAfter Int
+  bookingId    Int?
+  booking      Booking?              @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  description  String
+  createdAt    DateTime              @default(now()) @db.Timestamptz(3)
+
+  @@index([userId, createdAt])
+  @@index([bookingId])
 }
 

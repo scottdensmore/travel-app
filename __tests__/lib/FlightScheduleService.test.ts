@@ -139,7 +139,11 @@ describe('FlightScheduleService dynamic generator', () => {
                 premiumEconomyRows: 3,
                 economyRows: 18,
                 seatPattern: 'AC-DF',
-                status: 'ON_TIME'
+                status: 'ON_TIME',
+                awardSeatsEconomy: 4,
+                awardSeatsPremiumEconomy: 2,
+                awardSeatsBusiness: 2,
+                awardSeatsFirst: 1
             }
         });
 
