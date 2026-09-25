@@ -26,6 +26,12 @@ describe('pointsLedgerService', () => {
             // Negative fare returns 0
             expect(calculatePointsAccrualForFare(-5000)).toBe(0);
         });
+
+        it('defensively handles NaN and non-finite numbers', () => {
+            expect(calculatePointsAccrualForFare(NaN)).toBe(0);
+            expect(calculatePointsAccrualForFare(Infinity)).toBe(0);
+            expect(calculatePointsAccrualForFare(-Infinity)).toBe(0);
+        });
     });
 
     describe('constants', () => {
@@ -128,21 +134,28 @@ describe('pointsLedgerService', () => {
     });
 
     describe('grantWelcomePointsIfEligible', () => {
-        it('grants welcome points if user has no prior ledger entries', async () => {
+        const originalDevEmails = process.env.DEV_LOYALTY_EMAILS;
+
+        afterEach(() => {
+            process.env.DEV_LOYALTY_EMAILS = originalDevEmails;
+        });
+
+        it('grants standard welcome points (10000) for regular users and does not falsely match substring emails', async () => {
+            process.env.DEV_LOYALTY_EMAILS = 'developer@mona.internal,lead-dev@mona.internal';
             const mockTx: any = {
                 pointsLedgerEntry: {
                     findFirst: jest.fn().mockResolvedValue(null),
                     create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: 'entry-welcome', ...data })),
                 },
                 user: {
-                    findUnique: jest.fn().mockResolvedValue({ role: 'USER', email: 'regular@example.com' }),
+                    findUnique: jest.fn().mockResolvedValue({ role: 'USER', email: 'devon.smith@example.com' }),
                 },
             };
-            const granted = await grantWelcomePointsIfEligible('user-new', undefined, mockTx);
+            const granted = await grantWelcomePointsIfEligible('user-devon', undefined, mockTx);
             expect(granted).toBe(10000);
             expect(mockTx.pointsLedgerEntry.create).toHaveBeenCalledWith({
                 data: {
-                    userId: 'user-new',
+                    userId: 'user-devon',
                     type: PointsTransactionType.WELCOME_GRANT,
                     amount: 10000,
                     balanceAfter: 10000,
@@ -152,25 +165,47 @@ describe('pointsLedgerService', () => {
             });
         });
 
-        it('grants custom or dev welcome points when specified', async () => {
+        it('grants dev welcome points (50000) for ADMIN role or exact DEV_LOYALTY_EMAILS matches', async () => {
+            process.env.DEV_LOYALTY_EMAILS = 'special-tester@example.com';
             const mockTx: any = {
                 pointsLedgerEntry: {
                     findFirst: jest.fn().mockResolvedValue(null),
                     create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: 'entry-welcome-dev', ...data })),
                 },
                 user: {
-                    findUnique: jest.fn().mockResolvedValue({ role: 'ADMIN', email: 'dev@example.com' }),
+                    findUnique: jest.fn().mockResolvedValue({ role: 'USER', email: 'special-tester@example.com' }),
                 },
             };
-            const granted = await grantWelcomePointsIfEligible('user-dev', 50000, mockTx);
+            const granted = await grantWelcomePointsIfEligible('user-tester', undefined, mockTx);
             expect(granted).toBe(50000);
             expect(mockTx.pointsLedgerEntry.create).toHaveBeenCalledWith({
                 data: {
-                    userId: 'user-dev',
+                    userId: 'user-tester',
                     type: PointsTransactionType.WELCOME_GRANT,
                     amount: 50000,
                     balanceAfter: 50000,
                     description: 'Welcome grant (development account)',
+                    bookingId: null,
+                },
+            });
+        });
+
+        it('grants custom points when explicitly passed as number', async () => {
+            const mockTx: any = {
+                pointsLedgerEntry: {
+                    findFirst: jest.fn().mockResolvedValue(null),
+                    create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: 'entry-welcome-custom', ...data })),
+                },
+            };
+            const granted = await grantWelcomePointsIfEligible('user-custom', 25000, mockTx);
+            expect(granted).toBe(25000);
+            expect(mockTx.pointsLedgerEntry.create).toHaveBeenCalledWith({
+                data: {
+                    userId: 'user-custom',
+                    type: PointsTransactionType.WELCOME_GRANT,
+                    amount: 25000,
+                    balanceAfter: 25000,
+                    description: 'Welcome grant',
                     bookingId: null,
                 },
             });
@@ -301,6 +336,20 @@ describe('pointsLedgerService', () => {
             expect(history.page).toBe(1);
             expect(history.pageSize).toBe(10);
             expect(history.totalPages).toBe(1);
+        });
+
+        it('caps pageSize between 1 and 100', async () => {
+            const mockTx: any = {
+                pointsLedgerEntry: {
+                    findMany: jest.fn().mockResolvedValue([]),
+                    count: jest.fn().mockResolvedValue(0),
+                },
+            };
+            const historyLarge = await getPointsLedgerHistory('user-1', { pageSize: 500 }, mockTx);
+            expect(historyLarge.pageSize).toBe(100);
+
+            const historySmall = await getPointsLedgerHistory('user-1', { pageSize: -10 }, mockTx);
+            expect(historySmall.pageSize).toBe(1);
         });
     });
 });

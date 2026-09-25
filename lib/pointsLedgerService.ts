@@ -6,7 +6,7 @@ export const WELCOME_POINTS_DEV_USER = 50000;
 export const POINTS_EARN_MULTIPLIER_PER_DOLLAR = 5;
 
 export function calculatePointsAccrualForFare(totalPriceCents: number): number {
-    if (totalPriceCents <= 0) return 0;
+    if (!Number.isFinite(totalPriceCents) || totalPriceCents <= 0) return 0;
     const dollars = Math.floor(totalPriceCents / 100);
     return dollars * POINTS_EARN_MULTIPLIER_PER_DOLLAR;
 }
@@ -100,95 +100,130 @@ export async function grantWelcomePointsIfEligible(
         tx = maybeTx;
     }
 
-    const existing = await tx.pointsLedgerEntry.findFirst({
-        where: { userId },
-    });
-    if (existing) {
-        return 0;
-    }
+    const execute = async (client: Prisma.TransactionClient | PrismaClient): Promise<number> => {
+        if ('$queryRaw' in client && typeof client.$queryRaw === 'function') {
+            try {
+                await client.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`;
+            } catch {
+                // In unit test mocks or environments where queryRaw is not stubbed
+            }
+        }
 
-    let grantAmount = amount;
-    if (grantAmount === undefined) {
-        const user = await tx.user.findUnique({
-            where: { id: userId },
-            select: { role: true, email: true },
+        const existing = await client.pointsLedgerEntry.findFirst({
+            where: { userId },
         });
-        const isDev = user?.role === 'ADMIN' || user?.email?.includes('dev') || user?.email === 'scottdensmore@mac.com';
-        grantAmount = isDev ? WELCOME_POINTS_DEV_USER : WELCOME_POINTS_NEW_USER;
+        if (existing) {
+            return 0;
+        }
+
+        let grantAmount = amount;
+        if (grantAmount === undefined) {
+            const user = await client.user.findUnique({
+                where: { id: userId },
+                select: { role: true, email: true },
+            });
+            const devEmails = (process.env.DEV_LOYALTY_EMAILS || '')
+                .split(',')
+                .map((e) => e.trim().toLowerCase())
+                .filter(Boolean);
+            const userEmail = user?.email?.toLowerCase();
+            const isDev = user?.role === 'ADMIN' || (userEmail !== undefined && devEmails.includes(userEmail));
+            grantAmount = isDev ? WELCOME_POINTS_DEV_USER : WELCOME_POINTS_NEW_USER;
+        }
+
+        if (grantAmount <= 0) {
+            return 0;
+        }
+
+        await createPointsLedgerEntry(
+            {
+                userId,
+                type: PointsTransactionType.WELCOME_GRANT,
+                amount: grantAmount,
+                description: grantAmount === WELCOME_POINTS_DEV_USER
+                    ? 'Welcome grant (development account)'
+                    : 'Welcome grant',
+            },
+            client
+        );
+
+        return grantAmount;
+    };
+
+    if (tx === defaultPrisma && typeof defaultPrisma.$transaction === 'function') {
+        return defaultPrisma.$transaction(async (innerTx) => execute(innerTx));
     }
-
-    if (grantAmount <= 0) {
-        return 0;
-    }
-
-    await createPointsLedgerEntry(
-        {
-            userId,
-            type: PointsTransactionType.WELCOME_GRANT,
-            amount: grantAmount,
-            description: grantAmount === WELCOME_POINTS_DEV_USER
-                ? 'Welcome grant (development account)'
-                : 'Welcome grant',
-        },
-        tx
-    );
-
-    return grantAmount;
+    return execute(tx);
 }
 
 export async function accruePointsForCashBooking(
     bookingId: number,
     tx: Prisma.TransactionClient | PrismaClient = defaultPrisma
 ): Promise<number> {
-    const booking = await tx.booking.findUnique({
-        where: { id: bookingId },
-        select: {
-            id: true,
-            reference: true,
-            userId: true,
-            totalPriceCents: true,
-            isRewardBooking: true,
-        },
-    });
+    const execute = async (client: Prisma.TransactionClient | PrismaClient): Promise<number> => {
+        if ('$queryRaw' in client && typeof client.$queryRaw === 'function') {
+            try {
+                await client.$queryRaw`SELECT "id" FROM "Booking" WHERE "id" = ${bookingId} FOR UPDATE`;
+            } catch {
+                // In unit test mocks or environments where queryRaw is not stubbed
+            }
+        }
 
-    if (!booking) {
-        throw new Error(`Booking not found: ${bookingId}`);
+        const booking = await client.booking.findUnique({
+            where: { id: bookingId },
+            select: {
+                id: true,
+                reference: true,
+                userId: true,
+                totalPriceCents: true,
+                isRewardBooking: true,
+            },
+        });
+
+        if (!booking) {
+            throw new Error(`Booking not found: ${bookingId}`);
+        }
+
+        if (booking.isRewardBooking || !booking.userId) {
+            return 0;
+        }
+
+        const existingEarn = await client.pointsLedgerEntry.findFirst({
+            where: {
+                bookingId,
+                type: PointsTransactionType.FLIGHT_EARN,
+            },
+        });
+
+        if (existingEarn) {
+            return 0;
+        }
+
+        const pointsToAccrue = calculatePointsAccrualForFare(booking.totalPriceCents ?? 0);
+        if (pointsToAccrue <= 0) {
+            return 0;
+        }
+
+        await createPointsLedgerEntry(
+            {
+                userId: booking.userId,
+                type: PointsTransactionType.FLIGHT_EARN,
+                amount: pointsToAccrue,
+                description: booking.reference
+                    ? `Points earned for flight booking #${booking.reference}`
+                    : `Points earned for flight booking #${bookingId}`,
+                bookingId: booking.id,
+            },
+            client
+        );
+
+        return pointsToAccrue;
+    };
+
+    if (tx === defaultPrisma && typeof defaultPrisma.$transaction === 'function') {
+        return defaultPrisma.$transaction(async (innerTx) => execute(innerTx));
     }
-
-    if (booking.isRewardBooking || !booking.userId) {
-        return 0;
-    }
-
-    const existingEarn = await tx.pointsLedgerEntry.findFirst({
-        where: {
-            bookingId,
-            type: PointsTransactionType.FLIGHT_EARN,
-        },
-    });
-
-    if (existingEarn) {
-        return 0;
-    }
-
-    const pointsToAccrue = calculatePointsAccrualForFare(booking.totalPriceCents ?? 0);
-    if (pointsToAccrue <= 0) {
-        return 0;
-    }
-
-    await createPointsLedgerEntry(
-        {
-            userId: booking.userId,
-            type: PointsTransactionType.FLIGHT_EARN,
-            amount: pointsToAccrue,
-            description: booking.reference
-                ? `Points earned for flight booking #${booking.reference}`
-                : `Points earned for flight booking #${bookingId}`,
-            bookingId: booking.id,
-        },
-        tx
-    );
-
-    return pointsToAccrue;
+    return execute(tx);
 }
 
 export async function getPointsLedgerHistory(
@@ -197,7 +232,7 @@ export async function getPointsLedgerHistory(
     tx: Prisma.TransactionClient | PrismaClient = defaultPrisma
 ): Promise<PaginatedLedger> {
     const page = Math.max(1, options?.page ?? 1);
-    const pageSize = Math.max(1, options?.pageSize ?? 10);
+    const pageSize = Math.min(100, Math.max(1, options?.pageSize ?? 10));
     const skip = (page - 1) * pageSize;
 
     const [entries, total] = await Promise.all([
