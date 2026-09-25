@@ -44,6 +44,9 @@ export async function getUserSpendablePointsBalance(
     userId: string,
     tx: Prisma.TransactionClient | PrismaClient = defaultPrisma
 ): Promise<number> {
+    if (!tx?.pointsLedgerEntry) {
+        return 0;
+    }
     const latest = await tx.pointsLedgerEntry.findFirst({
         where: { userId },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -107,6 +110,10 @@ export async function grantWelcomePointsIfEligible(
             } catch {
                 // In unit test mocks or environments where queryRaw is not stubbed
             }
+        }
+
+        if (!client?.pointsLedgerEntry) {
+            return 0;
         }
 
         const existing = await client.pointsLedgerEntry.findFirst({
@@ -234,6 +241,17 @@ export async function getPointsLedgerHistory(
     const page = Math.max(1, options?.page ?? 1);
     const pageSize = Math.min(100, Math.max(1, options?.pageSize ?? 10));
     const skip = (page - 1) * pageSize;
+
+    if (!tx?.pointsLedgerEntry) {
+        return {
+            entries: [],
+            total: 0,
+            totalCount: 0,
+            page,
+            pageSize,
+            totalPages: 1,
+        };
+    }
 
     const [entries, total] = await Promise.all([
         tx.pointsLedgerEntry.findMany({

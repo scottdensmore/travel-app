@@ -1,4 +1,5 @@
 import { CABIN_FARE_PERCENT, bookingTotalCents, type CabinClass } from '@/lib/bookingPricing';
+import { CABIN_AWARD_POINTS } from '@/lib/rewardPricing';
 
 /**
  * Whether a booking may be cancelled, and what comes back if it is.
@@ -57,6 +58,8 @@ export interface CancellationOutcome {
     refundCents: number;
     /** What the airline keeps out of that refund. Never a charge on its own. */
     feeCents: number;
+    /** What reward points come back to the member account. */
+    pointsRedeposited?: number;
 }
 
 /** The booking, as much of it as the policy needs to see. */
@@ -70,6 +73,8 @@ export interface CancellableBooking {
     legFareCents: number[];
     /** One cabin per traveller on the booking. */
     cabins: readonly CabinClass[];
+    isRewardBooking?: boolean;
+    pointsRedeemed?: number | null;
 }
 
 /**
@@ -147,6 +152,8 @@ export function cancellationNote(outcome: CancellationOutcome): string {
 export function cancellableBooking(booking: {
     status: string;
     totalPriceCents: number | null;
+    isRewardBooking?: boolean;
+    pointsRedeemed?: number | null;
     legs: Array<{
         flight: { priceCents: number; departureDate: Date } | null;
         seatAssignments: Array<{ cabinClass: CabinClass }>;
@@ -180,6 +187,8 @@ export function cancellableBooking(booking: {
         departsAt,
         legFareCents: flownLegs.map(leg => leg.flight!.priceCents),
         cabins,
+        isRewardBooking: Boolean(booking.isRewardBooking),
+        pointsRedeemed: booking.pointsRedeemed ?? null,
     };
 }
 
@@ -196,15 +205,78 @@ export function cancellableBooking(booking: {
  */
 export function cancellationOutcome(
     booking: CancellableBooking,
-    now: Date,
+    now: Date = new Date(),
 ): CancellationOutcome {
     const hours = hoursUntil(booking.departsAt, now);
+
+    if (booking.isRewardBooking) {
+        if (hours <= 0) {
+            return {
+                allowed: false,
+                reason: 'ALREADY_DEPARTED',
+                refundCents: 0,
+                feeCents: 0,
+                pointsRedeposited: 0,
+            };
+        }
+
+        if (booking.status === 'DISRUPTED') {
+            return {
+                allowed: true,
+                reason: 'DISRUPTED',
+                refundCents: booking.totalPriceCents,
+                feeCents: 0,
+                pointsRedeposited: booking.pointsRedeemed ?? 0,
+            };
+        }
+
+        if (hours < REFUND_CUTOFF_HOURS) {
+            return {
+                allowed: true,
+                reason: 'INSIDE_CUTOFF',
+                refundCents: 0,
+                feeCents: 0,
+                pointsRedeposited: 0,
+            };
+        }
+
+        let pointsRedeposited = 0;
+        const totalRedeemed = booking.pointsRedeemed ?? 0;
+        if (totalRedeemed > 0 && booking.cabins.length > 0) {
+            const allPremium = booking.cabins.every(c => c === 'FIRST' || c === 'BUSINESS');
+            const allStandard = booking.cabins.every(c => c === 'ECONOMY' || c === 'PREMIUM_ECONOMY');
+            if (allPremium) {
+                pointsRedeposited = totalRedeemed;
+            } else if (allStandard) {
+                pointsRedeposited = Math.floor(totalRedeemed * 0.8);
+            } else {
+                const nominalPoints = booking.cabins.map(cabin => CABIN_AWARD_POINTS[cabin] ?? 15000);
+                const totalNominal = nominalPoints.reduce((sum, pts) => sum + pts, 0);
+                const shares = totalNominal <= 0
+                    ? booking.cabins.map(() => Math.floor(totalRedeemed / Math.max(booking.cabins.length, 1)))
+                    : nominalPoints.map(pts => Math.floor(totalRedeemed * pts / totalNominal));
+                pointsRedeposited = shares.reduce((sum, share, index) => {
+                    const cabin = booking.cabins[index];
+                    const rate = (cabin === 'FIRST' || cabin === 'BUSINESS') ? 1.0 : 0.8;
+                    return sum + Math.floor(share * rate);
+                }, 0);
+            }
+        }
+
+        return {
+            allowed: true,
+            reason: 'REFUNDABLE',
+            refundCents: booking.totalPriceCents,
+            feeCents: 0,
+            pointsRedeposited,
+        };
+    }
 
     // Checked before anything about money, and before the disruption case: a
     // flight that has gone was not cancelled by the airline, whatever the
     // booking says, and paying out on that state would be worse than refusing.
     if (hours <= 0) {
-        return { allowed: false, reason: 'ALREADY_DEPARTED', refundCents: 0, feeCents: 0 };
+        return { allowed: false, reason: 'ALREADY_DEPARTED', refundCents: 0, feeCents: 0, pointsRedeposited: 0 };
     }
 
     if (booking.status === 'DISRUPTED') {
@@ -214,13 +286,14 @@ export function cancellationOutcome(
             reason: 'DISRUPTED',
             refundCents: booking.totalPriceCents,
             feeCents: 0,
+            pointsRedeposited: 0,
         };
     }
 
     if (hours < REFUND_CUTOFF_HOURS) {
         // Still cancellable. Refusing would strand the customer with a booking
         // they cannot act on and keep a seat held that could still be resold.
-        return { allowed: true, reason: 'INSIDE_CUTOFF', refundCents: 0, feeCents: 0 };
+        return { allowed: true, reason: 'INSIDE_CUTOFF', refundCents: 0, feeCents: 0, pointsRedeposited: 0 };
     }
 
     const fees = chargedShares(booking).map((share, index) => ({
@@ -233,5 +306,8 @@ export function cancellationOutcome(
         reason: 'REFUNDABLE',
         refundCents: fees.reduce((total, { share, fee }) => total + share - fee, 0),
         feeCents: fees.reduce((total, { fee }) => total + fee, 0),
+        pointsRedeposited: 0,
     };
 }
+
+export const calculateCancellationOutcome = cancellationOutcome;

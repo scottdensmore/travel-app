@@ -384,8 +384,10 @@ export default class FlightBookingService {
                 data: {
                     userId,
                     totalPriceCents,
-                    isRewardBooking: Boolean(isRewardBooking),
-                    pointsRedeemed: isRewardBooking ? totalPoints : null,
+                    ...(isRewardBooking ? {
+                        isRewardBooking: true,
+                        pointsRedeemed: totalPoints,
+                    } : {}),
                     legs: {
                         create: flightIds.map((flightId, index) => ({
                             sequence: index + 1,
