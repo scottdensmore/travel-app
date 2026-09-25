@@ -151,6 +151,7 @@ export const searchFlightsSchema = z.object({
     /// The cabin being shopped. Results are priced and filtered for it, so an
     /// unknown value is rejected rather than quietly treated as economy.
     cabinClass: cabinClassSchema.default('ECONOMY'),
+    isRewardSearch: z.boolean().optional(),
 }).strict().superRefine(({ from, departureDate, returnDate }, context) => {
     // The window is the origin airport's calendar day, not UTC's. A place with
     // no airport record falls back to UTC rather than rejecting the search.
@@ -483,6 +484,7 @@ export const searchMultiCityFlightsSchema = z.object({
         .min(2, 'At least 2 legs are required for a multi-city search.')
         .max(MAX_ITINERARY_LEGS, `At most ${MAX_ITINERARY_LEGS} legs are allowed.`),
     cabinClass: cabinClassSchema.optional(),
+    isRewardSearch: z.boolean().optional(),
 }).superRefine(({ legs }, context) => {
     for (let i = 1; i < legs.length; i++) {
         if (legs[i].departureDate < legs[i - 1].departureDate) {

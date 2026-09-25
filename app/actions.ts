@@ -89,6 +89,12 @@ import {
     verifyUserPassword,
     type DeletionEligibilityResult,
 } from '@/lib/privacyService';
+import {
+    calculateAwardFareQuote,
+    getAwardSeatsAvailableForCabin,
+    isAwardAvailableForFlight,
+    type AwardFareQuote,
+} from '@/lib/rewardPricing';
 
 export type ActionServerError = {
     ok: false;
@@ -212,6 +218,7 @@ export async function searchFlightsAction(
     departureDateStr?: string,
     returnDateStr?: string,
     cabinClass?: CabinClass,
+    isRewardSearch?: boolean,
 ) {
     const parsed = parseActionInput(searchFlightsSchema, {
         from,
@@ -223,10 +230,12 @@ export async function searchFlightsAction(
             ? undefined
             : returnDateStr,
         ...(cabinClass === undefined ? {} : { cabinClass }),
+        ...(isRewardSearch === undefined ? {} : { isRewardSearch }),
     });
     if (!parsed.ok) return parsed;
     ({ from, to, departureDate: departureDateStr, returnDate: returnDateStr } = parsed.data);
     const cabin = parsed.data.cabinClass;
+    const rewardSearch = parsed.data.isRewardSearch;
 
     if (!departureDateStr) {
         const route = flightRouteWhere(from, to);
@@ -237,7 +246,7 @@ export async function searchFlightsAction(
             orderBy: { departureDate: 'asc' },
             include: flightRouteInclude,
         })).map(withRouteLabels);
-        return { flights: flightsForCabin(flights, cabin), nearbyDates: [], inbound: null };
+        return { flights: flightsForCabin(flights, cabin, rewardSearch), nearbyDates: [], inbound: null };
     }
 
     const now = new Date();
@@ -247,9 +256,9 @@ export async function searchFlightsAction(
     // show and the error stands. The return is a second dependency, and losing
     // it degrades the result rather than discarding the outbound too (#68).
     const [outboundResult, inboundResult] = await Promise.allSettled([
-        searchOneDirection(from, to, departureDateStr, now, cabin),
+        searchOneDirection(from, to, departureDateStr, now, cabin, rewardSearch),
         returnDateStr
-            ? searchOneDirection(to, from, returnDateStr, now, cabin)
+            ? searchOneDirection(to, from, returnDateStr, now, cabin, rewardSearch)
             : Promise.resolve(null),
     ]);
 
@@ -281,7 +290,13 @@ const CABIN_ROW_COUNT: Record<CabinClass, (flight: Flight) => number | null> = {
 };
 
 /** A search result, and whether the cabin that was searched exists on it. */
-export type SearchResultFlight = RoutedFlight & { cabinAvailable: boolean };
+export type SearchResultFlight = RoutedFlight & {
+    cabinAvailable: boolean;
+    awardQuote?: AwardFareQuote;
+    awardAvailable?: boolean;
+    awardSeatsAvailable?: Record<CabinClass, number>;
+    remainingAwardSeats?: number;
+};
 
 export type MultiCityLegSearchResult =
     | {
@@ -304,6 +319,7 @@ export type MultiCityLegSearchResult =
 export interface MultiCitySearchResponse {
     legs: MultiCityLegSearchResult[];
     cabinClass?: CabinClass;
+    isRewardSearch?: boolean;
 }
 
 export async function searchMultiCityFlightsAction(
@@ -317,11 +333,11 @@ export async function searchMultiCityFlightsAction(
         };
     }
 
-    const { legs, cabinClass } = parsed.data;
+    const { legs, cabinClass, isRewardSearch } = parsed.data;
     const now = new Date();
 
     const legResults = await Promise.allSettled(
-        legs.map(leg => searchOneDirection(leg.from, leg.to, leg.departureDate, now, cabinClass ?? 'ECONOMY'))
+        legs.map(leg => searchOneDirection(leg.from, leg.to, leg.departureDate, now, cabinClass ?? 'ECONOMY', isRewardSearch))
     );
 
     const mappedLegs: MultiCityLegSearchResult[] = legResults.map((res, index) => {
@@ -349,6 +365,7 @@ export async function searchMultiCityFlightsAction(
     return {
         legs: mappedLegs,
         cabinClass,
+        ...(isRewardSearch !== undefined ? { isRewardSearch } : {}),
     };
 }
 
@@ -365,21 +382,44 @@ export async function searchMultiCityFlightsAction(
  * A null row count is a flight predating per-cabin layouts; those fall back to
  * the same defaults the seat map uses, which is to assume the cabin exists.
  */
-function flightsForCabin(flights: RoutedFlight[], cabin: CabinClass): SearchResultFlight[] {
+function flightsForCabin(
+    flights: RoutedFlight[],
+    cabin: CabinClass,
+    isRewardSearch?: boolean,
+): SearchResultFlight[] {
     return flights.map(flight => {
         const available = (CABIN_ROW_COUNT[cabin](flight) ?? 1) > 0;
-        if (!available || cabin === 'ECONOMY') {
-            // Economy needs no arithmetic, and an unavailable cabin is quoted at
-            // the catalogue fare because that is what the customer can book.
-            return { ...flight, cabinAvailable: available };
-        }
-        // The fare is stored in one form, so quoting a cabin is arithmetic on a
-        // number rather than a parse that can fail.
-        return {
+        const baseResult: SearchResultFlight = {
             ...flight,
-            cabinAvailable: true,
-            priceCents: calculatePassengerFareCents(flightFareCents(flight), cabin),
+            cabinAvailable: available,
+            ...(available && cabin !== 'ECONOMY'
+                ? { priceCents: calculatePassengerFareCents(flightFareCents(flight), cabin) }
+                : {}),
         };
+
+        if (isRewardSearch) {
+            const remainingAwardSeats = getAwardSeatsAvailableForCabin(flight, cabin);
+            const awardQuote = calculateAwardFareQuote({
+                cabinClass: cabin,
+                legCount: 1,
+                passengerCount: 1,
+            });
+            const awardAvailable = isAwardAvailableForFlight(flight, cabin, 1);
+            return {
+                ...baseResult,
+                awardQuote,
+                awardAvailable,
+                remainingAwardSeats,
+                awardSeatsAvailable: {
+                    ECONOMY: flight.awardSeatsEconomy ?? 0,
+                    PREMIUM_ECONOMY: flight.awardSeatsPremiumEconomy ?? 0,
+                    BUSINESS: flight.awardSeatsBusiness ?? 0,
+                    FIRST: flight.awardSeatsFirst ?? 0,
+                },
+            };
+        }
+
+        return baseResult;
     });
 }
 
@@ -399,6 +439,7 @@ async function searchOneDirection(
     isoDate: string,
     now: Date,
     cabin: CabinClass = 'ECONOMY',
+    isRewardSearch?: boolean,
 ): Promise<{ flights: SearchResultFlight[]; nearbyDates: string[] }> {
     // The day the customer asked for, at the airport they are leaving from.
     // A UTC day is the wrong window once departures are instants: a 22:00 Miami
@@ -426,7 +467,7 @@ async function searchOneDirection(
         },
         orderBy: { departureDate: 'asc' },
         include: flightRouteInclude,
-    })).map(withRouteLabels), cabin);
+    })).map(withRouteLabels), cabin, isRewardSearch);
 
     if (flights.length > 0) return { flights, nearbyDates: [] };
 
