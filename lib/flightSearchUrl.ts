@@ -167,8 +167,16 @@ export function parseFlightSearchUrl(
     } else if (urlOrSearch instanceof URL) {
         searchParams = urlOrSearch.searchParams;
     } else {
-        const queryIndex = urlOrSearch.indexOf('?');
-        const query = queryIndex !== -1 ? urlOrSearch.slice(queryIndex + 1) : urlOrSearch;
+        const clean = urlOrSearch.split('#')[0];
+        const queryIndex = clean.indexOf('?');
+        let query: string;
+        if (queryIndex !== -1) {
+            query = clean.slice(queryIndex + 1);
+        } else if (clean.includes('/')) {
+            query = '';
+        } else {
+            query = clean;
+        }
         searchParams = new URLSearchParams(query);
     }
     const params: FlightSearchParamRecord = {};

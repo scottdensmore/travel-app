@@ -922,6 +922,47 @@ describe('searchFlightsAction', () => {
             ],
         });
     });
+
+    it('marks awardAvailable false and remainingAwardSeats 0 when cabin does not physically exist on aircraft', async () => {
+        const flights = [
+            {
+                id: 1,
+                flightNumber: 'CA101',
+                from: 'Seattle, USA',
+                to: 'Detroit, USA',
+                priceCents: 20000,
+                firstClassRows: 0,
+                awardSeatsFirst: 2,
+            },
+        ];
+        mockedFlightFindMany.mockResolvedValue(flights.map(routed));
+
+        const result = await searchFlightsAction(
+            'Seattle, USA',
+            'Detroit, USA',
+            undefined,
+            undefined,
+            'FIRST',
+            true,
+        );
+
+        expect(result).toMatchObject({
+            flights: [
+                {
+                    id: 1,
+                    cabinAvailable: false,
+                    awardAvailable: false,
+                    remainingAwardSeats: 0,
+                    awardSeatsAvailable: {
+                        ECONOMY: 4,
+                        PREMIUM_ECONOMY: 2,
+                        BUSINESS: 2,
+                        FIRST: 2,
+                    },
+                },
+            ],
+        });
+    });
 });
 
 describe('searchMultiCityFlightsAction', () => {

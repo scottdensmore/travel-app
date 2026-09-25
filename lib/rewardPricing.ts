@@ -1,4 +1,5 @@
 import type { CabinClass } from '@prisma/client';
+import { formatPrice } from '@/lib/bookingPricing';
 
 export const CABIN_AWARD_POINTS: Record<CabinClass, number> = {
     ECONOMY: 15000,
@@ -46,6 +47,15 @@ export function calculateAwardFareQuote(options: {
     passengerCount: number;
 }): AwardFareQuote {
     const { cabinClass, legCount, passengerCount } = options;
+    if (
+        !Number.isInteger(legCount)
+        || legCount <= 0
+        || !Number.isInteger(passengerCount)
+        || passengerCount <= 0
+    ) {
+        throw new RangeError('legCount and passengerCount must be positive integers');
+    }
+
     const pointsPerPassengerLeg = CABIN_AWARD_POINTS[cabinClass] ?? CABIN_AWARD_POINTS.ECONOMY;
     const taxesPerPassengerLegCents = MANDATORY_AWARD_TAX_CENTS_PER_LEG;
 
@@ -61,7 +71,7 @@ export function calculateAwardFareQuote(options: {
         taxesPerPassengerLegCents,
         totalTaxesCents,
         formattedPoints: `${totalPointsRequired.toLocaleString('en-US')} pts`,
-        formattedTaxes: `$${(totalTaxesCents / 100).toFixed(2)}`,
+        formattedTaxes: formatPrice(totalTaxesCents),
     };
 }
 

@@ -398,23 +398,23 @@ function flightsForCabin(
         };
 
         if (isRewardSearch) {
-            const remainingAwardSeats = getAwardSeatsAvailableForCabin(flight, cabin);
+            const remainingAwardSeats = available ? getAwardSeatsAvailableForCabin(flight, cabin) : 0;
             const awardQuote = calculateAwardFareQuote({
                 cabinClass: cabin,
                 legCount: 1,
                 passengerCount: 1,
             });
-            const awardAvailable = isAwardAvailableForFlight(flight, cabin, 1);
+            const awardAvailable = available && isAwardAvailableForFlight(flight, cabin, 1);
             return {
                 ...baseResult,
                 awardQuote,
                 awardAvailable,
                 remainingAwardSeats,
                 awardSeatsAvailable: {
-                    ECONOMY: flight.awardSeatsEconomy ?? 0,
-                    PREMIUM_ECONOMY: flight.awardSeatsPremiumEconomy ?? 0,
-                    BUSINESS: flight.awardSeatsBusiness ?? 0,
-                    FIRST: flight.awardSeatsFirst ?? 0,
+                    ECONOMY: getAwardSeatsAvailableForCabin(flight, 'ECONOMY'),
+                    PREMIUM_ECONOMY: getAwardSeatsAvailableForCabin(flight, 'PREMIUM_ECONOMY'),
+                    BUSINESS: getAwardSeatsAvailableForCabin(flight, 'BUSINESS'),
+                    FIRST: getAwardSeatsAvailableForCabin(flight, 'FIRST'),
                 },
             };
         }

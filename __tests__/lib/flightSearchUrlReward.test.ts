@@ -162,6 +162,34 @@ describe('flightSearchUrl reward search criteria', () => {
                 isRewardSearch: true,
             });
         });
+
+        it('strips hash fragments from URL', () => {
+            const parsed = parseFlightSearchUrl(
+                'https://example.com/flights?from=SEA&to=DTW&depart=2026-07-18&trip=one-way&reward=true#flight-details',
+                routes,
+                bookingWindow,
+            );
+
+            expect(parsed).toEqual({
+                from: 'Seattle, USA',
+                to: 'Detroit, USA',
+                departureDate: '2026-07-18',
+                returnDate: '',
+                tripType: 'one-way',
+                cabinClass: 'ECONOMY',
+                isRewardSearch: true,
+            });
+        });
+
+        it('treats path without query as having no search parameters even with hash', () => {
+            const parsed = parseFlightSearchUrl(
+                '/flights#section',
+                routes,
+                bookingWindow,
+            );
+
+            expect(parsed).toBeUndefined();
+        });
     });
 
     describe('isUnusableSearchLink', () => {

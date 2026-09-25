@@ -78,6 +78,17 @@ describe('rewardPricing', () => {
             expect(quote.formattedPoints).toBe('540,000 pts');
             expect(quote.formattedTaxes).toBe('$90.90');
         });
+
+        it('rejects non-positive or non-integer legCount and passengerCount', () => {
+            expect(() => calculateAwardFareQuote({ cabinClass: 'ECONOMY', legCount: 0, passengerCount: 1 }))
+                .toThrow('legCount and passengerCount must be positive integers');
+            expect(() => calculateAwardFareQuote({ cabinClass: 'ECONOMY', legCount: 1, passengerCount: -2 }))
+                .toThrow('legCount and passengerCount must be positive integers');
+            expect(() => calculateAwardFareQuote({ cabinClass: 'ECONOMY', legCount: 1.5, passengerCount: 1 }))
+                .toThrow('legCount and passengerCount must be positive integers');
+            expect(() => calculateAwardFareQuote({ cabinClass: 'ECONOMY', legCount: 1, passengerCount: 2.3 }))
+                .toThrow('legCount and passengerCount must be positive integers');
+        });
     });
 
     describe('CABIN_AWARD_POINTS and constants', () => {
