@@ -5,6 +5,11 @@ import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 import { notFound, redirect } from 'next/navigation';
 
+import {
+    getUserSpendablePointsBalance,
+    grantWelcomePointsIfEligible,
+} from '@/lib/pointsLedgerService';
+
 jest.mock('next-auth', () => ({
     getServerSession: jest.fn(),
 }));
@@ -18,6 +23,10 @@ jest.mock('@/lib/prisma', () => ({
         flight: { findMany: jest.fn() },
         user: { findUniqueOrThrow: jest.fn() },
     },
+}));
+jest.mock('@/lib/pointsLedgerService', () => ({
+    getUserSpendablePointsBalance: jest.fn().mockResolvedValue(10000),
+    grantWelcomePointsIfEligible: jest.fn().mockResolvedValue(10000),
 }));
 jest.mock('@/app/actions', () => ({
     getOccupiedSeatsAction: jest.fn().mockResolvedValue([]),
@@ -207,4 +216,15 @@ describe('CheckoutPage multi-leg flight parameter parsing', () => {
         const searchParams = Promise.resolve({ flights: '   ' });
         await expect(CheckoutPage({ searchParams })).rejects.toThrow('NEXT_NOT_FOUND');
     });
+
+    it('evaluates welcome points grant and spendable points balance for logged-in user on checkout', async () => {
+        (prisma.flight.findMany as jest.Mock).mockResolvedValue([flight10]);
+        const searchParams = Promise.resolve({ flights: '10', reward: 'true' });
+        const ui = await CheckoutPage({ searchParams });
+        render(ui);
+
+        expect(grantWelcomePointsIfEligible).toHaveBeenCalledWith('user-123');
+        expect(getUserSpendablePointsBalance).toHaveBeenCalledWith('user-123');
+    });
 });
+

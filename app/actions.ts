@@ -98,6 +98,7 @@ import {
 } from '@/lib/rewardPricing';
 import {
     getUserSpendablePointsBalance,
+    grantWelcomePointsIfEligible,
     accruePointsForCashBooking,
     createPointsLedgerEntry,
     InsufficientPointsError,
@@ -702,6 +703,7 @@ export async function getUserSpendablePointsBalanceAction(): Promise<number> {
     const session = await getServerSession(authOptions);
     const userId = session?.user?.id;
     if (!userId) throw new Error('Unauthorized');
+    await grantWelcomePointsIfEligible(userId);
     return getUserSpendablePointsBalance(userId);
 }
 

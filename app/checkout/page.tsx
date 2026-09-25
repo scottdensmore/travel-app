@@ -12,7 +12,10 @@ import {
     DEFAULT_ACCOUNT_TIME_ZONE,
     normalizeAccountTimeZone,
 } from '@/lib/accountTimeZone';
-import { getUserSpendablePointsBalance } from '@/lib/pointsLedgerService';
+import {
+    getUserSpendablePointsBalance,
+    grantWelcomePointsIfEligible,
+} from '@/lib/pointsLedgerService';
 
 export const metadata: Metadata = {
     title: 'Checkout',
@@ -110,6 +113,8 @@ export default async function CheckoutPage({ searchParams }: PageProps) {
             notFound();
         }
     }
+
+    await grantWelcomePointsIfEligible(session.user.id);
 
     const [found, account, spendablePointsBalance] = await Promise.all([
         prisma.flight.findMany({

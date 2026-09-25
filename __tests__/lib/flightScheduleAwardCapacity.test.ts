@@ -1,6 +1,5 @@
 /** @jest-environment node */
 import FlightScheduleService from '@/lib/FlightScheduleService';
-import { prisma } from '@/lib/prisma';
 
 describe('FlightScheduleService award seat propagation', () => {
     it('propagates custom award seat quotas from schedule to generated flight occurrences', async () => {

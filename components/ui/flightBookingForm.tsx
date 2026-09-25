@@ -1520,7 +1520,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                 </div>
 
                                 {/* Price Slider */}
-                                {maxPriceBoundary > minPriceBoundary && (
+                                {maxPriceBoundary > minPriceBoundary && !isRewardSearch && (
                                     <div style={{ marginBottom: '1.5rem' }}>
                                         <label htmlFor="price-slider" style={{ display: 'block', fontSize: '0.85rem', color: '#a78bfa', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '8px' }}>
                                             Max Price: {formatPrice(maxPrice)}
