@@ -370,11 +370,11 @@ describe('FlightBookingForm', () => {
     });
 
     it('offers no control that does nothing', () => {
-        // A reward checkbox with no redemption behind it, and a Multicity link
-        // pointing at "#", both promised a search the app cannot run (#70).
+        // A Multicity link pointing at "#" promised a search the app cannot run (#70).
+        // Reward flight redemption is now implemented (#130).
         const { container } = renderForm();
 
-        expect(screen.queryByLabelText(/reward flights/i)).not.toBeInTheDocument();
+        expect(screen.getByLabelText(/search reward flights/i)).toBeInTheDocument();
         expect(screen.queryByRole('link', { name: /multicity/i })).not.toBeInTheDocument();
         expect(container.querySelectorAll('a[href="#"]')).toHaveLength(0);
     });

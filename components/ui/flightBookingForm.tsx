@@ -14,6 +14,10 @@ import AirportData from '@/lib/data/AirportData'
 import { flightFareCents, formatPrice } from '@/lib/bookingPricing'
 import { MAX_ITINERARY_LEGS } from '@/lib/validation'
 import {
+    calculateAwardFareQuote,
+    getAwardSeatsAvailableForCabin,
+} from '@/lib/rewardPricing'
+import {
     buildFlightSearchUrl,
     SEARCH_CABINS,
     type FlightSearchCriteria,
@@ -155,21 +159,63 @@ const LegSelectButton: React.FC<{
     leg: 'departing' | 'return';
     isSelected: boolean;
     onSelect: () => void;
-}> = ({ flight, leg, isSelected, onSelect }) => (
+    disabled?: boolean;
+}> = ({ flight, leg, isSelected, onSelect, disabled = false }) => (
     <button
         type="button"
-        onClick={onSelect}
+        disabled={disabled}
+        aria-disabled={disabled}
+        onClick={disabled ? undefined : onSelect}
         aria-pressed={isSelected}
         aria-label={`Select flight ${flight.flightNumber} as the ${leg} leg`}
         className="flight-result-book"
         style={{
-            background: isSelected ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : undefined,
-            border: isSelected ? '2px solid #34d399' : '2px solid transparent',
+            background: disabled
+                ? '#2b2938'
+                : isSelected
+                ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                : undefined,
+            border: disabled
+                ? '1px solid rgba(255, 255, 255, 0.15)'
+                : isSelected
+                ? '2px solid #34d399'
+                : '2px solid transparent',
+            color: disabled ? 'rgba(255, 255, 255, 0.4)' : undefined,
+            cursor: disabled ? 'not-allowed' : undefined,
+            boxShadow: disabled ? 'none' : undefined,
         }}
     >
         {isSelected ? '✓ Selected' : 'Select'}
     </button>
 );
+
+function getFlightAwardInfo(
+    flight: SearchResultFlight,
+    cabin: SearchCabin,
+) {
+    const remainingAwardSeats = flight.remainingAwardSeats !== undefined
+        ? flight.remainingAwardSeats
+        : getAwardSeatsAvailableForCabin(flight, cabin);
+    const awardAvailable = flight.awardAvailable !== undefined
+        ? flight.awardAvailable
+        : (remainingAwardSeats > 0);
+    const isSoldOut = remainingAwardSeats === 0 || !awardAvailable;
+    const isLowInventory = !isSoldOut && remainingAwardSeats <= 2 && remainingAwardSeats > 0;
+    const quote = flight.awardQuote ?? calculateAwardFareQuote({
+        cabinClass: cabin,
+        legCount: 1,
+        passengerCount: 1,
+    });
+    return {
+        remainingAwardSeats,
+        awardAvailable,
+        isSoldOut,
+        isLowInventory,
+        quote,
+        pointsFareLabel: `${quote.formattedPoints} + ${quote.formattedTaxes} taxes`,
+    };
+}
+
 
 /**
  * The return date a departure implies: a week later, never past the end of the
@@ -236,6 +282,9 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     );
     const [cabinClass, setCabinClass] = useState<SearchCabin>(
         initialSearch?.cabinClass ?? 'ECONOMY'
+    );
+    const [isRewardSearch, setIsRewardSearch] = useState<boolean>(
+        initialSearch?.isRewardSearch ?? initialMultiCityResults?.isRewardSearch ?? false
     );
     const [tripType, setTripType] = useState<TripType>(
         initialMultiCityResults
@@ -413,6 +462,22 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         setCabinClass(nextCabin);
     };
 
+    const handleRewardSearchChange = (nextRewardSearch: boolean) => {
+        searchRequestIdRef.current += 1;
+        setIsSearching(false);
+        setNearbyDates([]);
+        setSearchResults(null);
+        setMultiCityResults(null);
+        setSelectedMultiCityFlights([]);
+        setActiveLegStepIndex(0);
+        setInboundResults(null);
+        setInboundUnavailable(false);
+        setSelectedOutboundId(null);
+        setSelectedInboundId(null);
+        setBookingState({ status: 'idle' });
+        setIsRewardSearch(nextRewardSearch);
+    };
+
     const handleTripTypeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         clearEmptySearchState();
         const nextTripType = e.target.value as TripType;
@@ -478,13 +543,22 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
 
         setIsSearching(true);
         try {
-            const results = await searchFlightsAction(
-                criteria.from,
-                criteria.to,
-                criteria.departureDate,
-                criteria.tripType === 'one-way' ? undefined : criteria.returnDate,
-                criteria.cabinClass,
-            );
+            const results = criteria.isRewardSearch
+                ? await searchFlightsAction(
+                    criteria.from,
+                    criteria.to,
+                    criteria.departureDate,
+                    criteria.tripType === 'one-way' ? undefined : criteria.returnDate,
+                    criteria.cabinClass,
+                    criteria.isRewardSearch,
+                )
+                : await searchFlightsAction(
+                    criteria.from,
+                    criteria.to,
+                    criteria.departureDate,
+                    criteria.tripType === 'one-way' ? undefined : criteria.returnDate,
+                    criteria.cabinClass,
+                );
             if (requestId !== searchRequestIdRef.current) return;
             if (isActionValidationFailure(results)) {
                 const clearOnOneWay = Boolean(
@@ -624,6 +698,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                         departureDate: l.departureDate,
                     })),
                     cabinClass,
+                    ...(isRewardSearch ? { isRewardSearch: true } : {}),
                 });
                 if (isActionValidationFailure(results)) {
                     setBookingState({
@@ -693,6 +768,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
             returnDate: isOneWay ? '' : returnDate,
             tripType: isOneWay ? 'one-way' : 'round-trip',
             cabinClass,
+            isRewardSearch: isRewardSearch || undefined,
         });
     };
 
@@ -709,6 +785,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
             returnDate: suggestedReturnDate,
             tripType: isOneWay ? 'one-way' : 'round-trip',
             cabinClass,
+            isRewardSearch: isRewardSearch || undefined,
         });
     };
 
@@ -725,6 +802,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
             returnDate: isOneWay ? '' : returnDate,
             tripType: isOneWay ? 'one-way' : 'round-trip',
             cabinClass,
+            isRewardSearch: isRewardSearch || undefined,
         });
     };
 
@@ -953,6 +1031,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
 
     // Carried into checkout so the fare quoted there is the one that was shown.
     const cabinParam = cabinClass === 'ECONOMY' ? '' : `&cabin=${cabinClass}`;
+    const rewardParam = isRewardSearch ? '&reward=true' : '';
 
     const itineraryPrompt = !selectedOutbound
         ? 'Choose a departing flight.'
@@ -1259,6 +1338,20 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                     </select>
                 </div>
 
+                <div className="fields-container" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '0.75rem', marginBottom: '0.75rem' }}>
+                    <label htmlFor="isRewardSearch" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: '#fff', fontSize: '0.9rem' }}>
+                        <input
+                            type="checkbox"
+                            id="isRewardSearch"
+                            name="isRewardSearch"
+                            checked={isRewardSearch}
+                            onChange={(e) => handleRewardSearchChange(e.target.checked)}
+                            className="focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2"
+                        />
+                        Search reward flights
+                    </label>
+                </div>
+
                 <button type="submit" disabled={isSearching}>
                     {isSearching ? 'Searching...' : 'Find your trip'}
                 </button>
@@ -1547,22 +1640,110 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                             </div>
                                             <FlightResultTiming flight={flight} />
                                             <div className="flight-result-fare">
-                                                <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>{fareLabel(flight)}</span>
-                                                {!flight.cabinAvailable && <CabinUnavailableNote cabin={cabinClass} />}
-                                                {isChoosingItinerary ? (
-                                                    <LegSelectButton
-                                                        flight={flight}
-                                                        leg="departing"
-                                                        isSelected={selectedOutboundId === flight.id}
-                                                        onSelect={() => setSelectedOutboundId(flight.id)}
-                                                    />
+                                                {isRewardSearch ? (
+                                                    (() => {
+                                                        const { isSoldOut, isLowInventory, remainingAwardSeats, pointsFareLabel } = getFlightAwardInfo(flight, cabinClass);
+                                                        return (
+                                                            <>
+                                                                <span
+                                                                    className="award-points-pill"
+                                                                    data-testid="award-points-pill"
+                                                                    style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#34d399' }}
+                                                                >
+                                                                    {pointsFareLabel}
+                                                                </span>
+                                                                {!flight.cabinAvailable && <CabinUnavailableNote cabin={cabinClass} />}
+                                                                {isLowInventory && (
+                                                                    <span
+                                                                        className="award-badge-low-inventory"
+                                                                        data-testid="award-low-inventory-badge"
+                                                                        style={{
+                                                                            display: 'inline-block',
+                                                                            padding: '3px 8px',
+                                                                            fontSize: '0.75rem',
+                                                                            fontWeight: 600,
+                                                                            borderRadius: '6px',
+                                                                            backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                                                                            color: '#fbbf24',
+                                                                            border: '1px solid rgba(245, 158, 11, 0.4)',
+                                                                        }}
+                                                                    >
+                                                                        Only {remainingAwardSeats} award seats left!
+                                                                    </span>
+                                                                )}
+                                                                {isSoldOut && (
+                                                                    <span
+                                                                        className="award-badge-sold-out"
+                                                                        data-testid="award-sold-out-badge"
+                                                                        style={{
+                                                                            display: 'inline-block',
+                                                                            padding: '3px 8px',
+                                                                            fontSize: '0.75rem',
+                                                                            fontWeight: 600,
+                                                                            borderRadius: '6px',
+                                                                            backgroundColor: 'rgba(156, 163, 175, 0.15)',
+                                                                            color: '#9ca3af',
+                                                                            border: '1px solid rgba(156, 163, 175, 0.3)',
+                                                                        }}
+                                                                    >
+                                                                        Sold out on points
+                                                                    </span>
+                                                                )}
+                                                                {isChoosingItinerary ? (
+                                                                    <LegSelectButton
+                                                                        flight={flight}
+                                                                        leg="departing"
+                                                                        isSelected={selectedOutboundId === flight.id}
+                                                                        onSelect={() => setSelectedOutboundId(flight.id)}
+                                                                        disabled={isSoldOut}
+                                                                    />
+                                                                ) : isSoldOut ? (
+                                                                    <button
+                                                                        type="button"
+                                                                        disabled
+                                                                        aria-disabled="true"
+                                                                        className="flight-result-book disabled"
+                                                                        style={{
+                                                                            background: '#2b2938',
+                                                                            color: 'rgba(255, 255, 255, 0.4)',
+                                                                            border: '1px solid rgba(255, 255, 255, 0.15)',
+                                                                            cursor: 'not-allowed',
+                                                                            boxShadow: 'none',
+                                                                        }}
+                                                                    >
+                                                                        Book Now
+                                                                    </button>
+                                                                ) : (
+                                                                    <Link
+                                                                        className="flight-result-book"
+                                                                        href={`/checkout?outbound=${flight.id}${cabinParam}${rewardParam}`}
+                                                                    >
+                                                                        Book Now
+                                                                    </Link>
+                                                                )}
+                                                            </>
+                                                        );
+                                                    })()
                                                 ) : (
-                                                    <Link
-                                                        className="flight-result-book"
-                                                        href={`/checkout?outbound=${flight.id}${cabinParam}`}
-                                                    >
-                                                        Book Now
-                                                    </Link>
+                                                    <>
+                                                        <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>{fareLabel(flight)}</span>
+                                                        {!flight.cabinAvailable && <CabinUnavailableNote cabin={cabinClass} />}
+                                                        {isChoosingItinerary ? (
+                                                            <LegSelectButton
+                                                                flight={flight}
+                                                                leg="departing"
+                                                                isSelected={selectedOutboundId === flight.id}
+                                                                onSelect={() => setSelectedOutboundId(flight.id)}
+                                                            />
+                                                        ) : (
+                                                            <Link
+                                                                className="flight-result-book"
+                                                                href={`/checkout?outbound=${flight.id}${cabinParam}`}
+                                                            >
+                                                                Book Now
+                                                            </Link>
+                                                        )}
+                                                    </>
                                                 )}
                                             </div>
                                         </div>
@@ -1628,14 +1809,77 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                                         </div>
                                                         <FlightResultTiming flight={flight} />
                                                         <div className="flight-result-fare">
-                                                            <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>{fareLabel(flight)}</span>
-                                                            {!flight.cabinAvailable && <CabinUnavailableNote cabin={cabinClass} />}
-                                                            <LegSelectButton
-                                                                flight={flight}
-                                                                leg="return"
-                                                                isSelected={selectedInboundId === flight.id}
-                                                                onSelect={() => setSelectedInboundId(flight.id)}
-                                                            />
+                                                            {isRewardSearch ? (
+                                                                (() => {
+                                                                    const { isSoldOut, isLowInventory, remainingAwardSeats, pointsFareLabel } = getFlightAwardInfo(flight, cabinClass);
+                                                                    return (
+                                                                        <>
+                                                                            <span
+                                                                                className="award-points-pill"
+                                                                                data-testid="award-points-pill"
+                                                                                style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#34d399' }}
+                                                                            >
+                                                                                {pointsFareLabel}
+                                                                            </span>
+                                                                            {!flight.cabinAvailable && <CabinUnavailableNote cabin={cabinClass} />}
+                                                                            {isLowInventory && (
+                                                                                <span
+                                                                                    className="award-badge-low-inventory"
+                                                                                    data-testid="award-low-inventory-badge"
+                                                                                    style={{
+                                                                                        display: 'inline-block',
+                                                                                        padding: '3px 8px',
+                                                                                        fontSize: '0.75rem',
+                                                                                        fontWeight: 600,
+                                                                                        borderRadius: '6px',
+                                                                                        backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                                                                                        color: '#fbbf24',
+                                                                                        border: '1px solid rgba(245, 158, 11, 0.4)',
+                                                                                    }}
+                                                                                >
+                                                                                    Only {remainingAwardSeats} award seats left!
+                                                                                </span>
+                                                                            )}
+                                                                            {isSoldOut && (
+                                                                                <span
+                                                                                    className="award-badge-sold-out"
+                                                                                    data-testid="award-sold-out-badge"
+                                                                                    style={{
+                                                                                        display: 'inline-block',
+                                                                                        padding: '3px 8px',
+                                                                                        fontSize: '0.75rem',
+                                                                                        fontWeight: 600,
+                                                                                        borderRadius: '6px',
+                                                                                        backgroundColor: 'rgba(156, 163, 175, 0.15)',
+                                                                                        color: '#9ca3af',
+                                                                                        border: '1px solid rgba(156, 163, 175, 0.3)',
+                                                                                    }}
+                                                                                >
+                                                                                    Sold out on points
+                                                                                </span>
+                                                                            )}
+                                                                            <LegSelectButton
+                                                                                flight={flight}
+                                                                                leg="return"
+                                                                                isSelected={selectedInboundId === flight.id}
+                                                                                onSelect={() => setSelectedInboundId(flight.id)}
+                                                                                disabled={isSoldOut}
+                                                                            />
+                                                                        </>
+                                                                    );
+                                                                })()
+                                                            ) : (
+                                                                <>
+                                                                    <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>{fareLabel(flight)}</span>
+                                                                    {!flight.cabinAvailable && <CabinUnavailableNote cabin={cabinClass} />}
+                                                                    <LegSelectButton
+                                                                        flight={flight}
+                                                                        leg="return"
+                                                                        isSelected={selectedInboundId === flight.id}
+                                                                        onSelect={() => setSelectedInboundId(flight.id)}
+                                                                    />
+                                                                </>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 ))}
@@ -1678,7 +1922,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                         <Link
                                             data-testid="round-trip-book"
                                             className="flight-result-book"
-                                            href={`/checkout?outbound=${selectedOutbound.id}&inbound=${selectedInbound.id}${cabinParam}`}
+                                            href={`/checkout?outbound=${selectedOutbound.id}&inbound=${selectedInbound.id}${cabinParam}${rewardParam}`}
                                         >
                                             Book round trip
                                         </Link>
@@ -1941,22 +2185,104 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                                             </div>
                                                             <FlightResultTiming flight={flight} />
                                                             <div className="flight-result-fare">
-                                                                <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>{fareLabel(flight)}</span>
-                                                                {!flight.cabinAvailable && <CabinUnavailableNote cabin={cabinClass} />}
-                                                                <button
-                                                                    type="button"
-                                                                    data-testid="select-flight-btn"
-                                                                    aria-label={`Select flight ${flight.flightNumber}`}
-                                                                    aria-pressed={isSelected}
-                                                                    onClick={() => handleSelectMultiCityFlight(flight)}
-                                                                    className="flight-result-book"
-                                                                    style={{
-                                                                        background: isSelected ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : undefined,
-                                                                        border: isSelected ? '2px solid #34d399' : '2px solid transparent',
-                                                                    }}
-                                                                >
-                                                                    {isSelected ? '✓ Selected' : `Select flight ${flight.flightNumber}`}
-                                                                </button>
+                                                                {isRewardSearch ? (
+                                                                    (() => {
+                                                                        const { isSoldOut, isLowInventory, remainingAwardSeats, pointsFareLabel } = getFlightAwardInfo(flight, cabinClass);
+                                                                        return (
+                                                                            <>
+                                                                                <span
+                                                                                    className="award-points-pill"
+                                                                                    data-testid="award-points-pill"
+                                                                                    style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#34d399' }}
+                                                                                >
+                                                                                    {pointsFareLabel}
+                                                                                </span>
+                                                                                {!flight.cabinAvailable && <CabinUnavailableNote cabin={cabinClass} />}
+                                                                                {isLowInventory && (
+                                                                                    <span
+                                                                                        className="award-badge-low-inventory"
+                                                                                        data-testid="award-low-inventory-badge"
+                                                                                        style={{
+                                                                                            display: 'inline-block',
+                                                                                            padding: '3px 8px',
+                                                                                            fontSize: '0.75rem',
+                                                                                            fontWeight: 600,
+                                                                                            borderRadius: '6px',
+                                                                                            backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                                                                                            color: '#fbbf24',
+                                                                                            border: '1px solid rgba(245, 158, 11, 0.4)',
+                                                                                        }}
+                                                                                    >
+                                                                                        Only {remainingAwardSeats} award seats left!
+                                                                                    </span>
+                                                                                )}
+                                                                                {isSoldOut && (
+                                                                                    <span
+                                                                                        className="award-badge-sold-out"
+                                                                                        data-testid="award-sold-out-badge"
+                                                                                        style={{
+                                                                                            display: 'inline-block',
+                                                                                            padding: '3px 8px',
+                                                                                            fontSize: '0.75rem',
+                                                                                            fontWeight: 600,
+                                                                                            borderRadius: '6px',
+                                                                                            backgroundColor: 'rgba(156, 163, 175, 0.15)',
+                                                                                            color: '#9ca3af',
+                                                                                            border: '1px solid rgba(156, 163, 175, 0.3)',
+                                                                                        }}
+                                                                                    >
+                                                                                        Sold out on points
+                                                                                    </span>
+                                                                                )}
+                                                                                <button
+                                                                                    type="button"
+                                                                                    data-testid="select-flight-btn"
+                                                                                    aria-label={`Select flight ${flight.flightNumber}`}
+                                                                                    aria-pressed={isSelected}
+                                                                                    disabled={isSoldOut}
+                                                                                    aria-disabled={isSoldOut}
+                                                                                    onClick={isSoldOut ? undefined : () => handleSelectMultiCityFlight(flight)}
+                                                                                    className="flight-result-book"
+                                                                                    style={{
+                                                                                        background: isSoldOut
+                                                                                            ? '#2b2938'
+                                                                                            : isSelected
+                                                                                            ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                                                                                            : undefined,
+                                                                                        border: isSoldOut
+                                                                                            ? '1px solid rgba(255, 255, 255, 0.15)'
+                                                                                            : isSelected
+                                                                                            ? '2px solid #34d399'
+                                                                                            : '2px solid transparent',
+                                                                                        color: isSoldOut ? 'rgba(255, 255, 255, 0.4)' : undefined,
+                                                                                        cursor: isSoldOut ? 'not-allowed' : undefined,
+                                                                                    }}
+                                                                                >
+                                                                                    {isSelected ? '✓ Selected' : `Select flight ${flight.flightNumber}`}
+                                                                                </button>
+                                                                            </>
+                                                                        );
+                                                                    })()
+                                                                ) : (
+                                                                    <>
+                                                                        <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>{fareLabel(flight)}</span>
+                                                                        {!flight.cabinAvailable && <CabinUnavailableNote cabin={cabinClass} />}
+                                                                        <button
+                                                                            type="button"
+                                                                            data-testid="select-flight-btn"
+                                                                            aria-label={`Select flight ${flight.flightNumber}`}
+                                                                            aria-pressed={isSelected}
+                                                                            onClick={() => handleSelectMultiCityFlight(flight)}
+                                                                            className="flight-result-book"
+                                                                            style={{
+                                                                                background: isSelected ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : undefined,
+                                                                                border: isSelected ? '2px solid #34d399' : '2px solid transparent',
+                                                                            }}
+                                                                        >
+                                                                            {isSelected ? '✓ Selected' : `Select flight ${flight.flightNumber}`}
+                                                                        </button>
+                                                                    </>
+                                                                )}
                                                             </div>
                                                         </div>
                                                     );
@@ -1992,7 +2318,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                         All {multiCityResults.legs.length} flights selected. Ready to book your itinerary!
                                     </p>
                                     <Link
-                                        href={`/checkout?flights=${selectedMultiCityFlights.map(f => f!.id).join(',')}${cabinClass && cabinClass !== 'ECONOMY' ? `&cabin=${cabinClass}` : ''}`}
+                                        href={`/checkout?flights=${selectedMultiCityFlights.map(f => f!.id).join(',')}${cabinClass && cabinClass !== 'ECONOMY' ? `&cabin=${cabinClass}` : ''}${rewardParam}`}
                                         className="flight-result-book"
                                         style={{
                                             fontSize: '1.05rem',
