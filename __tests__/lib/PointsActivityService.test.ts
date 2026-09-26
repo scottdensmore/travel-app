@@ -204,4 +204,28 @@ describe('PointsActivityService dynamic calculations', () => {
             { description: 'Jul 2026', date: 'Jul 2026', points: 1000 },
         ]);
     });
+
+    it('returns 0 status points for reward bookings even if taxes or fees were paid', () => {
+        const rewardBookings: any[] = [
+            {
+                id: 100,
+                isRewardBooking: true,
+                createdAt: new Date('2026-03-15'),
+                totalPriceCents: 1010,
+                legs: [{ sequence: 1, flight: {
+                    id: 50,
+                    airline: 'Mona Airways',
+                    flightNumber: 'MO501',
+                    from: 'Seattle, USA',
+                    to: 'Detroit, USA',
+                    priceCents: 35000,
+                } }]
+            }
+        ];
+        const service = new PointsActivityService(rewardBookings, 1000);
+        expect(service.getCurrentPoints()).toBe(1000);
+        const activities = service.getPointsActivity();
+        expect(activities[0].points).toBe(0);
+    });
 });
+

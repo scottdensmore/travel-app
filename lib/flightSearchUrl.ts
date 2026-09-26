@@ -16,6 +16,7 @@ export interface FlightSearchCriteria {
     /// Results are priced and filtered for this cabin, so a shared link that
     /// omitted it would show a different trip from the one it described.
     cabinClass: SearchCabin;
+    isRewardSearch?: boolean;
 }
 
 export type FlightSearchParamRecord = Record<
@@ -50,7 +51,7 @@ export function parseFlightSearchParams(
     routes: FlightRoute[],
     bookingWindow: BookingWindow,
 ): FlightSearchCriteria | undefined {
-    if (['from', 'to', 'depart', 'return', 'trip', 'cabin'].some(
+    if (['from', 'to', 'depart', 'return', 'trip', 'cabin', 'reward'].some(
         (name) => Array.isArray(params[name])
     )) {
         return undefined;
@@ -66,6 +67,8 @@ export function parseFlightSearchParams(
     const departureDate = singleParam(params, 'depart') ?? '';
     const returnDate = singleParam(params, 'return') ?? '';
     const tripType = singleParam(params, 'trip');
+    const rewardParam = singleParam(params, 'reward');
+    const isRewardSearch = rewardParam === 'true';
     // An absent cabin is the default, not an invalid link: older shared URLs
     // predate the parameter. An unrecognised one is invalid, because it would
     // silently show a different cabin from the one the link named.
@@ -97,6 +100,7 @@ export function parseFlightSearchParams(
             returnDate: '',
             tripType,
             cabinClass,
+            ...(isRewardSearch ? { isRewardSearch: true } : {}),
         };
     }
 
@@ -116,6 +120,7 @@ export function parseFlightSearchParams(
         returnDate,
         tripType,
         cabinClass,
+        ...(isRewardSearch ? { isRewardSearch: true } : {}),
     };
 }
 
@@ -144,12 +149,50 @@ export function buildFlightSearchUrl(
     if (criteria.cabinClass !== 'ECONOMY') {
         params.set('cabin', criteria.cabinClass);
     }
+    if (criteria.isRewardSearch) {
+        params.set('reward', 'true');
+    }
 
     return `${pathname}?${params.toString()}`;
 }
 
+export function parseFlightSearchUrl(
+    urlOrSearch: string | URLSearchParams | URL,
+    routes: FlightRoute[],
+    bookingWindow: BookingWindow,
+): FlightSearchCriteria | undefined {
+    let searchParams: URLSearchParams;
+    if (urlOrSearch instanceof URLSearchParams) {
+        searchParams = urlOrSearch;
+    } else if (urlOrSearch instanceof URL) {
+        searchParams = urlOrSearch.searchParams;
+    } else {
+        const clean = urlOrSearch.split('#')[0];
+        const queryIndex = clean.indexOf('?');
+        let query: string;
+        if (queryIndex !== -1) {
+            query = clean.slice(queryIndex + 1);
+        } else if (clean.includes('/')) {
+            query = '';
+        } else {
+            query = clean;
+        }
+        searchParams = new URLSearchParams(query);
+    }
+    const params: FlightSearchParamRecord = {};
+    searchParams.forEach((_, key) => {
+        const all = searchParams.getAll(key);
+        if (all.length > 1) {
+            params[key] = all;
+        } else {
+            params[key] = all[0];
+        }
+    });
+    return parseFlightSearchParams(params, routes, bookingWindow);
+}
+
 /** Every parameter that means "this link is asking for a particular search". */
-const SEARCH_PARAMS = ['from', 'to', 'depart', 'return', 'trip', 'cabin'] as const;
+const SEARCH_PARAMS = ['from', 'to', 'depart', 'return', 'trip', 'cabin', 'reward'] as const;
 
 /**
  * The link asked for a search and this page could not honour it.

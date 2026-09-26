@@ -870,6 +870,99 @@ describe('searchFlightsAction', () => {
         expect(mockGenerateFlightsForDate).not.toHaveBeenCalled();
         expect(mockedFlightFindMany).not.toHaveBeenCalled();
     });
+
+    it('annotates search results with award pricing and availability when isRewardSearch is true', async () => {
+        const flights = [
+            {
+                id: 1,
+                flightNumber: 'CA101',
+                from: 'Seattle, USA',
+                to: 'Detroit, USA',
+                priceCents: 20000,
+                awardSeatsEconomy: 3,
+                awardSeatsPremiumEconomy: 2,
+                awardSeatsBusiness: 1,
+                awardSeatsFirst: 0,
+            },
+        ];
+        mockedFlightFindMany.mockResolvedValue(flights.map(routed));
+
+        const result = await searchFlightsAction(
+            'Seattle, USA',
+            'Detroit, USA',
+            undefined,
+            undefined,
+            'BUSINESS',
+            true,
+        );
+
+        expect(result).toMatchObject({
+            flights: [
+                {
+                    id: 1,
+                    cabinAvailable: true,
+                    awardAvailable: true,
+                    remainingAwardSeats: 1,
+                    awardQuote: {
+                        cabinClass: 'BUSINESS',
+                        legCount: 1,
+                        passengerCount: 1,
+                        totalPointsRequired: 40000,
+                        totalTaxesCents: 1010,
+                        formattedPoints: '40,000 pts',
+                        formattedTaxes: '$10.10',
+                    },
+                    awardSeatsAvailable: {
+                        ECONOMY: 3,
+                        PREMIUM_ECONOMY: 2,
+                        BUSINESS: 1,
+                        FIRST: 0,
+                    },
+                },
+            ],
+        });
+    });
+
+    it('marks awardAvailable false and remainingAwardSeats 0 when cabin does not physically exist on aircraft', async () => {
+        const flights = [
+            {
+                id: 1,
+                flightNumber: 'CA101',
+                from: 'Seattle, USA',
+                to: 'Detroit, USA',
+                priceCents: 20000,
+                firstClassRows: 0,
+                awardSeatsFirst: 2,
+            },
+        ];
+        mockedFlightFindMany.mockResolvedValue(flights.map(routed));
+
+        const result = await searchFlightsAction(
+            'Seattle, USA',
+            'Detroit, USA',
+            undefined,
+            undefined,
+            'FIRST',
+            true,
+        );
+
+        expect(result).toMatchObject({
+            flights: [
+                {
+                    id: 1,
+                    cabinAvailable: false,
+                    awardAvailable: false,
+                    remainingAwardSeats: 0,
+                    awardSeatsAvailable: {
+                        ECONOMY: 4,
+                        PREMIUM_ECONOMY: 2,
+                        BUSINESS: 2,
+                        FIRST: 2,
+                    },
+                },
+            ],
+        });
+    });
 });
 
 describe('searchMultiCityFlightsAction', () => {
@@ -972,6 +1065,54 @@ describe('searchMultiCityFlightsAction', () => {
             expect(result.legs[0].status).toBe('ok');
             expect(result.legs[0].flights).toHaveLength(1);
             expect(result.legs[0].flights[0].flightNumber).toBe('MA101');
+        }
+    });
+
+    it('annotates multi-city flights with award pricing and availability when isRewardSearch is true', async () => {
+        const flights = [
+            {
+                id: 1,
+                flightNumber: 'CA101',
+                from: 'Seattle, USA',
+                to: 'Detroit, USA',
+                departureDate: new Date('2026-07-02T12:00:00Z'),
+                awardSeatsEconomy: 2,
+                awardSeatsPremiumEconomy: 1,
+                awardSeatsBusiness: 0,
+                awardSeatsFirst: 0,
+            },
+        ];
+        mockedFlightFindMany.mockResolvedValue(flights.map(routed));
+
+        const payload = {
+            legs: [
+                { from: 'Seattle, USA', to: 'Detroit, USA', departureDate: '2026-07-01' },
+                { from: 'Detroit, USA', to: 'New York, USA', departureDate: '2026-07-05' },
+            ],
+            cabinClass: 'ECONOMY' as const,
+            isRewardSearch: true,
+        };
+
+        const result = await searchMultiCityFlightsAction(payload);
+        expect(result).toHaveProperty('legs');
+        if ('legs' in result) {
+            expect(result.isRewardSearch).toBe(true);
+            expect(result.legs[0].flights[0]).toMatchObject({
+                id: 1,
+                awardAvailable: true,
+                remainingAwardSeats: 2,
+                awardQuote: {
+                    cabinClass: 'ECONOMY',
+                    totalPointsRequired: 15000,
+                    totalTaxesCents: 1010,
+                },
+                awardSeatsAvailable: {
+                    ECONOMY: 2,
+                    PREMIUM_ECONOMY: 1,
+                    BUSINESS: 0,
+                    FIRST: 0,
+                },
+            });
         }
     });
 });

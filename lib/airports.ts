@@ -90,8 +90,11 @@ export function airportCodesForRoute(from: string, to: string): {
     fromAirportCode: string;
     toAirportCode: string;
 } {
-    const fromAirportCode = airportCodeFor(from);
-    const toAirportCode = airportCodeFor(to);
+    const resolveCode = (place: string): string | null =>
+        airportCodeFor(place) ?? (labelsByCode.has(place) || labelsByCode.has(place.toUpperCase()) ? place.toUpperCase() : null);
+
+    const fromAirportCode = resolveCode(from);
+    const toAirportCode = resolveCode(to);
 
     const unknown = [...new Set([
         ...(fromAirportCode === null ? [from] : []),

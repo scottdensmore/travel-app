@@ -21,7 +21,9 @@ import type {
     PaymentAuthorizationStatus,
     PaymentProvider,
 } from '@/lib/stripePaymentProvider';
+import type { CabinClass } from '@prisma/client';
 import { checkoutPaymentServiceSchema, parseInput } from '@/lib/validation';
+import { CABIN_AWARD_SEAT_KEYS, MANDATORY_AWARD_TAX_CENTS_PER_LEG } from '@/lib/rewardPricing';
 
 interface CheckoutPaymentInput {
     userId: string;
@@ -32,6 +34,7 @@ interface CheckoutPaymentInput {
         cabinClass: 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST';
     }>;
     ancillariesByPassenger?: Record<string | number, AncillaryType[]>;
+    isRewardBooking?: boolean;
 }
 
 interface CheckoutPaymentResult {
@@ -88,6 +91,9 @@ function requestFingerprint(input: Omit<CheckoutPaymentInput, 'userId'>): string
     if (sortedAncillaries.length > 0) {
         payload.push(sortedAncillaries);
     }
+    if (input.isRewardBooking) {
+        payload.push(true);
+    }
     return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }
 
@@ -136,6 +142,23 @@ export class CheckoutPaymentService {
                 }
                 return flight;
             });
+
+            if (input.isRewardBooking) {
+                const cabinCounts = new Map<CabinClass, number>();
+                for (const passenger of input.passengers) {
+                    cabinCounts.set(passenger.cabinClass as CabinClass, (cabinCounts.get(passenger.cabinClass as CabinClass) ?? 0) + 1);
+                }
+
+                for (const flight of flights) {
+                    for (const [cabin, count] of cabinCounts.entries()) {
+                        const fieldKey = CABIN_AWARD_SEAT_KEYS[cabin];
+                        const available = flight[fieldKey] ?? 0;
+                        if (available < count) {
+                            throw new Error(`Insufficient award seats available in ${cabin} on flight ${flight.flightNumber}.`);
+                        }
+                    }
+                }
+            }
 
             const existing = await tx.paymentAttempt.findUnique({
                 where: {
@@ -191,13 +214,17 @@ export class CheckoutPaymentService {
                 )
                 : 0;
 
+            const fareAmountCents = input.isRewardBooking
+                ? input.passengers.length * flights.length * MANDATORY_AWARD_TAX_CENTS_PER_LEG
+                : total.cents;
+
             return tx.paymentAttempt.create({
                 data: {
                     id: randomUUID(),
                     userId: input.userId,
                     checkoutId: input.checkoutId,
                     requestFingerprint: fingerprint,
-                    amountCents: total.cents + ancillariesTotalCents,
+                    amountCents: fareAmountCents + ancillariesTotalCents,
                     currency: 'USD',
                     status: 'CREATING',
                 },

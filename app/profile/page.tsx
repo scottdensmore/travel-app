@@ -15,6 +15,11 @@ import {
   DEFAULT_ACCOUNT_TIME_ZONE,
   normalizeAccountTimeZone,
 } from '@/lib/accountTimeZone';
+import {
+  getUserSpendablePointsBalance,
+  getPointsLedgerHistory,
+  grantWelcomePointsIfEligible,
+} from '@/lib/pointsLedgerService';
 
 export const metadata: Metadata = {
     title: 'Your profile',
@@ -206,6 +211,10 @@ export default async function ProfilePage() {
   const currentStatus = pointsActivityService.getCurrentStatus();
   const monthlyHistory = pointsActivityService.getMonthlyPointsActivity();
 
+  await grantWelcomePointsIfEligible(userId);
+  const spendablePointsBalance = await getUserSpendablePointsBalance(userId);
+  const ledgerHistory = await getPointsLedgerHistory(userId, { page: 1, pageSize: 50 });
+
   return (
     <ProfileClient 
       userName={userName}
@@ -214,6 +223,8 @@ export default async function ProfilePage() {
       accountTimeZoneChoices={accountTimeZoneChoices()}
       currentStatus={currentStatus}
       currentPoints={currentPoints}
+      spendablePointsBalance={spendablePointsBalance}
+      pointsLedgerEntries={ledgerHistory.entries}
       bookings={customerBookings}
       favorites={userFavorites}
       reviews={userReviews}

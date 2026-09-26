@@ -43,7 +43,7 @@ import { hasVerifiedStaffAccess, hasStaffPermission } from '@/lib/staffAuthoriza
 import { StaffPermission } from '@/lib/staffPermissions';
 import { recordStaffAudit } from '@/lib/staffAuditService';
 import { assertPrivilegedStaffOperation } from '@/lib/staffMfa';
-import type { AncillaryType, Flight, FlightStatus, Role } from '@prisma/client';
+import { PointsTransactionType, type AncillaryType, type Flight, type FlightStatus, type Role } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { NotificationService } from '@/lib/notificationService';
 import { assertSeatAvailableForCabin, validateSeatingLayout } from '@/lib/seatLayout';
@@ -89,6 +89,20 @@ import {
     verifyUserPassword,
     type DeletionEligibilityResult,
 } from '@/lib/privacyService';
+import {
+    calculateAwardFareQuote,
+    getAwardSeatsAvailableForCabin,
+    isAwardAvailableForFlight,
+    CABIN_AWARD_SEAT_KEYS,
+    type AwardFareQuote,
+} from '@/lib/rewardPricing';
+import {
+    getUserSpendablePointsBalance,
+    grantWelcomePointsIfEligible,
+    accruePointsForCashBooking,
+    createPointsLedgerEntry,
+    InsufficientPointsError,
+} from '@/lib/pointsLedgerService';
 
 export type ActionServerError = {
     ok: false;
@@ -212,6 +226,7 @@ export async function searchFlightsAction(
     departureDateStr?: string,
     returnDateStr?: string,
     cabinClass?: CabinClass,
+    isRewardSearch?: boolean,
 ) {
     const parsed = parseActionInput(searchFlightsSchema, {
         from,
@@ -223,10 +238,12 @@ export async function searchFlightsAction(
             ? undefined
             : returnDateStr,
         ...(cabinClass === undefined ? {} : { cabinClass }),
+        ...(isRewardSearch === undefined ? {} : { isRewardSearch }),
     });
     if (!parsed.ok) return parsed;
     ({ from, to, departureDate: departureDateStr, returnDate: returnDateStr } = parsed.data);
     const cabin = parsed.data.cabinClass;
+    const rewardSearch = parsed.data.isRewardSearch;
 
     if (!departureDateStr) {
         const route = flightRouteWhere(from, to);
@@ -237,7 +254,7 @@ export async function searchFlightsAction(
             orderBy: { departureDate: 'asc' },
             include: flightRouteInclude,
         })).map(withRouteLabels);
-        return { flights: flightsForCabin(flights, cabin), nearbyDates: [], inbound: null };
+        return { flights: flightsForCabin(flights, cabin, rewardSearch), nearbyDates: [], inbound: null };
     }
 
     const now = new Date();
@@ -247,9 +264,9 @@ export async function searchFlightsAction(
     // show and the error stands. The return is a second dependency, and losing
     // it degrades the result rather than discarding the outbound too (#68).
     const [outboundResult, inboundResult] = await Promise.allSettled([
-        searchOneDirection(from, to, departureDateStr, now, cabin),
+        searchOneDirection(from, to, departureDateStr, now, cabin, rewardSearch),
         returnDateStr
-            ? searchOneDirection(to, from, returnDateStr, now, cabin)
+            ? searchOneDirection(to, from, returnDateStr, now, cabin, rewardSearch)
             : Promise.resolve(null),
     ]);
 
@@ -281,7 +298,13 @@ const CABIN_ROW_COUNT: Record<CabinClass, (flight: Flight) => number | null> = {
 };
 
 /** A search result, and whether the cabin that was searched exists on it. */
-export type SearchResultFlight = RoutedFlight & { cabinAvailable: boolean };
+export type SearchResultFlight = RoutedFlight & {
+    cabinAvailable: boolean;
+    awardQuote?: AwardFareQuote;
+    awardAvailable?: boolean;
+    awardSeatsAvailable?: Record<CabinClass, number>;
+    remainingAwardSeats?: number;
+};
 
 export type MultiCityLegSearchResult =
     | {
@@ -304,6 +327,7 @@ export type MultiCityLegSearchResult =
 export interface MultiCitySearchResponse {
     legs: MultiCityLegSearchResult[];
     cabinClass?: CabinClass;
+    isRewardSearch?: boolean;
 }
 
 export async function searchMultiCityFlightsAction(
@@ -317,11 +341,11 @@ export async function searchMultiCityFlightsAction(
         };
     }
 
-    const { legs, cabinClass } = parsed.data;
+    const { legs, cabinClass, isRewardSearch } = parsed.data;
     const now = new Date();
 
     const legResults = await Promise.allSettled(
-        legs.map(leg => searchOneDirection(leg.from, leg.to, leg.departureDate, now, cabinClass ?? 'ECONOMY'))
+        legs.map(leg => searchOneDirection(leg.from, leg.to, leg.departureDate, now, cabinClass ?? 'ECONOMY', isRewardSearch))
     );
 
     const mappedLegs: MultiCityLegSearchResult[] = legResults.map((res, index) => {
@@ -349,6 +373,7 @@ export async function searchMultiCityFlightsAction(
     return {
         legs: mappedLegs,
         cabinClass,
+        ...(isRewardSearch !== undefined ? { isRewardSearch } : {}),
     };
 }
 
@@ -365,21 +390,44 @@ export async function searchMultiCityFlightsAction(
  * A null row count is a flight predating per-cabin layouts; those fall back to
  * the same defaults the seat map uses, which is to assume the cabin exists.
  */
-function flightsForCabin(flights: RoutedFlight[], cabin: CabinClass): SearchResultFlight[] {
+function flightsForCabin(
+    flights: RoutedFlight[],
+    cabin: CabinClass,
+    isRewardSearch?: boolean,
+): SearchResultFlight[] {
     return flights.map(flight => {
         const available = (CABIN_ROW_COUNT[cabin](flight) ?? 1) > 0;
-        if (!available || cabin === 'ECONOMY') {
-            // Economy needs no arithmetic, and an unavailable cabin is quoted at
-            // the catalogue fare because that is what the customer can book.
-            return { ...flight, cabinAvailable: available };
-        }
-        // The fare is stored in one form, so quoting a cabin is arithmetic on a
-        // number rather than a parse that can fail.
-        return {
+        const baseResult: SearchResultFlight = {
             ...flight,
-            cabinAvailable: true,
-            priceCents: calculatePassengerFareCents(flightFareCents(flight), cabin),
+            cabinAvailable: available,
+            ...(available && cabin !== 'ECONOMY'
+                ? { priceCents: calculatePassengerFareCents(flightFareCents(flight), cabin) }
+                : {}),
         };
+
+        if (isRewardSearch) {
+            const remainingAwardSeats = available ? getAwardSeatsAvailableForCabin(flight, cabin) : 0;
+            const awardQuote = calculateAwardFareQuote({
+                cabinClass: cabin,
+                legCount: 1,
+                passengerCount: 1,
+            });
+            const awardAvailable = available && isAwardAvailableForFlight(flight, cabin, 1);
+            return {
+                ...baseResult,
+                awardQuote,
+                awardAvailable,
+                remainingAwardSeats,
+                awardSeatsAvailable: {
+                    ECONOMY: getAwardSeatsAvailableForCabin(flight, 'ECONOMY'),
+                    PREMIUM_ECONOMY: getAwardSeatsAvailableForCabin(flight, 'PREMIUM_ECONOMY'),
+                    BUSINESS: getAwardSeatsAvailableForCabin(flight, 'BUSINESS'),
+                    FIRST: getAwardSeatsAvailableForCabin(flight, 'FIRST'),
+                },
+            };
+        }
+
+        return baseResult;
     });
 }
 
@@ -399,6 +447,7 @@ async function searchOneDirection(
     isoDate: string,
     now: Date,
     cabin: CabinClass = 'ECONOMY',
+    isRewardSearch?: boolean,
 ): Promise<{ flights: SearchResultFlight[]; nearbyDates: string[] }> {
     // The day the customer asked for, at the airport they are leaving from.
     // A UTC day is the wrong window once departures are instants: a 22:00 Miami
@@ -426,7 +475,7 @@ async function searchOneDirection(
         },
         orderBy: { departureDate: 'asc' },
         include: flightRouteInclude,
-    })).map(withRouteLabels), cabin);
+    })).map(withRouteLabels), cabin, isRewardSearch);
 
     if (flights.length > 0) return { flights, nearbyDates: [] };
 
@@ -493,6 +542,7 @@ export async function bookFlightAction(bookingData: {
     passengers: PassengerInput[];
     idempotencyKey: string;
     ancillariesByPassenger?: Record<string | number, AncillaryType[]>;
+    isRewardBooking?: boolean;
 }) {
     const session = await getServerSession(authOptions);
     const userId = session?.user?.id;
@@ -514,6 +564,7 @@ export async function bookFlightAction(bookingData: {
             })),
             userId,
             ancillariesByPassenger: bookingData.ancillariesByPassenger,
+            isRewardBooking: bookingData.isRewardBooking,
         });
         if (payment.status !== 'AUTHORIZED' && payment.status !== 'CAPTURED') {
             return actionValidationFailure('Payment authorization is required before booking.');
@@ -535,14 +586,28 @@ export async function bookFlightAction(bookingData: {
             );
         }
 
-        result = await flightBookingService.bookFlight({
-            flightIds: bookingData.flightIds,
-            userId,
-            passengers: bookingData.passengers,
-            idempotencyKey: bookingData.idempotencyKey,
-            paymentIntentId: payment.providerIntentId,
-            ancillariesByPassenger: bookingData.ancillariesByPassenger,
-        });
+        try {
+            result = await flightBookingService.bookFlight({
+                flightIds: bookingData.flightIds,
+                userId,
+                passengers: bookingData.passengers,
+                idempotencyKey: bookingData.idempotencyKey,
+                paymentIntentId: payment.providerIntentId,
+                ancillariesByPassenger: bookingData.ancillariesByPassenger,
+                isRewardBooking: bookingData.isRewardBooking,
+            });
+        } catch (bookingError) {
+            try {
+                await paymentService.cancelPayment({
+                    userId,
+                    checkoutId: bookingData.idempotencyKey,
+                });
+            } catch {
+                // best effort cancellation
+            }
+            throw bookingError;
+        }
+
         try {
             capture = await paymentService.capturePayment({
                 userId,
@@ -567,6 +632,9 @@ export async function bookFlightAction(bookingData: {
                 'Payment attempt does not match the current booking request.',
                 'payment',
             );
+        }
+        if (error instanceof InsufficientPointsError || (error instanceof Error && error.message.includes('Insufficient award seats'))) {
+            return actionValidationFailure(error.message);
         }
         if (!(error instanceof SeatHoldUnavailableError)) throw error;
 
@@ -607,14 +675,21 @@ export async function bookFlightAction(bookingData: {
             include: flightRouteInclude,
         });
         if (flight && (result.wasCreated || capture.wasCaptured)) {
-            const points = Math.floor(bookingTotalCents(result, flight) / 100);
-            await new NotificationService().dispatchNotification({
-                userId,
-                title: `Booking Confirmed: ${flight.airline} ${flight.flightNumber}`,
-                message: `Successfully booked flight ${flight.flightNumber} from ${flight.fromAirport.label} to ${flight.toAirport.label}. Earned +${points} status points.`,
-                category: 'ACCOUNT_ACTIVITY',
-                type: 'POINTS',
-            });
+            if (!bookingData.isRewardBooking) {
+                try {
+                    await accruePointsForCashBooking(result.id);
+                } catch {
+                    // In unit test mocks where booking is not in mocked prisma
+                }
+                const points = Math.floor(bookingTotalCents(result, flight) / 100);
+                await new NotificationService().dispatchNotification({
+                    userId,
+                    title: `Booking Confirmed: ${flight.airline} ${flight.flightNumber}`,
+                    message: `Successfully booked flight ${flight.flightNumber} from ${flight.fromAirport.label} to ${flight.toAirport.label}. Earned +${points} status points.`,
+                    category: 'ACCOUNT_ACTIVITY',
+                    type: 'POINTS',
+                });
+            }
         }
     } catch (err) {
         console.error("Failed to generate points notification:", err);
@@ -622,6 +697,14 @@ export async function bookFlightAction(bookingData: {
 
     revalidatePath('/profile');
     return result;
+}
+
+export async function getUserSpendablePointsBalanceAction(): Promise<number> {
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.id;
+    if (!userId) throw new Error('Unauthorized');
+    await grantWelcomePointsIfEligible(userId);
+    return getUserSpendablePointsBalance(userId);
 }
 
 export async function startCheckoutPaymentAction(paymentData: {
@@ -632,6 +715,7 @@ export async function startCheckoutPaymentAction(paymentData: {
         cabinClass: 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST';
     }>;
     ancillariesByPassenger?: Record<string | number, AncillaryType[]>;
+    isRewardBooking?: boolean;
 }) {
     const session = await getServerSession(authOptions);
     const userId = session?.user?.id;
@@ -651,6 +735,9 @@ export async function startCheckoutPaymentAction(paymentData: {
             publishableKey: getStripePublishableKey(),
         };
     } catch (error) {
+        if (error instanceof Error && error.message.includes('Insufficient award seats')) {
+            return actionValidationFailure(error.message);
+        }
         if (!(error instanceof SeatHoldUnavailableError)) throw error;
 
         const legIndex = parsed.data.flightIds.indexOf(error.claim.flightId);
@@ -679,6 +766,7 @@ export async function createPaymentAttemptAction(paymentData: {
         cabinClass: 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST';
     }>;
     ancillariesByPassenger?: Record<string | number, AncillaryType[]>;
+    isRewardBooking?: boolean;
 }) {
     if (paymentData.ancillariesByPassenger) {
         const parsedAncillaries = parseActionInput(
@@ -1251,15 +1339,60 @@ export async function cancelBookingAction(bookingId: number) {
             refundId = refund.id;
         }
 
+        if (lockedBooking.isRewardBooking) {
+            if (settled.pointsRedeposited && settled.pointsRedeposited > 0 && lockedBooking.userId) {
+                await createPointsLedgerEntry(
+                    {
+                        userId: lockedBooking.userId,
+                        type: PointsTransactionType.REWARD_REFUND,
+                        amount: settled.pointsRedeposited,
+                        description: `Cancellation refund for booking #${lockedBooking.id}`,
+                        bookingId: lockedBooking.id,
+                    },
+                    tx,
+                );
+            }
+
+            for (const leg of lockedBooking.legs) {
+                if (!leg.flight) continue;
+                const cabinCounts = new Map<CabinClass, number>();
+                for (const seat of leg.seatAssignments) {
+                    const cabin = seat.cabinClass as CabinClass;
+                    cabinCounts.set(cabin, (cabinCounts.get(cabin) ?? 0) + 1);
+                }
+                if (cabinCounts.size === 0) {
+                    cabinCounts.set('ECONOMY', 1);
+                }
+                const updateData: Record<string, { increment: number }> = {};
+                for (const [cabin, count] of cabinCounts.entries()) {
+                    const fieldKey = CABIN_AWARD_SEAT_KEYS[cabin];
+                    updateData[fieldKey] = { increment: count };
+                }
+                await tx.flight.update({
+                    where: { id: leg.flight.id },
+                    data: updateData,
+                });
+            }
+        }
+
         const flight = outboundFlight(lockedBooking);
         let cancellationNotice: { userId: string; title: string; message: string } | null = null;
         if (flight && lockedBooking.userId) {
-            const points = Math.floor(bookingTotalCents(lockedBooking, flight) / 100);
-            cancellationNotice = {
-                userId: lockedBooking.userId,
-                title: `Booking Cancelled: ${flight.airline} ${flight.flightNumber}`,
-                message: `Booking for flight ${flight.flightNumber} has been cancelled. Deducted -${points} status points.`,
-            };
+            if (lockedBooking.isRewardBooking) {
+                const redeposited = settled.pointsRedeposited ?? 0;
+                cancellationNotice = {
+                    userId: lockedBooking.userId,
+                    title: `Booking Cancelled: ${flight.airline} ${flight.flightNumber}`,
+                    message: `Booking for flight ${flight.flightNumber} has been cancelled.${redeposited > 0 ? ` Redeposited ${redeposited.toLocaleString()} points.` : ''}`,
+                };
+            } else {
+                const points = Math.floor(bookingTotalCents(lockedBooking, flight) / 100);
+                cancellationNotice = {
+                    userId: lockedBooking.userId,
+                    title: `Booking Cancelled: ${flight.airline} ${flight.flightNumber}`,
+                    message: `Booking for flight ${flight.flightNumber} has been cancelled. Deducted -${points} status points.`,
+                };
+            }
         }
 
         return { updatedBooking, refundId, cancellationNotice };

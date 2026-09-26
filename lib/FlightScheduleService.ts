@@ -1,4 +1,4 @@
-import type { Flight } from '@prisma/client';
+import type { Flight, FlightSchedule } from '@prisma/client';
 import { airportCodesForRoute, airportTimeZoneFor } from './airports';
 import { addDaysToIsoDate, todayIsoDate } from './dates';
 import { airportLocalInstant } from './flightTime';
@@ -120,21 +120,7 @@ export default class FlightScheduleService {
 
                     if (!flight) {
                         flight = await tx.flight.create({
-                            data: {
-                                flightScheduleId: schedule.id,
-                                flightNumber: schedule.flightNumber,
-                                airline: schedule.airline,
-                                ...airportCodesForRoute(schedule.from, schedule.to),
-                                departureDate,
-                                priceCents: schedule.priceCents,
-                                durationMinutes: schedule.durationMinutes,
-                                status: 'ON_TIME',
-                                firstClassRows: schedule.firstClassRows ?? 3,
-                                businessRows: schedule.businessRows ?? 3,
-                                premiumEconomyRows: schedule.premiumEconomyRows ?? 4,
-                                economyRows: schedule.economyRows ?? 20,
-                                seatPattern: schedule.seatPattern ?? 'ABC-DEF'
-                            }
+                            data: this.buildFlightFromSchedule(schedule, departureDate)
                         });
                         created = true;
                     }
@@ -266,6 +252,36 @@ export default class FlightScheduleService {
             schedules,
             shortestDaysCovered,
             isSufficient: shortestDaysCovered >= requiredDays,
+        };
+    }
+
+    /**
+     * Map a FlightSchedule template and departure date to the flight creation payload,
+     * including seat layout and award inventory quotas.
+     */
+    buildFlightFromSchedule(
+        schedule: Pick<FlightSchedule, 'id' | 'flightNumber' | 'airline' | 'from' | 'to' | 'priceCents' | 'durationMinutes'> &
+            Partial<Pick<FlightSchedule, 'firstClassRows' | 'businessRows' | 'premiumEconomyRows' | 'economyRows' | 'seatPattern' | 'awardSeatsEconomy' | 'awardSeatsPremiumEconomy' | 'awardSeatsBusiness' | 'awardSeatsFirst'>>,
+        departureDate: Date
+    ) {
+        return {
+            flightScheduleId: schedule.id,
+            flightNumber: schedule.flightNumber,
+            airline: schedule.airline,
+            ...airportCodesForRoute(schedule.from, schedule.to),
+            departureDate,
+            priceCents: schedule.priceCents,
+            durationMinutes: schedule.durationMinutes,
+            status: 'ON_TIME' as const,
+            firstClassRows: schedule.firstClassRows ?? 3,
+            businessRows: schedule.businessRows ?? 3,
+            premiumEconomyRows: schedule.premiumEconomyRows ?? 4,
+            economyRows: schedule.economyRows ?? 20,
+            seatPattern: schedule.seatPattern ?? 'ABC-DEF',
+            awardSeatsEconomy: schedule.awardSeatsEconomy ?? 4,
+            awardSeatsPremiumEconomy: schedule.awardSeatsPremiumEconomy ?? 2,
+            awardSeatsBusiness: schedule.awardSeatsBusiness ?? 2,
+            awardSeatsFirst: schedule.awardSeatsFirst ?? 1,
         };
     }
 }

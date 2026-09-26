@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { AncillaryType, CabinClass } from '@prisma/client';
+import { PointsTransactionType, type AncillaryType, type CabinClass } from '@prisma/client';
 import { heldSeats } from '@/lib/seatOccupancy';
 import { activeItineraryLegWhere, bookingFlights, legFlightClause } from '@/lib/bookingItinerary';
 import { prisma } from '@/lib/prisma';
@@ -13,6 +13,12 @@ import {
     flightFareCents,
     getAncillaryPriceCents,
 } from '@/lib/bookingPricing';
+import {
+    CABIN_AWARD_POINTS,
+    CABIN_AWARD_SEAT_KEYS,
+    MANDATORY_AWARD_TAX_CENTS_PER_LEG,
+} from '@/lib/rewardPricing';
+import { createPointsLedgerEntry } from '@/lib/pointsLedgerService';
 import { safePassengerSelect } from '@/lib/passengerDataAccess';
 import {
     decryptPassengerData,
@@ -122,6 +128,7 @@ export default class FlightBookingService {
         idempotencyKey: string;
         paymentIntentId?: string | null;
         ancillariesByPassenger?: Record<string | number, AncillaryType[]>;
+        isRewardBooking?: boolean;
     }) {
         const {
             flightIds,
@@ -130,6 +137,7 @@ export default class FlightBookingService {
             idempotencyKey,
             paymentIntentId,
             ancillariesByPassenger,
+            isRewardBooking,
         } = parseInput(
             flightBookingServiceSchema,
             bookingData
@@ -269,6 +277,45 @@ export default class FlightBookingService {
                 }
             }
 
+            if (isRewardBooking) {
+                const cabinCounts = new Map<CabinClass, number>();
+                for (const passenger of passengers) {
+                    cabinCounts.set(passenger.cabinClass, (cabinCounts.get(passenger.cabinClass) ?? 0) + 1);
+                }
+
+                for (const flight of flights) {
+                    for (const [cabin, count] of cabinCounts.entries()) {
+                        const fieldKey = CABIN_AWARD_SEAT_KEYS[cabin];
+                        const available = flight[fieldKey] ?? 0;
+                        if (available < count) {
+                            throw new Error(`Insufficient award seats available in ${cabin} on flight ${flight.flightNumber}.`);
+                        }
+                    }
+                }
+
+                for (const flight of flights) {
+                    const updateData: Record<string, { decrement: number }> = {};
+                    for (const [cabin, count] of cabinCounts.entries()) {
+                        const fieldKey = CABIN_AWARD_SEAT_KEYS[cabin];
+                        updateData[fieldKey] = { decrement: count };
+                    }
+                    await tx.flight.update({
+                        where: { id: flight.id },
+                        data: updateData,
+                    });
+                }
+            }
+
+            let totalPoints = 0;
+            let totalTaxesCents = 0;
+            if (isRewardBooking) {
+                for (const passenger of passengers) {
+                    const pointsPerLeg = CABIN_AWARD_POINTS[passenger.cabinClass] ?? CABIN_AWARD_POINTS.ECONOMY;
+                    totalPoints += pointsPerLeg * flights.length;
+                    totalTaxesCents += MANDATORY_AWARD_TAX_CENTS_PER_LEG * flights.length;
+                }
+            }
+
             const total = calculateItineraryTotal(
                 flights.map(flightFareCents),
                 passengers.map(passenger => ({
@@ -282,6 +329,10 @@ export default class FlightBookingService {
                     ancillaries: (ancillariesByPassenger && (ancillariesByPassenger[index] || ancillariesByPassenger[String(index)])) || [],
                 }))
             );
+
+            const totalPriceCents = isRewardBooking
+                ? totalTaxesCents + ancillariesTotalCents
+                : total.cents + ancillariesTotalCents;
 
             // Retain passenger data until the trip ends, which is the last leg.
             const lastDeparture = flights
@@ -332,7 +383,11 @@ export default class FlightBookingService {
             const booking = await tx.booking.create({
                 data: {
                     userId,
-                    totalPriceCents: total.cents + ancillariesTotalCents,
+                    totalPriceCents,
+                    ...(isRewardBooking ? {
+                        isRewardBooking: true,
+                        pointsRedeemed: totalPoints,
+                    } : {}),
                     legs: {
                         create: flightIds.map((flightId, index) => ({
                             sequence: index + 1,
@@ -397,6 +452,16 @@ export default class FlightBookingService {
                 ancillariesByPassengerId.set(record.passengerId, existing);
             });
 
+            if (isRewardBooking && totalPoints > 0) {
+                await createPointsLedgerEntry({
+                    userId,
+                    type: PointsTransactionType.REWARD_REDEMPTION,
+                    amount: -totalPoints,
+                    description: `Reward flight redemption for booking ${booking.reference ?? booking.id}`,
+                    bookingId: booking.id,
+                }, tx);
+            }
+
             // What each traveller bought, keyed by the id we minted for them.
             // protectedPassengers is built from passengers in order, so the two
             // line up here by construction -- but the created rows come back
@@ -440,6 +505,7 @@ export default class FlightBookingService {
         idempotencyKey: string;
         paymentIntentId?: string | null;
         ancillariesByPassenger?: Record<string | number, AncillaryType[]>;
+        isRewardBooking?: boolean;
     }) {
         return new FlightBookingService().bookFlight(bookingData);
     }

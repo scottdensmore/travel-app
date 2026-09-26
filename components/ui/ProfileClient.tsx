@@ -5,6 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import PointsActivityTable from "@/components/ui/pointsActivityTable";
+import PointsLedgerTable, { type PointsLedgerEntryRow } from "@/components/ui/PointsLedgerTable";
 import NextStatusChart from "@/components/ui/charts/nextStatusChart";
 import PointsHistoryChart from "@/components/ui/charts/pointsHistoryChart";
 import { flightFareCents, formatPrice } from '@/lib/bookingPricing';
@@ -114,6 +115,8 @@ interface ProfileClientProps {
     accountTimeZoneChoices: string[];
     currentStatus: string;
     currentPoints: number;
+    spendablePointsBalance?: number;
+    pointsLedgerEntries?: PointsLedgerEntryRow[];
     bookings: Booking[];
     favorites: UserFavorite[];
     reviews: Review[];
@@ -307,6 +310,8 @@ export default function ProfileClient({
     accountTimeZoneChoices,
     currentStatus,
     currentPoints,
+    spendablePointsBalance = 0,
+    pointsLedgerEntries = [],
     bookings,
     favorites,
     reviews,
@@ -813,11 +818,39 @@ export default function ProfileClient({
     return (
         <div className="page-container profile">
             <div className="sidebar-menu">
-                <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+                <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
                     <Image src={userAvatar} className="user-avatar" alt="User avatar" width={48} height={48} unoptimized style={{ display: 'inline-block' }} />
                     <h3 style={{ margin: '1rem 0 0.5rem' }}>{userName}</h3>
                     <p style={{ margin: '0.25rem 0' }}><strong>Current Status:</strong> {currentStatus}</p>
                     <p style={{ margin: '0.25rem 0' }}><strong>Status Points:</strong> {currentPoints.toLocaleString()}</p>
+                    <p style={{ margin: '0.25rem 0' }}><strong>Spendable Points:</strong> {spendablePointsBalance.toLocaleString()}</p>
+                </div>
+
+                <div
+                    className="spendable-points-card"
+                    data-testid="spendable-points-card"
+                    style={{
+                        marginBottom: '1.5rem',
+                        padding: '1rem',
+                        background: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)',
+                        color: '#ffffff',
+                        borderRadius: '0.5rem',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                        textAlign: 'center',
+                    }}
+                >
+                    <div style={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.9 }}>
+                        Spendable Points
+                    </div>
+                    <div
+                        data-testid="spendable-points-balance"
+                        style={{ fontSize: '1.5rem', fontWeight: 700, margin: '0.25rem 0' }}
+                    >
+                        {spendablePointsBalance.toLocaleString()} pts
+                    </div>
+                    <div style={{ fontSize: '0.75rem', opacity: 0.85 }}>
+                        Redeemable for award flights
+                    </div>
                 </div>
 
                 <AccountTimeZoneForm
@@ -1416,6 +1449,13 @@ export default function ProfileClient({
                     ) : (
                         <p className="text-gray-500 italic">You have not written any reviews yet.</p>
                     )}
+                </div>
+
+                <div className="profile-card mt-8" data-testid="points-ledger-card">
+                    <PointsLedgerTable
+                        entries={pointsLedgerEntries}
+                        accountTimeZone={accountTimeZone}
+                    />
                 </div>
 
                 <div className="profile-card mt-8">

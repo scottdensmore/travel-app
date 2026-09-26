@@ -496,6 +496,7 @@ describe('shared server validation schemas', () => {
         // A cabin the airline does not sell must not fall through to economy.
         expect(searchFlightsSchema.safeParse({ from: 'A', to: 'B', cabinClass: 'SLEEPER' }).success).toBe(false);
         expect(searchFlightsSchema.parse({ from: 'A', to: 'B', cabinClass: 'FIRST' }).cabinClass).toBe('FIRST');
+        expect(searchFlightsSchema.parse({ from: 'A', to: 'B', isRewardSearch: true }).isRewardSearch).toBe(true);
     });
 
     it('rejects past departures and returns before departure', () => {
@@ -1206,6 +1207,7 @@ describe('multi-city itinerary validation', () => {
         };
         const parsed = searchMultiCityFlightsSchema.safeParse(payload);
         expect(parsed.success).toBe(true);
+        expect(searchMultiCityFlightsSchema.parse({ ...payload, isRewardSearch: true }).isRewardSearch).toBe(true);
     });
 
     it('refuses multi-city search with fewer than 2 legs', () => {

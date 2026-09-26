@@ -71,6 +71,7 @@ class PointsActivityService {
 
   /** Whole status points earned by a booking, from its stored total. */
   private bookingPoints(booking: BookingWithFlight): number {
+    if (booking.isRewardBooking) return 0;
     return Math.floor(bookingTotalCents(booking, outboundFlight(booking)) / 100);
   }
 
