@@ -6,7 +6,7 @@ import { authOptions } from '@/lib/auth';
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { bookingId: string } }
+  { params }: { params: Promise<{ bookingId: string }> }
 ) {
   const session = await getServerSession(authOptions);
   
@@ -14,7 +14,7 @@ export async function GET(
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
-  const bookingId = parseInt(params.bookingId, 10);
+  const bookingId = parseInt((await params).bookingId, 10);
   if (isNaN(bookingId)) {
     return new NextResponse('Bad Request', { status: 400 });
   }

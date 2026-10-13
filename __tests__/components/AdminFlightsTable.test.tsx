@@ -316,13 +316,15 @@ describe('AdminFlightsTable', () => {
         const closeButton = screen.getByRole('button', { name: 'Close passenger manifest' });
         expect(closeButton).toHaveStyle({
             width: 'auto',
-            minWidth: 'unset',
-            flexShrink: 0,
+            'flex-shrink': '0',
             padding: '4px 8px',
         });
+        // jsdom 26 resolves `unset` when reading computed styles. Verify the
+        // explicit override itself so the declaration remains part of the test.
+        expect(closeButton.style.minWidth).toBe('unset');
 
         const headerTitle = screen.getByRole('heading', { name: 'Passenger Manifest' });
-        expect(headerTitle.parentElement).toHaveStyle({ minWidth: 0 });
+        expect(headerTitle.parentElement).toHaveStyle({ 'min-width': '0' });
     });
 });
 

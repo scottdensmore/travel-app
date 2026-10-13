@@ -10,7 +10,7 @@ import {
     bookingWindowIsoDates,
 } from '@/lib/dates';
 import { validateImageDataUrl } from '@/lib/uploadValidation';
-import { isManagedGuideImagePath } from '@/lib/guideImageStorage';
+import { isManagedGuideImagePath } from '@/lib/guideImagePath';
 
 export const MAX_MUTATION_BYTES = 1_000_000;
 export const MAX_REGISTRATION_BYTES = 16_384;
