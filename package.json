@@ -30,7 +30,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.447.0",
-    "next": "^16.2.11",
+    "next": "16.3.8",
     "next-auth": "^4.24.15",
     "pdfkit": "^0.20.2",
     "pg": "^8.18.0",
@@ -58,7 +58,7 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "eslint": "^9.39.3",
-    "eslint-config-next": "^16.2.11",
+    "eslint-config-next": "16.3.8",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
     "postcss": "^8.5.18",
@@ -77,7 +77,7 @@
       "uuid": "^11.1.1"
     },
     "next": {
-      "sharp": "^0.35.3"
+      "sharp": "^0.35.5"
     },
     "react-simple-maps": {
       "d3-geo": "^3.1.1",
