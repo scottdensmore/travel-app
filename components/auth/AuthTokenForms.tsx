@@ -6,7 +6,7 @@ type Feedback = { type: 'error' | 'success'; message: string } | null;
 
 function FeedbackMessage({ feedback, errorRef }: {
     feedback: Feedback;
-    errorRef: React.RefObject<HTMLDivElement>;
+    errorRef: React.RefObject<HTMLDivElement | null>;
 }) {
     if (!feedback) return null;
     if (feedback.type === 'success') {

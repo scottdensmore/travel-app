@@ -99,11 +99,13 @@ describe('/admin/flights schedule list', () => {
     });
 });
 
+type AnyPropsElement = React.ReactElement<Record<string, any>>;
+
 function findElement(
     node: React.ReactNode,
-    predicate: (element: React.ReactElement) => boolean,
-): React.ReactElement | null {
-    if (!React.isValidElement(node)) return null;
+    predicate: (element: AnyPropsElement) => boolean,
+): AnyPropsElement | null {
+    if (!React.isValidElement<Record<string, any>>(node)) return null;
     if (predicate(node)) return node;
 
     const children = React.Children.toArray(
