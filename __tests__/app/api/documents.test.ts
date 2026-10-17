@@ -59,7 +59,7 @@ describe('Documents API', () => {
     it('returns 401 if unauthorized', async () => {
       (getServerSession as jest.Mock).mockResolvedValue(null);
       const req = { url: 'http://localhost/api/documents/e-ticket/1' } as any;
-      const res = await getETicket(req, { params: { bookingId: '1' } });
+      const res = await getETicket(req, { params: Promise.resolve({ bookingId: '1' }) });
       expect(res.status).toBe(401);
     });
 
@@ -67,7 +67,7 @@ describe('Documents API', () => {
       (getServerSession as jest.Mock).mockResolvedValue({ user: { id: 'user1' } });
       (prisma.booking.findUnique as jest.Mock).mockResolvedValue(null);
       const req = { url: 'http://localhost/api/documents/e-ticket/1' } as any;
-      const res = await getETicket(req, { params: { bookingId: '1' } });
+      const res = await getETicket(req, { params: Promise.resolve({ bookingId: '1' }) });
       expect(res.status).toBe(404);
     });
 
@@ -75,7 +75,7 @@ describe('Documents API', () => {
       (getServerSession as jest.Mock).mockResolvedValue({ user: { id: 'user2', role: 'USER' } });
       (prisma.booking.findUnique as jest.Mock).mockResolvedValue({ userId: 'user1' });
       const req = { url: 'http://localhost/api/documents/e-ticket/1' } as any;
-      const res = await getETicket(req, { params: { bookingId: '1' } });
+      const res = await getETicket(req, { params: Promise.resolve({ bookingId: '1' }) });
       expect(res.status).toBe(403);
     });
 
@@ -83,7 +83,7 @@ describe('Documents API', () => {
       (getServerSession as jest.Mock).mockResolvedValue({ user: { id: 'user1', role: 'USER' } });
       (prisma.booking.findUnique as jest.Mock).mockResolvedValue({ userId: 'user1' });
       const req = { url: 'http://localhost/api/documents/e-ticket/1' } as any;
-      const res = await getETicket(req, { params: { bookingId: '1' } });
+      const res = await getETicket(req, { params: Promise.resolve({ bookingId: '1' }) });
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toBe('application/pdf');
     });
@@ -94,7 +94,7 @@ describe('Documents API', () => {
       (getServerSession as jest.Mock).mockResolvedValue({ user: { id: 'user1', role: 'USER' } });
       (prisma.booking.findUnique as jest.Mock).mockResolvedValue({ userId: 'user1' });
       const req = { url: 'http://localhost/api/documents/invoice/1' } as any;
-      const res = await getInvoice(req, { params: { bookingId: '1' } });
+      const res = await getInvoice(req, { params: Promise.resolve({ bookingId: '1' }) });
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toBe('application/pdf');
     });

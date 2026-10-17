@@ -195,6 +195,21 @@ function checkOverrides(packageJson, violations) {
     if (!overrides['d3-transition']) {
         violations.push("package.json overrides: 'd3-transition' pin is missing.");
     }
+
+    // postcss-selector-parser
+    if (!overrides['postcss-selector-parser']) {
+        violations.push("package.json overrides: 'postcss-selector-parser' pin is missing.");
+    }
+
+    // js-yaml
+    if (!overrides['js-yaml']) {
+        violations.push("package.json overrides: 'js-yaml' pin is missing.");
+    }
+
+    // braces
+    if (!overrides['braces']) {
+        violations.push("package.json overrides: 'braces' pin is missing.");
+    }
 }
 
 /**

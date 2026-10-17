@@ -947,13 +947,35 @@ export async function updateAccountTimeZoneAction(timeZone: string) {
     return updated;
 }
 
-export {
-    submitCityGuideReviewAction,
-    updateCityGuideReviewAction,
-    reportCityGuideReviewAction,
-    moderateReviewAction,
-    deleteReviewAction,
+import {
+    submitCityGuideReviewAction as submitReviewAction,
+    updateCityGuideReviewAction as updateReviewAction,
+    reportCityGuideReviewAction as reportReviewAction,
+    moderateReviewAction as moderateAction,
+    deleteReviewAction as deleteAction,
 } from '@/app/actions/reviewActions';
+
+// Next.js requires explicit async exports in a 'use server' module. Preserve
+// these public entry points while the review module owns their implementation.
+export async function submitCityGuideReviewAction(...args: Parameters<typeof submitReviewAction>) {
+    return submitReviewAction(...args);
+}
+
+export async function updateCityGuideReviewAction(...args: Parameters<typeof updateReviewAction>) {
+    return updateReviewAction(...args);
+}
+
+export async function reportCityGuideReviewAction(...args: Parameters<typeof reportReviewAction>) {
+    return reportReviewAction(...args);
+}
+
+export async function moderateReviewAction(...args: Parameters<typeof moderateAction>) {
+    return moderateAction(...args);
+}
+
+export async function deleteReviewAction(...args: Parameters<typeof deleteAction>) {
+    return deleteAction(...args);
+}
 
 const DEPARTED_MESSAGE =
     'This booking cannot be cancelled because the flight has already departed.';
