@@ -186,7 +186,7 @@ describe('ItineraryRebookingDialog', () => {
 
         const economy = await within(dialog).findByLabelText('Replacement seat for Ada Lovelace on MA101');
         const business = within(dialog).getByLabelText('Replacement seat for Grace Hopper on MA101');
-        expect(within(economy).getByRole('option', { name: '2A — occupied' })).toBeDisabled();
+        expect(await within(economy).findByRole('option', { name: '2A — occupied' })).toBeDisabled();
         expect(within(economy).queryByRole('option', { name: '1A' })).not.toBeInTheDocument();
         expect(within(business).getByRole('option', { name: '1A' })).toBeInTheDocument();
         expect(within(business).queryByRole('option', { name: /2A/ })).not.toBeInTheDocument();

@@ -42,11 +42,13 @@ jest.mock('@/components/ui/FlightScheduleDeletionForm', () => ({
 
 import ScheduleImpactPage from '@/app/admin/flights/schedules/[scheduleId]/page';
 
+type AnyPropsElement = React.ReactElement<Record<string, any>>;
+
 function findElements(
     node: React.ReactNode,
-    predicate: (element: React.ReactElement) => boolean,
-): React.ReactElement[] {
-    if (!React.isValidElement(node)) return [];
+    predicate: (element: AnyPropsElement) => boolean,
+): AnyPropsElement[] {
+    if (!React.isValidElement<Record<string, any>>(node)) return [];
     const matches = predicate(node) ? [node] : [];
     const children = React.Children.toArray(
         (node.props as { children?: React.ReactNode }).children,

@@ -67,13 +67,13 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
     const [success, setSuccess] = useState<string | null>(null);
 
     useEffect(() => {
-        if (!firstErrorField) return;
+        if (!firstErrorField || isPending) return;
         const input = document.getElementById(firstErrorField);
         if (input) {
             input.focus();
             input.scrollIntoView?.({ block: 'center' });
         }
-    }, [firstErrorField]);
+    }, [firstErrorField, isPending]);
 
     const weekdays = [
         { label: 'Sun', value: 0 },

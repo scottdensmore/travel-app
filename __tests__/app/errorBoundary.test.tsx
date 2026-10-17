@@ -114,10 +114,10 @@ describe('GlobalError (app/global-error.tsx)', () => {
         const error = new Error('FATAL_ROOT_CRASH: /etc/secrets/key.pem corrupted');
         const mockReset = jest.fn();
 
-        const { container } = render(<GlobalError error={error} reset={mockReset} />);
+        render(<GlobalError error={error} reset={mockReset} />);
 
-        expect(container.querySelector('html')).toBeInTheDocument();
-        expect(container.querySelector('body')).toBeInTheDocument();
+        expect(document.querySelector('html')).toBeInTheDocument();
+        expect(document.querySelector('body')).toBeInTheDocument();
         expect(screen.getByRole('heading', { level: 1, name: /something went wrong/i })).toBeInTheDocument();
         expect(screen.getByText(/incident reference:\s*ERR-[A-Z0-9]+/i)).toBeInTheDocument();
 

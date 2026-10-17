@@ -64,15 +64,21 @@ export default function AdminNotificationDeliveriesClient({
                 });
 
                 if (result.ok) {
-                    setDeliveries(result.data.deliveries);
-                    setTotalDeliveries(result.data.totalCount);
-                    setCurrentPage(page);
+                    startTransition(() => {
+                        setDeliveries(result.data.deliveries);
+                        setTotalDeliveries(result.data.totalCount);
+                        setCurrentPage(page);
+                    });
                 } else {
-                    setFeedback({ type: 'error', message: result.error?.message || 'Failed to fetch deliveries.' });
+                    startTransition(() => {
+                        setFeedback({ type: 'error', message: result.error?.message || 'Failed to fetch deliveries.' });
+                    });
                 }
             } catch (err: unknown) {
                 const msg = err instanceof Error ? err.message : 'Error fetching deliveries.';
-                setFeedback({ type: 'error', message: msg });
+                startTransition(() => {
+                    setFeedback({ type: 'error', message: msg });
+                });
             }
         });
     };
