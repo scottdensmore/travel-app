@@ -47,7 +47,7 @@ describe('CheckoutPage multi-leg flight parameter parsing', () => {
         airline: 'Mona',
         fromAirport: { label: 'SEA' },
         toAirport: { label: 'DTW' },
-        departureDate: new Date(),
+        departureDate: new Date('2099-01-10T10:00:00Z'),
         durationMinutes: 200,
         priceCents: 10000,
         firstClassRows: 2,
@@ -62,7 +62,7 @@ describe('CheckoutPage multi-leg flight parameter parsing', () => {
         airline: 'Mona',
         fromAirport: { label: 'DTW' },
         toAirport: { label: 'JFK' },
-        departureDate: new Date(),
+        departureDate: new Date('2099-01-15T10:00:00Z'),
         durationMinutes: 120,
         priceCents: 8000,
         firstClassRows: 2,
@@ -77,7 +77,7 @@ describe('CheckoutPage multi-leg flight parameter parsing', () => {
         airline: 'Mona',
         fromAirport: { label: 'JFK' },
         toAirport: { label: 'SEA' },
-        departureDate: new Date(),
+        departureDate: new Date('2099-01-20T10:00:00Z'),
         durationMinutes: 300,
         priceCents: 15000,
         firstClassRows: 2,
@@ -149,7 +149,7 @@ describe('CheckoutPage multi-leg flight parameter parsing', () => {
         (prisma.flight.findMany as jest.Mock).mockResolvedValue([
             // DB returns out of order
             flight20,
-            flight30,
+            { ...flight30, departureDate: new Date('2099-01-05T10:00:00Z') },
             flight10,
         ]);
 
@@ -159,6 +159,16 @@ describe('CheckoutPage multi-leg flight parameter parsing', () => {
 
         const spans = container.querySelectorAll('span');
         expect(Array.from(spans).map(s => s.textContent)).toEqual(['FL30', 'FL10', 'FL20']);
+    });
+
+    it('returns notFound when a later leg departs before an earlier leg arrives', async () => {
+        (prisma.flight.findMany as jest.Mock).mockResolvedValue([
+            flight10,
+            flight20,
+        ]);
+
+        const searchParams = Promise.resolve({ outbound: '20', inbound: '10' });
+        await expect(CheckoutPage({ searchParams })).rejects.toThrow('NEXT_NOT_FOUND');
     });
 
     it('preserves backward compatibility with outbound and inbound query parameters', async () => {

@@ -35,13 +35,17 @@ async function fixture() {
     return { user, flight };
 }
 
-async function createFlight(priceCents: number, suffix = randomUUID()) {
+async function createFlight(
+    priceCents: number,
+    suffix = randomUUID(),
+    departureDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+) {
     const flight = await prisma.flight.create({
         data: {
             flightNumber: `PAY-${suffix.slice(0, 8)}`,
             airline: 'Mona Airways',
             ...airportCodesForRoute('Seattle, USA', 'Detroit, USA'),
-            departureDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            departureDate,
             priceCents,
             firstClassRows: 0,
             businessRows: 10,
@@ -564,7 +568,11 @@ describe('starting a checkout payment', () => {
 
     it('locks every flight in stable ascending order before checking inventory', async () => {
         const { user, flight } = await fixture();
-        const returnFlight = await createFlight(20_000);
+        const returnFlight = await createFlight(
+            20_000,
+            randomUUID(),
+            new Date(flight.departureDate.getTime() - 24 * 60 * 60 * 1000),
+        );
         const checkoutId = randomUUID();
         const holderKey = checkoutHolderKey(user.id, checkoutId);
         await holdSeats([
@@ -589,6 +597,30 @@ describe('starting a checkout payment', () => {
         } finally {
             lockSpy.mockClear();
         }
+    });
+
+    it('rejects a multi-leg payment whose legs are not in chronological order', async () => {
+        const { user, flight } = await fixture();
+        const earlierFlight = await createFlight(
+            20_000,
+            randomUUID(),
+            new Date(flight.departureDate.getTime() - 24 * 60 * 60 * 1000),
+        );
+        const checkoutId = randomUUID();
+        const holderKey = checkoutHolderKey(user.id, checkoutId);
+        await holdSeats([
+            { flightId: flight.id, seatNumber: '2A', holderKey },
+            { flightId: earlierFlight.id, seatNumber: '2A', holderKey },
+        ]);
+        const fake = provider();
+
+        await expect(new CheckoutPaymentService(fake.value).startPayment({
+            userId: user.id,
+            checkoutId,
+            flightIds: [flight.id, earlierFlight.id],
+            passengers: [{ seatNumbers: ['2A', '2A'], cabinClass: 'BUSINESS' }],
+        })).rejects.toThrow('Itinerary legs must be in chronological order.');
+        expect(fake.createAuthorization).not.toHaveBeenCalled();
     });
 });
 

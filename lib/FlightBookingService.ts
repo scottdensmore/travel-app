@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { PointsTransactionType, type AncillaryType, type CabinClass } from '@prisma/client';
 import { heldSeats } from '@/lib/seatOccupancy';
-import { activeItineraryLegWhere, bookingFlights, legFlightClause } from '@/lib/bookingItinerary';
+import {
+    activeItineraryLegWhere,
+    assertChronologicalItinerary,
+    bookingFlights,
+    legFlightClause,
+} from '@/lib/bookingItinerary';
 import { prisma } from '@/lib/prisma';
 import { assertSeatAvailableForCabin } from '@/lib/seatLayout';
 import { lockFlightForUpdate } from '@/lib/flightLock';
@@ -220,6 +225,8 @@ export default class FlightBookingService {
             // Each leg is checked against its own flight: a seat that exists in
             // one cabin layout may not exist in the other, and occupancy is per
             // flight.
+            assertChronologicalItinerary(flights);
+
             for (const [legIndex, flight] of flights.entries()) {
                 if (flight.status === 'CANCELLED' || flight.departureDate.getTime() <= Date.now()) {
                     throw new Error('Flight is not available for booking.');

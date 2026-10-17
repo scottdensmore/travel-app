@@ -1,7 +1,9 @@
 /** @jest-environment node */
 import {
+    assertChronologicalItinerary,
     bookingFlights,
     cabinLabel,
+    isChronologicalItinerary,
     legDirectionLabel,
     legFlightClause,
     outboundFlight,
@@ -223,3 +225,44 @@ describe('seatLabel', () => {
         expect(seatLabel(undefined)).toBe('No seat assigned');
     });
 });
+
+describe('chronological itinerary validation', () => {
+    it('accepts a single-leg itinerary', () => {
+        const legs = [{ departureDate: '2099-01-01T10:00:00Z', durationMinutes: 180 }];
+        expect(isChronologicalItinerary(legs)).toBe(true);
+        expect(() => assertChronologicalItinerary(legs)).not.toThrow();
+    });
+
+    it('accepts multi-leg itineraries where each leg departs after the previous leg arrives', () => {
+        const legs = [
+            { departureDate: '2099-01-01T10:00:00Z', durationMinutes: 180 },
+            { departureDate: '2099-01-01T14:00:00Z', durationMinutes: 120 },
+            { departureDate: '2099-01-05T09:00:00Z', durationMinutes: 240 },
+        ];
+        expect(isChronologicalItinerary(legs)).toBe(true);
+        expect(() => assertChronologicalItinerary(legs)).not.toThrow();
+    });
+
+    it('rejects a multi-leg itinerary where a later leg departs before an earlier leg departs', () => {
+        const legs = [
+            { departureDate: '2099-01-05T10:00:00Z', durationMinutes: 180 },
+            { departureDate: '2099-01-01T10:00:00Z', durationMinutes: 180 },
+        ];
+        expect(isChronologicalItinerary(legs)).toBe(false);
+        expect(() => assertChronologicalItinerary(legs)).toThrow(
+            'Itinerary legs must be in chronological order.'
+        );
+    });
+
+    it('rejects a multi-leg itinerary where the next leg departs while the previous leg is still in flight', () => {
+        const legs = [
+            { departureDate: '2099-01-01T10:00:00Z', durationMinutes: 180 }, // arrives 13:00Z
+            { departureDate: '2099-01-01T12:00:00Z', durationMinutes: 120 }, // departs 12:00Z
+        ];
+        expect(isChronologicalItinerary(legs)).toBe(false);
+        expect(() => assertChronologicalItinerary(legs)).toThrow(
+            'Itinerary legs must be in chronological order.'
+        );
+    });
+});
+

@@ -193,3 +193,46 @@ export function legFlightClause(legIndex: number, legCount: number): string {
 export function outboundFlight<TFlight>(booking: BookingLegs<TFlight>): TFlight | null {
     return bookingFlights(booking)[0] ?? null;
 }
+
+/**
+ * Whether an itinerary's legs are in chronological order: each subsequent leg
+ * must depart no earlier than the preceding leg's arrival (or departure when
+ * duration is not recorded).
+ */
+export function isChronologicalItinerary(
+    flights: ReadonlyArray<{
+        departureDate: Date | string;
+        durationMinutes?: number | null;
+    }>,
+): boolean {
+    for (let index = 1; index < flights.length; index++) {
+        const previous = flights[index - 1];
+        const current = flights[index];
+        const previousDepartureMs = new Date(previous.departureDate).getTime();
+        const previousEndMs = previous.durationMinutes && previous.durationMinutes > 0
+            ? previousDepartureMs + previous.durationMinutes * 60_000
+            : previousDepartureMs;
+        const currentDepartureMs = new Date(current.departureDate).getTime();
+
+        if (currentDepartureMs < previousEndMs) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Throws if any leg in a multi-leg itinerary departs before the preceding leg
+ * arrives (or departs).
+ */
+export function assertChronologicalItinerary(
+    flights: ReadonlyArray<{
+        departureDate: Date | string;
+        durationMinutes?: number | null;
+    }>,
+): void {
+    if (!isChronologicalItinerary(flights)) {
+        throw new Error('Itinerary legs must be in chronological order.');
+    }
+}
+
