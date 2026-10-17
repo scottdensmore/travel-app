@@ -655,4 +655,47 @@ describe('FlightBookingService', () => {
             ).message
         );
     });
+
+    it('rejects a multi-leg booking whose legs are not in chronological order', async () => {
+        mockTx.flight.findMany.mockResolvedValue([
+            {
+                id: 7,
+                priceCents: 35000,
+                status: 'ON_TIME',
+                departureDate: new Date('2099-01-10T10:00:00Z'),
+                durationMinutes: 180,
+                firstClassRows: 2,
+                businessRows: 4,
+                premiumEconomyRows: 4,
+                economyRows: 20,
+                seatPattern: 'ABC-DEF'
+            },
+            {
+                id: 8,
+                priceCents: 35000,
+                status: 'ON_TIME',
+                departureDate: new Date('2099-01-05T10:00:00Z'),
+                durationMinutes: 180,
+                firstClassRows: 2,
+                businessRows: 4,
+                premiumEconomyRows: 4,
+                economyRows: 20,
+                seatPattern: 'ABC-DEF'
+            }
+        ]);
+        mockTx.booking.findFirst.mockResolvedValue(null);
+
+        await expect(new FlightBookingService().bookFlight({
+            flightIds: [7, 8],
+            userId: 'u1',
+            passengers: [{
+                firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1990-01-01',
+                passportNumber: 'US1111111', gender: 'Female',
+                seatNumbers: ['12A', '12B'], cabinClass: 'ECONOMY'
+            }],
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735'
+        })).rejects.toThrow('Itinerary legs must be in chronological order.');
+
+        expect(mockTx.booking.create).not.toHaveBeenCalled();
+    });
 });

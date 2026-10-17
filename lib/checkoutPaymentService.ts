@@ -5,7 +5,7 @@ import {
     calculateItineraryTotal,
     flightFareCents,
 } from '@/lib/bookingPricing';
-import { legFlightClause } from '@/lib/bookingItinerary';
+import { assertChronologicalItinerary, legFlightClause } from '@/lib/bookingItinerary';
 import { lockFlightForUpdate } from '@/lib/flightLock';
 import { prisma } from '@/lib/prisma';
 import { lockPaymentIntentForUpdate } from '@/lib/paymentIntentLock';
@@ -142,6 +142,8 @@ export class CheckoutPaymentService {
                 }
                 return flight;
             });
+
+            assertChronologicalItinerary(flights);
 
             if (input.isRewardBooking) {
                 const cabinCounts = new Map<CabinClass, number>();

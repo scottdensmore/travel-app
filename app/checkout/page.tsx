@@ -16,6 +16,7 @@ import {
     getUserSpendablePointsBalance,
     grantWelcomePointsIfEligible,
 } from '@/lib/pointsLedgerService';
+import { isChronologicalItinerary } from '@/lib/bookingItinerary';
 
 export const metadata: Metadata = {
     title: 'Checkout',
@@ -155,6 +156,10 @@ export default async function CheckoutPage({ searchParams }: PageProps) {
             awardSeatsFirst: flight.awardSeatsFirst,
         };
     });
+
+    if (!isChronologicalItinerary(flights)) {
+        notFound();
+    }
 
     const occupiedSeats = await Promise.all(flightIds.map(id => getOccupiedSeatsAction(id)));
 
