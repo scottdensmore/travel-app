@@ -2179,7 +2179,7 @@ describe('cancelBookingAction', () => {
                     where: { supersededAt: null },
                     include: {
                         flight: true,
-                        seatAssignments: { select: { cabinClass: true } },
+                        seatAssignments: { where: { releasedAt: null }, select: { cabinClass: true } },
                     },
                     orderBy: { sequence: 'asc' },
                 },
@@ -2188,11 +2188,12 @@ describe('cancelBookingAction', () => {
         expect(mockTx.booking.findUnique).toHaveBeenCalledWith({
             where: { id: 1 },
             include: {
+                passengers: { select: { id: true } },
                 legs: {
                     where: { supersededAt: null },
                     include: {
                         flight: true,
-                        seatAssignments: { select: { cabinClass: true } },
+                        seatAssignments: { where: { releasedAt: null }, select: { cabinClass: true } },
                     },
                     orderBy: { sequence: 'asc' },
                 },
