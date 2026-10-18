@@ -40,6 +40,14 @@ function findLinks(node: unknown): Array<{ href: string; children?: React.ReactN
     return links;
 }
 
+function textContent(node: React.ReactNode): string {
+    if (typeof node === 'string' || typeof node === 'number') return String(node);
+    if (!React.isValidElement(node)) return '';
+    return React.Children.toArray(
+        (node.props as { children?: React.ReactNode }).children
+    ).map(textContent).join(' ');
+}
+
 describe('AdminDashboard navigation cards', () => {
     beforeEach(() => {
         jest.clearAllMocks();
@@ -93,8 +101,43 @@ describe('AdminDashboard navigation cards', () => {
         expect(hrefs).toContain('/admin/bookings');
         expect(hrefs).toContain('/admin/notifications');
         expect(hrefs).toContain('/admin/payments');
-        expect(hrefs).not.toContain('/admin/users');
+        expect(hrefs).toContain('/admin/users');
         expect(hrefs).not.toContain('/admin/audit');
         expect(hrefs).not.toContain('/admin/flights');
+
+        expect(textContent(dashboard)).toContain(
+            'Review user permissions, promote or demote staff, and manage loyalty points balances.'
+        );
+    });
+
+    it('renders a Reward badge next to the flight number for reward bookings in Recent Bookings', async () => {
+        (getServerSession as jest.Mock).mockResolvedValue({
+            user: { role: 'SUPPORT', staffMfaVerified: true },
+        });
+        (prisma.booking.findMany as jest.Mock).mockResolvedValueOnce([
+            {
+                id: 901,
+                createdAt: new Date('2026-06-20T10:00:00.000Z'),
+                isRewardBooking: true,
+                user: { name: 'Ada Lovelace', email: 'ada@example.com' },
+                legs: [
+                    {
+                        sequence: 1,
+                        flight: {
+                            airline: 'Mona Airways',
+                            flightNumber: 'MA100',
+                            fromAirport: { label: 'Seattle, USA' },
+                            toAirport: { label: 'Tokyo, Japan' },
+                        },
+                    },
+                ],
+            },
+        ]);
+
+        const dashboard = await AdminDashboard();
+        const text = textContent(dashboard);
+
+        expect(text).toContain('Mona Airways MA100');
+        expect(text).toContain('Reward');
     });
 });

@@ -63,16 +63,22 @@ describe('/admin/flights schedule list', () => {
             daysOfWeek: [2, 4],
             priceCents: 120_000,
             isActive: false,
+            awardSeatsFirst: 2,
+            awardSeatsBusiness: 4,
+            awardSeatsPremiumEconomy: 3,
+            awardSeatsEconomy: 8,
         }]);
     });
 
-    it('shows the elapsed duration staff saved on each repeating template', async () => {
+    it('shows the elapsed duration and award seat quotas staff saved on each repeating template', async () => {
         const page = await AdminFlightsPage();
         const text = textContent(page);
 
         expect(text).toContain('Duration');
         expect(text).toContain('4h 05m');
         expect(text).toContain('11h 20m');
+        expect(text).toContain('Award: 1F / 2J / 2W / 4Y');
+        expect(text).toContain('Award: 2F / 4J / 3W / 8Y');
         expect(text).toContain('Active');
         expect(text).toContain('Inactive');
         expect(findElement(

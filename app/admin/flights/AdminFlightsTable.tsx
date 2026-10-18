@@ -27,6 +27,7 @@ interface Booking {
     createdAt: Date | string;
     status: string;
     totalPriceCents: number | null;
+    isRewardBooking?: boolean;
     passengers: Passenger[];
 }
 
@@ -39,6 +40,10 @@ interface Flight {
     departureDate: Date | string;
     priceCents: number;
     status: FlightStatus;
+    awardSeatsFirst?: number;
+    awardSeatsBusiness?: number;
+    awardSeatsPremiumEconomy?: number;
+    awardSeatsEconomy?: number;
     bookings: Booking[];
 }
 
@@ -101,7 +106,11 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
 
     const manifestPassengers = selectedFlight
         ? selectedFlight.bookings.flatMap(b =>
-              b.passengers.map(p => ({ ...p, bookingStatus: b.status }))
+              b.passengers.map(p => ({
+                  ...p,
+                  bookingStatus: b.status,
+                  isRewardBooking: Boolean(b.isRewardBooking),
+              }))
           )
         : [];
 
@@ -134,6 +143,11 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                                     .filter(b => b.status !== 'CANCELLED')
                                     .flatMap(b => b.passengers).length;
                                 const occupancyPercentage = ((activePassengersCount / 180) * 100).toFixed(1);
+                                const hasAwardInventory =
+                                    flight.awardSeatsFirst !== undefined ||
+                                    flight.awardSeatsBusiness !== undefined ||
+                                    flight.awardSeatsPremiumEconomy !== undefined ||
+                                    flight.awardSeatsEconomy !== undefined;
 
                                 return (
                                     <tr key={flight.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
@@ -162,6 +176,11 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                                         <td style={{ padding: '12px', fontSize: '0.9rem', color: '#e5e7eb' }}>
                                             <div style={{ fontWeight: '500' }}>{activePassengersCount} / 180</div>
                                             <div style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>{occupancyPercentage}% full</div>
+                                            {hasAwardInventory && (
+                                                <div style={{ fontSize: '0.72rem', color: '#c4b5fd', marginTop: '2px' }}>
+                                                    {`Award left: ${flight.awardSeatsFirst ?? 0}F · ${flight.awardSeatsBusiness ?? 0}J · ${flight.awardSeatsPremiumEconomy ?? 0}W · ${flight.awardSeatsEconomy ?? 0}Y`}
+                                                </div>
+                                            )}
                                         </td>
                                         <td style={{ padding: '12px' }}>
                                             <FlightStatusSelector id={flight.id} currentStatus={flight.status} />
@@ -347,6 +366,20 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                                                                     ? 'Disrupted'
                                                                     : 'Confirmed'}
                                                         </span>
+                                                        {passenger.isRewardBooking && (
+                                                            <span style={{
+                                                                marginLeft: '8px',
+                                                                padding: '2px 6px',
+                                                                borderRadius: '9999px',
+                                                                fontSize: '0.7rem',
+                                                                fontWeight: 700,
+                                                                backgroundColor: 'rgba(167, 139, 250, 0.18)',
+                                                                color: '#c4b5fd',
+                                                                border: '1px solid rgba(167, 139, 250, 0.35)',
+                                                            }}>
+                                                                Reward
+                                                            </span>
+                                                        )}
                                                     </td>
                                                 </tr>
                                             );

@@ -24,6 +24,10 @@ export default async function AdminDashboard() {
     const canModerateReviews = hasStaffPermission(session, StaffPermission.REVIEWS_MODERATE);
     const canReadNotifications = hasStaffPermission(session, StaffPermission.NOTIFICATIONS_READ);
     const canManageRoles = hasStaffPermission(session, StaffPermission.USERS_MANAGE_ROLES);
+    const canAccessUsers =
+        canManageRoles ||
+        hasStaffPermission(session, StaffPermission.USERS_MANAGE_POINTS) ||
+        hasStaffPermission(session, StaffPermission.USERS_READ);
     const canViewAuditLogs = hasStaffPermission(session, StaffPermission.AUDIT_LOGS_VIEW);
 
     // Recent bookings - only queried if staff member has BOOKINGS_READ permission
@@ -183,7 +187,7 @@ export default async function AdminDashboard() {
                     </Link>
                 )}
 
-                {canManageRoles && (
+                {canAccessUsers && (
                     <Link href="/admin/users" className="admin-card hover:border-purple-500 transition-all" style={{
                         textDecoration: 'none',
                         display: 'flex',
@@ -197,7 +201,7 @@ export default async function AdminDashboard() {
                     }}>
                         <h3 style={{ color: '#c084fc', fontSize: '1.25rem', margin: 0, fontWeight: 'bold' }}>User Role Management</h3>
                         <p style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem', margin: 0 }}>
-                            Review user permissions, promote or demote staff, and adjust role access.
+                            Review user permissions, promote or demote staff, and manage loyalty points balances.
                         </p>
                     </Link>
                 )}
@@ -247,7 +251,21 @@ export default async function AdminDashboard() {
                                                 {booking.user?.name || booking.user?.email || 'Guest'}
                                             </td>
                                             <td style={{ padding: '12px', fontSize: '0.9rem', color: '#fff' }}>
-                                                {flight ? `${flight.airline} ${flight.flightNumber}` : '—'}
+                                                <span>{flight ? `${flight.airline} ${flight.flightNumber}` : '—'}</span>
+                                                {booking.isRewardBooking && (
+                                                    <span style={{
+                                                        marginLeft: '8px',
+                                                        padding: '2px 6px',
+                                                        borderRadius: '9999px',
+                                                        fontSize: '0.7rem',
+                                                        fontWeight: 700,
+                                                        backgroundColor: 'rgba(167, 139, 250, 0.18)',
+                                                        color: '#c4b5fd',
+                                                        border: '1px solid rgba(167, 139, 250, 0.35)',
+                                                    }}>
+                                                        Reward
+                                                    </span>
+                                                )}
                                             </td>
                                             <td style={{ padding: '12px', fontSize: '0.9rem', color: '#fff' }}>
                                                 {flight ? `${flight.from} → ${flight.to}` : '—'}
