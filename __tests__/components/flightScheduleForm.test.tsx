@@ -203,6 +203,10 @@ describe('FlightScheduleForm', () => {
                 premiumEconomyRows: 4,
                 economyRows: 20,
                 seatPattern: 'ABC-DEF',
+                awardSeatsFirst: 1,
+                awardSeatsBusiness: 2,
+                awardSeatsPremiumEconomy: 2,
+                awardSeatsEconomy: 4,
             });
             expect(screen.getByText(/New schedule created successfully!/i)).toBeInTheDocument();
             expect(mockRefresh).toHaveBeenCalled();
@@ -262,6 +266,10 @@ describe('FlightScheduleForm', () => {
                 premiumEconomyRows: 4,
                 economyRows: 20,
                 seatPattern: 'ABC-DEF',
+                awardSeatsFirst: 1,
+                awardSeatsBusiness: 2,
+                awardSeatsPremiumEconomy: 2,
+                awardSeatsEconomy: 4,
             });
             expect(screen.getByText(/Schedule updated successfully!/i)).toBeInTheDocument();
             expect(mockRefresh).toHaveBeenCalled();
@@ -314,6 +322,10 @@ describe('FlightScheduleForm', () => {
         expect(screen.getByLabelText(/First Class Rows/i)).toHaveValue(3);
         expect(screen.getByLabelText(/Economy Class Rows/i)).toHaveValue(20);
         expect(screen.getByLabelText(/Seat Pattern/i)).toHaveValue('ABC-DEF');
+        expect(screen.getByLabelText('First Class Award Seats')).toHaveValue(1);
+        expect(screen.getByLabelText('Business Award Seats')).toHaveValue(2);
+        expect(screen.getByLabelText('Premium Economy Award Seats')).toHaveValue(2);
+        expect(screen.getByLabelText('Economy Award Seats')).toHaveValue(4);
 
         // Modify a seating configuration field
         fireEvent.change(screen.getByLabelText(/First Class Rows/i), { target: { value: '3' } });
@@ -336,7 +348,58 @@ describe('FlightScheduleForm', () => {
                 businessRows: 3,
                 premiumEconomyRows: 4,
                 economyRows: 20,
-                seatPattern: 'AC-DF'
+                seatPattern: 'AC-DF',
+                awardSeatsFirst: 1,
+                awardSeatsBusiness: 2,
+                awardSeatsPremiumEconomy: 2,
+                awardSeatsEconomy: 4,
+            });
+        });
+    });
+
+    it('renders and submits custom award seat quotas per cabin', async () => {
+        mockSaveFlightScheduleAction.mockResolvedValue({ id: 101 });
+
+        render(<FlightScheduleForm />);
+
+        fireEvent.change(screen.getByLabelText(/Flight Number \*/i), { target: { value: 'AA123' } });
+        fireEvent.change(screen.getByLabelText(/Airline Name \*/i), { target: { value: 'American Airlines' } });
+        fireEvent.change(screen.getByLabelText(/From \(Origin\) \*/i), { target: { value: 'New York, USA' } });
+        fireEvent.change(screen.getByLabelText(/To \(Destination\) \*/i), { target: { value: 'London, UK' } });
+        fireEvent.change(screen.getByLabelText(/Departure \(HH:MM\) \*/i), { target: { value: '08:00' } });
+        fireEvent.change(screen.getByLabelText(/Duration \(minutes\) \*/i), { target: { value: '245' } });
+        fireEvent.change(screen.getByLabelText(/Price \(\$\) \*/i), { target: { value: '850' } });
+        fireEvent.click(screen.getByLabelText('Mon'));
+
+        fireEvent.click(screen.getByRole('button', { name: /Customize Seating Configuration/i }));
+
+        fireEvent.change(screen.getByLabelText('First Class Award Seats'), { target: { value: '2' } });
+        fireEvent.change(screen.getByLabelText('Business Award Seats'), { target: { value: '5' } });
+        fireEvent.change(screen.getByLabelText('Premium Economy Award Seats'), { target: { value: '6' } });
+        fireEvent.change(screen.getByLabelText('Economy Award Seats'), { target: { value: '10' } });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create Schedule' }));
+
+        await waitFor(() => {
+            expect(mockSaveFlightScheduleAction).toHaveBeenCalledWith({
+                id: undefined,
+                flightNumber: 'AA123',
+                airline: 'American Airlines',
+                from: 'New York, USA',
+                to: 'London, UK',
+                departureTime: '08:00',
+                durationMinutes: 245,
+                daysOfWeek: [1],
+                price: '$850',
+                firstClassRows: 3,
+                businessRows: 3,
+                premiumEconomyRows: 4,
+                economyRows: 20,
+                seatPattern: 'ABC-DEF',
+                awardSeatsFirst: 2,
+                awardSeatsBusiness: 5,
+                awardSeatsPremiumEconomy: 6,
+                awardSeatsEconomy: 10,
             });
         });
     });

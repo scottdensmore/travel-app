@@ -1751,6 +1751,10 @@ export async function saveFlightScheduleAction(data: {
     premiumEconomyRows?: number | null;
     economyRows?: number | null;
     seatPattern?: string | null;
+    awardSeatsFirst?: number | null;
+    awardSeatsBusiness?: number | null;
+    awardSeatsPremiumEconomy?: number | null;
+    awardSeatsEconomy?: number | null;
 }) {
     const session = await getServerSession(authOptions);
     if (!hasVerifiedStaffAccess(session)) throw new Error("Unauthorized");
@@ -1777,6 +1781,10 @@ export async function saveFlightScheduleAction(data: {
     const premiumEconomyRows = data.premiumEconomyRows !== undefined && data.premiumEconomyRows !== null ? Number(data.premiumEconomyRows) : 4;
     const economyRows = data.economyRows !== undefined && data.economyRows !== null ? Number(data.economyRows) : 20;
     const seatPattern = data.seatPattern ?? "ABC-DEF";
+    const awardSeatsFirst = data.awardSeatsFirst !== undefined && data.awardSeatsFirst !== null ? Number(data.awardSeatsFirst) : 1;
+    const awardSeatsBusiness = data.awardSeatsBusiness !== undefined && data.awardSeatsBusiness !== null ? Number(data.awardSeatsBusiness) : 2;
+    const awardSeatsPremiumEconomy = data.awardSeatsPremiumEconomy !== undefined && data.awardSeatsPremiumEconomy !== null ? Number(data.awardSeatsPremiumEconomy) : 2;
+    const awardSeatsEconomy = data.awardSeatsEconomy !== undefined && data.awardSeatsEconomy !== null ? Number(data.awardSeatsEconomy) : 4;
 
     let normalizedSeatPattern: string;
     try {
@@ -1832,7 +1840,11 @@ export async function saveFlightScheduleAction(data: {
                 businessRows,
                 premiumEconomyRows,
                 economyRows,
-                seatPattern: normalizedSeatPattern
+                seatPattern: normalizedSeatPattern,
+                awardSeatsFirst,
+                awardSeatsBusiness,
+                awardSeatsPremiumEconomy,
+                awardSeatsEconomy,
             }
         });
     } else {
@@ -1850,7 +1862,11 @@ export async function saveFlightScheduleAction(data: {
                 businessRows,
                 premiumEconomyRows,
                 economyRows,
-                seatPattern: normalizedSeatPattern
+                seatPattern: normalizedSeatPattern,
+                awardSeatsFirst,
+                awardSeatsBusiness,
+                awardSeatsPremiumEconomy,
+                awardSeatsEconomy,
             }
         });
     }

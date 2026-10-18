@@ -3058,6 +3058,10 @@ describe('admin flight schedule actions', () => {
                     premiumEconomyRows: 4,
                     economyRows: 20,
                     seatPattern: 'ABC-DEF',
+                    awardSeatsFirst: 1,
+                    awardSeatsBusiness: 2,
+                    awardSeatsPremiumEconomy: 2,
+                    awardSeatsEconomy: 4,
                 },
             });
 
@@ -3122,10 +3126,41 @@ describe('admin flight schedule actions', () => {
                     premiumEconomyRows: 4,
                     economyRows: 20,
                     seatPattern: 'ABC-DEF',
+                    awardSeatsFirst: 1,
+                    awardSeatsBusiness: 2,
+                    awardSeatsPremiumEconomy: 2,
+                    awardSeatsEconomy: 4,
                 },
             });
             expect(mockedFlightCreate).not.toHaveBeenCalled();
             expect(result).toHaveProperty('id', 5);
+        });
+
+        it('persists custom award seat quotas on flightSchedule when creating or updating', async () => {
+            mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
+            mockedFlightScheduleCreate.mockResolvedValue({
+                id: 9,
+                ...sampleScheduleInput,
+                isActive: false,
+                priceCents: 85_000,
+            });
+
+            await saveFlightScheduleAction({
+                ...sampleScheduleInput,
+                awardSeatsFirst: 2,
+                awardSeatsBusiness: 4,
+                awardSeatsPremiumEconomy: 5,
+                awardSeatsEconomy: 8,
+            });
+
+            expect(mockedFlightScheduleCreate).toHaveBeenCalledWith({
+                data: expect.objectContaining({
+                    awardSeatsFirst: 2,
+                    awardSeatsBusiness: 4,
+                    awardSeatsPremiumEconomy: 5,
+                    awardSeatsEconomy: 8,
+                }),
+            });
         });
 
         it('does not generate new occurrences while updating an inactive template', async () => {
