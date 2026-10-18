@@ -12,6 +12,7 @@ import {
     getUserSpendablePointsBalance,
     InsufficientPointsError,
 } from '@/lib/pointsLedgerService';
+import { NotificationService } from '@/lib/notificationService';
 import { parseInput, updateUserRoleSchema, adjustUserPointsSchema } from '@/lib/validation';
 import { revalidatePath } from 'next/cache';
 
@@ -158,6 +159,19 @@ export async function adjustUserPointsAction(input: {
 
             return entry.balanceAfter;
         });
+
+        const signedDelta = `${validated.amount > 0 ? '+' : ''}${validated.amount.toLocaleString('en-US')} pts`;
+        try {
+            await new NotificationService().dispatchNotification({
+                userId: targetUser.id,
+                title: `Loyalty Points Adjusted (${signedDelta})`,
+                message: `Your spendable points balance was adjusted by ${signedDelta} (${validated.reason}). New balance: ${balanceAfter.toLocaleString('en-US')} pts.`,
+                category: 'ACCOUNT_ACTIVITY',
+                type: 'POINTS',
+            });
+        } catch {
+            /* non-blocking notification dispatch */
+        }
 
         revalidatePath('/admin/users');
         revalidatePath('/profile');
