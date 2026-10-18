@@ -122,7 +122,10 @@ export default async function AdminFlightsPage() {
                                             {durationLabel(schedule.durationMinutes)}
                                         </td>
                                         <td style={{ padding: '12px', fontSize: '0.9rem', color: '#34d399', fontWeight: 'bold' }}>
-                                            {formatPrice(schedule.priceCents ?? 0)}
+                                            <div>{formatPrice(schedule.priceCents ?? 0)}</div>
+                                            <div style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.55)', fontWeight: 'normal', marginTop: '2px' }}>
+                                                {`Award: ${schedule.awardSeatsFirst ?? 1}F / ${schedule.awardSeatsBusiness ?? 2}J / ${schedule.awardSeatsPremiumEconomy ?? 2}W / ${schedule.awardSeatsEconomy ?? 4}Y`}
+                                            </div>
                                         </td>
                                         <td style={{ padding: '12px', fontSize: '0.85rem', color: schedule.isActive ? '#86efac' : '#fbbf24', fontWeight: 700 }}>
                                             {schedule.isActive ? 'Active' : 'Inactive'}

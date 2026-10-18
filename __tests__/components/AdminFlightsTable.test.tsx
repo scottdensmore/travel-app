@@ -326,5 +326,32 @@ describe('AdminFlightsTable', () => {
         const headerTitle = screen.getByRole('heading', { name: 'Passenger Manifest' });
         expect(headerTitle.parentElement).toHaveStyle({ 'min-width': '0' });
     });
+
+    it('displays remaining award seats in occupancy cell and Reward badge in passenger manifest', () => {
+        const flightsWithAwardInventory = [
+            {
+                ...mockFlights[0],
+                awardSeatsFirst: 1,
+                awardSeatsBusiness: 2,
+                awardSeatsPremiumEconomy: 3,
+                awardSeatsEconomy: 4,
+                bookings: [
+                    {
+                        ...mockFlights[0].bookings[0],
+                        isRewardBooking: true,
+                    },
+                    ...mockFlights[0].bookings.slice(1),
+                ],
+            },
+        ];
+
+        render(<AdminFlightsTable initialFlights={flightsWithAwardInventory} />);
+
+        expect(screen.getByText('Award left: 1F · 2J · 3W · 4Y')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Manifest' }));
+
+        expect(screen.getByText('Reward')).toBeInTheDocument();
+    });
 });
 
