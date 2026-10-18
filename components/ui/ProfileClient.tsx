@@ -69,6 +69,8 @@ interface Booking {
     createdAt: Date | string;
     status: string; // "CONFIRMED", "DISRUPTED" or "CANCELLED"
     totalPriceCents: number | null;
+    isRewardBooking?: boolean;
+    pointsRedeemed?: number | null;
     // The itinerary. One leg today; a round trip adds the inbound (#69).
     legs: BookingLeg[];
     passengers: Passenger[];
@@ -267,6 +269,20 @@ function bookingPresentation(booking: Booking, renderedAt: number) {
                 : `${formatPrice(refund.amountCents)} refund needs attention.`
         : null;
 
+    const isRewardWithPoints = Boolean(
+        booking.isRewardBooking
+        && typeof booking.pointsRedeemed === 'number'
+        && booking.pointsRedeemed > 0
+    );
+
+    const priceLabel = isRewardWithPoints
+        ? booking.totalPriceCents !== null && booking.totalPriceCents !== undefined
+            ? `${booking.pointsRedeemed!.toLocaleString()} pts + ${formatPrice(booking.totalPriceCents)}`
+            : `${booking.pointsRedeemed!.toLocaleString()} pts`
+        : booking.totalPriceCents !== null && booking.totalPriceCents !== undefined
+            ? formatPrice(booking.totalPriceCents)
+            : legs[0]?.flight ? formatPrice(flightFareCents(legs[0].flight)) : '\u2014';
+
     return {
         legs,
         // One row per leg in the table; the card walks the same list.
@@ -292,9 +308,7 @@ function bookingPresentation(booking: Booking, renderedAt: number) {
             : 'Your seat is held. Cancel for a full refund, with no cancellation fee.',
         refundText,
         refundRetryable: Boolean(refund && refund.status !== 'SUCCEEDED'),
-        priceLabel: booking.totalPriceCents !== null && booking.totalPriceCents !== undefined
-            ? formatPrice(booking.totalPriceCents)
-            : legs[0]?.flight ? formatPrice(flightFareCents(legs[0].flight)) : '\u2014',
+        priceLabel,
         canChangeLeg: (leg: BookingLeg | null) =>
             !isCancelled && !departed && Boolean(leg?.flight) && leg?.flight?.status !== 'CANCELLED' && booking.passengers.some(
                 passenger => passengerCanChangeSeatOnLeg(leg!, passenger.id),
@@ -952,8 +966,23 @@ export default function ProfileClient({
                                                         <CellLabel>{direction ? `${direction}` : 'Flight'}</CellLabel>
                                                         {index === 0 && (
                                                             <>
-                                                                <div style={{ fontSize: '0.7rem', color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                                                                    {legs.length > 1 ? 'Round trip' : 'One way'}
+                                                                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px' }}>
+                                                                    <span style={{ fontSize: '0.7rem', color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                                                        {legs.length > 1 ? 'Round trip' : 'One way'}
+                                                                    </span>
+                                                                    {booking.isRewardBooking && (
+                                                                        <span style={{
+                                                                            fontSize: '0.68rem',
+                                                                            background: 'rgba(167, 139, 250, 0.2)',
+                                                                            color: '#ddd6fe',
+                                                                            border: '1px solid rgba(167, 139, 250, 0.4)',
+                                                                            padding: '1px 6px',
+                                                                            borderRadius: '9999px',
+                                                                            fontWeight: 600,
+                                                                        }}>
+                                                                            Reward Booking
+                                                                        </span>
+                                                                    )}
                                                                 </div>
                                                                 <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.78)' }}>
                                                                     Confirmation <span style={{ whiteSpace: 'nowrap' }}>{booking.reference}</span>
