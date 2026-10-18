@@ -2,12 +2,13 @@ import { prisma } from '@/lib/prisma';
 import { BookingStatus, PointsTransactionType, Prisma } from '@prisma/client';
 import { sendTravelDocumentsEmail, TravelDocumentEmailInput } from '@/lib/travelDocumentEmail';
 import { heldSeats } from '@/lib/seatOccupancy';
-import { activeItineraryLegWhere, bookingFlights } from '@/lib/bookingItinerary';
+import { activeItineraryLegWhere, bookingFlights, outboundFlight } from '@/lib/bookingItinerary';
 import { lockFlightForUpdate } from '@/lib/flightLock';
 import { type CabinClass } from '@/lib/bookingPricing';
 import { cancellableBooking, cancellationOutcome } from '@/lib/cancellationPolicy';
 import { CABIN_AWARD_SEAT_KEYS } from '@/lib/rewardPricing';
 import { createPointsLedgerEntry } from '@/lib/pointsLedgerService';
+import { NotificationService } from '@/lib/notificationService';
 import {
     ItineraryRebookingService,
     RebookItineraryInput,
@@ -252,7 +253,7 @@ export async function cancelAndRefundBooking(bookingId: number, actorUserId: str
     }
 
     // 2. Perform the cancellation via a transaction
-    return prisma.$transaction(async (tx) => {
+    const { updatedBooking, cancellationNotice } = await prisma.$transaction(async (tx) => {
         const lockOrder = bookingFlights(booking)
             .map((flight) => flight.id)
             .sort((left, right) => left - right);
@@ -369,8 +370,43 @@ export async function cancelAndRefundBooking(bookingId: number, actorUserId: str
             }
         }
 
-        return updatedBooking;
+        let cancellationNotice: { userId: string; title: string; message: string } | null = null;
+        if (lockedBooking.userId) {
+            const flight = outboundFlight(lockedBooking);
+            const title = flight
+                ? `Booking Cancelled: ${flight.airline} ${flight.flightNumber}`
+                : `Booking Cancelled: #${lockedBooking.reference}`;
+            const cashRefundFormatted = new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: lockedBooking.currency || 'USD',
+            }).format(settled.refundCents / 100);
+            const message = lockedBooking.isRewardBooking
+                ? `Your reward booking #${lockedBooking.reference} has been cancelled by customer support (${reason.trim()}). Redeposited ${(settled.pointsRedeposited ?? 0).toLocaleString('en-US')} pts and refunded ${cashRefundFormatted} in taxes.`
+                : `Your booking #${lockedBooking.reference} has been cancelled by customer support (${reason.trim()}). Refunded ${cashRefundFormatted}.`;
+
+            cancellationNotice = {
+                userId: lockedBooking.userId,
+                title,
+                message,
+            };
+        }
+
+        return { updatedBooking, cancellationNotice };
     });
+
+    if (cancellationNotice) {
+        try {
+            await new NotificationService().dispatchNotification({
+                ...cancellationNotice,
+                category: 'ACCOUNT_ACTIVITY',
+                type: 'FLIGHT_CANCELLED',
+            });
+        } catch {
+            // Non-blocking notification failure
+        }
+    }
+
+    return updatedBooking;
 }
 
 export async function resendConfirmationEmail(bookingId: number): Promise<{ success: true; sentTo: string }> {

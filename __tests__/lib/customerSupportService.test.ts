@@ -1,8 +1,13 @@
-import { resendReceiptEmail, searchBookings } from '@/lib/customerSupportService';
+import { cancelAndRefundBooking, resendReceiptEmail, searchBookings } from '@/lib/customerSupportService';
 import { generateInvoicePDF } from '@/lib/documents/pdfGenerator';
+import { lockFlightForUpdate } from '@/lib/flightLock';
+import { NotificationService } from '@/lib/notificationService';
+import { createPointsLedgerEntry } from '@/lib/pointsLedgerService';
 import { prisma } from '@/lib/prisma';
 import { sendReceiptEmail } from '@/lib/travelDocumentEmail';
 import { BookingStatus } from '@prisma/client';
+
+const mockDispatchNotification = jest.fn();
 
 jest.mock('@/lib/prisma', () => ({
     prisma: {
@@ -11,7 +16,22 @@ jest.mock('@/lib/prisma', () => ({
             count: jest.fn(),
             findUniqueOrThrow: jest.fn(),
         },
+        $transaction: jest.fn(),
     },
+}));
+
+jest.mock('@/lib/flightLock', () => ({
+    lockFlightForUpdate: jest.fn(),
+}));
+
+jest.mock('@/lib/pointsLedgerService', () => ({
+    createPointsLedgerEntry: jest.fn(),
+}));
+
+jest.mock('@/lib/notificationService', () => ({
+    NotificationService: jest.fn().mockImplementation(() => ({
+        dispatchNotification: mockDispatchNotification,
+    })),
 }));
 
 jest.mock('@/lib/documents/pdfGenerator', () => ({
@@ -195,4 +215,130 @@ describe('customerSupportService.resendReceiptEmail', () => {
     });
 });
 
+describe('customerSupportService.cancelAndRefundBooking', () => {
+    const futureDeparture = new Date(Date.now() + 72 * 60 * 60 * 1000);
 
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (lockFlightForUpdate as jest.Mock).mockResolvedValue(undefined);
+        (createPointsLedgerEntry as jest.Mock).mockResolvedValue({});
+        mockDispatchNotification.mockResolvedValue(undefined);
+    });
+
+    it('dispatches cancellation notification with points redeposited and tax refund for reward bookings', async () => {
+        const mockBooking = {
+            id: 401,
+            reference: 'MA-RWD401',
+            userId: 'user-rwd-1',
+            status: BookingStatus.CONFIRMED,
+            totalPriceCents: 1010,
+            currency: 'USD',
+            paymentIntentId: 'pi_reward_401',
+            isRewardBooking: true,
+            pointsRedeemed: 15000,
+            passengers: [{ id: 'p1' }],
+            legs: [
+                {
+                    id: 10,
+                    sequence: 1,
+                    flight: {
+                        id: 55,
+                        flightNumber: 'MA105',
+                        airline: 'Mona Airways',
+                        departureDate: futureDeparture,
+                        status: 'SCHEDULED',
+                        priceCents: 30000,
+                    },
+                    seatAssignments: [{ cabinClass: 'ECONOMY' }],
+                },
+            ],
+        };
+
+        (prisma.booking.findUniqueOrThrow as jest.Mock).mockResolvedValue(mockBooking);
+        (prisma.$transaction as jest.Mock).mockImplementation(async (cb) => {
+            const tx = {
+                booking: {
+                    findUniqueOrThrow: jest.fn().mockResolvedValue(mockBooking),
+                    update: jest.fn().mockResolvedValue({ ...mockBooking, status: BookingStatus.CANCELLED }),
+                },
+                $executeRaw: jest.fn().mockResolvedValue(1),
+                seatAssignment: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+                bookingStatusChange: { findFirstOrThrow: jest.fn().mockResolvedValue({ id: 99 }) },
+                paymentRefund: { create: jest.fn().mockResolvedValue({}) },
+                flight: { update: jest.fn().mockResolvedValue({}) },
+            };
+            return cb(tx);
+        });
+
+        const updated = await cancelAndRefundBooking(401, 'staff-1', 'Customer requested cancellation');
+
+        expect(updated.status).toBe(BookingStatus.CANCELLED);
+        expect(NotificationService).toHaveBeenCalledTimes(1);
+        expect(mockDispatchNotification).toHaveBeenCalledWith({
+            userId: 'user-rwd-1',
+            title: 'Booking Cancelled: Mona Airways MA105',
+            message:
+                'Your reward booking #MA-RWD401 has been cancelled by customer support (Customer requested cancellation). Redeposited 12,000 pts and refunded $10.10 in taxes.',
+            category: 'ACCOUNT_ACTIVITY',
+            type: 'FLIGHT_CANCELLED',
+        });
+    });
+
+    it('dispatches cancellation notification with cash refund for cash bookings', async () => {
+        const mockBooking = {
+            id: 402,
+            reference: 'MA-CSH402',
+            userId: 'user-csh-2',
+            status: BookingStatus.CONFIRMED,
+            totalPriceCents: 45000,
+            currency: 'USD',
+            paymentIntentId: 'pi_cash_402',
+            isRewardBooking: false,
+            pointsRedeemed: null,
+            passengers: [{ id: 'p2' }],
+            legs: [
+                {
+                    id: 11,
+                    sequence: 1,
+                    flight: {
+                        id: 56,
+                        flightNumber: 'MA202',
+                        airline: 'Mona Airways',
+                        departureDate: futureDeparture,
+                        status: 'SCHEDULED',
+                        priceCents: 45000,
+                    },
+                    seatAssignments: [{ cabinClass: 'ECONOMY' }],
+                },
+            ],
+        };
+
+        (prisma.booking.findUniqueOrThrow as jest.Mock).mockResolvedValue(mockBooking);
+        (prisma.$transaction as jest.Mock).mockImplementation(async (cb) => {
+            const tx = {
+                booking: {
+                    findUniqueOrThrow: jest.fn().mockResolvedValue(mockBooking),
+                    update: jest.fn().mockResolvedValue({ ...mockBooking, status: BookingStatus.CANCELLED }),
+                },
+                $executeRaw: jest.fn().mockResolvedValue(1),
+                seatAssignment: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+                bookingStatusChange: { findFirstOrThrow: jest.fn().mockResolvedValue({ id: 100 }) },
+                paymentRefund: { create: jest.fn().mockResolvedValue({}) },
+                flight: { update: jest.fn().mockResolvedValue({}) },
+            };
+            return cb(tx);
+        });
+
+        const updated = await cancelAndRefundBooking(402, 'staff-1', 'Duplicate booking');
+
+        expect(updated.status).toBe(BookingStatus.CANCELLED);
+        expect(NotificationService).toHaveBeenCalledTimes(1);
+        expect(mockDispatchNotification).toHaveBeenCalledWith({
+            userId: 'user-csh-2',
+            title: 'Booking Cancelled: Mona Airways MA202',
+            message: 'Your booking #MA-CSH402 has been cancelled by customer support (Duplicate booking). Refunded $360.00.',
+            category: 'ACCOUNT_ACTIVITY',
+            type: 'FLIGHT_CANCELLED',
+        });
+    });
+});
