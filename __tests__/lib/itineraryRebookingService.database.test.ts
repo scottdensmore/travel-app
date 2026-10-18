@@ -1039,4 +1039,64 @@ describe('ItineraryRebookingService', () => {
             where: { bookingId: scenario.booking.id },
         })).toBe(1);
     });
+
+    it('replenishes superseded flight award seats and decrements replacement flight award seats down to a floor of 0 for disrupted reward bookings', async () => {
+        const scenario = await createDisruptedBooking();
+        await prisma.booking.update({
+            where: { id: scenario.booking.id },
+            data: {
+                isRewardBooking: true,
+                pointsRedeemed: 55_000,
+            },
+        });
+        await prisma.flight.update({
+            where: { id: scenario.originalFlight.id },
+            data: {
+                awardSeatsEconomy: 2,
+                awardSeatsBusiness: 1,
+            },
+        });
+        const replacement = await createFlight({
+            suffix: 'REWARD-REPLACEMENT',
+            departureDate: '2099-05-11T16:00:00.000Z',
+        });
+        await prisma.flight.update({
+            where: { id: replacement.id },
+            data: {
+                awardSeatsEconomy: 3,
+                awardSeatsBusiness: 0,
+            },
+        });
+
+        await new ItineraryRebookingService().rebook(
+            replacementRequest(scenario, replacement.id),
+        );
+
+        const [updatedOldFlight, updatedReplacementFlight] = await Promise.all([
+            prisma.flight.findUniqueOrThrow({
+                where: { id: scenario.originalFlight.id },
+                select: {
+                    awardSeatsEconomy: true,
+                    awardSeatsBusiness: true,
+                },
+            }),
+            prisma.flight.findUniqueOrThrow({
+                where: { id: replacement.id },
+                select: {
+                    awardSeatsEconomy: true,
+                    awardSeatsBusiness: true,
+                },
+            }),
+        ]);
+
+        expect(updatedOldFlight).toEqual({
+            awardSeatsEconomy: 3,
+            awardSeatsBusiness: 2,
+        });
+        expect(updatedReplacementFlight).toEqual({
+            awardSeatsEconomy: 2,
+            awardSeatsBusiness: 0,
+        });
+    });
 });
+

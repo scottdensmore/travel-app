@@ -1,7 +1,9 @@
+import type { CabinClass } from '@/lib/bookingPricing';
 import { lockBookingForUpdate, lockFlightForUpdate } from '@/lib/flightLock';
-import { heldSeats } from '@/lib/seatOccupancy';
 import { prisma } from '@/lib/prisma';
+import { CABIN_AWARD_SEAT_KEYS } from '@/lib/rewardPricing';
 import { assertSeatAvailableForCabin } from '@/lib/seatLayout';
+import { heldSeats } from '@/lib/seatOccupancy';
 
 const REBOOKING_REASON = 'Rebooked after an airline cancellation.';
 
@@ -272,6 +274,34 @@ export class ItineraryRebookingService {
                         cabinClass: seat.cabinClass,
                     })),
                 });
+                if (booking.isRewardBooking) {
+                    const cabinCounts = new Map<CabinClass, number>();
+                    for (const seat of item.fromLeg.seatAssignments) {
+                        cabinCounts.set(
+                            seat.cabinClass,
+                            (cabinCounts.get(seat.cabinClass) ?? 0) + 1,
+                        );
+                    }
+                    const oldFlightUpdate: Record<string, { increment: number }> = {};
+                    const replacementFlightUpdate: Record<string, number> = {};
+                    for (const [cabin, count] of cabinCounts.entries()) {
+                        const fieldKey = CABIN_AWARD_SEAT_KEYS[cabin];
+                        oldFlightUpdate[fieldKey] = { increment: count };
+                        const currentAwardSeats = item.toFlight[fieldKey] ?? 0;
+                        replacementFlightUpdate[fieldKey] = Math.max(
+                            0,
+                            currentAwardSeats - count,
+                        );
+                    }
+                    await tx.flight.update({
+                        where: { id: item.fromLeg.flightId },
+                        data: oldFlightUpdate,
+                    });
+                    await tx.flight.update({
+                        where: { id: item.toFlight.id },
+                        data: replacementFlightUpdate,
+                    });
+                }
                 writtenReplacements.push({
                     fromLegId: item.fromLeg.id,
                     toLegId: toLeg.id,
