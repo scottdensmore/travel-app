@@ -66,9 +66,17 @@ import { sendTravelDocumentsEmail } from '@/lib/travelDocumentEmail';
 import { saveGuideImage } from '@/lib/guideImageStorage';
 import { submitReview, moderateReview } from '@/lib/reviewModerationService';
 import { recordStaffAudit } from '@/lib/staffAuditService';
+import { accruePointsForCashBooking } from '@/lib/pointsLedgerService';
 
 // Keep these heavy/server-only modules out of the unit test.
 jest.mock('@/lib/staffAuditService');
+jest.mock('@/lib/pointsLedgerService', () => {
+    const actual = jest.requireActual('@/lib/pointsLedgerService');
+    return {
+        ...actual,
+        accruePointsForCashBooking: jest.fn(actual.accruePointsForCashBooking),
+    };
+});
 jest.mock('@/lib/reviewModerationService', () => {
     const actual = jest.requireActual('@/lib/reviewModerationService');
     return {
@@ -1696,6 +1704,66 @@ describe('bookFlightAction', () => {
         });
         expect(mockStartPayment).not.toHaveBeenCalled();
         expect(mockBookFlight).not.toHaveBeenCalled();
+    });
+
+    it('dispatches a reward booking confirmation notification with redeemed points and skips cash point accrual when isRewardBooking is true', async () => {
+        mockedGetServerSession.mockResolvedValue({ user: { id: 'user-123' } });
+        mockStartPayment.mockResolvedValue({
+            amountCents: 1_010,
+            currency: 'USD',
+            clientSecret: 'pi_secret_for_elements',
+            providerIntentId: 'pi_authorized',
+            status: 'CAPTURED',
+        });
+        mockBookFlight.mockResolvedValue({
+            id: 1,
+            flightIds: [42],
+            userId: 'user-123',
+            totalPriceCents: 1010,
+            isRewardBooking: true,
+            pointsRedeemed: 15000,
+            wasCreated: true,
+        });
+        mockedFlightFindUnique.mockResolvedValue({
+            id: 42,
+            airline: 'Gemini Airways',
+            flightNumber: 'GA101',
+            priceCents: 20000,
+            fromAirport: { label: 'A' },
+            toAirport: { label: 'B' },
+        });
+
+        const passengers = [{
+            firstName: 'Ada',
+            lastName: 'Lovelace',
+            dateOfBirth: '1990-01-01',
+            passportNumber: 'AB123456',
+            gender: 'Female',
+            seatNumbers: ['11A'],
+            cabinClass: 'ECONOMY' as const,
+        }];
+
+        const result = await bookFlightAction({
+            flightIds: [42],
+            passengers,
+            idempotencyKey: '8ea59a65-9251-45b3-95d0-3920c49f5735',
+            isRewardBooking: true,
+        });
+
+        expect(result).toMatchObject({
+            id: 1,
+            isRewardBooking: true,
+            pointsRedeemed: 15000,
+            wasCreated: true,
+        });
+        expect(accruePointsForCashBooking).not.toHaveBeenCalled();
+        expect(mockDispatchNotification).toHaveBeenCalledWith({
+            userId: 'user-123',
+            title: 'Booking Confirmed: Gemini Airways GA101',
+            message: 'Successfully booked reward flight GA101 from A to B. Redeemed 15,000 pts.',
+            category: 'ACCOUNT_ACTIVITY',
+            type: 'POINTS',
+        });
     });
 });
 
