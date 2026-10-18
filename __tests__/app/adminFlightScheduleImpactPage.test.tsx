@@ -70,6 +70,10 @@ describe('/admin/flights/schedules/[scheduleId] impact preview', () => {
                 durationMinutes: 245,
                 priceCents: 35_000,
                 isActive: true,
+                awardSeatsFirst: 2,
+                awardSeatsBusiness: 3,
+                awardSeatsPremiumEconomy: 4,
+                awardSeatsEconomy: 6,
             },
             summary: {
                 total: 5,
@@ -85,7 +89,13 @@ describe('/admin/flights/schedules/[scheduleId] impact preview', () => {
                 occurrence(72, '2026-08-18T15:00:00.000Z', 'BOOKING_HISTORY', [91]),
                 occurrence(73, '2026-08-19T15:00:00.000Z', 'ACTIVE_CHECKOUT', [], true),
                 occurrence(74, '2026-08-20T15:00:00.000Z', 'OPERATIONAL_OVERRIDE', [], false, 'DELAYED'),
-                occurrence(75, '2026-08-21T15:00:00.000Z', 'SAFE_FUTURE'),
+                {
+                    ...occurrence(75, '2026-08-21T15:00:00.000Z', 'SAFE_FUTURE'),
+                    awardSeatsFirst: 1,
+                    awardSeatsBusiness: 2,
+                    awardSeatsPremiumEconomy: 3,
+                    awardSeatsEconomy: 5,
+                },
             ],
         });
     });
@@ -101,6 +111,8 @@ describe('/admin/flights/schedules/[scheduleId] impact preview', () => {
         expect(forSchedule).toHaveBeenCalledWith(17);
         expect(text).toContain('Schedule impact preview');
         expect(text).toContain('Mona Airways MA237');
+        expect(text).toContain('Award quotas: 2F / 3J / 4W / 6Y');
+        expect(text).toContain('Award seats: 1F · 2J · 3W · 5Y');
         expect(text).toContain('Impact preview');
         expect(text).toContain('Nothing changes until you confirm an action below.');
         expect(text).toContain('Active template');

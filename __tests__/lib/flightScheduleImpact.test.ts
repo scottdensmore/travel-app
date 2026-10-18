@@ -148,6 +148,10 @@ describe('FlightScheduleImpactService', () => {
                 durationMinutes: true,
                 priceCents: true,
                 isActive: true,
+                awardSeatsFirst: true,
+                awardSeatsBusiness: true,
+                awardSeatsPremiumEconomy: true,
+                awardSeatsEconomy: true,
                 flights: {
                     orderBy: { departureDate: 'asc' },
                     select: {
@@ -158,6 +162,10 @@ describe('FlightScheduleImpactService', () => {
                         durationMinutes: true,
                         priceCents: true,
                         status: true,
+                        awardSeatsFirst: true,
+                        awardSeatsBusiness: true,
+                        awardSeatsPremiumEconomy: true,
+                        awardSeatsEconomy: true,
                         fromAirport: { select: { label: true } },
                         toAirport: { select: { label: true } },
                         itineraryLegs: { select: { bookingId: true } },
@@ -220,6 +228,55 @@ describe('FlightScheduleImpactService', () => {
             'status',
             'to',
         ]);
+    });
+
+    it('projects schedule award quotas and occurrence remaining award inventory when present', async () => {
+        findSchedule.mockResolvedValue({
+            id: 17,
+            flightNumber: 'MA237',
+            airline: 'Mona Airways',
+            from: 'Seattle, USA',
+            to: 'Detroit, USA',
+            durationMinutes: 245,
+            priceCents: 35_000,
+            isActive: true,
+            awardSeatsFirst: 2,
+            awardSeatsBusiness: 4,
+            awardSeatsPremiumEconomy: 6,
+            awardSeatsEconomy: 8,
+            flights: [{
+                id: 71,
+                flightNumber: 'MA237',
+                airline: 'Mona Airways',
+                departureDate: new Date('2026-08-18T15:00:00.000Z'),
+                durationMinutes: 245,
+                priceCents: 35_000,
+                status: 'ON_TIME',
+                awardSeatsFirst: 1,
+                awardSeatsBusiness: 3,
+                awardSeatsPremiumEconomy: 5,
+                awardSeatsEconomy: 7,
+                fromAirport: { label: 'Seattle, USA' },
+                toAirport: { label: 'Detroit, USA' },
+                itineraryLegs: [],
+                seatHolds: [],
+            }],
+        });
+
+        const impact = await new FlightScheduleImpactService().forSchedule(17);
+
+        expect(impact?.schedule).toMatchObject({
+            awardSeatsFirst: 2,
+            awardSeatsBusiness: 4,
+            awardSeatsPremiumEconomy: 6,
+            awardSeatsEconomy: 8,
+        });
+        expect(impact?.occurrences[0]).toMatchObject({
+            awardSeatsFirst: 1,
+            awardSeatsBusiness: 3,
+            awardSeatsPremiumEconomy: 5,
+            awardSeatsEconomy: 7,
+        });
     });
 
     it('returns null rather than inventing a preview for a missing schedule', async () => {

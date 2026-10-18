@@ -35,6 +35,10 @@ export interface ScheduleImpactOccurrence extends ScheduleOccurrencePolicyInput 
     durationMinutes: number | null;
     priceCents: number;
     eligibility: ScheduleOccurrenceEligibility;
+    awardSeatsFirst?: number;
+    awardSeatsBusiness?: number;
+    awardSeatsPremiumEconomy?: number;
+    awardSeatsEconomy?: number;
 }
 
 export interface FlightScheduleImpact {
@@ -48,6 +52,10 @@ export interface FlightScheduleImpact {
         durationMinutes: number;
         priceCents: number;
         isActive: boolean;
+        awardSeatsFirst?: number;
+        awardSeatsBusiness?: number;
+        awardSeatsPremiumEconomy?: number;
+        awardSeatsEconomy?: number;
     };
     summary: ScheduleImpactSummary;
     occurrences: ScheduleImpactOccurrence[];
@@ -124,6 +132,10 @@ export class FlightScheduleImpactService {
                 durationMinutes: true,
                 priceCents: true,
                 isActive: true,
+                awardSeatsFirst: true,
+                awardSeatsBusiness: true,
+                awardSeatsPremiumEconomy: true,
+                awardSeatsEconomy: true,
                 flights: {
                     orderBy: { departureDate: 'asc' },
                     select: {
@@ -134,6 +146,10 @@ export class FlightScheduleImpactService {
                         durationMinutes: true,
                         priceCents: true,
                         status: true,
+                        awardSeatsFirst: true,
+                        awardSeatsBusiness: true,
+                        awardSeatsPremiumEconomy: true,
+                        awardSeatsEconomy: true,
                         ...flightRouteInclude,
                         itineraryLegs: { select: { bookingId: true } },
                         seatHolds: {
@@ -173,6 +189,10 @@ export class FlightScheduleImpactService {
                 bookingIds,
                 hasActiveCheckout,
                 eligibility: classifyScheduleOccurrence(policyInput, asOf),
+                ...(routed.awardSeatsFirst !== undefined ? { awardSeatsFirst: routed.awardSeatsFirst } : {}),
+                ...(routed.awardSeatsBusiness !== undefined ? { awardSeatsBusiness: routed.awardSeatsBusiness } : {}),
+                ...(routed.awardSeatsPremiumEconomy !== undefined ? { awardSeatsPremiumEconomy: routed.awardSeatsPremiumEconomy } : {}),
+                ...(routed.awardSeatsEconomy !== undefined ? { awardSeatsEconomy: routed.awardSeatsEconomy } : {}),
             };
         });
 
