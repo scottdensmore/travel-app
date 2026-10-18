@@ -179,6 +179,67 @@ describe('ProfilePointsLedger Component Integration', () => {
         expect(screen.getByTestId('points-ledger-empty'))
             .toHaveTextContent('No reward points activity recorded yet.');
     });
+
+    it('displays redeemed points + cash price and Reward Booking badge for reward bookings in My Bookings table', () => {
+        render(
+            <ProfileClient
+                userName="Alex Traveler"
+                userAvatar="avatar.png"
+                accountTimeZone="UTC"
+                accountTimeZoneChoices={['UTC', 'America/Los_Angeles']}
+                currentStatus="Gold"
+                currentPoints={4200}
+                spendablePointsBalance={43750}
+                pointsLedgerEntries={sampleLedgerEntries}
+                bookings={[
+                    {
+                        id: 202,
+                        reference: 'MA-2222',
+                        createdAt: '2026-06-10T12:00:00Z',
+                        status: 'CONFIRMED',
+                        isRewardBooking: true,
+                        pointsRedeemed: 15000,
+                        totalPriceCents: 1010,
+                        legs: [
+                            {
+                                id: 601,
+                                sequence: 1,
+                                flight: {
+                                    id: 301,
+                                    flightNumber: 'GA202',
+                                    airline: 'Gemini Airways',
+                                    from: 'Seattle, USA',
+                                    to: 'Detroit, USA',
+                                    departureDate: '2026-06-20T08:00:00Z',
+                                    priceCents: 25000,
+                                },
+                                seatAssignments: [
+                                    { passengerId: 'p-1', seatNumber: '14A', cabinClass: 'ECONOMY' },
+                                ],
+                            },
+                        ],
+                        passengers: [
+                            {
+                                id: 'p-1',
+                                firstName: 'Alex',
+                                lastName: 'Traveler',
+                                gender: 'Non-binary',
+                            },
+                        ],
+                    },
+                ]}
+                favorites={[]}
+                reviews={[]}
+                activityData={[]}
+                monthlyHistory={[]}
+                renderedAt={new Date('2026-06-01T00:00:00Z').getTime()}
+            />
+        );
+
+        const bookingRow = screen.getByTestId('booking-row-202');
+        expect(within(bookingRow).getByText('15,000 pts + $10.10')).toBeInTheDocument();
+        expect(within(bookingRow).getByText('Reward Booking')).toBeInTheDocument();
+    });
 });
 
 describe('PointsLedgerTable pagination and interaction', () => {
