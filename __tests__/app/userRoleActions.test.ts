@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma';
 import * as staffMfaModule from '@/lib/staffMfa';
 import { PointsTransactionType } from '@prisma/client';
 
+const mockDispatchNotification = jest.fn();
+
 jest.mock('next-auth', () => ({
     getServerSession: jest.fn(),
 }));
@@ -13,6 +15,11 @@ jest.mock('@/lib/auth', () => ({
 }));
 jest.mock('next/cache', () => ({
     revalidatePath: jest.fn(),
+}));
+jest.mock('@/lib/notificationService', () => ({
+    NotificationService: jest.fn().mockImplementation(() => ({
+        dispatchNotification: (...args: unknown[]) => mockDispatchNotification(...args),
+    })),
 }));
 jest.mock('@/lib/staffMfa', () => {
     const actual = jest.requireActual('@/lib/staffMfa');
@@ -41,6 +48,7 @@ jest.mock('@/lib/prisma', () => ({
 describe('adjustUserPointsAction', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        mockDispatchNotification.mockResolvedValue(undefined);
     });
 
     it('rejects invalid inputs (zero amount, empty reason, excessive delta)', async () => {
@@ -76,7 +84,7 @@ describe('adjustUserPointsAction', () => {
         expect(result.requiresStepUp).toBe(true);
     });
 
-    it('creates ADMIN_ADJUSTMENT ledger entry and records staff audit on valid step-up code', async () => {
+    it('creates ADMIN_ADJUSTMENT ledger entry, records staff audit, and dispatches ACCOUNT_ACTIVITY notification on valid step-up code', async () => {
         (getServerSession as jest.Mock).mockResolvedValue({
             user: { id: 'support1', email: 'support@example.com', role: 'SUPPORT', staffMfaVerified: true },
         });
@@ -126,6 +134,54 @@ describe('adjustUserPointsAction', () => {
                 reason: 'Service recovery goodwill credit',
             }),
         }));
+        expect(mockDispatchNotification).toHaveBeenCalledWith({
+            userId: 'target-1',
+            title: 'Loyalty Points Adjusted (+5,000 pts)',
+            message: 'Your spendable points balance was adjusted by +5,000 pts (Service recovery goodwill credit). New balance: 15,000 pts.',
+            category: 'ACCOUNT_ACTIVITY',
+            type: 'POINTS',
+        });
+    });
+
+    it('succeeds and formats negative delta notification even if notification dispatch throws', async () => {
+        (getServerSession as jest.Mock).mockResolvedValue({
+            user: { id: 'admin1', email: 'admin@example.com', role: 'ADMIN', staffMfaVerified: true },
+        });
+
+        (prisma.user.findUnique as jest.Mock)
+            .mockResolvedValueOnce({ id: 'admin1', staffMfaSecretEncrypted: 'enc-secret' })
+            .mockResolvedValueOnce({ id: 'target-1', email: 'target@example.com' });
+
+        (staffMfaModule.verifyAndConsumeStaffTotp as jest.Mock).mockResolvedValue(true);
+        (prisma.pointsLedgerEntry.findFirst as jest.Mock).mockResolvedValue({ balanceAfter: 10000 });
+        (prisma.pointsLedgerEntry.create as jest.Mock).mockResolvedValue({
+            id: 'entry-2',
+            userId: 'target-1',
+            type: PointsTransactionType.ADMIN_ADJUSTMENT,
+            amount: -2500,
+            balanceAfter: 7500,
+            description: 'Admin adjustment: Clawback duplicate bonus',
+        });
+        mockDispatchNotification.mockRejectedValueOnce(new Error('Notification service down'));
+
+        const result = await adjustUserPointsAction({
+            userId: 'target-1',
+            amount: -2500,
+            reason: 'Clawback duplicate bonus',
+            stepUpCode: '123456',
+        });
+
+        expect(result).toEqual({
+            success: true,
+            balanceAfter: 7500,
+        });
+        expect(mockDispatchNotification).toHaveBeenCalledWith({
+            userId: 'target-1',
+            title: 'Loyalty Points Adjusted (-2,500 pts)',
+            message: 'Your spendable points balance was adjusted by -2,500 pts (Clawback duplicate bonus). New balance: 7,500 pts.',
+            category: 'ACCOUNT_ACTIVITY',
+            type: 'POINTS',
+        });
     });
 
     it('returns InsufficientPointsError message when negative adjustment exceeds user balance', async () => {
@@ -150,5 +206,6 @@ describe('adjustUserPointsAction', () => {
         expect(result.success).toBe(false);
         expect(result.error).toMatch(/insufficient reward points/i);
         expect(prisma.pointsLedgerEntry.create).not.toHaveBeenCalled();
+        expect(mockDispatchNotification).not.toHaveBeenCalled();
     });
 });
