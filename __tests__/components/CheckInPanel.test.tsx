@@ -990,5 +990,59 @@ describe('seat confirmation and seat change during check-in', () => {
             expect(screen.queryByText('TSA PreCheck')).not.toBeInTheDocument();
         });
     });
+
+    describe('reward booking badge and points display', () => {
+        it('renders the Reward Booking badge and points redeemed when isRewardBooking is true', () => {
+            render(
+                <CheckInPanel
+                    legs={[
+                        leg({
+                            isRewardBooking: true,
+                            pointsRedeemed: 25000,
+                        }),
+                    ]}
+                />
+            );
+
+            const badge = screen.getByTestId('reward-booking-badge');
+            expect(badge).toBeInTheDocument();
+            expect(screen.getByText('Reward Booking')).toBeInTheDocument();
+            expect(badge).toHaveTextContent('Reward Booking · 25,000 pts');
+        });
+
+        it('renders the Reward Booking badge without points when pointsRedeemed is null or zero', () => {
+            render(
+                <CheckInPanel
+                    legs={[
+                        leg({
+                            isRewardBooking: true,
+                            pointsRedeemed: null,
+                        }),
+                    ]}
+                />
+            );
+
+            const badge = screen.getByTestId('reward-booking-badge');
+            expect(badge).toBeInTheDocument();
+            expect(badge).toHaveTextContent('Reward Booking');
+            expect(badge).not.toHaveTextContent('pts');
+        });
+
+        it('does not render the Reward Booking badge for cash bookings', () => {
+            render(
+                <CheckInPanel
+                    legs={[
+                        leg({
+                            isRewardBooking: false,
+                            pointsRedeemed: null,
+                        }),
+                    ]}
+                />
+            );
+
+            expect(screen.queryByTestId('reward-booking-badge')).not.toBeInTheDocument();
+            expect(screen.queryByText('Reward Booking')).not.toBeInTheDocument();
+        });
+    });
 });
 

@@ -124,6 +124,8 @@ export default async function CheckInPage() {
                     id: true,
                     reference: true,
                     status: true,
+                    isRewardBooking: true,
+                    pointsRedeemed: true,
                     passengers: {
                         select: {
                             ...safePassengerSelect,
@@ -241,6 +243,8 @@ export default async function CheckInPage() {
             bookingId: leg.booking.id,
             legId: leg.id,
             reference: leg.booking.reference,
+            isRewardBooking: Boolean(leg.booking.isRewardBooking),
+            pointsRedeemed: leg.booking.pointsRedeemed ?? null,
             directionLabel,
             airline: flight.airline,
             flightNumber: flight.flightNumber,

@@ -35,6 +35,8 @@ export interface CheckInLegView {
     bookingId: number;
     legId: number;
     reference: string;
+    isRewardBooking?: boolean;
+    pointsRedeemed?: number | null;
     directionLabel: string;
     airline: string;
     flightNumber: string;
@@ -475,11 +477,36 @@ export default function CheckInPanel({ legs }: { legs: CheckInLegView[] }) {
                                                 says nothing to a screen reader
                                                 and nothing to anyone who cannot
                                                 separate the two hues. */}
-                                            <p
-                                                className={`checkin-state checkin-state-${leg.reason.toLowerCase().replaceAll('_', '-')}`}
-                                            >
-                                                {leg.statusLabel}
-                                            </p>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
+                                                {leg.isRewardBooking && (
+                                                    <span
+                                                        className="checkin-reward-badge"
+                                                        data-testid="reward-booking-badge"
+                                                        style={{
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            fontSize: '0.75rem',
+                                                            background: 'rgba(167, 139, 250, 0.2)',
+                                                            color: '#ddd6fe',
+                                                            border: '1px solid rgba(167, 139, 250, 0.4)',
+                                                            padding: '0.2rem 0.6rem',
+                                                            borderRadius: '9999px',
+                                                            fontWeight: 600,
+                                                            whiteSpace: 'nowrap',
+                                                        }}
+                                                    >
+                                                        <span>Reward Booking</span>
+                                                        {typeof leg.pointsRedeemed === 'number' && leg.pointsRedeemed > 0 && (
+                                                            <span>{` · ${leg.pointsRedeemed.toLocaleString('en-US')} pts`}</span>
+                                                        )}
+                                                    </span>
+                                                )}
+                                                <p
+                                                    className={`checkin-state checkin-state-${leg.reason.toLowerCase().replaceAll('_', '-')}`}
+                                                >
+                                                    {leg.statusLabel}
+                                                </p>
+                                            </div>
                                         </div>
 
                                         <dl className="checkin-facts">

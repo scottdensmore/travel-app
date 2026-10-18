@@ -48,6 +48,8 @@ const leg = (overrides: {
     hoursFromNow?: number;
     flightStatus?: 'ON_TIME' | 'DELAYED' | 'CANCELLED';
     bookingStatus?: string;
+    isRewardBooking?: boolean;
+    pointsRedeemed?: number | null;
     positions?: Array<{ id: number; sequence: number }>;
     passengers?: Array<{
         id: string;
@@ -66,6 +68,8 @@ const leg = (overrides: {
             id: 7,
             reference: 'MA-0123456789ABCDEF0123',
             status: overrides.bookingStatus ?? 'CONFIRMED',
+            isRewardBooking: overrides.isRewardBooking ?? false,
+            pointsRedeemed: overrides.pointsRedeemed ?? null,
             passengers: (overrides.passengers
                 ?? [{ id: 'p1', firstName: 'Ada', lastName: 'Lovelace', gender: 'Female' }]
             ).map(passenger => ({
@@ -357,6 +361,21 @@ describe('check-in page', () => {
         });
         expect(view.travellers[0].cabinClass).toBe('ECONOMY');
         expect(view.travellers[0].seatNumber).toBe('11A');
+    });
+
+    it('selects and passes reward booking status and points redeemed to the panel', async () => {
+        findMany.mockResolvedValue([leg({
+            isRewardBooking: true,
+            pointsRedeemed: 35000,
+        })]);
+
+        const [view] = await legsPassedToPanel();
+        const { select } = findMany.mock.calls[0][0];
+
+        expect(select.booking.select.isRewardBooking).toBe(true);
+        expect(select.booking.select.pointsRedeemed).toBe(true);
+        expect(view.isRewardBooking).toBe(true);
+        expect(view.pointsRedeemed).toBe(35000);
     });
 });
 
