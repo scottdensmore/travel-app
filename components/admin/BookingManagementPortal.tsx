@@ -45,6 +45,8 @@ export interface SupportBookingItem {
     status: BookingStatus;
     totalPriceCents?: number;
     currency?: string;
+    isRewardBooking?: boolean;
+    pointsRedeemed?: number | null;
     createdAt?: Date | string;
     user?: SupportBookingUser | null;
     legs?: SupportBookingLeg[];
@@ -697,7 +699,19 @@ export default function BookingManagementPortal({
                                 return (
                                     <tr key={booking.id} className="hover:bg-gray-900/40 text-sm">
                                         <td className="p-3 font-mono font-bold text-purple-300">
-                                            {booking.reference}
+                                            <div>{booking.reference}</div>
+                                            {booking.isRewardBooking && (
+                                                <div className="mt-1 flex flex-wrap items-center gap-1.5 font-sans font-semibold">
+                                                    <span className="px-2 py-0.5 rounded text-[11px] bg-amber-950/80 text-amber-300 border border-amber-700/70">
+                                                        Reward Booking
+                                                    </span>
+                                                    {typeof booking.pointsRedeemed === 'number' && booking.pointsRedeemed > 0 && (
+                                                        <span className="text-xs text-amber-200">
+                                                            {booking.pointsRedeemed.toLocaleString()} pts
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="p-3">
                                             <div className="font-semibold text-white">{customerName}</div>
@@ -1247,6 +1261,15 @@ export default function BookingManagementPortal({
                                 <p className="text-xs text-gray-400 mt-0.5">
                                     Booking Reference: <span className="font-mono text-purple-200">{activeCancelBooking.reference}</span>
                                 </p>
+                                {activeCancelBooking.isRewardBooking && (
+                                    <p className="text-xs text-amber-300 mt-1 font-medium">
+                                        Reward Booking:{' '}
+                                        {typeof activeCancelBooking.pointsRedeemed === 'number'
+                                            ? `${activeCancelBooking.pointsRedeemed.toLocaleString()} pts redeemed`
+                                            : 'Points redemption'}{' '}
+                                        (eligible points and taxes will be refunded and award seats replenished)
+                                    </p>
+                                )}
                             </div>
                             <button
                                 type="button"

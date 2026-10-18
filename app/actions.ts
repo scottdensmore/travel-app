@@ -1268,7 +1268,7 @@ export async function cancelBookingAction(bookingId: number) {
                     flight: true,
                     // The cabin is held per traveller per leg, and the fee is a
                     // percentage of each traveller's own fare (#76).
-                    seatAssignments: { select: { cabinClass: true } },
+                    seatAssignments: { where: heldSeats(), select: { cabinClass: true } },
                 },
                 orderBy: { sequence: 'asc' },
             },
@@ -1312,11 +1312,12 @@ export async function cancelBookingAction(bookingId: number) {
         const lockedBooking = await tx.booking.findUnique({
             where: { id: bookingId },
             include: {
+                passengers: { select: { id: true } },
                 legs: {
                     where: activeItineraryLegWhere,
                     include: {
                         flight: true,
-                        seatAssignments: { select: { cabinClass: true } },
+                        seatAssignments: { where: heldSeats(), select: { cabinClass: true } },
                     },
                     orderBy: { sequence: 'asc' },
                 },
@@ -1386,6 +1387,7 @@ export async function cancelBookingAction(bookingId: number) {
                 );
             }
 
+            const fallbackCount = Math.max(1, lockedBooking.passengers?.length ?? 1);
             for (const leg of lockedBooking.legs) {
                 if (!leg.flight) continue;
                 const cabinCounts = new Map<CabinClass, number>();
@@ -1394,7 +1396,7 @@ export async function cancelBookingAction(bookingId: number) {
                     cabinCounts.set(cabin, (cabinCounts.get(cabin) ?? 0) + 1);
                 }
                 if (cabinCounts.size === 0) {
-                    cabinCounts.set('ECONOMY', 1);
+                    cabinCounts.set('ECONOMY', fallbackCount);
                 }
                 const updateData: Record<string, { increment: number }> = {};
                 for (const [cabin, count] of cabinCounts.entries()) {

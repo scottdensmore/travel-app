@@ -1,8 +1,13 @@
 import { prisma } from '@/lib/prisma';
-import { BookingStatus, Prisma } from '@prisma/client';
+import { BookingStatus, PointsTransactionType, Prisma } from '@prisma/client';
 import { sendTravelDocumentsEmail, TravelDocumentEmailInput } from '@/lib/travelDocumentEmail';
 import { heldSeats } from '@/lib/seatOccupancy';
-import { activeItineraryLegWhere } from '@/lib/bookingItinerary';
+import { activeItineraryLegWhere, bookingFlights } from '@/lib/bookingItinerary';
+import { lockFlightForUpdate } from '@/lib/flightLock';
+import { type CabinClass } from '@/lib/bookingPricing';
+import { cancellableBooking, cancellationOutcome } from '@/lib/cancellationPolicy';
+import { CABIN_AWARD_SEAT_KEYS } from '@/lib/rewardPricing';
+import { createPointsLedgerEntry } from '@/lib/pointsLedgerService';
 import {
     ItineraryRebookingService,
     RebookItineraryInput,
@@ -26,6 +31,8 @@ export interface SupportBookingItem {
     status: BookingStatus;
     totalPriceCents: number;
     currency: string;
+    isRewardBooking: boolean;
+    pointsRedeemed: number | null;
     createdAt: Date;
     user: {
         id: string;
@@ -145,6 +152,8 @@ export async function searchBookings(query: SupportSearchQuery): Promise<Support
         status: b.status,
         totalPriceCents: b.totalPriceCents ?? 0,
         currency: b.currency,
+        isRewardBooking: Boolean(b.isRewardBooking),
+        pointsRedeemed: b.pointsRedeemed ?? null,
         createdAt: b.createdAt,
         user: b.user,
         legs: b.legs.map((leg) => ({
@@ -226,6 +235,16 @@ export async function cancelAndRefundBooking(bookingId: number, actorUserId: str
     // 1. Fetch booking to verify it's valid
     const booking = await prisma.booking.findUniqueOrThrow({
         where: { id: bookingId },
+        include: {
+            legs: {
+                where: activeItineraryLegWhere,
+                include: {
+                    flight: true,
+                    seatAssignments: { where: heldSeats(), select: { cabinClass: true } },
+                },
+                orderBy: { sequence: 'asc' },
+            },
+        },
     });
 
     if (booking.status === BookingStatus.CANCELLED) {
@@ -234,6 +253,46 @@ export async function cancelAndRefundBooking(bookingId: number, actorUserId: str
 
     // 2. Perform the cancellation via a transaction
     return prisma.$transaction(async (tx) => {
+        const lockOrder = bookingFlights(booking)
+            .map((flight) => flight.id)
+            .sort((left, right) => left - right);
+        for (const flightId of lockOrder) {
+            await lockFlightForUpdate(tx, flightId);
+        }
+
+        const lockedBooking = await tx.booking.findUniqueOrThrow({
+            where: { id: bookingId },
+            include: {
+                passengers: { select: { id: true } },
+                legs: {
+                    where: activeItineraryLegWhere,
+                    include: {
+                        flight: true,
+                        seatAssignments: { where: heldSeats(), select: { cabinClass: true } },
+                    },
+                    orderBy: { sequence: 'asc' },
+                },
+            },
+        });
+
+        if (lockedBooking.status === BookingStatus.CANCELLED) {
+            throw new Error('Booking is already cancelled.');
+        }
+
+        const hasFlownLegs = lockedBooking.legs.some((leg) => leg.flight !== null);
+        const settled = hasFlownLegs
+            ? cancellationOutcome(cancellableBooking(lockedBooking), new Date())
+            : {
+                  allowed: true,
+                  reason: 'REFUNDABLE' as const,
+                  refundCents: lockedBooking.totalPriceCents ?? 0,
+                  feeCents: 0,
+                  pointsRedeposited: lockedBooking.isRewardBooking ? (lockedBooking.pointsRedeemed ?? 0) : 0,
+              };
+
+        await tx.$executeRaw`
+            SELECT set_config('app.booking_refund_cents', ${String(settled.refundCents)}, true)
+        `;
         await tx.$executeRaw`
             SELECT set_config('app.booking_status_reason', ${reason}, true)
         `;
@@ -253,6 +312,62 @@ export async function cancelAndRefundBooking(bookingId: number, actorUserId: str
             }),
             data: { releasedAt: new Date() },
         });
+
+        if (settled.refundCents > 0 && lockedBooking.paymentIntentId) {
+            const change = await tx.bookingStatusChange.findFirstOrThrow({
+                where: {
+                    bookingId,
+                    from: lockedBooking.status,
+                    to: BookingStatus.CANCELLED,
+                },
+                orderBy: { sequence: 'desc' },
+            });
+            await tx.paymentRefund.create({
+                data: {
+                    bookingStatusChangeId: change.id,
+                    providerIntentId: lockedBooking.paymentIntentId,
+                    amountCents: settled.refundCents,
+                    currency: lockedBooking.currency,
+                },
+            });
+        }
+
+        if (lockedBooking.isRewardBooking) {
+            if (settled.pointsRedeposited && settled.pointsRedeposited > 0 && lockedBooking.userId) {
+                await createPointsLedgerEntry(
+                    {
+                        userId: lockedBooking.userId,
+                        type: PointsTransactionType.REWARD_REFUND,
+                        amount: settled.pointsRedeposited,
+                        description: `Cancellation refund for booking #${lockedBooking.id}`,
+                        bookingId: lockedBooking.id,
+                    },
+                    tx,
+                );
+            }
+
+            const fallbackCount = Math.max(1, lockedBooking.passengers.length);
+            for (const leg of lockedBooking.legs) {
+                if (!leg.flight) continue;
+                const cabinCounts = new Map<CabinClass, number>();
+                for (const seat of leg.seatAssignments) {
+                    const cabin = seat.cabinClass as CabinClass;
+                    cabinCounts.set(cabin, (cabinCounts.get(cabin) ?? 0) + 1);
+                }
+                if (cabinCounts.size === 0) {
+                    cabinCounts.set('ECONOMY', fallbackCount);
+                }
+                const updateData: Record<string, { increment: number }> = {};
+                for (const [cabin, count] of cabinCounts.entries()) {
+                    const fieldKey = CABIN_AWARD_SEAT_KEYS[cabin];
+                    updateData[fieldKey] = { increment: count };
+                }
+                await tx.flight.update({
+                    where: { id: leg.flight.id },
+                    data: updateData,
+                });
+            }
+        }
 
         return updatedBooking;
     });

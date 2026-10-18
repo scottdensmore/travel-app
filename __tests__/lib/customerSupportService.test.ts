@@ -97,4 +97,30 @@ describe('customerSupportService.searchBookings', () => {
             }),
         }));
     });
+
+    it('maps isRewardBooking and pointsRedeemed fields onto SupportBookingItem', async () => {
+        (prisma.booking.findMany as jest.Mock).mockResolvedValue([
+            {
+                id: 202,
+                reference: 'MA-REWARD01',
+                status: BookingStatus.CONFIRMED,
+                totalPriceCents: 1010,
+                currency: 'USD',
+                isRewardBooking: true,
+                pointsRedeemed: 40000,
+                createdAt: new Date('2026-09-02T12:00:00Z'),
+                user: { id: 'u2', name: 'Jane Reward', email: 'jane@example.com' },
+                legs: [],
+                passengers: [],
+                _count: { notes: 0 },
+            },
+        ]);
+        (prisma.booking.count as jest.Mock).mockResolvedValue(1);
+
+        const result = await searchBookings({});
+        expect(result.bookings[0].isRewardBooking).toBe(true);
+        expect(result.bookings[0].pointsRedeemed).toBe(40000);
+        expect(result.bookings[0].totalPriceCents).toBe(1010);
+    });
 });
+

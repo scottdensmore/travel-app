@@ -398,4 +398,43 @@ describe('BookingManagementPortal', () => {
 
         expect(screen.getByText('MA-ABC123')).toBeInTheDocument();
     });
+
+    it('renders reward booking badge and points summary in table and cancel dialog', async () => {
+        const rewardBookings = [
+            {
+                ...mockBookings[0],
+                id: 202,
+                reference: 'MA-RWD999',
+                isRewardBooking: true,
+                pointsRedeemed: 40000,
+                totalPriceCents: 1010,
+            },
+        ];
+
+        render(
+            <BookingManagementPortal
+                initialData={{
+                    bookings: rewardBookings,
+                    totalCount: 1,
+                    page: 1,
+                    pageSize: 25,
+                    totalPages: 1,
+                }}
+                searchAction={mockSearchAction}
+                cancelAction={mockCancelAction}
+            />
+        );
+
+        expect(screen.getByText('MA-RWD999')).toBeInTheDocument();
+        expect(screen.getByText(/Reward Booking/i)).toBeInTheDocument();
+        expect(screen.getByText(/40,000 pts/i)).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: /cancel & refund/i }));
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+            expect(screen.getByText(/40,000 pts redeemed/i)).toBeInTheDocument();
+        });
+    });
 });
+

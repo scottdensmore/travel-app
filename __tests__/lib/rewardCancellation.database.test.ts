@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { prisma } from '@/lib/prisma';
 import { airportCodesForRoute } from '@/lib/airports';
 import { cancelBookingAction } from '@/app/actions';
+import { cancelAndRefundBooking } from '@/lib/customerSupportService';
 import { getServerSession } from 'next-auth';
 import { PointsTransactionType } from '@prisma/client';
 import {
@@ -317,4 +318,137 @@ describe('rewardCancellation database integration', () => {
         });
         expect(updatedFlight.awardSeatsEconomy).toBe(3); // 2 + 1
     });
+
+    it('replenishes award seats by passenger count when active seatAssignments are empty on cancellation', async () => {
+        const user = await createTestUser();
+        await createPointsLedgerEntry({
+            userId: user.id,
+            type: PointsTransactionType.WELCOME_GRANT,
+            amount: 50000,
+            description: 'Welcome grant',
+        });
+
+        const flight = await createTestFlight({ awardSeatsEconomy: 2, departsInHours: 48 });
+        const booking = await prisma.booking.create({
+            data: {
+                userId: user.id,
+                status: 'CONFIRMED',
+                isRewardBooking: true,
+                pointsRedeemed: 30000,
+                totalPriceCents: 2020,
+                paymentIntentId: `pi_test_${randomUUID().slice(0, 10)}`,
+                passengers: {
+                    create: [
+                        {
+                            firstName: 'Alice',
+                            lastName: 'CancelTest',
+                            gender: 'Female',
+                            sensitiveDataDeletedAt: new Date(),
+                        },
+                        {
+                            firstName: 'Bob',
+                            lastName: 'CancelTest',
+                            gender: 'Male',
+                            sensitiveDataDeletedAt: new Date(),
+                        },
+                    ],
+                },
+                legs: {
+                    create: [{
+                        sequence: 1,
+                        flightId: flight.id,
+                    }],
+                },
+            },
+            include: { legs: true, passengers: true },
+        });
+        created.bookingIds.push(booking.id);
+
+        await createPointsLedgerEntry({
+            userId: user.id,
+            type: PointsTransactionType.REWARD_REDEMPTION,
+            amount: -30000,
+            description: `Reward booking #${booking.id}`,
+            bookingId: booking.id,
+        });
+
+        mockedGetServerSession.mockResolvedValue({
+            user: { id: user.id, role: 'USER' },
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any);
+
+        await cancelBookingAction(booking.id);
+
+        // Award seats must increment by 2 (the 2 passengers), not 1
+        const updatedFlight = await prisma.flight.findUniqueOrThrow({
+            where: { id: flight.id },
+            select: { awardSeatsEconomy: true },
+        });
+        expect(updatedFlight.awardSeatsEconomy).toBe(4);
+    });
+
+    it('staff cancelAndRefundBooking redeposits points, replenishes award seats, and creates paymentRefund record', async () => {
+        const user = await createTestUser('reward-customer');
+        const staffUser = await createTestUser('reward-staff');
+
+        await createPointsLedgerEntry({
+            userId: user.id,
+            type: PointsTransactionType.WELCOME_GRANT,
+            amount: 50000,
+            description: 'Welcome grant',
+        });
+
+        const flight = await createTestFlight({ awardSeatsEconomy: 2, departsInHours: 48 });
+        const booking = await createRewardBooking({
+            userId: user.id,
+            flightId: flight.id,
+            cabinClass: 'ECONOMY',
+            pointsRedeemed: 15000,
+            totalPriceCents: 1010,
+        });
+
+        await createPointsLedgerEntry({
+            userId: user.id,
+            type: PointsTransactionType.REWARD_REDEMPTION,
+            amount: -15000,
+            description: `Reward booking #${booking.id}`,
+            bookingId: booking.id,
+        });
+
+        const cancelled = await cancelAndRefundBooking(
+            booking.id,
+            staffUser.id,
+            'Support cancelled reward booking at customer request',
+        );
+        expect(cancelled.status).toBe('CANCELLED');
+
+        // 80% of 15,000 = 12,000 points redeposited
+        const refundEntry = await prisma.pointsLedgerEntry.findFirst({
+            where: {
+                userId: user.id,
+                bookingId: booking.id,
+                type: PointsTransactionType.REWARD_REFUND,
+            },
+        });
+        expect(refundEntry).not.toBeNull();
+        expect(refundEntry?.amount).toBe(12000);
+        expect(refundEntry?.balanceAfter).toBe(47000);
+
+        // Award seat replenished on flight
+        const updatedFlight = await prisma.flight.findUniqueOrThrow({
+            where: { id: flight.id },
+            select: { awardSeatsEconomy: true },
+        });
+        expect(updatedFlight.awardSeatsEconomy).toBe(3);
+
+        // PaymentRefund record created for mandatory taxes
+        const refundRecord = await prisma.paymentRefund.findFirst({
+            where: {
+                providerIntentId: booking.paymentIntentId!,
+            },
+        });
+        expect(refundRecord).not.toBeNull();
+        expect(refundRecord?.amountCents).toBe(1010);
+    });
 });
+
