@@ -75,6 +75,9 @@ export default async function ScheduleImpactPage({
                     <p style={{ color: 'rgba(255, 255, 255, 0.72)', margin: '4px 0 0' }}>
                         {impact.schedule.from} → {impact.schedule.to} · {durationLabel(impact.schedule.durationMinutes)} · {formatPrice(impact.schedule.priceCents)}
                     </p>
+                    <p style={{ color: 'rgba(255, 255, 255, 0.58)', margin: '4px 0 0', fontSize: '0.85rem' }}>
+                        {`Award quotas: ${impact.schedule.awardSeatsFirst ?? 1}F / ${impact.schedule.awardSeatsBusiness ?? 2}J / ${impact.schedule.awardSeatsPremiumEconomy ?? 2}W / ${impact.schedule.awardSeatsEconomy ?? 4}Y`}
+                    </p>
                     <p style={{ color: impact.schedule.isActive ? '#86efac' : '#fbbf24', margin: '4px 0 0', fontWeight: 700 }}>
                         {impact.schedule.isActive ? 'Active template' : 'Inactive template'}
                     </p>
@@ -178,6 +181,14 @@ export default async function ScheduleImpactPage({
                                                     : durationLabel(occurrence.durationMinutes)} · {formatPrice(occurrence.priceCents)}
                                             </span>
                                             <div style={secondaryStyle}>Status: {occurrence.status.replaceAll('_', ' ')}</div>
+                                            {(occurrence.awardSeatsFirst !== undefined
+                                                || occurrence.awardSeatsBusiness !== undefined
+                                                || occurrence.awardSeatsPremiumEconomy !== undefined
+                                                || occurrence.awardSeatsEconomy !== undefined) && (
+                                                <div style={secondaryStyle}>
+                                                    {`Award seats: ${occurrence.awardSeatsFirst ?? 0}F · ${occurrence.awardSeatsBusiness ?? 0}J · ${occurrence.awardSeatsPremiumEconomy ?? 0}W · ${occurrence.awardSeatsEconomy ?? 0}Y`}
+                                                </div>
+                                            )}
                                         </td>
                                         <td style={cellStyle}>
                                             {occurrence.bookingIds.length > 0
