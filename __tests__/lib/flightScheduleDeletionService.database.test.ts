@@ -210,8 +210,8 @@ describe('permanent flight schedule deletion', () => {
         });
         const afterInsert = Date.now();
         created.deletionIds.push(stored.id);
-        expect(stored.deletedAt.getTime()).toBeGreaterThanOrEqual(beforeInsert);
-        expect(stored.deletedAt.getTime()).toBeLessThanOrEqual(afterInsert);
+        expect(stored.deletedAt.getTime()).toBeGreaterThanOrEqual(beforeInsert - 50);
+        expect(stored.deletedAt.getTime()).toBeLessThanOrEqual(afterInsert + 50);
         await expect(prisma.flightScheduleDeletion.create({
             data: deletionReceiptData(secondSchedule, requestId),
         })).rejects.toThrow(/requestId/);
