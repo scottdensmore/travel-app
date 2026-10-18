@@ -690,6 +690,15 @@ export async function bookFlightAction(bookingData: {
                     category: 'ACCOUNT_ACTIVITY',
                     type: 'POINTS',
                 });
+            } else {
+                const redeemedPoints = result.pointsRedeemed ?? 0;
+                await new NotificationService().dispatchNotification({
+                    userId,
+                    title: `Booking Confirmed: ${flight.airline} ${flight.flightNumber}`,
+                    message: `Successfully booked reward flight ${flight.flightNumber} from ${flight.fromAirport.label} to ${flight.toAirport.label}. Redeemed ${redeemedPoints.toLocaleString('en-US')} pts.`,
+                    category: 'ACCOUNT_ACTIVITY',
+                    type: 'POINTS',
+                });
             }
         }
     } catch (err) {
