@@ -1,5 +1,7 @@
-import { searchBookings } from '@/lib/customerSupportService';
+import { resendReceiptEmail, searchBookings } from '@/lib/customerSupportService';
+import { generateInvoicePDF } from '@/lib/documents/pdfGenerator';
 import { prisma } from '@/lib/prisma';
+import { sendReceiptEmail } from '@/lib/travelDocumentEmail';
 import { BookingStatus } from '@prisma/client';
 
 jest.mock('@/lib/prisma', () => ({
@@ -7,8 +9,17 @@ jest.mock('@/lib/prisma', () => ({
         booking: {
             findMany: jest.fn(),
             count: jest.fn(),
+            findUniqueOrThrow: jest.fn(),
         },
     },
+}));
+
+jest.mock('@/lib/documents/pdfGenerator', () => ({
+    generateInvoicePDF: jest.fn(),
+}));
+
+jest.mock('@/lib/travelDocumentEmail', () => ({
+    sendReceiptEmail: jest.fn(),
 }));
 
 describe('customerSupportService.searchBookings', () => {
@@ -123,4 +134,65 @@ describe('customerSupportService.searchBookings', () => {
         expect(result.bookings[0].totalPriceCents).toBe(1010);
     });
 });
+
+describe('customerSupportService.resendReceiptEmail', () => {
+    const mockPdfBuffer = Buffer.from('mock-pdf');
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (generateInvoicePDF as jest.Mock).mockResolvedValue(mockPdfBuffer);
+        (sendReceiptEmail as jest.Mock).mockResolvedValue(undefined);
+    });
+
+    it('formats totalAmountFormatted with points and cash for reward bookings', async () => {
+        (prisma.booking.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+            id: 301,
+            reference: 'MA-RWD301',
+            totalPriceCents: 1010,
+            currency: 'USD',
+            isRewardBooking: true,
+            pointsRedeemed: 15000,
+            user: { id: 'u3', name: 'Jane Flyer', email: 'jane@example.com' },
+            legs: [],
+            passengers: [],
+        });
+
+        const result = await resendReceiptEmail(301);
+
+        expect(result).toEqual({ success: true, sentTo: 'jane@example.com' });
+        expect(sendReceiptEmail).toHaveBeenCalledWith({
+            to: 'jane@example.com',
+            bookingReference: 'MA-RWD301',
+            pdfBuffer: mockPdfBuffer,
+            customerName: 'Jane Flyer',
+            totalAmountFormatted: '15,000 pts + $10.10',
+        });
+    });
+
+    it('preserves standard cash formatting for non-reward bookings', async () => {
+        (prisma.booking.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+            id: 302,
+            reference: 'MA-CSH302',
+            totalPriceCents: 45000,
+            currency: 'USD',
+            isRewardBooking: false,
+            pointsRedeemed: null,
+            user: { id: 'u4', name: 'John Cash', email: 'john@example.com' },
+            legs: [],
+            passengers: [],
+        });
+
+        const result = await resendReceiptEmail(302);
+
+        expect(result).toEqual({ success: true, sentTo: 'john@example.com' });
+        expect(sendReceiptEmail).toHaveBeenCalledWith({
+            to: 'john@example.com',
+            bookingReference: 'MA-CSH302',
+            pdfBuffer: mockPdfBuffer,
+            customerName: 'John Cash',
+            totalAmountFormatted: '$450.00',
+        });
+    });
+});
+
 

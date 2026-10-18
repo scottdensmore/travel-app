@@ -423,10 +423,15 @@ export async function resendReceiptEmail(bookingId: number): Promise<{ success: 
     const { generateInvoicePDF } = await import('@/lib/documents/pdfGenerator');
     const pdfBuffer = await generateInvoicePDF(booking);
 
-    const formattedTotal = new Intl.NumberFormat('en-US', {
+    const formattedCashTotal = new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: booking.currency || 'USD',
     }).format((booking.totalPriceCents ?? 0) / 100);
+
+    const formattedTotal =
+        booking.isRewardBooking && typeof booking.pointsRedeemed === 'number' && booking.pointsRedeemed > 0
+            ? `${booking.pointsRedeemed.toLocaleString('en-US')} pts + ${formattedCashTotal}`
+            : formattedCashTotal;
 
     const { sendReceiptEmail } = await import('@/lib/travelDocumentEmail');
     await sendReceiptEmail({
