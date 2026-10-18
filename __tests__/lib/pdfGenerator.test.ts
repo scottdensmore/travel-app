@@ -91,6 +91,28 @@ describe('pdfGenerator', () => {
       const latestInstance = instances[instances.length - 1].value;
       expect(latestInstance.text).toHaveBeenCalledWith(expect.stringContaining('TSA PreCheck'));
     });
+
+    it('renders reward redemption and points redeemed on e-ticket when isRewardBooking is true', async () => {
+      const rewardBooking = {
+        ...mockBooking,
+        isRewardBooking: true,
+        pointsRedeemed: 40000,
+      };
+      await generateETicketPDF(rewardBooking as any);
+      const PDFDocumentMock = jest.requireMock('pdfkit');
+      const instances = PDFDocumentMock.mock.results;
+      const latestInstance = instances[instances.length - 1].value;
+      expect(latestInstance.text).toHaveBeenCalledWith('Ticket Type: Reward Redemption');
+      expect(latestInstance.text).toHaveBeenCalledWith('Points Redeemed: 40,000 pts');
+    });
+
+    it('does not render reward redemption lines on cash e-ticket', async () => {
+      await generateETicketPDF(mockBooking as any);
+      const PDFDocumentMock = jest.requireMock('pdfkit');
+      const instances = PDFDocumentMock.mock.results;
+      const latestInstance = instances[instances.length - 1].value;
+      expect(latestInstance.text).not.toHaveBeenCalledWith('Ticket Type: Reward Redemption');
+    });
   });
 
   describe('generateInvoicePDF', () => {
@@ -99,5 +121,33 @@ describe('pdfGenerator', () => {
       expect(buffer).toBeInstanceOf(Buffer);
       expect(buffer.length).toBeGreaterThan(0);
     });
+
+    it('renders reward redemption breakdown, points redeemed, and mandatory taxes & fees on invoice when isRewardBooking is true', async () => {
+      const rewardBooking = {
+        ...mockBooking,
+        isRewardBooking: true,
+        pointsRedeemed: 40000,
+        totalPriceCents: 560,
+        currency: 'USD',
+      };
+      await generateInvoicePDF(rewardBooking as any);
+      const PDFDocumentMock = jest.requireMock('pdfkit');
+      const instances = PDFDocumentMock.mock.results;
+      const latestInstance = instances[instances.length - 1].value;
+      expect(latestInstance.text).toHaveBeenCalledWith('Fare Type: Reward Redemption');
+      expect(latestInstance.text).toHaveBeenCalledWith('Points Redeemed: 40,000 pts');
+      expect(latestInstance.text).toHaveBeenCalledWith('Mandatory Taxes & Fees: USD 5.60');
+      expect(latestInstance.text).toHaveBeenCalledWith('Total Amount: USD 5.60');
+    });
+
+    it('preserves cash invoice output without reward breakdown when isRewardBooking is false', async () => {
+      await generateInvoicePDF(mockBooking as any);
+      const PDFDocumentMock = jest.requireMock('pdfkit');
+      const instances = PDFDocumentMock.mock.results;
+      const latestInstance = instances[instances.length - 1].value;
+      expect(latestInstance.text).toHaveBeenCalledWith('Total Amount: USD 1500.00');
+      expect(latestInstance.text).not.toHaveBeenCalledWith('Fare Type: Reward Redemption');
+    });
   });
 });
+
