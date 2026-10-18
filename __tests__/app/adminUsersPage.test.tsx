@@ -80,7 +80,13 @@ describe('/admin/users page', () => {
         (hasStaffPermission as jest.Mock).mockReturnValue(true);
 
         const mockUsers = [
-            { id: 'u1', name: 'User 1', email: 'u1@example.com', role: 'ADMIN' },
+            {
+                id: 'u1',
+                name: 'User 1',
+                email: 'u1@example.com',
+                role: 'ADMIN',
+                pointsLedgerEntries: [{ balanceAfter: 25000 }],
+            },
         ];
         (prisma.user.findMany as jest.Mock).mockResolvedValue(mockUsers);
 
@@ -89,7 +95,15 @@ describe('/admin/users page', () => {
 
         expect(client).not.toBeNull();
         expect(client!.props).toMatchObject({
-            initialUsers: mockUsers,
+            initialUsers: [
+                {
+                    id: 'u1',
+                    name: 'User 1',
+                    email: 'u1@example.com',
+                    role: 'ADMIN',
+                    spendablePoints: 25000,
+                },
+            ],
         });
         expect(prisma.user.findMany).toHaveBeenCalledWith({
             select: {
@@ -97,6 +111,11 @@ describe('/admin/users page', () => {
                 name: true,
                 email: true,
                 role: true,
+                pointsLedgerEntries: {
+                    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+                    take: 1,
+                    select: { balanceAfter: true },
+                },
             },
             orderBy: { email: 'asc' },
             take: 100,

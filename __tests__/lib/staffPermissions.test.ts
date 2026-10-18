@@ -11,7 +11,7 @@ describe('Staff Permissions Matrix', () => {
         }
     });
 
-    it('grants SUPPORT bookings, notifications, and user read permissions only', () => {
+    it('grants SUPPORT bookings, notifications, user read, and user points management permissions only', () => {
         expect(ROLE_PERMISSIONS.SUPPORT).toContain(StaffPermission.BOOKINGS_READ);
         expect(ROLE_PERMISSIONS.SUPPORT).toContain(StaffPermission.BOOKINGS_WRITE);
         expect(ROLE_PERMISSIONS.SUPPORT).toContain(StaffPermission.BOOKINGS_WRITE_NOTES);
@@ -20,6 +20,7 @@ describe('Staff Permissions Matrix', () => {
         expect(ROLE_PERMISSIONS.SUPPORT).toContain(StaffPermission.NOTIFICATIONS_READ);
         expect(ROLE_PERMISSIONS.SUPPORT).toContain(StaffPermission.NOTIFICATIONS_RESEND);
         expect(ROLE_PERMISSIONS.SUPPORT).toContain(StaffPermission.USERS_READ);
+        expect(ROLE_PERMISSIONS.SUPPORT).toContain(StaffPermission.USERS_MANAGE_POINTS);
 
         // Denied areas
         expect(ROLE_PERMISSIONS.SUPPORT).not.toContain(StaffPermission.SCHEDULES_WRITE);

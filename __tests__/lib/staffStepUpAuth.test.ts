@@ -34,6 +34,7 @@ describe('Step-Up TOTP Authentication', () => {
         it('defines the expected list of privileged permissions', () => {
             expect(PRIVILEGED_PERMISSIONS).toEqual([
                 StaffPermission.USERS_MANAGE_ROLES,
+                StaffPermission.USERS_MANAGE_POINTS,
                 StaffPermission.SCHEDULES_DELETE,
                 StaffPermission.AUDIT_LOGS_PURGE,
                 StaffPermission.BOOKINGS_REFUND,

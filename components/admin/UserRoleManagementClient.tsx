@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import StepUpModal from './StepUpModal';
-import { updateUserRoleAction } from '@/app/actions/userRoleActions';
+import { updateUserRoleAction, adjustUserPointsAction } from '@/app/actions/userRoleActions';
 import { Role } from '@prisma/client';
 
 export interface UserItem {
@@ -10,6 +10,7 @@ export interface UserItem {
     name?: string | null;
     email: string | null;
     role: Role | string;
+    spendablePoints?: number;
     createdAt?: string | Date | null;
 }
 
@@ -36,6 +37,15 @@ export default function UserRoleManagementClient({
     const reasonModalRef = useRef<HTMLDivElement | null>(null);
     const reasonInputRef = useRef<HTMLTextAreaElement | null>(null);
 
+    // Pending points adjustment state
+    const [pendingPointsUser, setPendingPointsUser] = useState<UserItem | null>(null);
+    const [pointsAmountInput, setPointsAmountInput] = useState<string>('');
+    const [pointsAmount, setPointsAmount] = useState<number>(0);
+    const [pointsReason, setPointsReason] = useState<string>('');
+    const [pointsError, setPointsError] = useState<string | null>(null);
+    const pointsModalRef = useRef<HTMLDivElement | null>(null);
+    const pointsAmountInputRef = useRef<HTMLInputElement | null>(null);
+
     // Step-up modal state
     const [isStepUpOpen, setIsStepUpOpen] = useState<boolean>(false);
     const [stepUpError, setStepUpError] = useState<string | null>(null);
@@ -52,9 +62,20 @@ export default function UserRoleManagementClient({
 
     const handleRoleSelectChange = (user: UserItem, newRole: Role) => {
         if (user.role === newRole) return;
+        setPendingPointsUser(null);
         setPendingChange({ user, newRole });
         setReason('');
         setReasonError(null);
+        setFeedback(null);
+    };
+
+    const handleOpenPointsModal = (user: UserItem) => {
+        setPendingChange(null);
+        setPendingPointsUser(user);
+        setPointsAmountInput('');
+        setPointsAmount(0);
+        setPointsReason('');
+        setPointsError(null);
         setFeedback(null);
     };
 
@@ -63,13 +84,23 @@ export default function UserRoleManagementClient({
         setPendingChange(null);
         setReason('');
         setReasonError(null);
+        setPendingPointsUser(null);
+        setPointsAmountInput('');
+        setPointsAmount(0);
+        setPointsReason('');
+        setPointsError(null);
         setStepUpError(null);
     };
 
     useEffect(() => {
-        if (pendingChange && !isStepUpOpen) {
+        const activeModalRef = pendingChange ? reasonModalRef : pendingPointsUser ? pointsModalRef : null;
+        if ((pendingChange || pendingPointsUser) && !isStepUpOpen) {
             setTimeout(() => {
-                reasonInputRef.current?.focus();
+                if (pendingChange) {
+                    reasonInputRef.current?.focus();
+                } else if (pendingPointsUser) {
+                    pointsAmountInputRef.current?.focus();
+                }
             }, 50);
 
             const handleKeyDown = (e: KeyboardEvent) => {
@@ -79,10 +110,10 @@ export default function UserRoleManagementClient({
                     return;
                 }
 
-                if (e.key !== 'Tab' || !reasonModalRef.current) return;
+                if (e.key !== 'Tab' || !activeModalRef?.current) return;
 
                 const focusableElements = Array.from(
-                    reasonModalRef.current.querySelectorAll<HTMLElement>(
+                    activeModalRef.current.querySelectorAll<HTMLElement>(
                         'button:not(:disabled), textarea:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])'
                     )
                 );
@@ -92,12 +123,12 @@ export default function UserRoleManagementClient({
                 const lastElement = focusableElements[focusableElements.length - 1];
 
                 if (e.shiftKey) {
-                    if (document.activeElement === firstElement || !reasonModalRef.current.contains(document.activeElement)) {
+                    if (document.activeElement === firstElement || !activeModalRef.current.contains(document.activeElement)) {
                         e.preventDefault();
                         lastElement.focus();
                     }
                 } else {
-                    if (document.activeElement === lastElement || !reasonModalRef.current.contains(document.activeElement)) {
+                    if (document.activeElement === lastElement || !activeModalRef.current.contains(document.activeElement)) {
                         e.preventDefault();
                         firstElement.focus();
                     }
@@ -109,7 +140,7 @@ export default function UserRoleManagementClient({
                 document.removeEventListener('keydown', handleKeyDown);
             };
         }
-    }, [pendingChange, isStepUpOpen]);
+    }, [pendingChange, pendingPointsUser, isStepUpOpen]);
 
     const handleContinueToStepUp = (e: React.FormEvent) => {
         e.preventDefault();
@@ -122,43 +153,109 @@ export default function UserRoleManagementClient({
         setIsStepUpOpen(true);
     };
 
-    const handleStepUpSubmit = async (code: string) => {
-        if (!pendingChange) return;
-        setIsSubmitting(true);
+    const handleContinuePointsToStepUp = (e: React.FormEvent) => {
+        e.preventDefault();
+        const parsed = Number(pointsAmountInput.trim());
+        if (!pointsAmountInput.trim() || !Number.isInteger(parsed) || parsed === 0) {
+            setPointsError('Enter a non-zero whole integer points adjustment (e.g. +5000 or -2000).');
+            return;
+        }
+        if (Math.abs(parsed) > 1_000_000) {
+            setPointsError('Points adjustment cannot exceed 1,000,000 points.');
+            return;
+        }
+        if (!pointsReason.trim()) {
+            setPointsError('A valid operational reason is required for points adjustments.');
+            return;
+        }
+        setPointsAmount(parsed);
+        setPointsError(null);
         setStepUpError(null);
+        setIsStepUpOpen(true);
+    };
 
-        try {
-            const res = await updateUserRoleAction({
-                userId: pendingChange.user.id,
-                newRole: pendingChange.newRole,
-                reason: reason.trim(),
-                stepUpCode: code,
-            });
+    const handleStepUpSubmit = async (code: string) => {
+        if (pendingChange) {
+            setIsSubmitting(true);
+            setStepUpError(null);
 
-            if (res.success) {
-                const updatedUserId = pendingChange.user.id;
-                const newRole = pendingChange.newRole;
-                const userEmail = pendingChange.user.email;
-
-                // Update local list
-                setUsers((prev) =>
-                    prev.map((u) => (u.id === updatedUserId ? { ...u, role: newRole } : u))
-                );
-
-                setIsStepUpOpen(false);
-                setPendingChange(null);
-                setReason('');
-                setFeedback({
-                    message: `Successfully updated role to ${newRole} for ${userEmail}.`,
-                    isError: false,
+            try {
+                const res = await updateUserRoleAction({
+                    userId: pendingChange.user.id,
+                    newRole: pendingChange.newRole,
+                    reason: reason.trim(),
+                    stepUpCode: code,
                 });
-            } else {
-                setStepUpError(res.error || 'Failed to update user role.');
+
+                if (res.success) {
+                    const updatedUserId = pendingChange.user.id;
+                    const newRole = pendingChange.newRole;
+                    const userEmail = pendingChange.user.email;
+
+                    // Update local list
+                    setUsers((prev) =>
+                        prev.map((u) => (u.id === updatedUserId ? { ...u, role: newRole } : u))
+                    );
+
+                    setIsStepUpOpen(false);
+                    setPendingChange(null);
+                    setReason('');
+                    setFeedback({
+                        message: `Successfully updated role to ${newRole} for ${userEmail}.`,
+                        isError: false,
+                    });
+                } else {
+                    setStepUpError(res.error || 'Failed to update user role.');
+                }
+            } catch (err: unknown) {
+                setStepUpError(err instanceof Error ? err.message : 'Failed to update user role.');
+            } finally {
+                setIsSubmitting(false);
             }
-        } catch (err: unknown) {
-            setStepUpError(err instanceof Error ? err.message : 'Failed to update user role.');
-        } finally {
-            setIsSubmitting(false);
+            return;
+        }
+
+        if (pendingPointsUser) {
+            setIsSubmitting(true);
+            setStepUpError(null);
+
+            try {
+                const res = await adjustUserPointsAction({
+                    userId: pendingPointsUser.id,
+                    amount: pointsAmount,
+                    reason: pointsReason.trim(),
+                    stepUpCode: code,
+                });
+
+                if (res.success) {
+                    const updatedUserId = pendingPointsUser.id;
+                    const userEmail = pendingPointsUser.email;
+                    const newBalance =
+                        typeof res.balanceAfter === 'number'
+                            ? res.balanceAfter
+                            : (pendingPointsUser.spendablePoints ?? 0) + pointsAmount;
+
+                    setUsers((prev) =>
+                        prev.map((u) => (u.id === updatedUserId ? { ...u, spendablePoints: newBalance } : u))
+                    );
+
+                    setIsStepUpOpen(false);
+                    setPendingPointsUser(null);
+                    setPointsAmountInput('');
+                    setPointsAmount(0);
+                    setPointsReason('');
+                    setFeedback({
+                        message: `Successfully adjusted points for ${userEmail}. New balance: ${newBalance.toLocaleString()} pts.`,
+                        isError: false,
+                    });
+                } else {
+                    setStepUpError(res.error || 'Failed to adjust user points.');
+                }
+            } catch (err: unknown) {
+                setStepUpError(err instanceof Error ? err.message : 'Failed to adjust user points.');
+            } finally {
+                setIsSubmitting(false);
+            }
         }
     };
 
@@ -249,6 +346,9 @@ export default function UserRoleManagementClient({
                                 <th style={{ padding: '12px 16px', color: '#a78bfa', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                                     Current Role
                                 </th>
+                                <th style={{ padding: '12px 16px', color: '#a78bfa', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                    Points Balance
+                                </th>
                                 <th style={{ padding: '12px 16px', color: '#a78bfa', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>
                                     Modify Role
                                 </th>
@@ -284,6 +384,29 @@ export default function UserRoleManagementClient({
                                                 {user.role}
                                             </span>
                                         </td>
+                                        <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#fff' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                <span style={{ fontWeight: 600 }}>
+                                                    {(user.spendablePoints ?? 0).toLocaleString()} pts
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleOpenPointsModal(user)}
+                                                    style={{
+                                                        padding: '4px 10px',
+                                                        borderRadius: '6px',
+                                                        border: '1px solid rgba(192, 132, 252, 0.4)',
+                                                        background: 'rgba(192, 132, 252, 0.15)',
+                                                        color: '#c084fc',
+                                                        fontSize: '0.75rem',
+                                                        fontWeight: 600,
+                                                        cursor: 'pointer',
+                                                    }}
+                                                >
+                                                    Adjust Points
+                                                </button>
+                                            </div>
+                                        </td>
                                         <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                                             <select
                                                 aria-label={`Change role for ${user.email}`}
@@ -311,7 +434,7 @@ export default function UserRoleManagementClient({
                             })}
                             {filteredUsers.length === 0 && (
                                 <tr>
-                                    <td colSpan={4} style={{ padding: '36px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.4)' }}>
+                                    <td colSpan={5} style={{ padding: '36px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.4)' }}>
                                         No users found matching &quot;{search}&quot;.
                                     </td>
                                 </tr>
@@ -472,6 +595,180 @@ export default function UserRoleManagementClient({
                 </div>
             )}
 
+            {/* Adjust Points Modal */}
+            {pendingPointsUser && !isStepUpOpen && (
+                <div
+                    role="presentation"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) handleCancelPending();
+                    }}
+                    style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                        backdropFilter: 'blur(8px)',
+                        zIndex: 9999,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '16px',
+                        boxSizing: 'border-box',
+                    }}
+                >
+                    <div
+                        ref={pointsModalRef}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="adjust-points-title"
+                        style={{
+                            background: 'linear-gradient(135deg, #1e1b4b 0%, #311042 100%)',
+                            border: '1px solid rgba(255, 255, 255, 0.16)',
+                            borderRadius: '16px',
+                            padding: '24px',
+                            maxWidth: '480px',
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            color: '#fff',
+                            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.5)',
+                        }}
+                    >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <h3 id="adjust-points-title" style={{ margin: 0, fontSize: '1.25rem', color: '#c084fc', fontWeight: 'bold' }}>
+                                Adjust Loyalty Points
+                            </h3>
+                            <button
+                                type="button"
+                                onClick={handleCancelPending}
+                                aria-label="Close dialog"
+                                style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: 'rgba(255, 255, 255, 0.7)',
+                                    fontSize: '1.25rem',
+                                    cursor: 'pointer',
+                                }}
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <p style={{ margin: '0 0 16px 0', fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.8)', lineHeight: 1.4 }}>
+                            Adjusting points balance for <strong style={{ color: '#fff' }}>{pendingPointsUser.email}</strong> (Current balance:{' '}
+                            <strong style={{ color: '#c084fc' }}>{(pendingPointsUser.spendablePoints ?? 0).toLocaleString()} pts</strong>).
+                        </p>
+
+                        {pointsError && (
+                            <div
+                                role="alert"
+                                style={{
+                                    padding: '8px 12px',
+                                    marginBottom: '14px',
+                                    borderRadius: '6px',
+                                    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                                    color: '#f87171',
+                                    fontSize: '0.85rem',
+                                }}
+                            >
+                                {pointsError}
+                            </div>
+                        )}
+
+                        <form onSubmit={handleContinuePointsToStepUp} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div>
+                                <label
+                                    htmlFor="points-adjustment-amount"
+                                    style={{ display: 'block', fontSize: '0.85rem', color: '#a78bfa', fontWeight: 'bold', marginBottom: '6px' }}
+                                >
+                                    Points Delta (e.g. +5000 or -2000)
+                                </label>
+                                <input
+                                    id="points-adjustment-amount"
+                                    ref={pointsAmountInputRef}
+                                    type="text"
+                                    placeholder="e.g. +5000 or -2000"
+                                    value={pointsAmountInput}
+                                    onChange={(e) => setPointsAmountInput(e.target.value)}
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px',
+                                        borderRadius: '6px',
+                                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                                        background: '#17142d',
+                                        color: '#fff',
+                                        fontSize: '0.9rem',
+                                        boxSizing: 'border-box',
+                                    }}
+                                />
+                            </div>
+
+                            <div>
+                                <label
+                                    htmlFor="points-adjustment-reason"
+                                    style={{ display: 'block', fontSize: '0.85rem', color: '#a78bfa', fontWeight: 'bold', marginBottom: '6px' }}
+                                >
+                                    Adjustment Reason
+                                </label>
+                                <textarea
+                                    id="points-adjustment-reason"
+                                    rows={3}
+                                    placeholder="Explain the operational reason for this points adjustment..."
+                                    value={pointsReason}
+                                    onChange={(e) => setPointsReason(e.target.value)}
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px',
+                                        borderRadius: '6px',
+                                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                                        background: '#17142d',
+                                        color: '#fff',
+                                        fontSize: '0.9rem',
+                                        boxSizing: 'border-box',
+                                        resize: 'vertical',
+                                    }}
+                                />
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                                <button
+                                    type="button"
+                                    onClick={handleCancelPending}
+                                    style={{
+                                        padding: '8px 16px',
+                                        borderRadius: '6px',
+                                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                                        background: 'transparent',
+                                        color: 'rgba(255, 255, 255, 0.8)',
+                                        cursor: 'pointer',
+                                        fontSize: '0.9rem',
+                                    }}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    style={{
+                                        padding: '8px 18px',
+                                        borderRadius: '6px',
+                                        border: 'none',
+                                        background: '#c084fc',
+                                        color: '#0f0a19',
+                                        fontWeight: 'bold',
+                                        cursor: 'pointer',
+                                        fontSize: '0.9rem',
+                                    }}
+                                >
+                                    Continue to Authorization
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
             {/* Step-Up Modal for Role Mutation */}
             {pendingChange && (
                 <StepUpModal
@@ -484,6 +781,20 @@ export default function UserRoleManagementClient({
                     isSubmitting={isSubmitting}
                 />
             )}
+
+            {/* Step-Up Modal for Points Adjustment */}
+            {pendingPointsUser && (
+                <StepUpModal
+                    isOpen={isStepUpOpen}
+                    title="Authorize Points Adjustment"
+                    description={`Enter 6-digit TOTP code to confirm adjusting points (${pointsAmount > 0 ? `+${pointsAmount}` : pointsAmount}) for ${pendingPointsUser.email}.`}
+                    onClose={handleCancelPending}
+                    onSubmit={handleStepUpSubmit}
+                    error={stepUpError}
+                    isSubmitting={isSubmitting}
+                />
+            )}
         </div>
     );
 }
+

@@ -17,16 +17,29 @@ export default async function AdminUsersPage() {
         return null;
     }
 
-    const users = await prisma.user.findMany({
+    const rawUsers = await prisma.user.findMany({
         select: {
             id: true,
             name: true,
             email: true,
             role: true,
+            pointsLedgerEntries: {
+                orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+                take: 1,
+                select: { balanceAfter: true },
+            },
         },
         orderBy: { email: 'asc' },
         take: 100,
     });
+
+    const users = rawUsers.map((u) => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        spendablePoints: u.pointsLedgerEntries?.[0]?.balanceAfter ?? 0,
+    }));
 
     return (
         <div
