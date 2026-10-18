@@ -2148,7 +2148,11 @@ export async function generateFlightOccurrencesAction(
                                 businessRows,
                                 premiumEconomyRows,
                                 economyRows,
-                                seatPattern: normalizedSeatPattern
+                                seatPattern: normalizedSeatPattern,
+                                awardSeatsFirst: schedule.awardSeatsFirst ?? 1,
+                                awardSeatsBusiness: schedule.awardSeatsBusiness ?? 2,
+                                awardSeatsPremiumEconomy: schedule.awardSeatsPremiumEconomy ?? 2,
+                                awardSeatsEconomy: schedule.awardSeatsEconomy ?? 4,
                             }
                         });
                         occurrencesCreated++;

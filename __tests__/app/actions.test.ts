@@ -3816,9 +3816,45 @@ describe('admin flight schedule actions', () => {
                         premiumEconomyRows: 6,
                         economyRows: 24,
                         seatPattern: 'AC-DF',
+                        awardSeatsFirst: 1,
+                        awardSeatsBusiness: 2,
+                        awardSeatsPremiumEconomy: 2,
+                        awardSeatsEconomy: 4,
                     }
                 });
                 expect(result).toEqual({ success: true, count: 1, created: 1, updated: 0 });
+            });
+
+            it('propagates custom schedule award seat quotas onto newly generated occurrences', async () => {
+                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
+                mockedFlightScheduleFindUnique.mockResolvedValue({
+                    id: 1,
+                    flightNumber: 'AA101',
+                    airline: 'American Airlines',
+                    from: 'New York, USA',
+                    to: 'San Francisco, USA',
+                    departureTime: '08:00',
+                    durationMinutes: 245,
+                    daysOfWeek: [1],
+                    priceCents: 50000,
+                    awardSeatsFirst: 2,
+                    awardSeatsBusiness: 4,
+                    awardSeatsPremiumEconomy: 5,
+                    awardSeatsEconomy: 8,
+                });
+                mockedFlightFindFirst.mockResolvedValue(null);
+                mockedFlightCreate.mockResolvedValue({});
+
+                await generateFlightOccurrencesAction(1, '2026-07-06', '2026-07-06');
+
+                expect(mockedFlightCreate).toHaveBeenCalledWith({
+                    data: expect.objectContaining({
+                        awardSeatsFirst: 2,
+                        awardSeatsBusiness: 4,
+                        awardSeatsPremiumEconomy: 5,
+                        awardSeatsEconomy: 8,
+                    }),
+                });
             });
 
             it('rejects invalid seating configuration inputs', async () => {
