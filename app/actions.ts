@@ -98,6 +98,7 @@ import {
 } from '@/lib/rewardPricing';
 import {
     getUserSpendablePointsBalance,
+    getPointsLedgerHistory,
     grantWelcomePointsIfEligible,
     accruePointsForCashBooking,
     createPointsLedgerEntry,
@@ -705,6 +706,16 @@ export async function getUserSpendablePointsBalanceAction(): Promise<number> {
     if (!userId) throw new Error('Unauthorized');
     await grantWelcomePointsIfEligible(userId);
     return getUserSpendablePointsBalance(userId);
+}
+
+export async function getUserPointsLedgerHistoryAction(options?: {
+    page?: number;
+    pageSize?: number;
+}) {
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.id;
+    if (!userId) throw new Error('Unauthorized');
+    return getPointsLedgerHistory(userId, options);
 }
 
 export async function startCheckoutPaymentAction(paymentData: {

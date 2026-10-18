@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useEffect, useState, useTransition } from 'react';
+import { getUserPointsLedgerHistoryAction } from '@/app/actions';
 import { formatAccountDateTime } from '@/lib/accountTimeZone';
 
 export interface PointsLedgerEntryRow {
@@ -15,6 +16,7 @@ export interface PointsLedgerEntryRow {
 
 interface PointsLedgerTableProps {
     entries: PointsLedgerEntryRow[];
+    totalCount?: number;
     accountTimeZone: string;
     pageSize?: number;
 }
@@ -49,14 +51,67 @@ const TYPE_CONFIG: Record<string, { label: string; badgeClass: string; style: Re
 
 export default function PointsLedgerTable({
     entries,
+    totalCount,
     accountTimeZone,
     pageSize = 5,
 }: PointsLedgerTableProps) {
     const [currentPage, setCurrentPage] = useState(1);
-    const totalPages = Math.ceil(entries.length / pageSize) || 1;
+    const [totalEntriesCount, setTotalEntriesCount] = useState(totalCount ?? entries.length);
+    const [serverPageEntries, setServerPageEntries] = useState<Record<number, PointsLedgerEntryRow[]>>({});
+    const [error, setError] = useState<string | null>(null);
+    const [isPending, startTransition] = useTransition();
 
+    useEffect(() => {
+        setTotalEntriesCount(totalCount ?? entries.length);
+        setServerPageEntries({});
+        setCurrentPage(1);
+    }, [entries, totalCount]);
+
+    const totalPages = Math.ceil(totalEntriesCount / pageSize) || 1;
     const startIndex = (currentPage - 1) * pageSize;
-    const currentEntries = entries.slice(startIndex, startIndex + pageSize);
+    const endIndex = startIndex + pageSize;
+
+    const currentEntries = serverPageEntries[currentPage]
+        ?? entries.slice(startIndex, endIndex);
+
+    const navigateToPage = (targetPage: number) => {
+        const clampedPage = Math.max(1, Math.min(totalPages, targetPage));
+        if (clampedPage === currentPage || isPending) return;
+
+        setError(null);
+        const targetStart = (clampedPage - 1) * pageSize;
+        const targetEnd = targetStart + pageSize;
+        const availableLocally =
+            Boolean(serverPageEntries[clampedPage])
+            || (targetStart < entries.length && (targetEnd <= entries.length || targetEnd >= totalEntriesCount));
+
+        if (availableLocally) {
+            setCurrentPage(clampedPage);
+            return;
+        }
+
+        startTransition(async () => {
+            try {
+                const result = await getUserPointsLedgerHistoryAction({
+                    page: clampedPage,
+                    pageSize,
+                });
+                startTransition(() => {
+                    setServerPageEntries(prev => ({
+                        ...prev,
+                        [clampedPage]: result.entries,
+                    }));
+                    setTotalEntriesCount(result.totalCount);
+                    setCurrentPage(clampedPage);
+                });
+            } catch (err: unknown) {
+                const msg = err instanceof Error ? err.message : 'Unable to load points activity page.';
+                startTransition(() => {
+                    setError(msg);
+                });
+            }
+        });
+    };
 
     return (
         <div className="points-ledger-section" data-testid="points-ledger-section">
@@ -67,7 +122,25 @@ export default function PointsLedgerTable({
                 </span>
             </div>
 
-            {entries.length === 0 ? (
+            {error && (
+                <div
+                    role="alert"
+                    data-testid="points-ledger-error"
+                    style={{
+                        marginBottom: '1rem',
+                        padding: '0.75rem 1rem',
+                        borderRadius: '0.5rem',
+                        backgroundColor: '#fef2f2',
+                        color: '#991b1b',
+                        border: '1px solid #fecaca',
+                        fontSize: '0.875rem',
+                    }}
+                >
+                    {error}
+                </div>
+            )}
+
+            {totalEntriesCount === 0 && entries.length === 0 ? (
                 <p className="text-gray-500 italic" data-testid="points-ledger-empty" style={{ padding: '1rem 0' }}>
                     No reward points activity recorded yet.
                 </p>
@@ -182,32 +255,32 @@ export default function PointsLedgerTable({
                             <div style={{ display: 'flex', gap: '0.5rem' }}>
                                 <button
                                     type="button"
-                                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                    disabled={currentPage === 1}
+                                    onClick={() => navigateToPage(currentPage - 1)}
+                                    disabled={currentPage === 1 || isPending}
                                     style={{
                                         padding: '0.375rem 0.75rem',
                                         fontSize: '0.875rem',
                                         borderRadius: '0.375rem',
                                         border: '1px solid #d1d5db',
-                                        backgroundColor: currentPage === 1 ? '#f3f4f6' : '#ffffff',
-                                        color: currentPage === 1 ? '#9ca3af' : '#111827',
-                                        cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                                        backgroundColor: currentPage === 1 || isPending ? '#f3f4f6' : '#ffffff',
+                                        color: currentPage === 1 || isPending ? '#9ca3af' : '#111827',
+                                        cursor: currentPage === 1 || isPending ? 'not-allowed' : 'pointer',
                                     }}
                                 >
                                     Previous
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                    disabled={currentPage === totalPages}
+                                    onClick={() => navigateToPage(currentPage + 1)}
+                                    disabled={currentPage === totalPages || isPending}
                                     style={{
                                         padding: '0.375rem 0.75rem',
                                         fontSize: '0.875rem',
                                         borderRadius: '0.375rem',
                                         border: '1px solid #d1d5db',
-                                        backgroundColor: currentPage === totalPages ? '#f3f4f6' : '#ffffff',
-                                        color: currentPage === totalPages ? '#9ca3af' : '#111827',
-                                        cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                                        backgroundColor: currentPage === totalPages || isPending ? '#f3f4f6' : '#ffffff',
+                                        color: currentPage === totalPages || isPending ? '#9ca3af' : '#111827',
+                                        cursor: currentPage === totalPages || isPending ? 'not-allowed' : 'pointer',
                                     }}
                                 >
                                     Next
@@ -220,3 +293,4 @@ export default function PointsLedgerTable({
         </div>
     );
 }
+

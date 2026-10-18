@@ -225,6 +225,7 @@ export default async function ProfilePage() {
       currentPoints={currentPoints}
       spendablePointsBalance={spendablePointsBalance}
       pointsLedgerEntries={ledgerHistory.entries}
+      pointsLedgerTotalCount={ledgerHistory.totalCount}
       bookings={customerBookings}
       favorites={userFavorites}
       reviews={userReviews}
