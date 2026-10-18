@@ -16,6 +16,7 @@ export enum StaffPermission {
     NOTIFICATIONS_RESEND = 'NOTIFICATIONS_RESEND',
     USERS_READ = 'USERS_READ',
     USERS_MANAGE_ROLES = 'USERS_MANAGE_ROLES',
+    USERS_MANAGE_POINTS = 'USERS_MANAGE_POINTS',
     AUDIT_LOGS_VIEW = 'AUDIT_LOGS_VIEW',
     AUDIT_LOGS_PURGE = 'AUDIT_LOGS_PURGE',
 }
@@ -32,6 +33,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly StaffPermission[]> = {
         StaffPermission.NOTIFICATIONS_READ,
         StaffPermission.NOTIFICATIONS_RESEND,
         StaffPermission.USERS_READ,
+        StaffPermission.USERS_MANAGE_POINTS,
     ],
     OPERATIONS: [
         StaffPermission.SCHEDULES_READ,

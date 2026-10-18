@@ -928,9 +928,18 @@ export const updateUserRoleSchema = z.object({
     stepUpCode: stepUpCodeSchema.optional(),
 }).strict();
 
+export const adjustUserPointsSchema = z.object({
+    userId: stringIdSchema,
+    amount: z.number({ message: 'Points amount must be a number.' })
+        .int('Points amount must be a whole integer.')
+        .refine((val) => val !== 0, 'Points adjustment amount cannot be zero.')
+        .refine((val) => Math.abs(val) <= 1_000_000, 'Points adjustment cannot exceed 1,000,000 points.'),
+    reason: z.string().trim().min(1, 'Reason is required.').max(500, 'Reason is too long.'),
+    stepUpCode: stepUpCodeSchema.optional(),
+}).strict();
+
 export type StaffAuditInputSchemaType = z.infer<typeof staffAuditInputSchema>;
 export type StaffAuditQuerySchemaType = z.infer<typeof staffAuditQuerySchema>;
 export type AuditRetentionPurgeSchemaType = z.infer<typeof auditRetentionPurgeSchema>;
 export type UpdateUserRoleInput = z.infer<typeof updateUserRoleSchema>;
-
-
+export type AdjustUserPointsInput = z.infer<typeof adjustUserPointsSchema>;

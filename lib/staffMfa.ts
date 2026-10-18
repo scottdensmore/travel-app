@@ -244,6 +244,7 @@ export class StaffStepUpRequiredError extends Error {
 
 export const PRIVILEGED_PERMISSIONS: readonly StaffPermission[] = [
     StaffPermission.USERS_MANAGE_ROLES,
+    StaffPermission.USERS_MANAGE_POINTS,
     StaffPermission.SCHEDULES_DELETE,
     StaffPermission.AUDIT_LOGS_PURGE,
     StaffPermission.BOOKINGS_REFUND,
