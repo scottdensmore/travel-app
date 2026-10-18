@@ -27,6 +27,8 @@ export interface ExportedUserData {
         status: string;
         totalPriceCents: number | null;
         currency: string;
+        isRewardBooking: boolean;
+        pointsRedeemed: number | null;
         legs: Array<{
             sequence: number;
             flight: {
@@ -114,10 +116,20 @@ export interface ExportedUserData {
     pointsActivity: {
         currentPoints: number;
         currentStatus: string;
+        spendablePointsBalance?: number;
         activity: Array<{
             description: string;
             date: string;
             points: number;
+        }>;
+        ledgerEntries?: Array<{
+            id: string;
+            type: string;
+            amount: number;
+            balanceAfter: number;
+            description: string;
+            bookingId: number | null;
+            createdAt: Date;
         }>;
     };
     metadata: {
@@ -258,6 +270,8 @@ export async function exportUserData(userId: string): Promise<ExportedUserData> 
         status: booking.status,
         totalPriceCents: booking.totalPriceCents,
         currency: booking.currency,
+        isRewardBooking: Boolean(booking.isRewardBooking),
+        pointsRedeemed: booking.pointsRedeemed ?? null,
         legs: booking.legs.map(leg => ({
             sequence: leg.sequence,
             flight: leg.flight ? {
@@ -367,6 +381,24 @@ export async function exportUserData(userId: string): Promise<ExportedUserData> 
         },
     });
 
+    const rawLedgerEntries = prisma.pointsLedgerEntry?.findMany
+        ? await prisma.pointsLedgerEntry.findMany({
+              where: { userId },
+              orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+              select: {
+                  id: true,
+                  type: true,
+                  amount: true,
+                  balanceAfter: true,
+                  description: true,
+                  bookingId: true,
+                  createdAt: true,
+              },
+          })
+        : [];
+    const ledgerEntries = rawLedgerEntries ?? [];
+    const spendablePointsBalance = ledgerEntries[0]?.balanceAfter ?? 0;
+
     const exportData: ExportedUserData = {
         user: {
             id: user.id,
@@ -385,7 +417,9 @@ export async function exportUserData(userId: string): Promise<ExportedUserData> 
         pointsActivity: {
             currentPoints,
             currentStatus,
+            spendablePointsBalance,
             activity: activityData,
+            ledgerEntries,
         },
         metadata: {
             exportedAt: new Date().toISOString(),
