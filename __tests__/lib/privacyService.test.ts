@@ -49,6 +49,9 @@ jest.mock('@/lib/prisma', () => ({
         account: {
             deleteMany: jest.fn(),
         },
+        pointsLedgerEntry: {
+            findMany: jest.fn(),
+        },
     },
 }));
 
@@ -97,6 +100,9 @@ describe('privacyService', () => {
         };
         account: {
             deleteMany: jest.Mock;
+        };
+        pointsLedgerEntry: {
+            findMany: jest.Mock;
         };
     };
 
@@ -395,6 +401,130 @@ describe('privacyService', () => {
             expect(rawJson).not.toContain('staffMfaSecret');
             expect(rawJson).not.toContain('dateOfBirthEncrypted');
             expect(rawJson).not.toContain('passportNumberEncrypted');
+        });
+
+        it('exports reward booking fields and spendable points ledger entries', async () => {
+            const userId = 'user-loyalty-1';
+            mockPrisma.user.findUniqueOrThrow.mockResolvedValue({
+                id: userId,
+                name: 'Reward Traveler',
+                email: 'reward@example.com',
+                emailVerified: new Date('2026-01-01T00:00:00Z'),
+                image: null,
+                role: 'USER',
+                timeZone: 'UTC',
+            });
+
+            mockPrisma.booking.findMany.mockResolvedValue([
+                {
+                    id: 42,
+                    reference: 'MA-REWARD',
+                    createdAt: new Date('2026-04-01T12:00:00Z'),
+                    status: 'CONFIRMED',
+                    totalPriceCents: 0,
+                    currency: 'USD',
+                    isRewardBooking: true,
+                    pointsRedeemed: 25000,
+                    legs: [],
+                    passengers: [],
+                    statusChanges: [],
+                },
+                {
+                    id: 41,
+                    reference: 'MA-CASH01',
+                    createdAt: new Date('2026-03-15T12:00:00Z'),
+                    status: 'CONFIRMED',
+                    totalPriceCents: 30000,
+                    currency: 'USD',
+                    isRewardBooking: false,
+                    pointsRedeemed: null,
+                    legs: [],
+                    passengers: [],
+                    statusChanges: [],
+                },
+            ]);
+
+            mockPrisma.passengerAncillary.findMany.mockResolvedValue([]);
+            mockPrisma.review.findMany.mockResolvedValue([]);
+            mockPrisma.notificationPreference.findMany.mockResolvedValue([]);
+            mockPrisma.notification.findMany.mockResolvedValue([]);
+            mockPrisma.userFavorite.findMany.mockResolvedValue([]);
+
+            const ledgerCreatedAt1 = new Date('2026-04-01T12:00:00Z');
+            const ledgerCreatedAt2 = new Date('2026-01-01T00:00:00Z');
+            mockPrisma.pointsLedgerEntry.findMany.mockResolvedValue([
+                {
+                    id: 'ple-2',
+                    type: 'REWARD_REDEMPTION',
+                    amount: -25000,
+                    balanceAfter: 35000,
+                    description: 'Reward booking MA-REWARD',
+                    bookingId: 42,
+                    createdAt: ledgerCreatedAt1,
+                },
+                {
+                    id: 'ple-1',
+                    type: 'WELCOME_GRANT',
+                    amount: 60000,
+                    balanceAfter: 60000,
+                    description: 'Welcome bonus',
+                    bookingId: null,
+                    createdAt: ledgerCreatedAt2,
+                },
+            ]);
+
+            const exportResult = await exportUserData(userId);
+
+            expect(exportResult.bookings).toHaveLength(2);
+            expect(exportResult.bookings[0]).toMatchObject({
+                id: 42,
+                reference: 'MA-REWARD',
+                isRewardBooking: true,
+                pointsRedeemed: 25000,
+            });
+            expect(exportResult.bookings[1]).toMatchObject({
+                id: 41,
+                reference: 'MA-CASH01',
+                isRewardBooking: false,
+                pointsRedeemed: null,
+            });
+
+            expect(mockPrisma.pointsLedgerEntry.findMany).toHaveBeenCalledWith({
+                where: { userId },
+                orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+                select: {
+                    id: true,
+                    type: true,
+                    amount: true,
+                    balanceAfter: true,
+                    description: true,
+                    bookingId: true,
+                    createdAt: true,
+                },
+            });
+
+            expect(exportResult.pointsActivity.spendablePointsBalance).toBe(35000);
+            expect(exportResult.pointsActivity.ledgerEntries).toEqual([
+                {
+                    id: 'ple-2',
+                    type: 'REWARD_REDEMPTION',
+                    amount: -25000,
+                    balanceAfter: 35000,
+                    description: 'Reward booking MA-REWARD',
+                    bookingId: 42,
+                    createdAt: ledgerCreatedAt1,
+                },
+                {
+                    id: 'ple-1',
+                    type: 'WELCOME_GRANT',
+                    amount: 60000,
+                    balanceAfter: 60000,
+                    description: 'Welcome bonus',
+                    bookingId: null,
+                    createdAt: ledgerCreatedAt2,
+                },
+            ]);
+            expect(() => assertNoSensitiveExportData(exportResult)).not.toThrow();
         });
     });
 
