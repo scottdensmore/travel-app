@@ -19,6 +19,12 @@ export async function generateETicketPDF(booking: any): Promise<Buffer> {
       // Booking Details
       doc.fontSize(12).text(`Booking Reference: ${booking.reference}`);
       doc.text(`Booking Date: ${new Date(booking.createdAt).toLocaleDateString()}`);
+      if (booking.isRewardBooking) {
+        doc.text('Ticket Type: Reward Redemption');
+        if (typeof booking.pointsRedeemed === 'number' && booking.pointsRedeemed > 0) {
+          doc.text(`Points Redeemed: ${booking.pointsRedeemed.toLocaleString()} pts`);
+        }
+      }
       doc.moveDown();
 
       // Passenger Manifest
@@ -71,7 +77,15 @@ export async function generateInvoicePDF(booking: any): Promise<Buffer> {
       // Billing Breakdown
       doc.fontSize(14).text('Itemized Breakdown', { underline: true });
       const total = booking.totalPriceCents ? (booking.totalPriceCents / 100).toFixed(2) : '0.00';
-      doc.fontSize(12).text(`Total Amount: ${booking.currency} ${total}`);
+      const currency = booking.currency || 'USD';
+      if (booking.isRewardBooking) {
+        doc.fontSize(12).text('Fare Type: Reward Redemption');
+        if (typeof booking.pointsRedeemed === 'number' && booking.pointsRedeemed > 0) {
+          doc.fontSize(12).text(`Points Redeemed: ${booking.pointsRedeemed.toLocaleString()} pts`);
+        }
+        doc.fontSize(12).text(`Mandatory Taxes & Fees: ${currency} ${total}`);
+      }
+      doc.fontSize(12).text(`Total Amount: ${currency} ${total}`);
       doc.moveDown();
 
       doc.fontSize(14).text('Payment Summary', { underline: true });
