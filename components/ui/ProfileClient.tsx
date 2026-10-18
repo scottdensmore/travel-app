@@ -117,6 +117,7 @@ interface ProfileClientProps {
     currentPoints: number;
     spendablePointsBalance?: number;
     pointsLedgerEntries?: PointsLedgerEntryRow[];
+    pointsLedgerTotalCount?: number;
     bookings: Booking[];
     favorites: UserFavorite[];
     reviews: Review[];
@@ -312,6 +313,7 @@ export default function ProfileClient({
     currentPoints,
     spendablePointsBalance = 0,
     pointsLedgerEntries = [],
+    pointsLedgerTotalCount,
     bookings,
     favorites,
     reviews,
@@ -1454,6 +1456,7 @@ export default function ProfileClient({
                 <div className="profile-card mt-8" data-testid="points-ledger-card">
                     <PointsLedgerTable
                         entries={pointsLedgerEntries}
+                        totalCount={pointsLedgerTotalCount}
                         accountTimeZone={accountTimeZone}
                     />
                 </div>

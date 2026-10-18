@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
 /** jsdom has no ResizeObserver; keep the callbacks so a test can fire them. */
@@ -14,7 +14,7 @@ global.ResizeObserver = class {
 
 import ProfileClient from '@/components/ui/ProfileClient';
 import PointsLedgerTable from '@/components/ui/PointsLedgerTable';
-import { useRouter } from 'next/navigation';
+import { getUserPointsLedgerHistoryAction } from '@/app/actions';
 
 jest.mock('next/navigation', () => ({
     useRouter: jest.fn().mockReturnValue({
@@ -31,6 +31,7 @@ jest.mock('@/app/actions', () => ({
     getOccupiedSeatsAction: jest.fn(),
     retryBookingRefundAction: jest.fn(),
     rebookItineraryAction: jest.fn(),
+    getUserPointsLedgerHistoryAction: jest.fn(),
 }));
 
 jest.mock('@/components/ui/charts/nextStatusChart', () => () => <div data-testid="status-chart" />);
@@ -232,5 +233,72 @@ describe('PointsLedgerTable pagination and interaction', () => {
         const row = screen.getByTestId('ledger-row-ple-1');
         expect(row).toHaveTextContent('June 1, 2026');
         expect(row).toHaveTextContent('PDT');
+    });
+
+    it('fetches subsequent pages from the server when totalCount exceeds initially loaded entries and caches them', async () => {
+        (getUserPointsLedgerHistoryAction as jest.Mock).mockResolvedValueOnce({
+            entries: [sampleLedgerEntries[2], sampleLedgerEntries[3]],
+            totalCount: 6,
+        });
+
+        render(
+            <PointsLedgerTable
+                entries={[sampleLedgerEntries[0], sampleLedgerEntries[1]]}
+                totalCount={6}
+                accountTimeZone="UTC"
+                pageSize={2}
+            />
+        );
+
+        expect(screen.getByTestId('points-ledger-pagination')).toHaveTextContent('Page 1 of 3');
+        expect(screen.getByText('Welcome grant')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+        await waitFor(() => {
+            expect(getUserPointsLedgerHistoryAction).toHaveBeenCalledWith({
+                page: 2,
+                pageSize: 2,
+            });
+        });
+
+        await waitFor(() => {
+            expect(screen.getByTestId('points-ledger-pagination')).toHaveTextContent('Page 2 of 3');
+            expect(screen.getByText('Redemption for booking #MA-2222')).toBeInTheDocument();
+        });
+
+        // Navigate back to Page 1 (uses initial entries without server call)
+        fireEvent.click(screen.getByRole('button', { name: 'Previous' }));
+        expect(screen.getByTestId('points-ledger-pagination')).toHaveTextContent('Page 1 of 3');
+        expect(screen.getByText('Welcome grant')).toBeInTheDocument();
+        expect(getUserPointsLedgerHistoryAction).toHaveBeenCalledTimes(1);
+
+        // Navigate forward to Page 2 again (uses cached serverPageEntries without server call)
+        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+        expect(screen.getByTestId('points-ledger-pagination')).toHaveTextContent('Page 2 of 3');
+        expect(screen.getByText('Redemption for booking #MA-2222')).toBeInTheDocument();
+        expect(getUserPointsLedgerHistoryAction).toHaveBeenCalledTimes(1);
+    });
+
+    it('surfaces an accessible alert when server page fetch fails', async () => {
+        (getUserPointsLedgerHistoryAction as jest.Mock).mockRejectedValueOnce(
+            new Error('Network timeout loading ledger history.')
+        );
+
+        render(
+            <PointsLedgerTable
+                entries={[sampleLedgerEntries[0], sampleLedgerEntries[1]]}
+                totalCount={4}
+                accountTimeZone="UTC"
+                pageSize={2}
+            />
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+        const alert = await screen.findByTestId('points-ledger-error');
+        expect(alert).toHaveAttribute('role', 'alert');
+        expect(alert).toHaveTextContent('Network timeout loading ledger history.');
+        expect(screen.getByTestId('points-ledger-pagination')).toHaveTextContent('Page 1 of 2');
     });
 });
