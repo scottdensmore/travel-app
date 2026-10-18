@@ -25,6 +25,10 @@ interface FlightSchedule {
     premiumEconomyRows?: number | null;
     economyRows?: number | null;
     seatPattern?: string | null;
+    awardSeatsFirst?: number | null;
+    awardSeatsBusiness?: number | null;
+    awardSeatsPremiumEconomy?: number | null;
+    awardSeatsEconomy?: number | null;
 }
 
 export default function FlightScheduleForm({ initialSchedule }: { initialSchedule?: FlightSchedule }) {
@@ -53,6 +57,10 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
     const [premiumEconomyRows, setPremiumEconomyRows] = useState(initialSchedule?.premiumEconomyRows?.toString() ?? '4');
     const [economyRows, setEconomyRows] = useState(initialSchedule?.economyRows?.toString() ?? '20');
     const [seatPattern, setSeatPattern] = useState(initialSchedule?.seatPattern ?? 'ABC-DEF');
+    const [awardSeatsFirst, setAwardSeatsFirst] = useState(initialSchedule?.awardSeatsFirst?.toString() ?? '1');
+    const [awardSeatsBusiness, setAwardSeatsBusiness] = useState(initialSchedule?.awardSeatsBusiness?.toString() ?? '2');
+    const [awardSeatsPremiumEconomy, setAwardSeatsPremiumEconomy] = useState(initialSchedule?.awardSeatsPremiumEconomy?.toString() ?? '2');
+    const [awardSeatsEconomy, setAwardSeatsEconomy] = useState(initialSchedule?.awardSeatsEconomy?.toString() ?? '4');
     const [showSeatingConfig, setShowSeatingConfig] = useState(false);
     
     const [error, setError] = useState<string | null>(null);
@@ -120,6 +128,10 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
         const bRows = businessRows === '' ? 3 : Number(businessRows);
         const peRows = premiumEconomyRows === '' ? 4 : Number(premiumEconomyRows);
         const eRows = economyRows === '' ? 20 : Number(economyRows);
+        const fAwardSeats = awardSeatsFirst === '' ? 1 : Number(awardSeatsFirst);
+        const bAwardSeats = awardSeatsBusiness === '' ? 2 : Number(awardSeatsBusiness);
+        const peAwardSeats = awardSeatsPremiumEconomy === '' ? 2 : Number(awardSeatsPremiumEconomy);
+        const eAwardSeats = awardSeatsEconomy === '' ? 4 : Number(awardSeatsEconomy);
         let normalizedSeatPattern: string;
         try {
             normalizedSeatPattern = validateSeatingLayout(fRows, bRows, peRows, eRows, seatPattern);
@@ -149,7 +161,11 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                     businessRows: bRows,
                     premiumEconomyRows: peRows,
                     economyRows: eRows,
-                    seatPattern: normalizedSeatPattern
+                    seatPattern: normalizedSeatPattern,
+                    awardSeatsFirst: fAwardSeats,
+                    awardSeatsBusiness: bAwardSeats,
+                    awardSeatsPremiumEconomy: peAwardSeats,
+                    awardSeatsEconomy: eAwardSeats,
                 });
                 if (isActionValidationFailure(result)) {
                     setError(result.error.message);
@@ -186,6 +202,10 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                     setPremiumEconomyRows('4');
                     setEconomyRows('20');
                     setSeatPattern('ABC-DEF');
+                    setAwardSeatsFirst('1');
+                    setAwardSeatsBusiness('2');
+                    setAwardSeatsPremiumEconomy('2');
+                    setAwardSeatsEconomy('4');
                     setShowSeatingConfig(false);
                 }
                 router.refresh();
@@ -490,6 +510,64 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                                 disabled={isPending}
                                 style={{ padding: '6px 10px', fontSize: '0.85rem' }}
                             />
+                        </div>
+
+                        <div className="admin-form-grid admin-form-grid--two">
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <label htmlFor="awardSeatsFirst" style={{ fontSize: '0.8rem', color: '#a78bfa' }}>First Class Award Seats</label>
+                                <input
+                                    id="awardSeatsFirst"
+                                    type="number"
+                                    min="0"
+                                    value={awardSeatsFirst}
+                                    onChange={e => setAwardSeatsFirst(e.target.value)}
+                                    placeholder="e.g. 1"
+                                    disabled={isPending}
+                                    style={{ padding: '6px 10px', fontSize: '0.85rem' }}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <label htmlFor="awardSeatsBusiness" style={{ fontSize: '0.8rem', color: '#a78bfa' }}>Business Award Seats</label>
+                                <input
+                                    id="awardSeatsBusiness"
+                                    type="number"
+                                    min="0"
+                                    value={awardSeatsBusiness}
+                                    onChange={e => setAwardSeatsBusiness(e.target.value)}
+                                    placeholder="e.g. 2"
+                                    disabled={isPending}
+                                    style={{ padding: '6px 10px', fontSize: '0.85rem' }}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="admin-form-grid admin-form-grid--two">
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <label htmlFor="awardSeatsPremiumEconomy" style={{ fontSize: '0.8rem', color: '#a78bfa' }}>Premium Economy Award Seats</label>
+                                <input
+                                    id="awardSeatsPremiumEconomy"
+                                    type="number"
+                                    min="0"
+                                    value={awardSeatsPremiumEconomy}
+                                    onChange={e => setAwardSeatsPremiumEconomy(e.target.value)}
+                                    placeholder="e.g. 2"
+                                    disabled={isPending}
+                                    style={{ padding: '6px 10px', fontSize: '0.85rem' }}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <label htmlFor="awardSeatsEconomy" style={{ fontSize: '0.8rem', color: '#a78bfa' }}>Economy Award Seats</label>
+                                <input
+                                    id="awardSeatsEconomy"
+                                    type="number"
+                                    min="0"
+                                    value={awardSeatsEconomy}
+                                    onChange={e => setAwardSeatsEconomy(e.target.value)}
+                                    placeholder="e.g. 4"
+                                    disabled={isPending}
+                                    style={{ padding: '6px 10px', fontSize: '0.85rem' }}
+                                />
+                            </div>
                         </div>
                     </div>
                 )}

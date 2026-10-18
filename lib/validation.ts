@@ -277,7 +277,11 @@ export const scheduleSchema = z.object({
     businessRows: rowCountSchema.default(3),
     premiumEconomyRows: rowCountSchema.default(4),
     economyRows: rowCountSchema.default(20),
-    seatPattern: z.string().default('ABC-DEF')
+    seatPattern: z.string().default('ABC-DEF'),
+    awardSeatsFirst: rowCountSchema.default(1),
+    awardSeatsBusiness: rowCountSchema.default(2),
+    awardSeatsPremiumEconomy: rowCountSchema.default(2),
+    awardSeatsEconomy: rowCountSchema.default(4),
 }).strict().transform((schedule, context) => {
     try {
         return {
