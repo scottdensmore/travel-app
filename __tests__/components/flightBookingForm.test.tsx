@@ -1067,6 +1067,73 @@ describe('FlightBookingForm', () => {
             expect(screen.queryByLabelText(/Max Price/i)).not.toBeInTheDocument();
             expect(screen.queryByText(/Max Price:/i)).not.toBeInTheDocument();
         });
+
+        it('does not show the Available on points only filter during cash searches', async () => {
+            mockSearch.mockResolvedValue(searchSuccess([mockFlights[0]]));
+            renderForm();
+
+            fireEvent.click(screen.getByText('Find your trip'));
+            await waitFor(() => expect(screen.getByText('CA101')).toBeInTheDocument());
+
+            expect(screen.queryByTestId('filter-award-available-only')).not.toBeInTheDocument();
+            expect(screen.queryByLabelText(/Available on points only/i)).not.toBeInTheDocument();
+        });
+
+        it('filters out sold-out award flights when Available on points only is checked and restores them on Reset', async () => {
+            mockSearch.mockResolvedValue(searchSuccess([
+                {
+                    ...mockFlights[0],
+                    id: 1,
+                    flightNumber: 'GA101',
+                    awardAvailable: true,
+                    remainingAwardSeats: 4,
+                },
+                {
+                    ...mockFlights[0],
+                    id: 2,
+                    flightNumber: 'GA202',
+                    awardAvailable: false,
+                    remainingAwardSeats: 0,
+                },
+                {
+                    ...mockFlights[0],
+                    id: 3,
+                    flightNumber: 'GA303',
+                    awardAvailable: false,
+                    remainingAwardSeats: 2,
+                },
+            ]));
+            renderForm();
+
+            fireEvent.click(screen.getByLabelText(/search reward flights/i));
+            fireEvent.click(screen.getByText('Find your trip'));
+            await waitFor(() => expect(screen.getByText('GA101')).toBeInTheDocument());
+
+            // By default, all flights (including sold-out on points) are displayed
+            expect(screen.getByText('GA101')).toBeInTheDocument();
+            expect(screen.getByText('GA202')).toBeInTheDocument();
+            expect(screen.getByText('GA303')).toBeInTheDocument();
+
+            const awardFilterCheckbox = screen.getByTestId('filter-award-available-only');
+            expect(awardFilterCheckbox).not.toBeChecked();
+            expect(screen.getByLabelText(/Available on points only/i)).toBe(awardFilterCheckbox);
+
+            // Check "Available on points only"
+            fireEvent.click(awardFilterCheckbox);
+            expect(awardFilterCheckbox).toBeChecked();
+
+            // Sold-out award flights are hidden; available flight remains
+            expect(screen.getByText('GA101')).toBeInTheDocument();
+            expect(screen.queryByText('GA202')).not.toBeInTheDocument();
+            expect(screen.queryByText('GA303')).not.toBeInTheDocument();
+
+            // Clicking Reset unchecks the filter and restores sold-out flights
+            fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
+            expect(awardFilterCheckbox).not.toBeChecked();
+            expect(screen.getByText('GA101')).toBeInTheDocument();
+            expect(screen.getByText('GA202')).toBeInTheDocument();
+            expect(screen.getByText('GA303')).toBeInTheDocument();
+        });
     });
 
     it('shows no return date on an outbound card', async () => {

@@ -421,6 +421,7 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
     const [sortBy, setSortBy] = useState('price-asc');
     const [maxPrice, setMaxPrice] = useState<number>(0);
     const [selectedAirlines, setSelectedAirlines] = useState<string[]>([]);
+    const [awardAvailableOnly, setAwardAvailableOnly] = useState<boolean>(false);
 
     const clearEmptySearchState = () => {
         searchRequestIdRef.current += 1;
@@ -971,6 +972,14 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
             results = results.filter(f => selectedAirlines.includes(f.airline));
         }
 
+        // Filter by Award Availability
+        if (isRewardSearch && awardAvailableOnly) {
+            results = results.filter(flight => {
+                if (isRewardSearch && awardAvailableOnly && getFlightAwardInfo(flight, cabinClass).isSoldOut) return false;
+                return true;
+            });
+        }
+
         // Sort results
         results.sort((a, b) => {
             const priceA = fareCents(a);
@@ -991,12 +1000,13 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
         });
 
         return results;
-    }, [activeResults, maxPrice, selectedAirlines, sortBy]);
+    }, [activeResults, awardAvailableOnly, cabinClass, isRewardSearch, maxPrice, selectedAirlines, sortBy]);
 
     const handleResetFilters = () => {
         setMaxPrice(maxPriceBoundary);
         setSelectedAirlines([]);
         setSortBy('price-asc');
+        setAwardAvailableOnly(false);
     };
 
     const bookableInbound = useMemo(
@@ -1539,6 +1549,25 @@ const FlightBookingForm: React.FC<FlightBookingFormProps> = ({
                                             <span>{formatPrice(minPriceBoundary)}</span>
                                             <span>{formatPrice(maxPriceBoundary)}</span>
                                         </div>
+                                    </div>
+                                )}
+
+                                {isRewardSearch && (
+                                    <div style={{ marginBottom: '1.5rem' }}>
+                                        <label
+                                            htmlFor="filter-award-available-only"
+                                            style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', cursor: 'pointer' }}
+                                        >
+                                            <input
+                                                id="filter-award-available-only"
+                                                type="checkbox"
+                                                data-testid="filter-award-available-only"
+                                                checked={awardAvailableOnly}
+                                                onChange={(e) => setAwardAvailableOnly(e.target.checked)}
+                                                style={{ width: '16px', height: '16px', accentColor: '#8b5cf6', cursor: 'pointer' }}
+                                            />
+                                            Available on points only
+                                        </label>
                                     </div>
                                 )}
 
