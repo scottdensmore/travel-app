@@ -56,6 +56,8 @@ export default function ReviewModerationClient({
     const [activeTab, setActiveTab] = useState<TabType>('needs_attention');
     const [searchQuery, setSearchQuery] = useState<string>('');
     const [ratingFilter, setRatingFilter] = useState<string>('ALL');
+    const [auditSearchQuery, setAuditSearchQuery] = useState<string>('');
+    const [auditActionFilter, setAuditActionFilter] = useState<string>('ALL');
     const [notes, setNotes] = useState<Record<string, string>>({});
     const [expandedReports, setExpandedReports] = useState<Record<string, boolean>>({});
     const [deleteModalReview, setDeleteModalReview] = useState<ReviewItem | null>(null);
@@ -78,6 +80,38 @@ export default function ReviewModerationClient({
     }, [reviews]);
 
     const totalModeratedActions = audits.length;
+
+    const filteredAudits = useMemo(() => {
+        const q = auditSearchQuery.trim().toLowerCase();
+        return audits.filter(audit => {
+            const matchesAction =
+                auditActionFilter === 'ALL' || audit.action === auditActionFilter;
+            if (!matchesAction) return false;
+            if (!q) return true;
+
+            const modName = (audit.moderator?.name || '').toLowerCase();
+            const modEmail = (audit.moderator?.email || '').toLowerCase();
+            const action = (audit.action || '').toLowerCase();
+            const reason = (audit.reason || '').toLowerCase();
+            const city = (audit.review?.cityGuide?.city || '').toLowerCase();
+            const metaCity = (
+                audit.metadata && typeof audit.metadata === 'object' && 'city' in audit.metadata
+                    ? String((audit.metadata as Record<string, unknown>).city)
+                    : ''
+            ).toLowerCase();
+            const reviewId = (audit.review?.id || '').toLowerCase();
+
+            return (
+                modName.includes(q) ||
+                modEmail.includes(q) ||
+                action.includes(q) ||
+                reason.includes(q) ||
+                city.includes(q) ||
+                metaCity.includes(q) ||
+                reviewId.includes(q)
+            );
+        });
+    }, [audits, auditActionFilter, auditSearchQuery]);
 
     // Reviews in current status tab before search/rating filters
     const tabReviews = useMemo(() => {
@@ -318,6 +352,34 @@ export default function ReviewModerationClient({
             {activeTab === 'audit_trail' ? (
                 <div id="panel-audit-trail" role="tabpanel" aria-labelledby="tab-audit-trail" className="admin-card overflow-x-auto bg-gray-800/90 border border-gray-700/60 rounded-xl p-4">
                     <h2 className="text-xl font-bold text-purple-300 mb-4">Moderation Audit History</h2>
+                    {audits.length > 0 && (
+                        <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                            <input
+                                id="moderation-audit-search"
+                                type="search"
+                                aria-label="Search moderation audit history"
+                                data-testid="moderation-audit-search"
+                                placeholder="Search moderator, city, or reason..."
+                                value={auditSearchQuery}
+                                onChange={e => setAuditSearchQuery(e.target.value)}
+                                className="flex-1 px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                            />
+                            <select
+                                id="moderation-audit-action-filter"
+                                aria-label="Filter moderation audit history by action"
+                                data-testid="moderation-audit-action-filter"
+                                value={auditActionFilter}
+                                onChange={e => setAuditActionFilter(e.target.value)}
+                                className="px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500"
+                            >
+                                <option value="ALL">All Actions</option>
+                                <option value="APPROVE">APPROVE</option>
+                                <option value="HIDE">HIDE</option>
+                                <option value="DISMISS_REPORTS">DISMISS_REPORTS</option>
+                                <option value="DELETE">DELETE</option>
+                            </select>
+                        </div>
+                    )}
                     <table className="w-full text-left text-sm border-collapse">
                         <thead>
                             <tr className="border-b border-gray-700 text-gray-400 text-xs uppercase">
@@ -329,7 +391,7 @@ export default function ReviewModerationClient({
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-800 text-gray-300">
-                            {audits.map(audit => (
+                            {filteredAudits.map(audit => (
                                 <tr key={audit.id} className="hover:bg-gray-750">
                                     <td className="p-3 text-xs text-gray-400 whitespace-nowrap">
                                         {new Date(audit.createdAt).toLocaleString()}
@@ -367,6 +429,17 @@ export default function ReviewModerationClient({
                                 <tr>
                                     <td colSpan={5} className="p-6 text-center text-gray-500">
                                         No moderation audit records found.
+                                    </td>
+                                </tr>
+                            )}
+                            {audits.length > 0 && filteredAudits.length === 0 && (
+                                <tr>
+                                    <td
+                                        colSpan={5}
+                                        data-testid="moderation-audit-no-matches"
+                                        className="p-6 text-center text-gray-500"
+                                    >
+                                        No moderation audit records match the current filters.
                                     </td>
                                 </tr>
                             )}
