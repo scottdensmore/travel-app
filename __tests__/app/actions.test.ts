@@ -3542,6 +3542,51 @@ describe('admin flight schedule actions', () => {
             expect(mockedRevalidatePath).toHaveBeenCalledWith('/admin/flights/schedules/17');
         });
 
+        it('forwards per-cabin award seat quotas to the schedule terms service', async () => {
+            mockedGetServerSession.mockResolvedValue({
+                user: { id: 'admin-1', role: 'ADMIN', staffMfaVerified: true },
+            });
+            mockUpdateFlightScheduleTerms.mockResolvedValue({
+                changeId: 'change-18',
+                flightScheduleId: 17,
+                durationMinutes: 255,
+                priceCents: 37_500,
+                awardSeatsFirst: 2,
+                awardSeatsBusiness: 4,
+                awardSeatsPremiumEconomy: 5,
+                awardSeatsEconomy: 8,
+                updatedOccurrenceCount: 3,
+                protectedOccurrenceCount: 2,
+                createdAt: new Date('2026-08-17T15:00:00.000Z'),
+                wasApplied: true,
+            });
+
+            await expect(updateFlightScheduleTermsAction({
+                ...request,
+                awardSeatsFirst: 2,
+                awardSeatsBusiness: 4,
+                awardSeatsPremiumEconomy: 5,
+                awardSeatsEconomy: 8,
+            })).resolves.toMatchObject({
+                changeId: 'change-18',
+                awardSeatsFirst: 2,
+                awardSeatsBusiness: 4,
+                awardSeatsPremiumEconomy: 5,
+                awardSeatsEconomy: 8,
+            });
+            expect(mockUpdateFlightScheduleTerms).toHaveBeenCalledWith({
+                requestId: request.requestId,
+                flightScheduleId: 17,
+                actorUserId: 'admin-1',
+                durationMinutes: 255,
+                priceCents: 37_500,
+                awardSeatsFirst: 2,
+                awardSeatsBusiness: 4,
+                awardSeatsPremiumEconomy: 5,
+                awardSeatsEconomy: 8,
+            });
+        });
+
         it('rejects staff lacking SCHEDULES_WRITE permission', async () => {
             mockedGetServerSession.mockResolvedValue({
                 user: { id: 'support-1', role: 'SUPPORT', staffMfaVerified: true },

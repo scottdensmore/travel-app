@@ -183,6 +183,61 @@ describe('FlightScheduleTermsForm', () => {
         await waitFor(() => expect(updateTerms).toHaveBeenCalledTimes(2));
         expect(updateTerms.mock.calls[1][0].requestId).not.toBe(firstRequestId);
     });
+
+    it('prefills per-cabin award seat quotas and includes them when modified', async () => {
+        updateTerms.mockResolvedValue({
+            changeId: 'change-18',
+            flightScheduleId: 17,
+            durationMinutes: 245,
+            priceCents: 35_000,
+            awardSeatsFirst: 3,
+            awardSeatsBusiness: 4,
+            awardSeatsPremiumEconomy: 5,
+            awardSeatsEconomy: 8,
+            updatedOccurrenceCount: 1,
+            protectedOccurrenceCount: 4,
+            createdAt: new Date('2026-08-17T15:00:00.000Z'),
+            wasApplied: true,
+        });
+
+        render(
+            <FlightScheduleTermsForm
+                flightScheduleId={17}
+                durationMinutes={245}
+                priceCents={35_000}
+                safeFutureCount={1}
+                protectedCount={4}
+                initialAwardSeatsFirst={2}
+                initialAwardSeatsBusiness={3}
+                initialAwardSeatsPremiumEconomy={4}
+                initialAwardSeatsEconomy={6}
+            />,
+        );
+
+        expect(screen.getByLabelText('First award seats')).toHaveValue(2);
+        expect(screen.getByLabelText('Business award seats')).toHaveValue(3);
+        expect(screen.getByLabelText('Prem Econ award seats')).toHaveValue(4);
+        expect(screen.getByLabelText('Economy award seats')).toHaveValue(6);
+
+        fireEvent.change(screen.getByLabelText('First award seats'), { target: { value: '3' } });
+        fireEvent.change(screen.getByLabelText('Business award seats'), { target: { value: '4' } });
+        fireEvent.change(screen.getByLabelText('Prem Econ award seats'), { target: { value: '5' } });
+        fireEvent.change(screen.getByLabelText('Economy award seats'), { target: { value: '8' } });
+        fireEvent.click(screen.getByRole('checkbox', { name: /reviewed the impact/i }));
+        fireEvent.click(screen.getByRole('button', { name: 'Update duration and fare' }));
+
+        await waitFor(() => expect(updateTerms).toHaveBeenCalledWith({
+            requestId: expect.stringMatching(/^[0-9a-f-]{36}$/i),
+            flightScheduleId: 17,
+            durationMinutes: 245,
+            price: '$350',
+            confirmed: true,
+            awardSeatsFirst: 3,
+            awardSeatsBusiness: 4,
+            awardSeatsPremiumEconomy: 5,
+            awardSeatsEconomy: 8,
+        }));
+    });
 });
 
 function renderForm() {

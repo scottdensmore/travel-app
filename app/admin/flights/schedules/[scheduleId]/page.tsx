@@ -129,6 +129,10 @@ export default async function ScheduleImpactPage({
                 priceCents={impact.schedule.priceCents}
                 safeFutureCount={impact.summary.safeFuture}
                 protectedCount={impact.summary.protected}
+                initialAwardSeatsFirst={impact.schedule.awardSeatsFirst}
+                initialAwardSeatsBusiness={impact.schedule.awardSeatsBusiness}
+                initialAwardSeatsPremiumEconomy={impact.schedule.awardSeatsPremiumEconomy}
+                initialAwardSeatsEconomy={impact.schedule.awardSeatsEconomy}
             />
 
             <FlightScheduleActivationForm

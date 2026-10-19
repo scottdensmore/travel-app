@@ -142,6 +142,10 @@ describe('/admin/flights/schedules/[scheduleId] impact preview', () => {
             priceCents: 35_000,
             safeFutureCount: 1,
             protectedCount: 4,
+            initialAwardSeatsFirst: 2,
+            initialAwardSeatsBusiness: 3,
+            initialAwardSeatsPremiumEconomy: 4,
+            initialAwardSeatsEconomy: 6,
         });
         expect(findElements(
             page,

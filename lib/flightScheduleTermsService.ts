@@ -20,6 +20,21 @@ export interface FlightScheduleTermsInput {
     actorUserId: string;
     durationMinutes: number;
     priceCents: number;
+    awardSeatsFirst?: number;
+    awardSeatsBusiness?: number;
+    awardSeatsPremiumEconomy?: number;
+    awardSeatsEconomy?: number;
+}
+
+export type UpdateScheduleTermsInput = FlightScheduleTermsInput;
+
+export interface ScheduleTermsSnapshot {
+    durationMinutes: number;
+    priceCents: number;
+    awardSeatsFirst?: number;
+    awardSeatsBusiness?: number;
+    awardSeatsPremiumEconomy?: number;
+    awardSeatsEconomy?: number;
 }
 
 export interface FlightScheduleTermsResult {
@@ -27,6 +42,10 @@ export interface FlightScheduleTermsResult {
     flightScheduleId: number;
     durationMinutes: number;
     priceCents: number;
+    awardSeatsFirst?: number;
+    awardSeatsBusiness?: number;
+    awardSeatsPremiumEconomy?: number;
+    awardSeatsEconomy?: number;
     updatedOccurrenceCount: number;
     protectedOccurrenceCount: number;
     createdAt: Date;
@@ -46,6 +65,10 @@ type StoredChange = {
 };
 
 export class FlightScheduleTermsService {
+    async updateTerms(input: FlightScheduleTermsInput): Promise<FlightScheduleTermsResult> {
+        return this.update(input);
+    }
+
     async update(input: FlightScheduleTermsInput): Promise<FlightScheduleTermsResult> {
         try {
             return await prisma.$transaction(tx => this.updateInTransaction(tx, input));
@@ -67,6 +90,18 @@ export class FlightScheduleTermsService {
         tx: Prisma.TransactionClient,
         input: FlightScheduleTermsInput,
     ): Promise<FlightScheduleTermsResult> {
+        const awardSeatValues = [
+            input.awardSeatsFirst,
+            input.awardSeatsBusiness,
+            input.awardSeatsPremiumEconomy,
+            input.awardSeatsEconomy,
+        ];
+        for (const val of awardSeatValues) {
+            if (val !== undefined && (!Number.isInteger(val) || val < 0)) {
+                throw new Error('Award seat quotas must be non-negative integers.');
+            }
+        }
+
         const existingBeforeLock = await tx.flightScheduleTermsChange.findUnique({
             where: { requestId: input.requestId },
         });
@@ -93,14 +128,29 @@ export class FlightScheduleTermsService {
 
         const schedule = await tx.flightSchedule.findUnique({
             where: { id: input.flightScheduleId },
-            select: { id: true, durationMinutes: true, priceCents: true },
+            select: {
+                id: true,
+                durationMinutes: true,
+                priceCents: true,
+                awardSeatsFirst: true,
+                awardSeatsBusiness: true,
+                awardSeatsPremiumEconomy: true,
+                awardSeatsEconomy: true,
+            },
         });
         if (!schedule) {
             throw new FlightScheduleTermsError('NOT_FOUND', 'This flight schedule no longer exists.');
         }
+        const awardSeatsChanged = (
+            (input.awardSeatsFirst !== undefined && input.awardSeatsFirst !== schedule.awardSeatsFirst)
+            || (input.awardSeatsBusiness !== undefined && input.awardSeatsBusiness !== schedule.awardSeatsBusiness)
+            || (input.awardSeatsPremiumEconomy !== undefined && input.awardSeatsPremiumEconomy !== schedule.awardSeatsPremiumEconomy)
+            || (input.awardSeatsEconomy !== undefined && input.awardSeatsEconomy !== schedule.awardSeatsEconomy)
+        );
         if (
             schedule.durationMinutes === input.durationMinutes
             && schedule.priceCents === input.priceCents
+            && !awardSeatsChanged
         ) {
             throw new FlightScheduleTermsError(
                 'NO_CHANGES',
@@ -149,20 +199,23 @@ export class FlightScheduleTermsService {
             }, asOf) === 'SAFE_FUTURE')
             .map(occurrence => occurrence.id);
 
+        const termsData = {
+            durationMinutes: input.durationMinutes,
+            priceCents: input.priceCents,
+            ...(input.awardSeatsFirst !== undefined ? { awardSeatsFirst: input.awardSeatsFirst } : {}),
+            ...(input.awardSeatsBusiness !== undefined ? { awardSeatsBusiness: input.awardSeatsBusiness } : {}),
+            ...(input.awardSeatsPremiumEconomy !== undefined ? { awardSeatsPremiumEconomy: input.awardSeatsPremiumEconomy } : {}),
+            ...(input.awardSeatsEconomy !== undefined ? { awardSeatsEconomy: input.awardSeatsEconomy } : {}),
+        };
+
         await tx.flightSchedule.update({
             where: { id: input.flightScheduleId },
-            data: {
-                durationMinutes: input.durationMinutes,
-                priceCents: input.priceCents,
-            },
+            data: termsData,
         });
         if (safeIds.length > 0) {
             const updated = await tx.flight.updateMany({
                 where: { id: { in: safeIds } },
-                data: {
-                    durationMinutes: input.durationMinutes,
-                    priceCents: input.priceCents,
-                },
+                data: termsData,
             });
             if (updated.count !== safeIds.length) {
                 throw new Error('The safe schedule occurrence set changed during the update.');
@@ -182,7 +235,7 @@ export class FlightScheduleTermsService {
                 protectedOccurrenceCount: occurrences.length - safeIds.length,
             },
         });
-        return resultFromChange(change, true);
+        return resultFromChange(change, true, input);
     }
 }
 
@@ -202,15 +255,23 @@ function resultForExisting(
             'This retry key belongs to a different schedule update. Start a new update.',
         );
     }
-    return resultFromChange(change, false);
+    return resultFromChange(change, false, input);
 }
 
-function resultFromChange(change: StoredChange, wasApplied: boolean): FlightScheduleTermsResult {
+function resultFromChange(
+    change: StoredChange,
+    wasApplied: boolean,
+    input?: FlightScheduleTermsInput,
+): FlightScheduleTermsResult {
     return {
         changeId: change.id,
         flightScheduleId: change.flightScheduleId,
         durationMinutes: change.toDurationMinutes,
         priceCents: change.toPriceCents,
+        ...(input?.awardSeatsFirst !== undefined ? { awardSeatsFirst: input.awardSeatsFirst } : {}),
+        ...(input?.awardSeatsBusiness !== undefined ? { awardSeatsBusiness: input.awardSeatsBusiness } : {}),
+        ...(input?.awardSeatsPremiumEconomy !== undefined ? { awardSeatsPremiumEconomy: input.awardSeatsPremiumEconomy } : {}),
+        ...(input?.awardSeatsEconomy !== undefined ? { awardSeatsEconomy: input.awardSeatsEconomy } : {}),
         updatedOccurrenceCount: change.updatedOccurrenceCount,
         protectedOccurrenceCount: change.protectedOccurrenceCount,
         createdAt: change.createdAt,

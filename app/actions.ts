@@ -1960,6 +1960,10 @@ export async function updateFlightScheduleTermsAction(data: {
     durationMinutes: number;
     price: string;
     confirmed: boolean;
+    awardSeatsFirst?: number;
+    awardSeatsBusiness?: number;
+    awardSeatsPremiumEconomy?: number;
+    awardSeatsEconomy?: number;
 }) {
     const session = await getServerSession(authOptions);
     const actorUserId = session?.user?.id;
@@ -1970,6 +1974,13 @@ export async function updateFlightScheduleTermsAction(data: {
     const parsed = parseActionInput(flightScheduleTermsSchema, data);
     if (!parsed.ok) return parsed;
 
+    const awardSeatTerms = {
+        ...(parsed.data.awardSeatsFirst !== undefined ? { awardSeatsFirst: parsed.data.awardSeatsFirst } : {}),
+        ...(parsed.data.awardSeatsBusiness !== undefined ? { awardSeatsBusiness: parsed.data.awardSeatsBusiness } : {}),
+        ...(parsed.data.awardSeatsPremiumEconomy !== undefined ? { awardSeatsPremiumEconomy: parsed.data.awardSeatsPremiumEconomy } : {}),
+        ...(parsed.data.awardSeatsEconomy !== undefined ? { awardSeatsEconomy: parsed.data.awardSeatsEconomy } : {}),
+    };
+
     try {
         const result = await new FlightScheduleTermsService().update({
             requestId: parsed.data.requestId,
@@ -1977,6 +1988,7 @@ export async function updateFlightScheduleTermsAction(data: {
             actorUserId,
             durationMinutes: parsed.data.durationMinutes,
             priceCents: parsePriceToCents(parsed.data.price),
+            ...awardSeatTerms,
         });
         await recordStaffAudit({
             actorId: actorUserId,
@@ -1989,6 +2001,7 @@ export async function updateFlightScheduleTermsAction(data: {
                 requestId: parsed.data.requestId,
                 durationMinutes: parsed.data.durationMinutes,
                 price: parsed.data.price,
+                ...awardSeatTerms,
             },
         });
         revalidatePath('/admin/flights');
