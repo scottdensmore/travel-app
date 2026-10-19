@@ -238,6 +238,10 @@ describe('BookingCheckoutWizard - Reward Flight Redemption (#130)', () => {
         expect(screen.getByText(/Confirmed total: 15,000 pts \+ \$10\.10/i)).toBeInTheDocument();
         expect(screen.getByText('Receipt summary')).toBeInTheDocument();
         expect(screen.getByText(/Points Redeemed \(1 traveller\)/i)).toBeInTheDocument();
+        const remainingBalanceRow = screen.getByTestId('confirmed-remaining-points-balance');
+        expect(remainingBalanceRow).toBeInTheDocument();
+        expect(remainingBalanceRow).toHaveTextContent('Remaining Loyalty Balance');
+        expect(remainingBalanceRow).toHaveTextContent('35,000 pts');
     });
 
     it('shows insufficient points warning in Step 4 and disables payment button when balance is insufficient', async () => {

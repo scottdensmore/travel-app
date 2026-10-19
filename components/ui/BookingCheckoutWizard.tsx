@@ -2617,7 +2617,13 @@ export default function BookingCheckoutWizard({
                 )}
 
                 {/* STEP 5: SUCCESS / E-TICKET BOARDING PASS */}
-                {step === 5 && bookingResult && (
+                {step === 5 && bookingResult && (() => {
+                    const confirmedPointsRedeemed = bookingResult.pointsRedeemed ?? totalPointsRequired;
+                    const remainingLoyaltyBalance =
+                        isRewardBooking && spendablePointsBalance !== undefined
+                            ? Math.max(0, spendablePointsBalance - confirmedPointsRedeemed)
+                            : undefined;
+                    return (
                     <div style={{ textAlign: 'center', scrollMarginTop: '120px' }}>
                         <div style={{
                             width: '64px',
@@ -2650,7 +2656,7 @@ export default function BookingCheckoutWizard({
                         </p>
                         <p style={{ color: '#34d399', marginBottom: '2rem', fontWeight: 'bold' }}>
                             Confirmed total: {isRewardBooking
-                                ? `${(bookingResult.pointsRedeemed ?? totalPointsRequired).toLocaleString('en-US')} pts + ${formatPrice(bookingResult.totalPriceCents ?? (totalTaxesCents + ancillariesTotalCents))}`
+                                ? `${confirmedPointsRedeemed.toLocaleString('en-US')} pts + ${formatPrice(bookingResult.totalPriceCents ?? (totalTaxesCents + ancillariesTotalCents))}`
                                 : (bookingResult.totalPriceCents !== null ? formatPrice(bookingResult.totalPriceCents) : grandTotalPriceDisplay)}
                         </p>
 
@@ -2678,12 +2684,28 @@ export default function BookingCheckoutWizard({
                                 <>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'rgba(255,255,255,0.75)', marginBottom: '0.5rem' }}>
                                         <span>Points Redeemed ({bookingResult.passengers.length} traveller{bookingResult.passengers.length > 1 ? 's' : ''})</span>
-                                        <span>{(bookingResult.pointsRedeemed ?? totalPointsRequired).toLocaleString('en-US')} pts</span>
+                                        <span>{confirmedPointsRedeemed.toLocaleString('en-US')} pts</span>
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'rgba(255,255,255,0.75)', marginBottom: '0.5rem' }}>
                                         <span>Mandatory Taxes &amp; Fees</span>
                                         <span>{formatPrice(totalTaxesCents)}</span>
                                     </div>
+                                    {remainingLoyaltyBalance !== undefined && (
+                                        <div
+                                            data-testid="confirmed-remaining-points-balance"
+                                            style={{
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                fontSize: '0.9rem',
+                                                color: '#34d399',
+                                                fontWeight: 600,
+                                                marginBottom: '0.5rem',
+                                            }}
+                                        >
+                                            <span>Remaining Loyalty Balance</span>
+                                            <span>{remainingLoyaltyBalance.toLocaleString('en-US')} pts</span>
+                                        </div>
+                                    )}
                                 </>
                             ) : (
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'rgba(255,255,255,0.75)', marginBottom: '0.5rem' }}>
@@ -2923,7 +2945,8 @@ export default function BookingCheckoutWizard({
                             </Link>
                         </div>
                     </div>
-                )}
+                    );
+                })()}
 
             </div>
         </div>
