@@ -346,6 +346,112 @@ describe('FlightStatusTracker', () => {
         expect(screen.queryByTestId('tracker-award-seats-303')).not.toBeInTheDocument();
         expect(screen.queryByTestId('tracker-award-seats-304')).not.toBeInTheDocument();
         expect(screen.queryByTestId('tracker-award-seats-305')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('tracker-book-points-303')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('tracker-book-points-304')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('tracker-book-points-305')).not.toBeInTheDocument();
+    });
+
+    it('renders direct reward booking link ("Book with Points") alongside "Book This Flight" when award seats are available', () => {
+        const flightWithAwardSeats = {
+            ...mockFlightResult,
+            id: 401,
+            status: 'ON_TIME' as const,
+            awardSeatsFirst: 1,
+            awardSeatsBusiness: 2,
+            awardSeatsPremiumEconomy: 0,
+            awardSeatsEconomy: 4,
+        };
+
+        render(
+            <FlightStatusTracker
+                initialFlights={[flightWithAwardSeats]}
+                initialSearch={null}
+                coverage="today"
+            />
+        );
+
+        const cashBookLink = screen.getByRole('link', { name: /book this flight/i });
+        expect(cashBookLink).toHaveAttribute('href', '/book?flight=401');
+
+        const rewardBookLink = screen.getByTestId('tracker-book-points-401');
+        expect(rewardBookLink).toBeInTheDocument();
+        expect(rewardBookLink).toHaveTextContent('Book with Points');
+        expect(rewardBookLink).toHaveAttribute('href', '/book?flight=401&reward=true');
+    });
+
+    it('filters multiple flight results by status/award availability and shows empty filter message when none match', () => {
+        const boardingAwardFlight = {
+            ...mockFlightResult,
+            id: 501,
+            flightNumber: 'MA501',
+            status: 'ON_TIME' as const,
+            phase: 'BOARDING' as const,
+            awardSeatsEconomy: 3,
+        };
+        const delayedNoAwardFlight = {
+            ...mockDelayedFlightResult,
+            id: 502,
+            flightNumber: 'MA502',
+            awardSeatsEconomy: 0,
+        };
+        const onTimeUpcomingFlight = {
+            ...mockFlightResult,
+            id: 503,
+            flightNumber: 'MA503',
+            status: 'ON_TIME' as const,
+            phase: 'UPCOMING' as const,
+        };
+
+        render(
+            <FlightStatusTracker
+                initialFlights={[boardingAwardFlight, delayedNoAwardFlight, onTimeUpcomingFlight]}
+                initialSearch={{ mode: 'route', from: 'SEA', to: 'DTW' }}
+                coverage="today"
+            />
+        );
+
+        const filterSelect = screen.getByTestId('tracker-phase-filter');
+        expect(filterSelect).toBeInTheDocument();
+        expect(filterSelect).toHaveValue('ALL');
+        expect(screen.getByText('MA501')).toBeInTheDocument();
+        expect(screen.getByText('MA502')).toBeInTheDocument();
+        expect(screen.getByText('MA503')).toBeInTheDocument();
+
+        // Filter by Delayed
+        fireEvent.change(filterSelect, { target: { value: 'DELAYED' } });
+        expect(screen.queryByText('MA501')).not.toBeInTheDocument();
+        expect(screen.getByText('MA502')).toBeInTheDocument();
+        expect(screen.queryByText('MA503')).not.toBeInTheDocument();
+
+        // Filter by Award Seats Available
+        fireEvent.change(filterSelect, { target: { value: 'AWARD_AVAILABLE' } });
+        expect(screen.getByText('MA501')).toBeInTheDocument();
+        expect(screen.queryByText('MA502')).not.toBeInTheDocument();
+        expect(screen.queryByText('MA503')).not.toBeInTheDocument();
+
+        // Filter by On Time
+        fireEvent.change(filterSelect, { target: { value: 'ON_TIME' } });
+        expect(screen.queryByText('MA501')).not.toBeInTheDocument();
+        expect(screen.queryByText('MA502')).not.toBeInTheDocument();
+        expect(screen.getByText('MA503')).toBeInTheDocument();
+
+        // Filter by Arrived (none match)
+        fireEvent.change(filterSelect, { target: { value: 'ARRIVED' } });
+        expect(screen.queryByText('MA501')).not.toBeInTheDocument();
+        expect(screen.queryByText('MA502')).not.toBeInTheDocument();
+        expect(screen.queryByText('MA503')).not.toBeInTheDocument();
+        expect(screen.getByTestId('tracker-no-filter-matches')).toHaveTextContent(
+            'No flights match the selected status filter.'
+        );
+        expect(screen.getByTestId('tracker-phase-filter')).toBeInTheDocument();
+
+        // Switching tabs resets filter to ALL
+        fireEvent.click(screen.getByRole('tab', { name: /by flight number/i }));
+        expect(screen.getByTestId('tracker-phase-filter')).toHaveValue('ALL');
+        expect(screen.getByText('MA501')).toBeInTheDocument();
+        expect(screen.getByText('MA502')).toBeInTheDocument();
+        expect(screen.getByText('MA503')).toBeInTheDocument();
     });
 });
+
 
