@@ -404,8 +404,24 @@ describe('shared server validation schemas', () => {
             scheduleId: 2,
             startDate: '2026-07-01',
             endDate: '2026-07-31',
-            seatingConfig: { economyRows: 22, seatPattern: 'ABC-DEF' }
-        })).toMatchObject({ scheduleId: 2, startDate: '2026-07-01' });
+            seatingConfig: {
+                economyRows: 22,
+                seatPattern: 'ABC-DEF',
+                awardSeatsFirst: 2,
+                awardSeatsBusiness: 4,
+                awardSeatsPremiumEconomy: 5,
+                awardSeatsEconomy: 8,
+            }
+        })).toMatchObject({
+            scheduleId: 2,
+            startDate: '2026-07-01',
+            seatingConfig: {
+                awardSeatsFirst: 2,
+                awardSeatsBusiness: 4,
+                awardSeatsPremiumEconomy: 5,
+                awardSeatsEconomy: 8,
+            }
+        });
         expect(occurrenceRequestSchema.safeParse({
             scheduleId: 0,
             startDate: '07/01/2026',

@@ -673,7 +673,11 @@ export const occurrenceRequestSchema = z.object({
         businessRows: rowCountSchema.nullish(),
         premiumEconomyRows: rowCountSchema.nullish(),
         economyRows: rowCountSchema.nullish(),
-        seatPattern: z.string().max(64).nullish()
+        seatPattern: z.string().max(64).nullish(),
+        awardSeatsFirst: rowCountSchema.nullable().optional(),
+        awardSeatsBusiness: rowCountSchema.nullable().optional(),
+        awardSeatsPremiumEconomy: rowCountSchema.nullable().optional(),
+        awardSeatsEconomy: rowCountSchema.nullable().optional(),
     }).strict().optional()
 }).strict().refine(input => input.endDate >= input.startDate, {
     path: ['endDate'],

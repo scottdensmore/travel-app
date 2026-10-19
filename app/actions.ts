@@ -2067,6 +2067,10 @@ export async function generateFlightOccurrencesAction(
         premiumEconomyRows?: number | null;
         economyRows?: number | null;
         seatPattern?: string | null;
+        awardSeatsFirst?: number | null;
+        awardSeatsBusiness?: number | null;
+        awardSeatsPremiumEconomy?: number | null;
+        awardSeatsEconomy?: number | null;
     }
 ) {
     const session = await getServerSession(authOptions);
@@ -2124,6 +2128,18 @@ export async function generateFlightOccurrencesAction(
         const seatPattern = seatingConfig?.seatPattern !== undefined && seatingConfig.seatPattern !== null
             ? seatingConfig.seatPattern
             : (schedule.seatPattern ?? "ABC-DEF");
+        const awardSeatsFirst = seatingConfig?.awardSeatsFirst !== undefined && seatingConfig?.awardSeatsFirst !== null
+            ? Number(seatingConfig.awardSeatsFirst)
+            : (schedule.awardSeatsFirst ?? 1);
+        const awardSeatsBusiness = seatingConfig?.awardSeatsBusiness !== undefined && seatingConfig?.awardSeatsBusiness !== null
+            ? Number(seatingConfig.awardSeatsBusiness)
+            : (schedule.awardSeatsBusiness ?? 2);
+        const awardSeatsPremiumEconomy = seatingConfig?.awardSeatsPremiumEconomy !== undefined && seatingConfig?.awardSeatsPremiumEconomy !== null
+            ? Number(seatingConfig.awardSeatsPremiumEconomy)
+            : (schedule.awardSeatsPremiumEconomy ?? 2);
+        const awardSeatsEconomy = seatingConfig?.awardSeatsEconomy !== undefined && seatingConfig?.awardSeatsEconomy !== null
+            ? Number(seatingConfig.awardSeatsEconomy)
+            : (schedule.awardSeatsEconomy ?? 4);
 
         let normalizedSeatPattern: string;
         try {
@@ -2177,10 +2193,10 @@ export async function generateFlightOccurrencesAction(
                                 premiumEconomyRows,
                                 economyRows,
                                 seatPattern: normalizedSeatPattern,
-                                awardSeatsFirst: schedule.awardSeatsFirst ?? 1,
-                                awardSeatsBusiness: schedule.awardSeatsBusiness ?? 2,
-                                awardSeatsPremiumEconomy: schedule.awardSeatsPremiumEconomy ?? 2,
-                                awardSeatsEconomy: schedule.awardSeatsEconomy ?? 4,
+                                awardSeatsFirst,
+                                awardSeatsBusiness,
+                                awardSeatsPremiumEconomy,
+                                awardSeatsEconomy,
                             }
                         });
                         occurrencesCreated++;

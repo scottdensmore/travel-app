@@ -161,4 +161,75 @@ describe('ManualOccurrenceBuilder', () => {
 
         expect(mockGenerateAction).not.toHaveBeenCalled();
     });
+
+    it('auto-fills and submits per-cabin award seat quota overrides to generateFlightOccurrencesAction', async () => {
+        mockGenerateAction.mockResolvedValue({ success: true, count: 2, created: 2, updated: 0 });
+
+        const schedulesWithAwardQuotas = [
+            {
+                ...sampleSchedules[0],
+                awardSeatsFirst: 2,
+                awardSeatsBusiness: 4,
+                awardSeatsPremiumEconomy: 5,
+                awardSeatsEconomy: 8,
+            },
+            {
+                ...sampleSchedules[1],
+                awardSeatsFirst: null,
+                awardSeatsBusiness: null,
+                awardSeatsPremiumEconomy: null,
+                awardSeatsEconomy: null,
+            },
+        ];
+
+        render(<ManualOccurrenceBuilder schedules={schedulesWithAwardQuotas} />);
+
+        // Select schedule 10 with custom template quotas
+        fireEvent.change(screen.getByLabelText(/Flight Template \*/i), { target: { value: '10' } });
+
+        expect(screen.getByLabelText('First Class Award Seats')).toHaveValue(2);
+        expect(screen.getByLabelText('Business Award Seats')).toHaveValue(4);
+        expect(screen.getByLabelText('Prem. Economy Award Seats')).toHaveValue(5);
+        expect(screen.getByLabelText('Economy Award Seats')).toHaveValue(8);
+
+        // Select schedule 20 with null template quotas -> falls back to 1/2/2/4
+        fireEvent.change(screen.getByLabelText(/Flight Template \*/i), { target: { value: '20' } });
+
+        expect(screen.getByLabelText('First Class Award Seats')).toHaveValue(1);
+        expect(screen.getByLabelText('Business Award Seats')).toHaveValue(2);
+        expect(screen.getByLabelText('Prem. Economy Award Seats')).toHaveValue(2);
+        expect(screen.getByLabelText('Economy Award Seats')).toHaveValue(4);
+
+        // Switch back to schedule 10 and override award seat quotas
+        fireEvent.change(screen.getByLabelText(/Flight Template \*/i), { target: { value: '10' } });
+        fireEvent.change(screen.getByLabelText(/Start Date \*/i), { target: { value: '2026-07-10' } });
+        fireEvent.change(screen.getByLabelText(/End Date \*/i), { target: { value: '2026-07-20' } });
+
+        fireEvent.change(screen.getByLabelText('First Class Award Seats'), { target: { value: '3' } });
+        fireEvent.change(screen.getByLabelText('Business Award Seats'), { target: { value: '6' } });
+        fireEvent.change(screen.getByLabelText('Prem. Economy Award Seats'), { target: { value: '7' } });
+        fireEvent.change(screen.getByLabelText('Economy Award Seats'), { target: { value: '12' } });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Generate Occurrences' }));
+
+        await waitFor(() => {
+            expect(mockGenerateAction).toHaveBeenCalledWith(
+                10,
+                '2026-07-10',
+                '2026-07-20',
+                {
+                    firstClassRows: 3,
+                    businessRows: 5,
+                    premiumEconomyRows: 6,
+                    economyRows: 25,
+                    seatPattern: 'AC-DF',
+                    awardSeatsFirst: 3,
+                    awardSeatsBusiness: 6,
+                    awardSeatsPremiumEconomy: 7,
+                    awardSeatsEconomy: 12,
+                }
+            );
+        });
+    });
 });
+

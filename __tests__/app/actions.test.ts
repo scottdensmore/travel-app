@@ -3970,6 +3970,43 @@ describe('admin flight schedule actions', () => {
                 });
             });
 
+            it('uses overridden per-cabin award seat quotas from seatingConfig when creating occurrences', async () => {
+                mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
+                mockedFlightScheduleFindUnique.mockResolvedValue({
+                    id: 1,
+                    flightNumber: 'AA101',
+                    airline: 'American Airlines',
+                    from: 'New York, USA',
+                    to: 'San Francisco, USA',
+                    departureTime: '08:00',
+                    durationMinutes: 245,
+                    daysOfWeek: [1],
+                    priceCents: 50000,
+                    awardSeatsFirst: 1,
+                    awardSeatsBusiness: 2,
+                    awardSeatsPremiumEconomy: 2,
+                    awardSeatsEconomy: 4,
+                });
+                mockedFlightFindFirst.mockResolvedValue(null);
+                mockedFlightCreate.mockResolvedValue({});
+
+                await generateFlightOccurrencesAction(1, '2026-07-06', '2026-07-06', {
+                    awardSeatsFirst: 3,
+                    awardSeatsBusiness: 6,
+                    awardSeatsPremiumEconomy: 7,
+                    awardSeatsEconomy: 12,
+                });
+
+                expect(mockedFlightCreate).toHaveBeenCalledWith({
+                    data: expect.objectContaining({
+                        awardSeatsFirst: 3,
+                        awardSeatsBusiness: 6,
+                        awardSeatsPremiumEconomy: 7,
+                        awardSeatsEconomy: 12,
+                    }),
+                });
+            });
+
             it('rejects invalid seating configuration inputs', async () => {
                 mockedGetServerSession.mockResolvedValue({ user: { role: 'ADMIN', staffMfaVerified: true } });
 

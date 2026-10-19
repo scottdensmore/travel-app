@@ -20,6 +20,10 @@ interface ScheduleItem {
     premiumEconomyRows?: number | null;
     economyRows?: number | null;
     seatPattern?: string | null;
+    awardSeatsFirst?: number | null;
+    awardSeatsBusiness?: number | null;
+    awardSeatsPremiumEconomy?: number | null;
+    awardSeatsEconomy?: number | null;
 }
 
 export default function ManualOccurrenceBuilder({ schedules }: { schedules: ScheduleItem[] }) {
@@ -36,6 +40,10 @@ export default function ManualOccurrenceBuilder({ schedules }: { schedules: Sche
     const [premiumEconomyRows, setPremiumEconomyRows] = useState<string>('4');
     const [economyRows, setEconomyRows] = useState<string>('20');
     const [seatPattern, setSeatPattern] = useState<string>('ABC-DEF');
+    const [awardSeatsFirst, setAwardSeatsFirst] = useState<string>('1');
+    const [awardSeatsBusiness, setAwardSeatsBusiness] = useState<string>('2');
+    const [awardSeatsPremiumEconomy, setAwardSeatsPremiumEconomy] = useState<string>('2');
+    const [awardSeatsEconomy, setAwardSeatsEconomy] = useState<string>('4');
 
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
@@ -51,6 +59,10 @@ export default function ManualOccurrenceBuilder({ schedules }: { schedules: Sche
             setPremiumEconomyRows(selected.premiumEconomyRows?.toString() ?? '4');
             setEconomyRows(selected.economyRows?.toString() ?? '20');
             setSeatPattern(selected.seatPattern ?? 'ABC-DEF');
+            setAwardSeatsFirst(selected.awardSeatsFirst?.toString() ?? '1');
+            setAwardSeatsBusiness(selected.awardSeatsBusiness?.toString() ?? '2');
+            setAwardSeatsPremiumEconomy(selected.awardSeatsPremiumEconomy?.toString() ?? '2');
+            setAwardSeatsEconomy(selected.awardSeatsEconomy?.toString() ?? '4');
         }
     }, [selectedScheduleId, schedules]);
 
@@ -85,6 +97,26 @@ export default function ManualOccurrenceBuilder({ schedules }: { schedules: Sche
         const bRows = businessRows === '' ? 3 : Number(businessRows);
         const peRows = premiumEconomyRows === '' ? 4 : Number(premiumEconomyRows);
         const eRows = economyRows === '' ? 20 : Number(economyRows);
+        const selected = schedules.find(s => s.id.toString() === selectedScheduleId);
+        const defaultAwardFirst = selected?.awardSeatsFirst ?? 1;
+        const defaultAwardBusiness = selected?.awardSeatsBusiness ?? 2;
+        const defaultAwardPremiumEconomy = selected?.awardSeatsPremiumEconomy ?? 2;
+        const defaultAwardEconomy = selected?.awardSeatsEconomy ?? 4;
+        const fAwardSeats = awardSeatsFirst === '' ? defaultAwardFirst : Number(awardSeatsFirst);
+        const bAwardSeats = awardSeatsBusiness === '' ? defaultAwardBusiness : Number(awardSeatsBusiness);
+        const peAwardSeats = awardSeatsPremiumEconomy === '' ? defaultAwardPremiumEconomy : Number(awardSeatsPremiumEconomy);
+        const eAwardSeats = awardSeatsEconomy === '' ? defaultAwardEconomy : Number(awardSeatsEconomy);
+        const hasScheduleAwardSeats =
+            (selected?.awardSeatsFirst !== undefined && selected?.awardSeatsFirst !== null) ||
+            (selected?.awardSeatsBusiness !== undefined && selected?.awardSeatsBusiness !== null) ||
+            (selected?.awardSeatsPremiumEconomy !== undefined && selected?.awardSeatsPremiumEconomy !== null) ||
+            (selected?.awardSeatsEconomy !== undefined && selected?.awardSeatsEconomy !== null);
+        const awardSeatsChanged =
+            fAwardSeats !== defaultAwardFirst ||
+            bAwardSeats !== defaultAwardBusiness ||
+            peAwardSeats !== defaultAwardPremiumEconomy ||
+            eAwardSeats !== defaultAwardEconomy;
+
         let normalizedSeatPattern: string;
         try {
             normalizedSeatPattern = validateSeatingLayout(fRows, bRows, peRows, eRows, seatPattern);
@@ -104,7 +136,13 @@ export default function ManualOccurrenceBuilder({ schedules }: { schedules: Sche
                         businessRows: bRows,
                         premiumEconomyRows: peRows,
                         economyRows: eRows,
-                        seatPattern: normalizedSeatPattern
+                        seatPattern: normalizedSeatPattern,
+                        ...((hasScheduleAwardSeats || awardSeatsChanged) ? {
+                            awardSeatsFirst: fAwardSeats,
+                            awardSeatsBusiness: bAwardSeats,
+                            awardSeatsPremiumEconomy: peAwardSeats,
+                            awardSeatsEconomy: eAwardSeats,
+                        } : {})
                     }
                 );
 
@@ -277,6 +315,60 @@ export default function ManualOccurrenceBuilder({ schedules }: { schedules: Sche
                             disabled={isPending}
                             style={{ padding: '6px 10px', fontSize: '0.85rem' }}
                         />
+                    </div>
+
+                    <div className="admin-form-grid admin-form-grid--two">
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <label htmlFor="manualAwardSeatsFirst" style={{ fontSize: '0.8rem', color: '#a78bfa' }}>First Class Award Seats</label>
+                            <input
+                                id="manualAwardSeatsFirst"
+                                type="number"
+                                min="0"
+                                value={awardSeatsFirst}
+                                onChange={e => setAwardSeatsFirst(e.target.value)}
+                                disabled={isPending}
+                                style={{ padding: '6px 10px', fontSize: '0.85rem' }}
+                            />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <label htmlFor="manualAwardSeatsBusiness" style={{ fontSize: '0.8rem', color: '#a78bfa' }}>Business Award Seats</label>
+                            <input
+                                id="manualAwardSeatsBusiness"
+                                type="number"
+                                min="0"
+                                value={awardSeatsBusiness}
+                                onChange={e => setAwardSeatsBusiness(e.target.value)}
+                                disabled={isPending}
+                                style={{ padding: '6px 10px', fontSize: '0.85rem' }}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="admin-form-grid admin-form-grid--two">
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <label htmlFor="manualAwardSeatsPremiumEconomy" style={{ fontSize: '0.8rem', color: '#a78bfa' }}>Prem. Economy Award Seats</label>
+                            <input
+                                id="manualAwardSeatsPremiumEconomy"
+                                type="number"
+                                min="0"
+                                value={awardSeatsPremiumEconomy}
+                                onChange={e => setAwardSeatsPremiumEconomy(e.target.value)}
+                                disabled={isPending}
+                                style={{ padding: '6px 10px', fontSize: '0.85rem' }}
+                            />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <label htmlFor="manualAwardSeatsEconomy" style={{ fontSize: '0.8rem', color: '#a78bfa' }}>Economy Award Seats</label>
+                            <input
+                                id="manualAwardSeatsEconomy"
+                                type="number"
+                                min="0"
+                                value={awardSeatsEconomy}
+                                onChange={e => setAwardSeatsEconomy(e.target.value)}
+                                disabled={isPending}
+                                style={{ padding: '6px 10px', fontSize: '0.85rem' }}
+                            />
+                        </div>
                     </div>
                 </div>
             )}
