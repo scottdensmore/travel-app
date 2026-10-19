@@ -26,7 +26,7 @@ services:
         condition: service_started
 
   proxy:
-    image: nginxinc/nginx-unprivileged:1.27-alpine
+    image: nginxinc/nginx-unprivileged:1.31-alpine
     ports:
       - "3000:8080"
     volumes:
@@ -74,7 +74,7 @@ services:
         condition: service_completed_successfully
 
   mailpit:
-    image: axllent/mailpit:v1.30.0
+    image: axllent/mailpit:v1.31.6
     ports:
       - "127.0.0.1:8025:8025"
 
