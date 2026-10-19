@@ -2343,7 +2343,13 @@ export default function BookingCheckoutWizard({
                                         fontWeight: 600,
                                     }}
                                 >
-                                    Available balance: {spendablePointsBalance.toLocaleString('en-US')} pts
+                                    <span>Available balance: {spendablePointsBalance.toLocaleString('en-US')} pts</span>
+                                    <span
+                                        data-testid="remaining-points-after-booking-step4"
+                                        style={{ marginLeft: '0.75rem', color: '#34d399', fontSize: '0.9rem' }}
+                                    >
+                                        · Remaining after booking: {(spendablePointsBalance - totalPointsRequired).toLocaleString('en-US')} pts
+                                    </span>
                                 </div>
                             )
                         )}
