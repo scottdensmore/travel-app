@@ -57,6 +57,7 @@ export default function PointsLedgerTable({
 }: PointsLedgerTableProps) {
     const [currentPage, setCurrentPage] = useState(1);
     const [selectedType, setSelectedType] = useState<string>('ALL');
+    const [searchQuery, setSearchQuery] = useState<string>('');
     const [totalEntriesCount, setTotalEntriesCount] = useState(totalCount ?? entries.length);
     const [serverPageEntries, setServerPageEntries] = useState<Record<number, PointsLedgerEntryRow[]>>({});
     const [filteredServerPageEntries, setFilteredServerPageEntries] = useState<Record<number, PointsLedgerEntryRow[]>>({});
@@ -72,21 +73,39 @@ export default function PointsLedgerTable({
         setCurrentPage(1);
     }, [entries, totalCount]);
 
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+
     const locallyFilteredEntries = selectedType === 'ALL'
         ? entries
         : entries.filter((entry) => entry.type === selectedType);
 
-    const activeTotalCount = selectedType === 'ALL'
-        ? totalEntriesCount
-        : (filteredTotalCount ?? locallyFilteredEntries.length);
+    const searchFilteredEntries = normalizedSearch === ''
+        ? locallyFilteredEntries
+        : locallyFilteredEntries.filter((entry) => {
+            const typeLabel = TYPE_CONFIG[entry.type]?.label ?? entry.type;
+            const bookingIdStr = entry.bookingId ? String(entry.bookingId) : '';
+            return (
+                entry.description.toLowerCase().includes(normalizedSearch) ||
+                typeLabel.toLowerCase().includes(normalizedSearch) ||
+                bookingIdStr.toLowerCase().includes(normalizedSearch)
+            );
+        });
+
+    const activeTotalCount = normalizedSearch !== ''
+        ? searchFilteredEntries.length
+        : selectedType === 'ALL'
+            ? totalEntriesCount
+            : (filteredTotalCount ?? locallyFilteredEntries.length);
 
     const totalPages = Math.ceil(activeTotalCount / pageSize) || 1;
     const startIndex = (currentPage - 1) * pageSize;
     const endIndex = startIndex + pageSize;
 
-    const currentEntries = selectedType === 'ALL'
-        ? (serverPageEntries[currentPage] ?? entries.slice(startIndex, endIndex))
-        : (filteredServerPageEntries[currentPage] ?? locallyFilteredEntries.slice(startIndex, endIndex));
+    const currentEntries = normalizedSearch !== ''
+        ? searchFilteredEntries.slice(startIndex, endIndex)
+        : selectedType === 'ALL'
+            ? (serverPageEntries[currentPage] ?? entries.slice(startIndex, endIndex))
+            : (filteredServerPageEntries[currentPage] ?? locallyFilteredEntries.slice(startIndex, endIndex));
 
     const handleTypeChange = (newType: string) => {
         setSelectedType(newType);
@@ -126,6 +145,12 @@ export default function PointsLedgerTable({
         if (clampedPage === currentPage || isPending) return;
 
         setError(null);
+
+        if (normalizedSearch !== '') {
+            setCurrentPage(clampedPage);
+            return;
+        }
+
         const targetStart = (clampedPage - 1) * pageSize;
         const targetEnd = targetStart + pageSize;
 
@@ -205,6 +230,26 @@ export default function PointsLedgerTable({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
                 <h3 className="text-xl font-bold" style={{ margin: 0 }}>Points Activity History</h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <input
+                        id="points-ledger-search"
+                        type="search"
+                        aria-label="Search points activity"
+                        data-testid="points-ledger-search"
+                        placeholder="Search description or booking..."
+                        value={searchQuery}
+                        onChange={(e) => {
+                            setSearchQuery(e.target.value);
+                            setCurrentPage(1);
+                        }}
+                        style={{
+                            padding: '0.25rem 0.5rem',
+                            fontSize: '0.875rem',
+                            borderRadius: '0.375rem',
+                            border: '1px solid #d1d5db',
+                            backgroundColor: '#ffffff',
+                            color: '#111827',
+                        }}
+                    />
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <label htmlFor="points-ledger-type-filter" style={{ fontSize: '0.875rem', color: '#4b5563' }}>
                             Filter by type:
