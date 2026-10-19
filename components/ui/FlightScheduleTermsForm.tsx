@@ -12,6 +12,10 @@ interface FlightScheduleTermsFormProps {
     priceCents: number;
     safeFutureCount: number;
     protectedCount: number;
+    initialAwardSeatsFirst?: number;
+    initialAwardSeatsBusiness?: number;
+    initialAwardSeatsPremiumEconomy?: number;
+    initialAwardSeatsEconomy?: number;
 }
 
 export default function FlightScheduleTermsForm({
@@ -20,10 +24,23 @@ export default function FlightScheduleTermsForm({
     priceCents,
     safeFutureCount,
     protectedCount,
+    initialAwardSeatsFirst,
+    initialAwardSeatsBusiness,
+    initialAwardSeatsPremiumEconomy,
+    initialAwardSeatsEconomy,
 }: FlightScheduleTermsFormProps) {
     const router = useRouter();
+    const defaultAwardFirst = initialAwardSeatsFirst ?? 1;
+    const defaultAwardBusiness = initialAwardSeatsBusiness ?? 2;
+    const defaultAwardPremiumEconomy = initialAwardSeatsPremiumEconomy ?? 2;
+    const defaultAwardEconomy = initialAwardSeatsEconomy ?? 4;
+
     const [durationMinutes, setDurationMinutes] = useState(String(initialDurationMinutes));
     const [price, setPrice] = useState(formatPrice(priceCents));
+    const [awardSeatsFirst, setAwardSeatsFirst] = useState(String(defaultAwardFirst));
+    const [awardSeatsBusiness, setAwardSeatsBusiness] = useState(String(defaultAwardBusiness));
+    const [awardSeatsPremiumEconomy, setAwardSeatsPremiumEconomy] = useState(String(defaultAwardPremiumEconomy));
+    const [awardSeatsEconomy, setAwardSeatsEconomy] = useState(String(defaultAwardEconomy));
     const [confirmed, setConfirmed] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
@@ -51,6 +68,17 @@ export default function FlightScheduleTermsForm({
         requestId.current = stableRequestId;
         const normalizedPrice = price.startsWith('$') ? price : `$${price}`;
 
+        const parsedAwardFirst = Number(awardSeatsFirst);
+        const parsedAwardBusiness = Number(awardSeatsBusiness);
+        const parsedAwardPremiumEconomy = Number(awardSeatsPremiumEconomy);
+        const parsedAwardEconomy = Number(awardSeatsEconomy);
+        const awardSeatsChanged = (
+            parsedAwardFirst !== defaultAwardFirst
+            || parsedAwardBusiness !== defaultAwardBusiness
+            || parsedAwardPremiumEconomy !== defaultAwardPremiumEconomy
+            || parsedAwardEconomy !== defaultAwardEconomy
+        );
+
         setIsPending(true);
         try {
             const result = await updateFlightScheduleTermsAction({
@@ -59,6 +87,12 @@ export default function FlightScheduleTermsForm({
                 durationMinutes: Number(durationMinutes),
                 price: normalizedPrice,
                 confirmed,
+                ...(awardSeatsChanged ? {
+                    awardSeatsFirst: parsedAwardFirst,
+                    awardSeatsBusiness: parsedAwardBusiness,
+                    awardSeatsPremiumEconomy: parsedAwardPremiumEconomy,
+                    awardSeatsEconomy: parsedAwardEconomy,
+                } : {}),
             });
             if (isActionValidationFailure(result)) {
                 setError(result.error.message);
@@ -148,6 +182,60 @@ export default function FlightScheduleTermsForm({
                             type="text"
                             value={price}
                             onChange={event => setPrice(event.target.value)}
+                            disabled={isPending}
+                            required
+                        />
+                    </label>
+                </div>
+                <div className="admin-form-grid admin-form-grid--two">
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', color: '#a78bfa', fontWeight: 700, fontSize: '0.85rem' }}>
+                        First award seats
+                        <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            inputMode="numeric"
+                            value={awardSeatsFirst}
+                            onChange={event => setAwardSeatsFirst(event.target.value)}
+                            disabled={isPending}
+                            required
+                        />
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', color: '#a78bfa', fontWeight: 700, fontSize: '0.85rem' }}>
+                        Business award seats
+                        <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            inputMode="numeric"
+                            value={awardSeatsBusiness}
+                            onChange={event => setAwardSeatsBusiness(event.target.value)}
+                            disabled={isPending}
+                            required
+                        />
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', color: '#a78bfa', fontWeight: 700, fontSize: '0.85rem' }}>
+                        Prem Econ award seats
+                        <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            inputMode="numeric"
+                            value={awardSeatsPremiumEconomy}
+                            onChange={event => setAwardSeatsPremiumEconomy(event.target.value)}
+                            disabled={isPending}
+                            required
+                        />
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', color: '#a78bfa', fontWeight: 700, fontSize: '0.85rem' }}>
+                        Economy award seats
+                        <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            inputMode="numeric"
+                            value={awardSeatsEconomy}
+                            onChange={event => setAwardSeatsEconomy(event.target.value)}
                             disabled={isPending}
                             required
                         />

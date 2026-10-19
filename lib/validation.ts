@@ -317,7 +317,13 @@ export const flightScheduleTermsSchema = z.object({
         confirmed => confirmed,
         'Review the schedule impact before updating.',
     ),
+    awardSeatsFirst: rowCountSchema.optional(),
+    awardSeatsBusiness: rowCountSchema.optional(),
+    awardSeatsPremiumEconomy: rowCountSchema.optional(),
+    awardSeatsEconomy: rowCountSchema.optional(),
 }).strict();
+
+export const updateFlightScheduleTermsSchema = flightScheduleTermsSchema;
 
 export const flightScheduleActivationSchema = z.object({
     flightScheduleId: positiveId('Schedule ID'),

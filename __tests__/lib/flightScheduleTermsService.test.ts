@@ -281,6 +281,82 @@ describe('FlightScheduleTermsService', () => {
         );
         expect(tx.flightScheduleTermsChange.create).not.toHaveBeenCalled();
     });
+
+    it('updates per-cabin award seat quotas on the schedule and safe future occurrences even when duration and fare are unchanged', async () => {
+        const tx = transactionClient();
+        tx.flightSchedule.findUnique.mockResolvedValue({
+            id: 17,
+            durationMinutes: 245,
+            priceCents: 35_000,
+            awardSeatsFirst: 1,
+            awardSeatsBusiness: 2,
+            awardSeatsPremiumEconomy: 2,
+            awardSeatsEconomy: 4,
+        });
+        tx.flightScheduleTermsChange.create.mockResolvedValue(audit({
+            toDurationMinutes: 245,
+            toPriceCents: 35_000,
+        }));
+        transaction.mockImplementation((work: (client: typeof tx) => unknown) => work(tx));
+
+        const awardInput = {
+            ...input,
+            durationMinutes: 245,
+            priceCents: 35_000,
+            awardSeatsFirst: 3,
+            awardSeatsBusiness: 4,
+            awardSeatsPremiumEconomy: 5,
+            awardSeatsEconomy: 8,
+        };
+
+        await expect(new FlightScheduleTermsService().update(awardInput)).resolves.toMatchObject({
+            changeId: 'change-17',
+            flightScheduleId: 17,
+            durationMinutes: 245,
+            priceCents: 35_000,
+            awardSeatsFirst: 3,
+            awardSeatsBusiness: 4,
+            awardSeatsPremiumEconomy: 5,
+            awardSeatsEconomy: 8,
+            updatedOccurrenceCount: 1,
+            protectedOccurrenceCount: 4,
+            wasApplied: true,
+        });
+
+        expect(tx.flightSchedule.update).toHaveBeenCalledWith({
+            where: { id: 17 },
+            data: {
+                durationMinutes: 245,
+                priceCents: 35_000,
+                awardSeatsFirst: 3,
+                awardSeatsBusiness: 4,
+                awardSeatsPremiumEconomy: 5,
+                awardSeatsEconomy: 8,
+            },
+        });
+        expect(tx.flight.updateMany).toHaveBeenCalledWith({
+            where: { id: { in: [75] } },
+            data: {
+                durationMinutes: 245,
+                priceCents: 35_000,
+                awardSeatsFirst: 3,
+                awardSeatsBusiness: 4,
+                awardSeatsPremiumEconomy: 5,
+                awardSeatsEconomy: 8,
+            },
+        });
+    });
+
+    it('rejects negative or non-integer award seat quotas', async () => {
+        const tx = transactionClient();
+        transaction.mockImplementation((work: (client: typeof tx) => unknown) => work(tx));
+
+        await expect(new FlightScheduleTermsService().update({
+            ...input,
+            awardSeatsFirst: -1,
+        })).rejects.toThrow('Award seat quotas must be non-negative integers.');
+        expect(tx.flightSchedule.update).not.toHaveBeenCalled();
+    });
 });
 
 function occurrence(
