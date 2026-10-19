@@ -418,5 +418,96 @@ describe('PointsLedgerTable pagination and interaction', () => {
         expect(screen.queryByText('No matching points activity found for the selected filter.')).not.toBeInTheDocument();
         expect(screen.getByText('Welcome grant')).toBeInTheDocument();
     });
+
+    it('filters displayed rows by search query substring across description, type label, or bookingId', () => {
+        render(
+            <PointsLedgerTable
+                entries={[
+                    ...sampleLedgerEntries,
+                    {
+                        id: 'ple-5',
+                        type: 'ADMIN_ADJUSTMENT',
+                        amount: 500,
+                        balanceAfter: 59250,
+                        bookingId: 909,
+                        description: 'Goodwill adjustment note for delayed flight',
+                        createdAt: '2026-06-12T10:00:00Z',
+                    },
+                ]}
+                accountTimeZone="UTC"
+                pageSize={5}
+            />
+        );
+
+        const searchInput = screen.getByTestId('points-ledger-search');
+        expect(searchInput).toHaveAttribute('aria-label', 'Search points activity');
+
+        // Search by booking reference / description substring (case-insensitive)
+        fireEvent.change(searchInput, { target: { value: 'ma-1111' } });
+        expect(screen.getByText('Points earned for flight booking #MA-1111')).toBeInTheDocument();
+        expect(screen.queryByText('Welcome grant')).not.toBeInTheDocument();
+        expect(screen.queryByText('Redemption for booking #MA-2222')).not.toBeInTheDocument();
+
+        // Search by adjustment note
+        fireEvent.change(searchInput, { target: { value: 'goodwill adjustment' } });
+        expect(screen.getByText('Goodwill adjustment note for delayed flight')).toBeInTheDocument();
+        expect(screen.queryByText('Points earned for flight booking #MA-1111')).not.toBeInTheDocument();
+
+        // Search by numeric bookingId
+        fireEvent.change(searchInput, { target: { value: '909' } });
+        expect(screen.getByText('Goodwill adjustment note for delayed flight')).toBeInTheDocument();
+    });
+
+    it('combines search query and transaction type filter', () => {
+        render(
+            <PointsLedgerTable
+                entries={sampleLedgerEntries}
+                accountTimeZone="UTC"
+                pageSize={5}
+            />
+        );
+
+        const searchInput = screen.getByTestId('points-ledger-search');
+        const filterSelect = screen.getByTestId('points-ledger-type-filter');
+
+        // Search "booking" matches 3 entries (#MA-1111, #MA-2222, #102)
+        fireEvent.change(searchInput, { target: { value: 'booking' } });
+        expect(screen.getByText('Points earned for flight booking #MA-1111')).toBeInTheDocument();
+        expect(screen.getByText('Redemption for booking #MA-2222')).toBeInTheDocument();
+        expect(screen.getByText('Cancellation refund for booking #102')).toBeInTheDocument();
+        expect(screen.queryByText('Welcome grant')).not.toBeInTheDocument();
+
+        // Combine with REWARD_REDEMPTION type filter
+        fireEvent.change(filterSelect, { target: { value: 'REWARD_REDEMPTION' } });
+        expect(screen.getByText('Redemption for booking #MA-2222')).toBeInTheDocument();
+        expect(screen.queryByText('Points earned for flight booking #MA-1111')).not.toBeInTheDocument();
+        expect(screen.queryByText('Cancellation refund for booking #102')).not.toBeInTheDocument();
+    });
+
+    it('shows empty filter message when search query matches no entries and restores entries when cleared', () => {
+        render(
+            <PointsLedgerTable
+                entries={sampleLedgerEntries}
+                accountTimeZone="UTC"
+                pageSize={5}
+            />
+        );
+
+        const searchInput = screen.getByTestId('points-ledger-search');
+
+        fireEvent.change(searchInput, { target: { value: 'nonexistent-flight-9999' } });
+
+        expect(screen.getByTestId('points-ledger-filter-empty'))
+            .toHaveTextContent('No matching points activity found for the selected filter.');
+        // Both search input and type filter remain visible
+        expect(screen.getByTestId('points-ledger-search')).toBeInTheDocument();
+        expect(screen.getByTestId('points-ledger-type-filter')).toBeInTheDocument();
+
+        // Clearing search restores entries
+        fireEvent.change(searchInput, { target: { value: '' } });
+        expect(screen.queryByTestId('points-ledger-filter-empty')).not.toBeInTheDocument();
+        expect(screen.getByText('Welcome grant')).toBeInTheDocument();
+        expect(screen.getByText('Points earned for flight booking #MA-1111')).toBeInTheDocument();
+    });
 });
 
