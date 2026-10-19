@@ -362,4 +362,61 @@ describe('PointsLedgerTable pagination and interaction', () => {
         expect(alert).toHaveTextContent('Network timeout loading ledger history.');
         expect(screen.getByTestId('points-ledger-pagination')).toHaveTextContent('Page 1 of 2');
     });
+
+    it('filters displayed rows by selected transaction type and resets to all activity', () => {
+        render(
+            <PointsLedgerTable
+                entries={sampleLedgerEntries}
+                accountTimeZone="UTC"
+                pageSize={5}
+            />
+        );
+
+        const filterSelect = screen.getByTestId('points-ledger-type-filter');
+        expect(filterSelect).toHaveValue('ALL');
+
+        // Initially all 4 entries are displayed
+        expect(screen.getByText('Welcome grant')).toBeInTheDocument();
+        expect(screen.getByText('Points earned for flight booking #MA-1111')).toBeInTheDocument();
+        expect(screen.getByText('Redemption for booking #MA-2222')).toBeInTheDocument();
+        expect(screen.getByText('Cancellation refund for booking #102')).toBeInTheDocument();
+
+        // Filter by Redemption (REWARD_REDEMPTION)
+        fireEvent.change(filterSelect, { target: { value: 'REWARD_REDEMPTION' } });
+        expect(filterSelect).toHaveValue('REWARD_REDEMPTION');
+
+        expect(screen.getByText('Redemption for booking #MA-2222')).toBeInTheDocument();
+        expect(screen.queryByText('Welcome grant')).not.toBeInTheDocument();
+        expect(screen.queryByText('Points earned for flight booking #MA-1111')).not.toBeInTheDocument();
+        expect(screen.queryByText('Cancellation refund for booking #102')).not.toBeInTheDocument();
+
+        // Switch back to All Activity
+        fireEvent.change(filterSelect, { target: { value: 'ALL' } });
+        expect(screen.getByText('Welcome grant')).toBeInTheDocument();
+        expect(screen.getByText('Redemption for booking #MA-2222')).toBeInTheDocument();
+    });
+
+    it('renders empty filter message while keeping filter visible when no entries match selected type', () => {
+        render(
+            <PointsLedgerTable
+                entries={sampleLedgerEntries}
+                accountTimeZone="UTC"
+                pageSize={5}
+            />
+        );
+
+        const filterSelect = screen.getByTestId('points-ledger-type-filter');
+
+        // Filter by Adjustment (ADMIN_ADJUSTMENT) which has 0 matching rows in sampleLedgerEntries
+        fireEvent.change(filterSelect, { target: { value: 'ADMIN_ADJUSTMENT' } });
+
+        expect(screen.getByText('No matching points activity found for the selected filter.')).toBeInTheDocument();
+        expect(screen.getByTestId('points-ledger-type-filter')).toBeInTheDocument();
+
+        // Can switch back to ALL
+        fireEvent.change(filterSelect, { target: { value: 'ALL' } });
+        expect(screen.queryByText('No matching points activity found for the selected filter.')).not.toBeInTheDocument();
+        expect(screen.getByText('Welcome grant')).toBeInTheDocument();
+    });
 });
+
