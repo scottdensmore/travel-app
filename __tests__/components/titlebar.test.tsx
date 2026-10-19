@@ -243,6 +243,7 @@ describe('TitleBar', () => {
         render(<TitleBar />);
 
         expect(screen.getByText('Admin')).toBeInTheDocument();
+        expect(screen.getByText('Admin').closest('li')).toHaveClass('selected');
         expect(screen.queryByText('Book Flight')).not.toBeInTheDocument();
     });
 
@@ -255,6 +256,59 @@ describe('TitleBar', () => {
         render(<TitleBar />);
 
         expect(screen.queryByText('Admin')).not.toBeInTheDocument();
+    });
+
+    it.each(['OPS', 'OPERATIONS', 'SUPPORT', 'MODERATOR'] as const)(
+        'exposes the Admin navigation link for MFA-verified %s staff',
+        (role) => {
+            (usePathname as jest.Mock).mockReturnValue('/book');
+            (require('next-auth/react').useSession as jest.Mock).mockReturnValue({
+                data: { user: { role, staffMfaVerified: true } },
+            });
+
+            render(<TitleBar />);
+
+            const adminLink = screen.getByRole('link', { name: 'Admin' });
+            expect(adminLink).toHaveAttribute('href', '/admin');
+        }
+    );
+
+    it.each([
+        ['OPS', false],
+        ['OPERATIONS', false],
+        ['SUPPORT', false],
+        ['MODERATOR', false],
+        ['USER', true],
+        ['USER', false],
+    ] as const)(
+        'does not expose the Admin navigation link for role %s when staffMfaVerified is %s',
+        (role, staffMfaVerified) => {
+            (usePathname as jest.Mock).mockReturnValue('/book');
+            (require('next-auth/react').useSession as jest.Mock).mockReturnValue({
+                data: { user: { role, staffMfaVerified } },
+            });
+
+            render(<TitleBar />);
+
+            expect(screen.queryByRole('link', { name: 'Admin' })).not.toBeInTheDocument();
+        }
+    );
+
+    it.each([
+        ['/checkin', 'Check In'],
+        ['/admin/bookings', 'Booking Support'],
+        ['/admin/users', 'User & Role Management'],
+        ['/admin/flights', 'Flight Schedules'],
+        ['/admin/audit', 'Staff Audit Trail'],
+        ['/admin/reviews', 'Review Moderation'],
+        ['/admin/payments', 'Payment Recovery'],
+        ['/admin/notifications', 'Notification Deliveries'],
+    ])('renders the header page title for %s as "%s"', (route, expectedTitle) => {
+        (usePathname as jest.Mock).mockReturnValue(route);
+
+        render(<TitleBar />);
+
+        expect(screen.getByText(expectedTitle, { selector: '.logo span' })).toBeInTheDocument();
     });
 
     it('calls signOut when the Sign Out button is clicked', () => {
