@@ -53,6 +53,7 @@ export default function StaffAuditPortalClient({
     const [action, setAction] = useState<string>('ALL');
     const [targetType, setTargetType] = useState<string>('');
     const [targetId, setTargetId] = useState<string>('');
+    const [quickFilter, setQuickFilter] = useState<string>('');
 
     // Selected log for diff modal
     const [selectedLog, setSelectedLog] = useState<AuditLogItem | null>(null);
@@ -227,6 +228,20 @@ export default function StaffAuditPortalClient({
             return String(dateInput);
         }
     };
+
+    const normalizedQuickFilter = quickFilter.trim().toLowerCase();
+    const displayedLogs = normalizedQuickFilter
+        ? logs.filter((log) =>
+              [
+                  log.targetId,
+                  log.targetType,
+                  log.reason,
+                  log.actorEmail,
+                  log.actorId,
+                  log.action,
+              ].some((field) => (field ?? '').toLowerCase().includes(normalizedQuickFilter))
+          )
+        : logs;
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -490,6 +505,45 @@ export default function StaffAuditPortalClient({
                     overflow: 'hidden',
                 }}
             >
+                <div
+                    style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '12px 16px',
+                        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                        background: 'rgba(255, 255, 255, 0.01)',
+                        flexWrap: 'wrap',
+                    }}
+                >
+                    <label
+                        htmlFor="audit-quick-filter"
+                        style={{ fontSize: '0.85rem', fontWeight: 600, color: '#c084fc' }}
+                    >
+                        Quick Row Filter
+                    </label>
+                    <input
+                        id="audit-quick-filter"
+                        type="search"
+                        aria-label="Quick filter displayed audit logs"
+                        data-testid="audit-quick-filter"
+                        placeholder="Filter displayed rows by target, reason, or actor..."
+                        value={quickFilter}
+                        onChange={(e) => setQuickFilter(e.target.value)}
+                        style={{
+                            flex: '1 1 280px',
+                            maxWidth: '420px',
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(255, 255, 255, 0.2)',
+                            background: '#17142d',
+                            color: '#fff',
+                            fontSize: '0.85rem',
+                            boxSizing: 'border-box',
+                        }}
+                    />
+                </div>
                 <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                         <thead>
@@ -518,7 +572,7 @@ export default function StaffAuditPortalClient({
                             </tr>
                         </thead>
                         <tbody>
-                            {logs.map((log) => {
+                            {displayedLogs.map((log) => {
                                 const roleStyle = getRoleBadgeColor(log.actorRole);
                                 const actionStyle = getActionBadgeColor(log.action);
                                 return (
@@ -599,6 +653,13 @@ export default function StaffAuditPortalClient({
                                     </tr>
                                 );
                             })}
+                            {logs.length > 0 && displayedLogs.length === 0 && (
+                                <tr>
+                                    <td colSpan={7} style={{ padding: '36px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.4)' }}>
+                                        No audit logs on this page match the quick filter.
+                                    </td>
+                                </tr>
+                            )}
                             {logs.length === 0 && (
                                 <tr>
                                     <td colSpan={7} style={{ padding: '36px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.4)' }}>
