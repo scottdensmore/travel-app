@@ -15,6 +15,8 @@ interface CategoryConfig {
     key: NotificationCategory;
     title: string;
     description: string;
+    includedAlerts: string;
+    aliasTestId?: string;
     icon: string;
 }
 
@@ -29,18 +31,22 @@ const CATEGORIES: CategoryConfig[] = [
         key: 'FLIGHT_STATUS',
         title: 'Flight Status & Operational Alerts',
         description: 'Real-time updates on gate changes, departure delays, cancellations, and boarding announcements.',
+        includedAlerts: 'Includes: flight delays, cancellations, support-initiated refunds, and rebooking waivers.',
+        aliasTestId: 'notification-category-examples-IRROPS_AND_DISRUPTIONS',
         icon: '✈️',
     },
     {
         key: 'ACCOUNT_ACTIVITY',
         title: 'Account & Bookings',
         description: 'Booking confirmations, itinerary receipts, cancellations, refunds, and loyalty points activity.',
+        includedAlerts: 'Includes: flight & reward booking confirmations, loyalty points earned/redeemed, and staff points adjustments.',
         icon: '🎫',
     },
     {
         key: 'TRAVEL_GUIDES',
         title: 'Travel Guides & Tips',
         description: 'Curated destination recommendations, seasonal travel inspiration, and local tips.',
+        includedAlerts: 'Includes: curated destination guides, seasonal travel inspiration, and local insider tips.',
         icon: '🌍',
     },
 ];
@@ -203,6 +209,18 @@ export default function NotificationPreferencesClient({
                                             </div>
                                             <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.7)', lineHeight: '1.4' }}>
                                                 {cat.description}
+                                            </div>
+                                            <div
+                                                data-testid={`notification-category-examples-${cat.key}`}
+                                                style={{ fontSize: '0.78rem', color: 'rgba(196, 181, 253, 0.85)', marginTop: '0.35rem', lineHeight: '1.35' }}
+                                            >
+                                                {cat.aliasTestId ? (
+                                                    <span data-testid={cat.aliasTestId}>
+                                                        {cat.includedAlerts}
+                                                    </span>
+                                                ) : (
+                                                    cat.includedAlerts
+                                                )}
                                             </div>
                                         </div>
                                     </div>

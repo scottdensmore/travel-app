@@ -123,4 +123,29 @@ describe('NotificationPreferencesClient', () => {
             expect(inAppGuideToggle).toHaveAttribute('aria-checked', 'false');
         });
     });
+
+    it('renders explicit included alert examples for loyalty/reward activity and operational disruptions', () => {
+        render(
+            <NotificationPreferencesClient
+                userEmail="alex@example.com"
+                initialPreferences={initialPreferences}
+            />
+        );
+
+        const accountExamples = screen.getByTestId('notification-category-examples-ACCOUNT_ACTIVITY');
+        expect(accountExamples).toHaveTextContent(
+            'Includes: flight & reward booking confirmations, loyalty points earned/redeemed, and staff points adjustments.'
+        );
+
+        const irropsExamples = screen.getByTestId('notification-category-examples-IRROPS_AND_DISRUPTIONS');
+        expect(irropsExamples).toHaveTextContent(
+            'Includes: flight delays, cancellations, support-initiated refunds, and rebooking waivers.'
+        );
+
+        const flightStatusExamples = screen.getByTestId('notification-category-examples-FLIGHT_STATUS');
+        expect(flightStatusExamples).toHaveTextContent(
+            'Includes: flight delays, cancellations, support-initiated refunds, and rebooking waivers.'
+        );
+    });
 });
+
