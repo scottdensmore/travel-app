@@ -16,6 +16,7 @@ export default function AccountTimeZoneForm({
 }: AccountTimeZoneFormProps) {
     const router = useRouter();
     const [selected, setSelected] = useState(timeZone);
+    const [filterQuery, setFilterQuery] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [feedback, setFeedback] = useState<{
         kind: 'success' | 'error';
@@ -23,6 +24,17 @@ export default function AccountTimeZoneForm({
     } | null>(null);
     const pendingRef = useRef(false);
     const feedbackRef = useRef<HTMLParagraphElement | null>(null);
+
+    const trimmedQuery = filterQuery.trim().toLowerCase();
+    const matchingChoices = trimmedQuery === ''
+        ? choices
+        : choices.filter(
+            choice =>
+                choice.toLowerCase().includes(trimmedQuery) ||
+                choice.replaceAll('_', ' ').toLowerCase().includes(trimmedQuery),
+        );
+    const hasNoMatches = trimmedQuery !== '' && matchingChoices.length === 0;
+    const renderedChoices = hasNoMatches ? [selected] : matchingChoices;
 
     useEffect(() => {
         if (feedback) feedbackRef.current?.focus();
@@ -66,6 +78,22 @@ export default function AccountTimeZoneForm({
                 saved timezone, not this browser&apos;s location.
             </p>
             <form onSubmit={save} aria-label="Account timezone settings">
+                <label htmlFor="account-timezone-filter">Filter timezones</label>
+                <input
+                    id="account-timezone-filter"
+                    type="search"
+                    aria-label="Filter timezones"
+                    data-testid="account-timezone-filter"
+                    placeholder="Search city or region..."
+                    value={filterQuery}
+                    onChange={event => setFilterQuery(event.target.value)}
+                    disabled={isSaving}
+                />
+                {hasNoMatches && (
+                    <p data-testid="account-timezone-no-matches" role="status">
+                        No matching timezones found.
+                    </p>
+                )}
                 <label htmlFor="account-timezone">Account timezone</label>
                 <select
                     id="account-timezone"
@@ -73,7 +101,7 @@ export default function AccountTimeZoneForm({
                     onChange={event => setSelected(event.target.value)}
                     disabled={isSaving}
                 >
-                    {choices.map(choice => (
+                    {renderedChoices.map(choice => (
                         <option key={choice} value={choice}>{choice.replaceAll('_', ' ')}</option>
                     ))}
                 </select>
@@ -95,3 +123,4 @@ export default function AccountTimeZoneForm({
         </section>
     );
 }
+

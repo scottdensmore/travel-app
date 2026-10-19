@@ -107,4 +107,56 @@ describe('AccountTimeZoneForm', () => {
         expect(alert).not.toHaveTextContent('database-password-sentinel');
         expect(alert).toHaveFocus();
     });
+
+    it('filters timezone options by city or region query including spaces for underscores', () => {
+        render(
+            <AccountTimeZoneForm
+                timeZone="UTC"
+                choices={['UTC', 'America/New_York', 'America/Los_Angeles', 'Asia/Tokyo']}
+            />,
+        );
+
+        const filterInput = screen.getByTestId('account-timezone-filter');
+        const select = screen.getByRole('combobox', { name: 'Account timezone' });
+
+        expect(select.querySelectorAll('option')).toHaveLength(4);
+
+        fireEvent.change(filterInput, { target: { value: 'New York' } });
+
+        const optionsAfterSpaceQuery = Array.from(select.querySelectorAll('option')).map(
+            option => (option as HTMLOptionElement).value,
+        );
+        expect(optionsAfterSpaceQuery).toEqual(['America/New_York']);
+        expect(screen.queryByTestId('account-timezone-no-matches')).not.toBeInTheDocument();
+
+        fireEvent.change(filterInput, { target: { value: 'tokyo' } });
+        const optionsAfterCityQuery = Array.from(select.querySelectorAll('option')).map(
+            option => (option as HTMLOptionElement).value,
+        );
+        expect(optionsAfterCityQuery).toEqual(['Asia/Tokyo']);
+    });
+
+    it('renders a no-matches status message while preserving the selected option when no timezones match', () => {
+        render(
+            <AccountTimeZoneForm
+                timeZone="UTC"
+                choices={['UTC', 'America/New_York', 'Asia/Tokyo']}
+            />,
+        );
+
+        const filterInput = screen.getByTestId('account-timezone-filter');
+        const select = screen.getByRole('combobox', { name: 'Account timezone' });
+
+        fireEvent.change(filterInput, { target: { value: 'Mars/Olympus_Mons' } });
+
+        const noMatches = screen.getByTestId('account-timezone-no-matches');
+        expect(noMatches).toBeInTheDocument();
+        expect(noMatches).toHaveTextContent('No matching timezones found.');
+
+        const options = Array.from(select.querySelectorAll('option')).map(
+            option => (option as HTMLOptionElement).value,
+        );
+        expect(options).toEqual(['UTC']);
+    });
 });
+
