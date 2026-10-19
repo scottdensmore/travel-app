@@ -159,5 +159,36 @@ describe('UserRoleManagementClient', () => {
         expect(await screen.findByText(/successfully adjusted points for bob@example\.com/i)).toBeInTheDocument();
         expect(screen.getByText('17,000 pts')).toBeInTheDocument();
     });
+
+    it('renders live projected balance preview when entering positive or negative points delta', () => {
+        render(<UserRoleManagementClient initialUsers={mockUsers} />);
+
+        const adjustButtons = screen.getAllByRole('button', { name: /adjust points/i });
+        // Click Adjust Points for Bob (current balance: 12,000 pts)
+        fireEvent.click(adjustButtons[1]);
+
+        expect(screen.getByRole('dialog', { name: /adjust loyalty points/i })).toBeInTheDocument();
+        expect(screen.queryByTestId('points-adjustment-projected-balance')).not.toBeInTheDocument();
+
+        const amountInput = screen.getByLabelText(/points delta/i);
+
+        // Positive delta: +5000 -> 17,000 pts
+        fireEvent.change(amountInput, { target: { value: '+5000' } });
+        const preview = screen.getByTestId('points-adjustment-projected-balance');
+        expect(preview).toBeInTheDocument();
+        expect(preview).toHaveTextContent('Projected balance: 17,000 pts');
+        expect(preview).not.toHaveTextContent('(Warning: resulting balance is negative)');
+
+        // Negative delta exceeding balance: -15000 -> -3,000 pts with warning
+        fireEvent.change(amountInput, { target: { value: '-15000' } });
+        expect(screen.getByTestId('points-adjustment-projected-balance')).toHaveTextContent(
+            'Projected balance: -3,000 pts (Warning: resulting balance is negative)'
+        );
+
+        // Invalid or zero delta hides preview
+        fireEvent.change(amountInput, { target: { value: '0' } });
+        expect(screen.queryByTestId('points-adjustment-projected-balance')).not.toBeInTheDocument();
+    });
 });
+
 
