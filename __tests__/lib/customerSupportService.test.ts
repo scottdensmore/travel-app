@@ -153,6 +153,25 @@ describe('customerSupportService.searchBookings', () => {
         expect(result.bookings[0].pointsRedeemed).toBe(40000);
         expect(result.bookings[0].totalPriceCents).toBe(1010);
     });
+
+    it('filters bookings by isRewardBooking when boolean is provided', async () => {
+        (prisma.booking.findMany as jest.Mock).mockResolvedValue([]);
+        (prisma.booking.count as jest.Mock).mockResolvedValue(0);
+
+        await searchBookings({ isRewardBooking: true });
+        expect(prisma.booking.findMany).toHaveBeenLastCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({ isRewardBooking: true }),
+            })
+        );
+
+        await searchBookings({ isRewardBooking: false });
+        expect(prisma.booking.findMany).toHaveBeenLastCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({ isRewardBooking: false }),
+            })
+        );
+    });
 });
 
 describe('customerSupportService.resendReceiptEmail', () => {

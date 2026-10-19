@@ -436,5 +436,56 @@ describe('BookingManagementPortal', () => {
             expect(screen.getByText(/40,000 pts redeemed/i)).toBeInTheDocument();
         });
     });
+
+    it('renders points + cash breakdown for reward bookings and passes isRewardBooking filter to searchAction', async () => {
+        mockSearchAction.mockResolvedValueOnce({
+            bookings: [],
+            totalCount: 0,
+            page: 1,
+            pageSize: 25,
+            totalPages: 1,
+        });
+
+        const rewardBookings = [
+            {
+                ...mockBookings[0],
+                id: 303,
+                reference: 'MA-RWD303',
+                isRewardBooking: true,
+                pointsRedeemed: 15000,
+                totalPriceCents: 1010,
+                currency: 'USD',
+            },
+        ];
+
+        render(
+            <BookingManagementPortal
+                initialData={{
+                    bookings: rewardBookings,
+                    totalCount: 1,
+                    page: 1,
+                    pageSize: 25,
+                    totalPages: 1,
+                }}
+                searchAction={mockSearchAction}
+                cancelAction={mockCancelAction}
+            />
+        );
+
+        expect(screen.getByText('15,000 pts + $10.10')).toBeInTheDocument();
+
+        const bookingTypeSelect = screen.getByRole('combobox', { name: /booking type/i });
+        fireEvent.change(bookingTypeSelect, { target: { value: 'REWARD' } });
+        fireEvent.click(screen.getByRole('button', { name: /^search$/i }));
+
+        await waitFor(() => {
+            expect(mockSearchAction).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    isRewardBooking: true,
+                    page: 1,
+                })
+            );
+        });
+    });
 });
 

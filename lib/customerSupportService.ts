@@ -20,6 +20,7 @@ export interface SupportSearchQuery {
     emailOrName?: string;
     flightNumber?: string;
     status?: BookingStatus;
+    isRewardBooking?: boolean;
     dateFrom?: string;
     dateTo?: string;
     page?: number;
@@ -88,6 +89,9 @@ export async function searchBookings(query: SupportSearchQuery): Promise<Support
     }
     if (query.status) {
         where.status = query.status;
+    }
+    if (typeof query.isRewardBooking === 'boolean') {
+        where.isRewardBooking = query.isRewardBooking;
     }
     if (query.emailOrName?.trim()) {
         const term = query.emailOrName.trim();
