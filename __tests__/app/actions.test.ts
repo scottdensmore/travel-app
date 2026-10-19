@@ -4508,6 +4508,38 @@ describe('resendBoardingPassAction', () => {
             }),
         );
     });
+
+    it('forwards isRewardBooking and pointsRedeemed when booking is a reward booking', async () => {
+        mockedGetServerSession.mockResolvedValue({
+            user: { id: 'user-1', email: 'ada@example.com' },
+        });
+        mockedItineraryLegFindFirst.mockResolvedValue({
+            ...sampleLeg,
+            booking: {
+                ...sampleLeg.booking,
+                isRewardBooking: true,
+                pointsRedeemed: 25000,
+            },
+        });
+        mockedSendTravelDocumentsEmail.mockResolvedValue(undefined);
+
+        const result = await resendBoardingPassAction(1, 10);
+
+        expect(result).toEqual({
+            ok: true,
+            data: {
+                sentTo: 'ada@example.com',
+            },
+        });
+        expect(mockedSendTravelDocumentsEmail).toHaveBeenCalledWith(
+            expect.objectContaining({
+                to: 'ada@example.com',
+                bookingReference: 'MNA-1234',
+                isRewardBooking: true,
+                pointsRedeemed: 25000,
+            }),
+        );
+    });
 });
 
 describe('searchFlightStatusAction', () => {

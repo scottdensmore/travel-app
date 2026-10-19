@@ -436,6 +436,12 @@ export async function resendConfirmationEmail(bookingId: number): Promise<{ succ
             seat: p.seatAssignments[0]?.seatNumber || 'Unassigned',
             cabin: p.seatAssignments[0]?.cabinClass || 'ECONOMY',
         })),
+        ...(booking.isRewardBooking
+            ? {
+                  isRewardBooking: true,
+                  pointsRedeemed: booking.pointsRedeemed ?? null,
+              }
+            : {}),
     };
 
     await sendTravelDocumentsEmail(input);

@@ -1,6 +1,7 @@
 /** @jest-environment node */
 import {
     formatTravelDocumentsEmailText,
+    formatTravelDocumentsEmailHtml,
     sendTravelDocumentsEmail,
     sendReceiptEmail,
     TravelDocumentEmailInput,
@@ -51,6 +52,27 @@ describe('travel document email delivery', () => {
         expect(text).toContain('Grace Hopper');
         expect(text).toContain('11B');
         expect(text).toContain('Economy');
+        expect(text).not.toContain('Ticket Type: Reward Redemption');
+        expect(text).not.toContain('Points Redeemed:');
+    });
+
+    it('includes reward redemption breakdown in plain-text and HTML emails for reward bookings', () => {
+        const rewardInput: TravelDocumentEmailInput = {
+            ...sampleInput,
+            isRewardBooking: true,
+            pointsRedeemed: 25000,
+        };
+
+        const text = formatTravelDocumentsEmailText(rewardInput);
+        expect(text).toContain('Departure: Aug 19, 2026 at 08:00 PDT\nTicket Type: Reward Redemption\nPoints Redeemed: 25,000 pts');
+
+        const html = formatTravelDocumentsEmailHtml(rewardInput);
+        expect(html).toContain('<p><strong>Ticket Type:</strong> Reward Redemption</p>');
+        expect(html).toContain('<p><strong>Points Redeemed:</strong> 25,000 pts</p>');
+
+        const cashHtml = formatTravelDocumentsEmailHtml(sampleInput);
+        expect(cashHtml).not.toContain('Reward Redemption');
+        expect(cashHtml).not.toContain('Points Redeemed:');
     });
 
     it('formats plain-text email with fare breakdown details', () => {

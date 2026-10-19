@@ -46,6 +46,8 @@ export interface TravelDocumentEmailInput {
     toDestination: string;
     departureReadable: string;
     passengers: TravelDocumentPassenger[];
+    isRewardBooking?: boolean;
+    pointsRedeemed?: number | null;
 }
 
 export function formatTravelDocumentsEmailText(input: TravelDocumentEmailInput): string {
@@ -87,6 +89,14 @@ export function formatTravelDocumentsEmailText(input: TravelDocumentEmailInput):
         })
         .join('\n\n');
 
+    const rewardLines: string[] = [];
+    if (input.isRewardBooking) {
+        rewardLines.push('Ticket Type: Reward Redemption');
+        if (typeof input.pointsRedeemed === 'number' && input.pointsRedeemed > 0) {
+            rewardLines.push(`Points Redeemed: ${input.pointsRedeemed.toLocaleString('en-US')} pts`);
+        }
+    }
+
     return [
         `Here are your travel documents for flight ${input.flightNumber}.`,
         '',
@@ -95,6 +105,7 @@ export function formatTravelDocumentsEmailText(input: TravelDocumentEmailInput):
         `Flight: ${input.flightNumber}`,
         `Route: ${input.from} to ${input.toDestination}`,
         `Departure: ${input.departureReadable}`,
+        ...rewardLines,
         '',
         'Passengers and Seat Assignments:',
         passengerLines,
@@ -210,6 +221,16 @@ export function formatTravelDocumentsEmailHtml(input: TravelDocumentEmailInput):
         })
         .join('');
 
+    const rewardHtmlLines: string[] = [];
+    if (input.isRewardBooking) {
+        rewardHtmlLines.push('<p><strong>Ticket Type:</strong> Reward Redemption</p>');
+        if (typeof input.pointsRedeemed === 'number' && input.pointsRedeemed > 0) {
+            rewardHtmlLines.push(
+                `<p><strong>Points Redeemed:</strong> ${input.pointsRedeemed.toLocaleString('en-US')} pts</p>`,
+            );
+        }
+    }
+
     return `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
             <h2>Your Travel Documents</h2>
@@ -219,7 +240,7 @@ export function formatTravelDocumentsEmailHtml(input: TravelDocumentEmailInput):
                 <p><strong>Confirmation Reference:</strong> ${input.bookingReference}</p>
                 <p><strong>Airline:</strong> ${input.airline}</p>
                 <p><strong>Route:</strong> ${input.from} to ${input.toDestination}</p>
-                <p><strong>Departure:</strong> ${input.departureReadable}</p>
+                <p><strong>Departure:</strong> ${input.departureReadable}</p>${rewardHtmlLines.length > 0 ? `\n                ${rewardHtmlLines.join('\n                ')}` : ''}
             </div>
             
             ${passengerCards}
