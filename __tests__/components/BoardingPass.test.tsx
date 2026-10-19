@@ -38,4 +38,31 @@ describe('BoardingPass', () => {
         expect(screen.queryByTestId('boarding-pass-reward-badge')).not.toBeInTheDocument();
         expect(screen.queryByText('REWARD TICKET')).not.toBeInTheDocument();
     });
+
+    it('renders the Redemption detail when isRewardBooking is true and pointsRedeemed is greater than 0', () => {
+        render(<BoardingPass {...baseProps} isRewardBooking={true} pointsRedeemed={15000} />);
+
+        const redemption = screen.getByTestId('boarding-pass-redemption');
+        expect(redemption).toBeInTheDocument();
+        expect(redemption).toHaveTextContent('Redemption');
+        expect(redemption).toHaveTextContent('15,000 pts');
+    });
+
+    it('does not render the Redemption detail when isRewardBooking is false or pointsRedeemed is omitted or 0', () => {
+        const { unmount } = render(<BoardingPass {...baseProps} isRewardBooking={false} pointsRedeemed={15000} />);
+        expect(screen.queryByTestId('boarding-pass-redemption')).not.toBeInTheDocument();
+        unmount();
+
+        const { unmount: unmountOmitted } = render(<BoardingPass {...baseProps} isRewardBooking={true} />);
+        expect(screen.queryByTestId('boarding-pass-redemption')).not.toBeInTheDocument();
+        unmountOmitted();
+
+        const { unmount: unmountZero } = render(<BoardingPass {...baseProps} isRewardBooking={true} pointsRedeemed={0} />);
+        expect(screen.queryByTestId('boarding-pass-redemption')).not.toBeInTheDocument();
+        unmountZero();
+
+        render(<BoardingPass {...baseProps} isRewardBooking={true} pointsRedeemed={null} />);
+        expect(screen.queryByTestId('boarding-pass-redemption')).not.toBeInTheDocument();
+    });
 });
+
