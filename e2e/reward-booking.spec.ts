@@ -144,6 +144,7 @@ test.describe('Reward Flight Search, Redemption & Redeposit Journey', () => {
                 durationMinutes: { not: null },
                 departureDate: {
                     gt: new Date(Date.now() + 96 * 60 * 60 * 1000),
+                    lt: new Date(Date.now() + 25 * 24 * 60 * 60 * 1000),
                 },
             },
             include: flightRouteInclude,
@@ -222,19 +223,30 @@ test.describe('Reward Flight Search, Redemption & Redeposit Journey', () => {
         });
         expect(flightAfterBooking.awardSeatsEconomy).toBe(1);
 
-        // 7. Navigate to /profile and verify spendable balance and Points Activity History table
+        // 7. Navigate to /checkin and verify the upcoming leg displays the reward booking badge with points redeemed
+        await page.goto('/checkin');
+        const checkInRewardBadge = page.getByTestId('reward-booking-badge').first();
+        await expect(checkInRewardBadge).toBeVisible();
+        await expect(checkInRewardBadge).toContainText('Reward Booking · 15,000 pts');
+
+        // 8. Navigate to /profile and verify My Bookings row badge & price, spendable balance, and Points Activity History table
         await page.goto('/profile');
+        const bookingRow = page.getByTestId(`booking-row-${persistedBooking.id}`);
+        await expect(bookingRow).toBeVisible();
+        await expect(bookingRow).toContainText('Reward Booking');
+        await expect(bookingRow).toContainText('15,000 pts + $10.10');
+
         await expect(page.getByTestId('spendable-points-balance')).toContainText('35,000 pts');
         await expect(page.getByTestId('points-ledger-table')).toBeVisible();
         await expect(page.getByTestId('badge-REWARD_REDEMPTION').first()).toHaveText('Redemption');
         await expect(page.getByTestId('points-ledger-table')).toContainText('-15,000');
 
-        // 8. Cancel the reward booking from /profile (>24h before departure: 80% Economy points redeposited + 100% taxes refunded)
+        // 9. Cancel the reward booking from /profile (>24h before departure: 80% Economy points redeposited + 100% taxes refunded)
         page.once('dialog', async dialog => {
             expect(dialog.message()).toContain('Are you sure you want to cancel booking for flight');
             await dialog.accept();
         });
-        await page.click('button:has-text("Cancel")');
+        await bookingRow.getByRole('button', { name: 'Cancel' }).click();
 
         const cancellationStatus = page.getByRole('status').filter({
             hasText: 'Booking cancelled. Any refund due will appear in the status column.',
