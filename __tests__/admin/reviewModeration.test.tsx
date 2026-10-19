@@ -541,4 +541,145 @@ describe('ReviewModerationClient', () => {
         fireEvent.change(ratingSelect, { target: { value: '2' } });
         expect(screen.getByText('No reviews match the current filters.')).toBeInTheDocument();
     });
+
+    it('filters Audit Trail records by action (APPROVE, HIDE, DELETE, DISMISS_REPORTS)', () => {
+        const multiAudits = [
+            {
+                id: 'aud-hide',
+                action: 'HIDE',
+                reason: 'Automated threshold: 3+ user reports',
+                createdAt: new Date('2026-01-02T00:00:00Z'),
+                moderator: { name: 'System' },
+                review: { id: 'rev-1', cityGuide: { city: 'Paris' } },
+            },
+            {
+                id: 'aud-approve',
+                action: 'APPROVE',
+                reason: 'Verified authentic traveler review',
+                createdAt: new Date('2026-01-03T00:00:00Z'),
+                moderator: { name: 'Alice Moderator', email: 'alice@example.com' },
+                review: { id: 'rev-2', cityGuide: { city: 'Tokyo' } },
+            },
+            {
+                id: 'aud-delete',
+                action: 'DELETE',
+                reason: 'Removed malicious phishing review',
+                metadata: { city: 'Berlin' },
+                createdAt: new Date('2026-01-04T00:00:00Z'),
+                moderator: { name: 'Bob Admin', email: 'bob@example.com' },
+                review: null,
+            },
+        ];
+
+        render(
+            <ReviewModerationClient
+                initialReviews={mockReviews as any}
+                initialAudits={multiAudits as any}
+            />
+        );
+
+        fireEvent.click(screen.getByRole('tab', { name: /audit trail/i }));
+
+        const actionFilter = screen.getByTestId('moderation-audit-action-filter');
+        expect(actionFilter).toHaveAttribute(
+            'aria-label',
+            'Filter moderation audit history by action'
+        );
+
+        // Filter by APPROVE
+        fireEvent.change(actionFilter, { target: { value: 'APPROVE' } });
+        expect(screen.getByText('Verified authentic traveler review')).toBeInTheDocument();
+        expect(screen.queryByText(/Automated threshold: 3\+ user reports/i)).not.toBeInTheDocument();
+        expect(screen.queryByText('Removed malicious phishing review')).not.toBeInTheDocument();
+
+        // Filter by HIDE
+        fireEvent.change(actionFilter, { target: { value: 'HIDE' } });
+        expect(screen.getByText(/Automated threshold: 3\+ user reports/i)).toBeInTheDocument();
+        expect(screen.queryByText('Verified authentic traveler review')).not.toBeInTheDocument();
+
+        // Filter by DELETE
+        fireEvent.change(actionFilter, { target: { value: 'DELETE' } });
+        expect(screen.getByText('Removed malicious phishing review')).toBeInTheDocument();
+        expect(screen.queryByText(/Automated threshold: 3\+ user reports/i)).not.toBeInTheDocument();
+
+        // Filter by DISMISS_REPORTS (none in list) -> shows no matches row
+        fireEvent.change(actionFilter, { target: { value: 'DISMISS_REPORTS' } });
+        expect(screen.getByTestId('moderation-audit-no-matches')).toHaveTextContent(
+            'No moderation audit records match the current filters.'
+        );
+
+        // Reset to ALL
+        fireEvent.change(actionFilter, { target: { value: 'ALL' } });
+        expect(screen.getByText(/Automated threshold: 3\+ user reports/i)).toBeInTheDocument();
+        expect(screen.getByText('Verified authentic traveler review')).toBeInTheDocument();
+        expect(screen.getByText('Removed malicious phishing review')).toBeInTheDocument();
+    });
+
+    it('searches Audit Trail records by moderator, city, metadata city, or reason and shows empty match message when none match', () => {
+        const multiAudits = [
+            {
+                id: 'aud-hide',
+                action: 'HIDE',
+                reason: 'Automated threshold: 3+ user reports',
+                createdAt: new Date('2026-01-02T00:00:00Z'),
+                moderator: { name: 'System' },
+                review: { id: 'rev-1', cityGuide: { city: 'Paris' } },
+            },
+            {
+                id: 'aud-approve',
+                action: 'APPROVE',
+                reason: 'Verified authentic traveler review',
+                createdAt: new Date('2026-01-03T00:00:00Z'),
+                moderator: { name: 'Alice Moderator', email: 'alice@example.com' },
+                review: { id: 'rev-2', cityGuide: { city: 'Tokyo' } },
+            },
+            {
+                id: 'aud-delete',
+                action: 'DELETE',
+                reason: 'Removed malicious phishing review',
+                metadata: { city: 'Berlin' },
+                createdAt: new Date('2026-01-04T00:00:00Z'),
+                moderator: { name: 'Bob Admin', email: 'bob@example.com' },
+                review: null,
+            },
+        ];
+
+        render(
+            <ReviewModerationClient
+                initialReviews={mockReviews as any}
+                initialAudits={multiAudits as any}
+            />
+        );
+
+        fireEvent.click(screen.getByRole('tab', { name: /audit trail/i }));
+
+        const auditSearch = screen.getByTestId('moderation-audit-search');
+        expect(auditSearch).toHaveAttribute('aria-label', 'Search moderation audit history');
+
+        // Search by moderator name
+        fireEvent.change(auditSearch, { target: { value: 'Alice' } });
+        expect(screen.getByText('Verified authentic traveler review')).toBeInTheDocument();
+        expect(screen.queryByText(/Automated threshold: 3\+ user reports/i)).not.toBeInTheDocument();
+
+        // Search by city (from review.cityGuide.city)
+        fireEvent.change(auditSearch, { target: { value: 'Paris' } });
+        expect(screen.getByText(/Automated threshold: 3\+ user reports/i)).toBeInTheDocument();
+        expect(screen.queryByText('Verified authentic traveler review')).not.toBeInTheDocument();
+
+        // Search by city from metadata (for deleted reviews)
+        fireEvent.change(auditSearch, { target: { value: 'berlin' } });
+        expect(screen.getByText('Removed malicious phishing review')).toBeInTheDocument();
+        expect(screen.queryByText('Verified authentic traveler review')).not.toBeInTheDocument();
+
+        // Search by reason
+        fireEvent.change(auditSearch, { target: { value: 'phishing' } });
+        expect(screen.getByText('Removed malicious phishing review')).toBeInTheDocument();
+        expect(screen.queryByText(/Automated threshold: 3\+ user reports/i)).not.toBeInTheDocument();
+
+        // Non-matching search query
+        fireEvent.change(auditSearch, { target: { value: 'nonexistent-audit-query-999' } });
+        expect(screen.getByTestId('moderation-audit-no-matches')).toHaveTextContent(
+            'No moderation audit records match the current filters.'
+        );
+    });
 });
