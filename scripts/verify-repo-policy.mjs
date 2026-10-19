@@ -104,7 +104,19 @@ function checkEngines(packageJson, violations) {
 }
 
 /**
- * Check 2b: Verify Dockerfile base image uses the Node 22 LTS line when present.
+ * Check 2b: Verify package.json devDependencies["@types/node"] targets the Node 22 major line.
+ */
+export function checkTypesNodeVersion(packageJson, violations) {
+    const typesNode = packageJson.devDependencies?.['@types/node'];
+    if (typeof typesNode !== 'string' || !/^(?:\^|~)?22(?:\.|$)/.test(typesNode)) {
+        violations.push(
+            `package.json: devDependencies["@types/node"] must target the Node 22 major line (found: '${typesNode ?? 'none'}').`
+        );
+    }
+}
+
+/**
+ * Check 2c: Verify Dockerfile base image uses the Node 22 LTS line when present.
  */
 function checkDockerfile(repoRoot, violations) {
     const dockerfilePath = path.join(repoRoot, 'Dockerfile');
@@ -330,8 +342,16 @@ export function verifyRepoPolicy({ repoRoot = path.resolve(path.dirname(fileURLT
 
     // 2. Engines baseline
     checkEngines(packageJson, violations);
+    checkTypesNodeVersion(packageJson, violations);
     checkDockerfile(repoRoot, violations);
-    if (!violations.some((v) => v.startsWith('package.json: \'engines.node\'') || v.startsWith('Dockerfile base image'))) {
+    if (
+        !violations.some(
+            (v) =>
+                v.startsWith("package.json: 'engines.node'") ||
+                v.startsWith('package.json: devDependencies["@types/node"]') ||
+                v.startsWith('Dockerfile base image')
+        )
+    ) {
         output.log('✔ package.json and Dockerfile Node 22 baseline verified.');
     }
 
