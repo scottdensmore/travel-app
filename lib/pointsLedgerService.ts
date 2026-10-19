@@ -29,6 +29,7 @@ export interface PointsLedgerInput {
 export interface PointsLedgerHistoryOptions {
     page?: number;
     pageSize?: number;
+    type?: PointsTransactionType | string;
 }
 
 export interface PaginatedLedger {
@@ -253,15 +254,19 @@ export async function getPointsLedgerHistory(
         };
     }
 
+    const where: Prisma.PointsLedgerEntryWhereInput = options?.type
+        ? { userId, type: options.type as PointsTransactionType }
+        : { userId };
+
     const [entries, total] = await Promise.all([
         tx.pointsLedgerEntry.findMany({
-            where: { userId },
+            where,
             orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
             skip,
             take: pageSize,
         }),
         tx.pointsLedgerEntry.count({
-            where: { userId },
+            where,
         }),
     ]);
 

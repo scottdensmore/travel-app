@@ -351,5 +351,41 @@ describe('pointsLedgerService', () => {
             const historySmall = await getPointsLedgerHistory('user-1', { pageSize: -10 }, mockTx);
             expect(historySmall.pageSize).toBe(1);
         });
+
+        it('filters ledger entries by transaction type when type option is provided', async () => {
+            const mockRedemptions = [
+                {
+                    id: 'entry-redemption',
+                    type: PointsTransactionType.REWARD_REDEMPTION,
+                    amount: -15000,
+                    balanceAfter: 5000,
+                    createdAt: new Date(),
+                },
+            ];
+            const mockTx: any = {
+                pointsLedgerEntry: {
+                    findMany: jest.fn().mockResolvedValue(mockRedemptions),
+                    count: jest.fn().mockResolvedValue(1),
+                },
+            };
+
+            const history = await getPointsLedgerHistory(
+                'user-1',
+                { page: 1, pageSize: 10, type: PointsTransactionType.REWARD_REDEMPTION },
+                mockTx
+            );
+
+            expect(history.entries).toEqual(mockRedemptions);
+            expect(history.totalCount).toBe(1);
+            expect(mockTx.pointsLedgerEntry.findMany).toHaveBeenCalledWith({
+                where: { userId: 'user-1', type: PointsTransactionType.REWARD_REDEMPTION },
+                orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+                skip: 0,
+                take: 10,
+            });
+            expect(mockTx.pointsLedgerEntry.count).toHaveBeenCalledWith({
+                where: { userId: 'user-1', type: PointsTransactionType.REWARD_REDEMPTION },
+            });
+        });
     });
 });
