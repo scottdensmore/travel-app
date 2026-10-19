@@ -18,6 +18,7 @@ export interface AdminNotificationDeliveriesClientProps {
 
 type StatusTab = 'ALL' | 'FAILED' | 'SENT' | 'PENDING';
 type ChannelFilter = 'ALL' | 'EMAIL' | 'IN_APP';
+type NotificationTypeFilter = 'ALL' | 'POINTS' | 'FLIGHT_CANCELLED' | 'FLIGHT_DELAYED' | 'GATE_CHANGE';
 
 export default function AdminNotificationDeliveriesClient({
     initialDeliveries,
@@ -30,6 +31,7 @@ export default function AdminNotificationDeliveriesClient({
     const [deliveries, setDeliveries] = useState<NotificationDeliveryWithNotification[]>(initialDeliveries);
     const [activeTab, setActiveTab] = useState<StatusTab>('ALL');
     const [selectedChannel, setSelectedChannel] = useState<ChannelFilter>('ALL');
+    const [selectedType, setSelectedType] = useState<NotificationTypeFilter>('ALL');
     const [searchQuery, setSearchQuery] = useState('');
     const [retryingIds, setRetryingIds] = useState<Record<string, boolean>>({});
     const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -47,17 +49,25 @@ export default function AdminNotificationDeliveriesClient({
         pending: pendingCount ?? initialDeliveries.filter(d => d.status === 'PENDING').length,
     });
 
-    const fetchDeliveries = async (tab: StatusTab, channel: ChannelFilter, search: string, page: number = 1) => {
+    const fetchDeliveries = async (
+        tab: StatusTab,
+        channel: ChannelFilter,
+        search: string,
+        page: number = 1,
+        type: NotificationTypeFilter = selectedType
+    ) => {
         setFeedback(null);
         startTransition(async () => {
             try {
                 const queryStatus = tab === 'ALL' ? undefined : tab;
                 const queryChannel = channel === 'ALL' ? undefined : channel;
+                const queryType = type === 'ALL' ? undefined : type;
                 const querySearch = search.trim() ? search.trim() : undefined;
 
                 const result = await getAdminNotificationDeliveriesAction({
                     status: queryStatus,
                     channel: queryChannel,
+                    ...(queryType ? { type: queryType } : {}),
                     search: querySearch,
                     page,
                     pageSize,
@@ -85,31 +95,37 @@ export default function AdminNotificationDeliveriesClient({
 
     const handleTabChange = (tab: StatusTab) => {
         setActiveTab(tab);
-        fetchDeliveries(tab, selectedChannel, searchQuery, 1);
+        fetchDeliveries(tab, selectedChannel, searchQuery, 1, selectedType);
     };
 
     const handleChannelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const channel = e.target.value as ChannelFilter;
         setSelectedChannel(channel);
-        fetchDeliveries(activeTab, channel, searchQuery, 1);
+        fetchDeliveries(activeTab, channel, searchQuery, 1, selectedType);
+    };
+
+    const handleTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const type = e.target.value as NotificationTypeFilter;
+        setSelectedType(type);
+        fetchDeliveries(activeTab, selectedChannel, searchQuery, 1, type);
     };
 
     const handleSearchSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        fetchDeliveries(activeTab, selectedChannel, searchQuery, 1);
+        fetchDeliveries(activeTab, selectedChannel, searchQuery, 1, selectedType);
     };
 
     const handlePreviousPage = () => {
         if (currentPage > 1) {
             const newPage = currentPage - 1;
-            fetchDeliveries(activeTab, selectedChannel, searchQuery, newPage);
+            fetchDeliveries(activeTab, selectedChannel, searchQuery, newPage, selectedType);
         }
     };
 
     const handleNextPage = () => {
         if (currentPage < totalPages) {
             const newPage = currentPage + 1;
-            fetchDeliveries(activeTab, selectedChannel, searchQuery, newPage);
+            fetchDeliveries(activeTab, selectedChannel, searchQuery, newPage, selectedType);
         }
     };
 
@@ -275,6 +291,26 @@ export default function AdminNotificationDeliveriesClient({
                             <option value="ALL">All Channels</option>
                             <option value="EMAIL">Email</option>
                             <option value="IN_APP">In-App</option>
+                        </select>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <label htmlFor="notification-type-filter" className="text-sm font-medium text-gray-300">
+                            Type:
+                        </label>
+                        <select
+                            id="notification-type-filter"
+                            aria-label="Filter by notification type"
+                            data-testid="notification-type-filter"
+                            value={selectedType}
+                            onChange={handleTypeChange}
+                            className="px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500"
+                        >
+                            <option value="ALL">All Types</option>
+                            <option value="POINTS">Loyalty &amp; Points (POINTS)</option>
+                            <option value="FLIGHT_CANCELLED">Flight Cancelled</option>
+                            <option value="FLIGHT_DELAYED">Flight Delayed</option>
+                            <option value="GATE_CHANGE">Gate Change</option>
                         </select>
                     </div>
 

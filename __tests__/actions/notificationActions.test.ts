@@ -218,6 +218,39 @@ describe('Notification Server Actions', () => {
                 })
             );
         });
+
+        it('filters deliveries by notification.type when type is provided', async () => {
+            const session = { user: { id: 'admin-1', role: 'ADMIN' } };
+            (getServerSession as jest.Mock).mockResolvedValue(session);
+            (hasStaffPermission as jest.Mock).mockReturnValue(true);
+
+            (prisma.notificationDelivery.findMany as jest.Mock).mockResolvedValue([]);
+            (prisma.notificationDelivery.count as jest.Mock).mockResolvedValue(0);
+
+            const result = await getAdminNotificationDeliveriesAction({
+                type: 'POINTS',
+                page: 1,
+                pageSize: 50,
+            });
+
+            expect(result).toEqual({ ok: true, data: { deliveries: [], totalCount: 0 } });
+            expect(prisma.notificationDelivery.findMany).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    where: {
+                        notification: {
+                            type: 'POINTS',
+                        },
+                    },
+                })
+            );
+            expect(prisma.notificationDelivery.count).toHaveBeenCalledWith({
+                where: {
+                    notification: {
+                        type: 'POINTS',
+                    },
+                },
+            });
+        });
     });
 
     describe('retryNotificationDeliveryAction', () => {
