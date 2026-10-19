@@ -353,5 +353,88 @@ describe('AdminFlightsTable', () => {
 
         expect(screen.getByText('Reward')).toBeInTheDocument();
     });
+
+    it('does not render the filter bar when initialFlights is empty', () => {
+        render(<AdminFlightsTable initialFlights={[]} />);
+
+        expect(screen.queryByTestId('admin-flights-search')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('admin-flights-status-filter')).not.toBeInTheDocument();
+        expect(screen.getByText('No active flight instances generated for the next 7 days.')).toBeInTheDocument();
+    });
+
+    it('filters flight rows by search query matching flight number, airline, or route', () => {
+        render(<AdminFlightsTable initialFlights={mockFlights} />);
+
+        const searchInput = screen.getByTestId('admin-flights-search');
+        expect(searchInput).toHaveAttribute('aria-label', 'Search flights by number, airline, or route');
+        expect(searchInput).toHaveAttribute('placeholder', 'Search flight #, airline, or route...');
+
+        // Filter by flight number (case-insensitive)
+        fireEvent.change(searchInput, { target: { value: 'fl202' } });
+        expect(screen.queryByText('FL101')).not.toBeInTheDocument();
+        expect(screen.getByText('FL202')).toBeInTheDocument();
+
+        // Filter by route origin/destination
+        fireEvent.change(searchInput, { target: { value: 'lax' } });
+        expect(screen.getByText('FL101')).toBeInTheDocument();
+        expect(screen.queryByText('FL202')).not.toBeInTheDocument();
+
+        // Filter by airline
+        fireEvent.change(searchInput, { target: { value: 'another' } });
+        expect(screen.queryByText('FL101')).not.toBeInTheDocument();
+        expect(screen.getByText('FL202')).toBeInTheDocument();
+    });
+
+    it('filters flight rows by status and shows empty state when no flights match', () => {
+        const flightsWithAllStatuses = [
+            ...mockFlights,
+            {
+                id: 3,
+                flightNumber: 'FL303',
+                airline: 'Cancelled Air',
+                from: 'ORD',
+                to: 'MIA',
+                departureDate: '2026-06-22T15:00:00.000Z',
+                priceCents: 18000,
+                status: 'CANCELLED' as const,
+                bookings: [],
+            },
+        ];
+
+        render(<AdminFlightsTable initialFlights={flightsWithAllStatuses} />);
+
+        const statusSelect = screen.getByTestId('admin-flights-status-filter');
+        expect(statusSelect).toHaveAttribute('aria-label', 'Filter flights by status');
+
+        // Filter by ON_TIME
+        fireEvent.change(statusSelect, { target: { value: 'ON_TIME' } });
+        expect(screen.getByText('FL101')).toBeInTheDocument();
+        expect(screen.queryByText('FL202')).not.toBeInTheDocument();
+        expect(screen.queryByText('FL303')).not.toBeInTheDocument();
+
+        // Filter by DELAYED
+        fireEvent.change(statusSelect, { target: { value: 'DELAYED' } });
+        expect(screen.queryByText('FL101')).not.toBeInTheDocument();
+        expect(screen.getByText('FL202')).toBeInTheDocument();
+        expect(screen.queryByText('FL303')).not.toBeInTheDocument();
+
+        // Filter by CANCELLED
+        fireEvent.change(statusSelect, { target: { value: 'CANCELLED' } });
+        expect(screen.queryByText('FL101')).not.toBeInTheDocument();
+        expect(screen.queryByText('FL202')).not.toBeInTheDocument();
+        expect(screen.getByText('FL303')).toBeInTheDocument();
+
+        // Combine status filter with non-matching search query
+        const searchInput = screen.getByTestId('admin-flights-search');
+        fireEvent.change(searchInput, { target: { value: 'JFK' } });
+        expect(screen.queryByText('FL101')).not.toBeInTheDocument();
+        expect(screen.queryByText('FL202')).not.toBeInTheDocument();
+        expect(screen.queryByText('FL303')).not.toBeInTheDocument();
+        expect(screen.getByText('No flights match the current filters.')).toBeInTheDocument();
+        // Filter bar remains visible
+        expect(screen.getByTestId('admin-flights-search')).toBeInTheDocument();
+        expect(screen.getByTestId('admin-flights-status-filter')).toBeInTheDocument();
+    });
 });
+
 
