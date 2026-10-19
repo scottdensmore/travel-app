@@ -87,6 +87,7 @@ export interface BookingManagementPortalProps {
         emailOrName?: string;
         flightNumber?: string;
         status?: BookingStatus;
+        isRewardBooking?: boolean;
         dateFrom?: string;
         dateTo?: string;
         page?: number;
@@ -112,6 +113,13 @@ export interface BookingManagementPortalProps {
     ) => Promise<void>;
     rebookAction?: (bookingId: number, request: Record<string, unknown>, reason: string) => Promise<unknown>;
     staffRebookItineraryAction?: (bookingId: number, request: Record<string, unknown>, reason: string) => Promise<unknown>;
+}
+
+function formatCurrency(cents: number, currency?: string): string {
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currency || 'USD',
+    }).format(cents / 100);
 }
 
 export default function BookingManagementPortal({
@@ -177,6 +185,7 @@ export default function BookingManagementPortal({
     const [emailOrName, setEmailOrName] = useState<string>('');
     const [flightNumber, setFlightNumber] = useState<string>('');
     const [status, setStatus] = useState<BookingStatus | ''>('');
+    const [bookingType, setBookingType] = useState<'ALL' | 'REWARD' | 'CASH'>('ALL');
     const [dateFrom, setDateFrom] = useState<string>('');
     const [dateTo, setDateTo] = useState<string>('');
 
@@ -239,17 +248,23 @@ export default function BookingManagementPortal({
         }
     }, [activeNotesBooking, activeSeatBooking, activeRebookBooking, activeCancelBooking]);
 
-    const executeSearch = async (targetPage: number) => {
+    const executeSearch = async (targetPage: number, reset = false) => {
         setLoading(true);
         setFeedback(null);
         try {
+            const effectiveBookingType = reset ? 'ALL' : bookingType;
             const query = {
-                reference: reference.trim() || undefined,
-                emailOrName: emailOrName.trim() || undefined,
-                flightNumber: flightNumber.trim() || undefined,
-                status: (status as BookingStatus) || undefined,
-                dateFrom: dateFrom || undefined,
-                dateTo: dateTo || undefined,
+                reference: reset ? undefined : reference.trim() || undefined,
+                emailOrName: reset ? undefined : emailOrName.trim() || undefined,
+                flightNumber: reset ? undefined : flightNumber.trim() || undefined,
+                status: reset ? undefined : (status as BookingStatus) || undefined,
+                ...(effectiveBookingType === 'REWARD'
+                    ? { isRewardBooking: true }
+                    : effectiveBookingType === 'CASH'
+                    ? { isRewardBooking: false }
+                    : {}),
+                dateFrom: reset ? undefined : dateFrom || undefined,
+                dateTo: reset ? undefined : dateTo || undefined,
                 page: targetPage,
                 pageSize,
             };
@@ -291,9 +306,10 @@ export default function BookingManagementPortal({
         setEmailOrName('');
         setFlightNumber('');
         setStatus('');
+        setBookingType('ALL');
         setDateFrom('');
         setDateTo('');
-        executeSearch(1);
+        executeSearch(1, true);
     };
 
     // Notes Handlers
@@ -614,6 +630,23 @@ export default function BookingManagementPortal({
                         </div>
 
                         <div>
+                            <label htmlFor="filter-booking-type" className="block text-xs font-semibold text-purple-300 mb-1">
+                                Booking Type
+                            </label>
+                            <select
+                                id="filter-booking-type"
+                                aria-label="Booking Type"
+                                value={bookingType}
+                                onChange={(e) => setBookingType(e.target.value as 'ALL' | 'REWARD' | 'CASH')}
+                                className="w-full px-3 py-2 bg-gray-900 rounded border border-gray-700 text-white text-sm focus:outline-none focus:border-purple-400"
+                            >
+                                <option value="ALL">All Types</option>
+                                <option value="REWARD">Reward Only</option>
+                                <option value="CASH">Cash Only</option>
+                            </select>
+                        </div>
+
+                        <div>
                             <label htmlFor="dateFrom" className="block text-xs font-semibold text-purple-300 mb-1">
                                 Date From
                             </label>
@@ -700,17 +733,25 @@ export default function BookingManagementPortal({
                                     <tr key={booking.id} className="hover:bg-gray-900/40 text-sm">
                                         <td className="p-3 font-mono font-bold text-purple-300">
                                             <div>{booking.reference}</div>
-                                            {booking.isRewardBooking && (
+                                            {booking.isRewardBooking ? (
                                                 <div className="mt-1 flex flex-wrap items-center gap-1.5 font-sans font-semibold">
                                                     <span className="px-2 py-0.5 rounded text-[11px] bg-amber-950/80 text-amber-300 border border-amber-700/70">
                                                         Reward Booking
                                                     </span>
                                                     {typeof booking.pointsRedeemed === 'number' && booking.pointsRedeemed > 0 && (
                                                         <span className="text-xs text-amber-200">
-                                                            {booking.pointsRedeemed.toLocaleString()} pts
+                                                            {typeof booking.totalPriceCents === 'number'
+                                                                ? `${booking.pointsRedeemed.toLocaleString('en-US')} pts + ${formatCurrency(booking.totalPriceCents, booking.currency)}`
+                                                                : `${booking.pointsRedeemed.toLocaleString('en-US')} pts`}
                                                         </span>
                                                     )}
                                                 </div>
+                                            ) : (
+                                                typeof booking.totalPriceCents === 'number' && (
+                                                    <div className="mt-0.5 font-sans text-xs font-normal text-gray-400">
+                                                        {formatCurrency(booking.totalPriceCents, booking.currency)}
+                                                    </div>
+                                                )
                                             )}
                                         </td>
                                         <td className="p-3">
