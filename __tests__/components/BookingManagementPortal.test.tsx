@@ -563,6 +563,66 @@ describe('BookingManagementPortal', () => {
 
         expect(screen.queryByTestId('support-rebook-reward-notice')).not.toBeInTheDocument();
     });
+
+    it('renders passenger cabin class and current seat badges in Reassign Seats modal', async () => {
+        const bookingsWithPassengers = [
+            {
+                ...mockBookings[0],
+                id: 501,
+                reference: 'MA-SEAT501',
+                passengers: [
+                    {
+                        id: 'p1',
+                        firstName: 'John',
+                        lastName: 'Doe',
+                        cabinClass: 'FIRST_CLASS',
+                        seatAssignments: [
+                            { id: 'sa1', flightId: 'f1', seatNumber: '1A', cabinClass: 'FIRST_CLASS', releasedAt: null },
+                        ],
+                    },
+                    {
+                        id: 'p2',
+                        firstName: 'Jane',
+                        lastName: 'Doe',
+                        seatAssignments: [],
+                    },
+                ],
+            },
+        ];
+
+        render(
+            <BookingManagementPortal
+                initialData={{
+                    bookings: bookingsWithPassengers,
+                    totalCount: 1,
+                    page: 1,
+                    pageSize: 25,
+                    totalPages: 1,
+                }}
+                searchAction={mockSearchAction}
+                cancelAction={mockCancelAction}
+                seatChangeAction={mockSeatChangeAction}
+            />
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: /reassign seats/i }));
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+            expect(screen.getByRole('heading', { name: /reassign seats/i })).toBeInTheDocument();
+        });
+
+        expect(screen.getByText('Passenger: John Doe')).toBeInTheDocument();
+        expect(screen.getByTestId('support-seat-modal-meta-p1')).toBeInTheDocument();
+        expect(screen.getByTestId('support-seat-modal-cabin-p1')).toHaveTextContent('Cabin: FIRST CLASS');
+        expect(screen.getByTestId('support-seat-modal-current-seat-p1')).toHaveTextContent('Current: 1A');
+
+        expect(screen.getByText('Passenger: Jane Doe')).toBeInTheDocument();
+        expect(screen.getByTestId('support-seat-modal-meta-p2')).toBeInTheDocument();
+        expect(screen.getByTestId('support-seat-modal-cabin-p2')).toHaveTextContent('Cabin: ECONOMY');
+        expect(screen.getByTestId('support-seat-modal-current-seat-p2')).toHaveTextContent('Current: Unassigned');
+    });
 });
+
 
 
