@@ -11,7 +11,7 @@ Before rollout:
 
 1. Identify and preserve the actual existing data volume, including any anonymous volume created while PostgreSQL 18 used the old mount path. Retain a verified backup and a tested rollback path.
 2. Rehearse a supported upgrade or logical dump/restore using a separate copy and isolated database instance. Do not mount the live PostgreSQL 15 volume into PostgreSQL 18.
-3. Validate the upgraded copy, application migrations and database behavior against PostgreSQL 18. Existing hosted database CI currently uses PostgreSQL 15.
+3. Validate the upgraded copy, application migrations and database behavior against PostgreSQL 18 (hosted database CI runs against PostgreSQL 18).
 4. Arrange an owner-approved rollout and rollback window. This repository change does not perform a live migration.
 
 Read-only layout checks can be run against a copied volume directory:
