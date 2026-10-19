@@ -183,6 +183,8 @@ export default function CheckInPanel({ legs }: { legs: CheckInLegView[] }) {
     const [isSavingSeat, setIsSavingSeat] = useState<boolean>(false);
     const [seatModalError, setSeatModalError] = useState<string | null>(null);
     const [resendingLegId, setResendingLegId] = useState<number | null>(null);
+    const [searchQuery, setSearchQuery] = useState<string>('');
+    const [statusFilter, setStatusFilter] = useState<'ALL' | 'ELIGIBLE' | 'CHECKED_IN' | 'REWARD'>('ALL');
     // Keyed by BOOKING, not by leg. The attestation is recorded per booking -- a
     // passport does not change between an outbound and a return -- so two legs of
     // one booking are one question, and keying per leg asked it twice on the same
@@ -204,6 +206,38 @@ export default function CheckInPanel({ legs }: { legs: CheckInLegView[] }) {
     } | null>(null);
     const feedbackRef = useRef<HTMLParagraphElement | null>(null);
     const attestationRefs = useRef<Record<number, HTMLInputElement | null>>({});
+
+    const filteredLegs = useMemo(() => {
+        const query = searchQuery.trim().toLowerCase();
+        return legs.filter((leg) => {
+            if (statusFilter === 'ELIGIBLE') {
+                if (!(leg.allowed && leg.reason === 'OPEN')) return false;
+            } else if (statusFilter === 'CHECKED_IN') {
+                const isCheckedIn =
+                    leg.reason === 'ALREADY_CHECKED_IN' ||
+                    (leg.travellers.length > 0 && leg.travellers.every((t) => t.checkedIn));
+                if (!isCheckedIn) return false;
+            } else if (statusFilter === 'REWARD') {
+                if (!Boolean(leg.isRewardBooking)) return false;
+            }
+
+            if (query) {
+                const routeText = `${leg.from} to ${leg.to}`.toLowerCase();
+                const flightText = `${leg.airline} ${leg.flightNumber}`.toLowerCase();
+                const matchesQuery =
+                    leg.reference.toLowerCase().includes(query) ||
+                    leg.flightNumber.toLowerCase().includes(query) ||
+                    leg.airline.toLowerCase().includes(query) ||
+                    leg.from.toLowerCase().includes(query) ||
+                    leg.to.toLowerCase().includes(query) ||
+                    routeText.includes(query) ||
+                    flightText.includes(query);
+                if (!matchesQuery) return false;
+            }
+
+            return true;
+        });
+    }, [legs, searchQuery, statusFilter]);
 
     /**
      * Which leg carries the attestation for each booking.
@@ -448,8 +482,67 @@ export default function CheckInPanel({ legs }: { legs: CheckInLegView[] }) {
                         <Link href="/book">Book a flight</Link> to travel with us.
                     </p>
                 ) : (
+                    <>
+                        <div
+                            className="checkin-filter-bar"
+                            style={{
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                gap: '0.75rem',
+                                marginBottom: '1.25rem',
+                                alignItems: 'center',
+                            }}
+                        >
+                            <input
+                                id="checkin-search"
+                                type="search"
+                                aria-label="Search check-in flights"
+                                data-testid="checkin-search"
+                                placeholder="Search confirmation #, flight #, or route..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                style={{
+                                    flex: '1 1 240px',
+                                    padding: '0.55rem 0.75rem',
+                                    borderRadius: '8px',
+                                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                                    background: 'rgba(255, 255, 255, 0.06)',
+                                    color: '#fff',
+                                    fontSize: '0.9rem',
+                                }}
+                            />
+                            <select
+                                id="checkin-status-filter"
+                                aria-label="Filter check-in flights"
+                                data-testid="checkin-status-filter"
+                                value={statusFilter}
+                                onChange={(e) =>
+                                    setStatusFilter(
+                                        e.target.value as 'ALL' | 'ELIGIBLE' | 'CHECKED_IN' | 'REWARD'
+                                    )
+                                }
+                                style={{
+                                    padding: '0.55rem 0.75rem',
+                                    borderRadius: '8px',
+                                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                                    background: 'rgba(30, 27, 75, 0.9)',
+                                    color: '#fff',
+                                    fontSize: '0.9rem',
+                                }}
+                            >
+                                <option value="ALL">All Flights</option>
+                                <option value="ELIGIBLE">Eligible Now</option>
+                                <option value="CHECKED_IN">Checked In</option>
+                                <option value="REWARD">Reward Bookings</option>
+                            </select>
+                        </div>
+                        {filteredLegs.length === 0 ? (
+                            <p className="checkin-empty">
+                                No check-in flights match the current filters.
+                            </p>
+                        ) : (
                     <ul className="checkin-leg-list">
-                        {legs.map((leg) => {
+                        {filteredLegs.map((leg) => {
                             const busy = pendingLegId === leg.legId;
                             const shown = feedback?.legId === leg.legId ? feedback : null;
                             const headingId = `checkin-leg-${leg.legId}-heading`;
@@ -811,6 +904,8 @@ export default function CheckInPanel({ legs }: { legs: CheckInLegView[] }) {
                             );
                         })}
                     </ul>
+                        )}
+                    </>
                 )}
 
                 {seatModalState && (() => {
