@@ -261,6 +261,8 @@ export default function ItineraryRebookingDialog({
                                             const cabin = cabinFor(group.fromLegId, passenger.id);
                                             const currentSeat = selectedSeats[seatKey(group.fromLegId, passenger.id)] ?? '';
                                             const occupied = new Set(occupiedByFlight[flight.id] ?? []);
+                                            const cabinSeats = seatsForCabin(cabin, flight);
+                                            const openSeatCount = cabinSeats.filter(seat => !occupied.has(seat)).length;
                                             const selectId = `replacement-seat-${bookingId}-${group.fromLegId}-${passenger.id}`;
                                             return (
                                                 <div className="rebooking-seat-choice" key={passenger.id}>
@@ -268,6 +270,13 @@ export default function ItineraryRebookingDialog({
                                                         Replacement seat for {passenger.firstName} {passenger.lastName} on {flight.flightNumber}
                                                     </label>
                                                     <span>{cabinLabel(cabin)}</span>
+                                                    <span
+                                                        className="rebooking-open-seats"
+                                                        data-testid={`rebooking-open-seats-${group.fromLegId}-${passenger.id}`}
+                                                        style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.7)' }}
+                                                    >
+                                                        {openSeatCount} {openSeatCount === 1 ? 'open seat' : 'open seats'}
+                                                    </span>
                                                     <select
                                                         id={selectId}
                                                         value={currentSeat}
@@ -278,7 +287,7 @@ export default function ItineraryRebookingDialog({
                                                         disabled={pending}
                                                     >
                                                         <option value="">Choose a seat</option>
-                                                        {seatsForCabin(cabin, flight).map(seat => {
+                                                        {cabinSeats.map(seat => {
                                                             const unavailable = occupied.has(seat)
                                                                 || (locallyChosen.has(seat) && seat !== currentSeat);
                                                             return (
