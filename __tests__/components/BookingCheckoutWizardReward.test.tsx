@@ -183,6 +183,7 @@ describe('BookingCheckoutWizard - Reward Flight Redemption (#130)', () => {
         await advanceFromSeatsToReview();
         expect(screen.getByText('Review Booking')).toBeInTheDocument();
         expect(screen.getByTestId('spendable-points-balance-step4')).toHaveTextContent(/Available balance: 50,000 pts/i);
+        expect(screen.getByTestId('remaining-points-after-booking-step4')).toHaveTextContent('· Remaining after booking: 35,000 pts');
 
         // Trip summary should show Points Redemption and Mandatory Taxes & Fees
         expect(screen.getByText('Points Redemption')).toBeInTheDocument();

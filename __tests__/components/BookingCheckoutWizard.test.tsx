@@ -2043,5 +2043,37 @@ describe('BookingCheckoutWizard', () => {
             });
         });
     });
+
+    it('displays projected remaining points balance on Step 4 of a reward booking when spendablePointsBalance >= totalPointsRequired', async () => {
+        const rewardFlight = {
+            ...sampleFlight,
+            awardSeatsEconomy: 4,
+            awardSeatsBusiness: 2,
+            awardSeatsPremiumEconomy: 2,
+            awardSeatsFirst: 2,
+        };
+        const { container } = render(
+            <BookingCheckoutWizard
+                flights={[rewardFlight]}
+                occupiedSeats={[[]]}
+                isRewardBooking={true}
+                spendablePointsBalance={45000}
+            />
+        );
+
+        fireEvent.change(screen.getByPlaceholderText('John'), { target: { value: 'Alice' } });
+        fireEvent.change(screen.getByPlaceholderText('Doe'), { target: { value: 'Smith' } });
+        fireEvent.change(container.querySelector('input[type="date"]')!, { target: { value: '1995-05-15' } });
+        fireEvent.change(screen.getByPlaceholderText('A00000000'), { target: { value: 'US1234567' } });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Select Seats →' }));
+        fireEvent.click(screen.getByTitle('Select Seat 11A'));
+
+        await advanceFromSeatsToReview();
+
+        expect(screen.getByText('Review Booking')).toBeInTheDocument();
+        expect(screen.getByTestId('spendable-points-balance-step4')).toHaveTextContent('Available balance: 45,000 pts');
+        expect(screen.getByTestId('remaining-points-after-booking-step4')).toHaveTextContent('· Remaining after booking: 30,000 pts');
+    });
 });
 
