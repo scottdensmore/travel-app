@@ -120,13 +120,28 @@ const TitleBar: React.FC = () => {
         '/travelguide': 'Travel Guide',
         '/profile': 'Profile',
         '/flight-status': 'Flight Status',
+        '/checkin': 'Check In',
         '/admin': 'Admin Dashboard',
         '/admin/travelguide': 'Manage City Guides',
+        '/admin/flights': 'Flight Schedules',
+        '/admin/bookings': 'Booking Support',
+        '/admin/users': 'User & Role Management',
+        '/admin/audit': 'Staff Audit Trail',
+        '/admin/reviews': 'Review Moderation',
+        '/admin/payments': 'Payment Recovery',
+        '/admin/notifications': 'Notification Deliveries',
     };
 
     const pageTitle = pageTitles[pathname] || '';
     const userAvatar = session?.user?.image || "/img/my-profile-photo.jpg";
-    const isAdmin = session?.user?.role === 'ADMIN' && session.user.staffMfaVerified;
+    const userRole = session?.user?.role as string | undefined;
+    const isAdmin =
+        (userRole === 'ADMIN' ||
+            userRole === 'OPERATIONS' ||
+            userRole === 'OPS' ||
+            userRole === 'SUPPORT' ||
+            userRole === 'MODERATOR') &&
+        Boolean(session?.user?.staffMfaVerified);
 
     // Set while the document is going away, so a poll that dies with it can be
     // told apart from one that failed on its own.
@@ -362,7 +377,7 @@ const TitleBar: React.FC = () => {
                     )}
 
                     {isAdmin && (
-                        <li className={pathname === '/admin' ? 'selected' : ''}>
+                        <li className={pathname?.startsWith('/admin') ? 'selected' : ''}>
                             <Link href="/admin">Admin</Link>
                         </li>
                     )}
