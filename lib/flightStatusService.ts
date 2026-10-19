@@ -28,6 +28,10 @@ export interface FlightStatusResult {
     departure: LocalDeparture;
     arrival: LocalArrival | null;
     gates: EffectiveFlightGates;
+    awardSeatsFirst?: number | null;
+    awardSeatsBusiness?: number | null;
+    awardSeatsPremiumEconomy?: number | null;
+    awardSeatsEconomy?: number | null;
 }
 
 export class FlightStatusService {
@@ -110,6 +114,10 @@ export class FlightStatusService {
                 departure: dep,
                 arrival: arr,
                 gates,
+                awardSeatsFirst: flight.awardSeatsFirst,
+                awardSeatsBusiness: flight.awardSeatsBusiness,
+                awardSeatsPremiumEconomy: flight.awardSeatsPremiumEconomy,
+                awardSeatsEconomy: flight.awardSeatsEconomy,
             };
         });
     }

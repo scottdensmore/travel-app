@@ -658,6 +658,22 @@ export default function FlightStatusTracker({
                             ? departureInOriginZone(flight.estimatedArrival, destZone)
                             : null;
 
+                        const hasAwardSeatsDefined =
+                            typeof flight.awardSeatsFirst === 'number' ||
+                            typeof flight.awardSeatsBusiness === 'number' ||
+                            typeof flight.awardSeatsPremiumEconomy === 'number' ||
+                            typeof flight.awardSeatsEconomy === 'number';
+                        const totalAward = hasAwardSeatsDefined
+                            ? (flight.awardSeatsFirst ?? 0) +
+                              (flight.awardSeatsBusiness ?? 0) +
+                              (flight.awardSeatsPremiumEconomy ?? 0) +
+                              (flight.awardSeatsEconomy ?? 0)
+                            : 0;
+                        const showAwardSeats =
+                            flight.status !== 'CANCELLED' &&
+                            hasAwardSeatsDefined &&
+                            totalAward > 0;
+
                         return (
                             <div
                                 key={flight.id}
@@ -968,6 +984,24 @@ export default function FlightStatusTracker({
                                         paddingTop: '1rem',
                                     }}
                                 >
+                                    {showAwardSeats && (
+                                        <span
+                                            data-testid={`tracker-award-seats-${flight.id}`}
+                                            style={{
+                                                marginRight: 'auto',
+                                                padding: '0.25rem 0.65rem',
+                                                borderRadius: '9999px',
+                                                fontSize: '0.75rem',
+                                                fontWeight: '600',
+                                                display: 'inline-block',
+                                                backgroundColor: 'rgba(192, 132, 252, 0.15)',
+                                                color: '#c084fc',
+                                                border: '1px solid rgba(192, 132, 252, 0.3)',
+                                            }}
+                                        >
+                                            Award seats: {flight.awardSeatsFirst ?? 0}F · {flight.awardSeatsBusiness ?? 0}J · {flight.awardSeatsPremiumEconomy ?? 0}W · {flight.awardSeatsEconomy ?? 0}Y ({totalAward} total)
+                                        </span>
+                                    )}
                                     <Link
                                         href={`/book?flight=${flight.id}`}
                                         style={{
