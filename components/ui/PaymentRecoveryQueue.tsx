@@ -41,12 +41,29 @@ export default function PaymentRecoveryQueue({ initialAttempts }: PaymentRecover
     const [attempts, setAttempts] = useState(initialAttempts);
     const [pendingId, setPendingId] = useState<string | null>(null);
     const [feedback, setFeedback] = useState<Feedback | null>(null);
+    const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIONABLE' | 'RECONCILED'>('ALL');
+    const [searchQuery, setSearchQuery] = useState<string>('');
     const [, startTransition] = useTransition();
     const feedbackRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (feedback) feedbackRef.current?.focus();
     }, [feedback]);
+
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+    const filteredAttempts = attempts.filter(attempt => {
+        const isTerminal = TERMINAL_STATUSES.has(attempt.status);
+        if (statusFilter === 'ACTIONABLE' && isTerminal) return false;
+        if (statusFilter === 'RECONCILED' && !isTerminal) return false;
+        if (!normalizedSearch) return true;
+        return [
+            attempt.userName,
+            attempt.userEmail,
+            attempt.providerIntentId,
+            attempt.checkoutId,
+            attempt.id,
+        ].some(field => field?.toLowerCase().includes(normalizedSearch));
+    });
 
     const reconcile = (attemptId: string) => {
         setFeedback(null);
@@ -107,59 +124,99 @@ export default function PaymentRecoveryQueue({ initialAttempts }: PaymentRecover
                     No stale payment attempts need review.
                 </p>
             ) : (
-                <div className="payment-recovery-list">
-                    {attempts.map(attempt => {
-                        const isPending = pendingId === attempt.id;
-                        const isTerminal = TERMINAL_STATUSES.has(attempt.status);
-                        return (
-                            <article
-                                key={attempt.id}
-                                aria-label={`Payment attempt ${attempt.id}`}
-                                className="payment-recovery-card"
-                            >
-                                <div className="payment-recovery-details">
-                                    <div>
-                                        <span className="payment-recovery-label">Customer</span>
-                                        <strong>{attempt.userName ?? 'Account unavailable'}</strong>
-                                        {attempt.userEmail && <span>{attempt.userEmail}</span>}
-                                    </div>
-                                    <div>
-                                        <span className="payment-recovery-label">Amount</span>
-                                        <strong>{formatPrice(attempt.amountCents)} {attempt.currency}</strong>
-                                    </div>
-                                    <div>
-                                        <span className="payment-recovery-label">Local status</span>
-                                        <strong>{attempt.status}</strong>
-                                    </div>
-                                    <div>
-                                        <span className="payment-recovery-label">Last local update</span>
-                                        <span>{formattedUpdatedAt(attempt.updatedAt)} UTC</span>
-                                    </div>
-                                    <div>
-                                        <span className="payment-recovery-label">Stripe intent</span>
-                                        <code>{attempt.providerIntentId}</code>
-                                    </div>
-                                    <div>
-                                        <span className="payment-recovery-label">Checkout</span>
-                                        <code>{attempt.checkoutId}</code>
-                                    </div>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => reconcile(attempt.id)}
-                                    disabled={pendingId !== null || isTerminal}
-                                    aria-busy={isPending || undefined}
-                                >
-                                    {isPending
-                                        ? 'Refreshing payment status…'
-                                        : isTerminal
-                                            ? 'Payment reconciled'
-                                            : 'Refresh payment status'}
-                                </button>
-                            </article>
-                        );
-                    })}
-                </div>
+                <>
+                    <div
+                        className="payment-recovery-filters"
+                        style={{
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: '0.75rem',
+                            marginTop: '1rem',
+                        }}
+                    >
+                        <select
+                            id="payment-recovery-status-filter"
+                            aria-label="Filter payment attempts by status"
+                            data-testid="payment-recovery-status-filter"
+                            value={statusFilter}
+                            onChange={e => setStatusFilter(e.target.value as 'ALL' | 'ACTIONABLE' | 'RECONCILED')}
+                        >
+                            <option value="ALL">All Attempts</option>
+                            <option value="ACTIONABLE">Actionable Only</option>
+                            <option value="RECONCILED">Reconciled</option>
+                        </select>
+                        <input
+                            id="payment-recovery-search"
+                            type="search"
+                            aria-label="Search payment attempts"
+                            data-testid="payment-recovery-search"
+                            placeholder="Search customer, intent, or checkout..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            style={{ flex: '1 1 220px' }}
+                        />
+                    </div>
+
+                    {filteredAttempts.length === 0 ? (
+                        <p style={{ color: 'rgba(255, 255, 255, 0.6)', marginTop: '1rem', marginBottom: 0 }}>
+                            No payment attempts match the current filters.
+                        </p>
+                    ) : (
+                        <div className="payment-recovery-list">
+                            {filteredAttempts.map(attempt => {
+                                const isPending = pendingId === attempt.id;
+                                const isTerminal = TERMINAL_STATUSES.has(attempt.status);
+                                return (
+                                    <article
+                                        key={attempt.id}
+                                        aria-label={`Payment attempt ${attempt.id}`}
+                                        className="payment-recovery-card"
+                                    >
+                                        <div className="payment-recovery-details">
+                                            <div>
+                                                <span className="payment-recovery-label">Customer</span>
+                                                <strong>{attempt.userName ?? 'Account unavailable'}</strong>
+                                                {attempt.userEmail && <span>{attempt.userEmail}</span>}
+                                            </div>
+                                            <div>
+                                                <span className="payment-recovery-label">Amount</span>
+                                                <strong>{formatPrice(attempt.amountCents)} {attempt.currency}</strong>
+                                            </div>
+                                            <div>
+                                                <span className="payment-recovery-label">Local status</span>
+                                                <strong>{attempt.status}</strong>
+                                            </div>
+                                            <div>
+                                                <span className="payment-recovery-label">Last local update</span>
+                                                <span>{formattedUpdatedAt(attempt.updatedAt)} UTC</span>
+                                            </div>
+                                            <div>
+                                                <span className="payment-recovery-label">Stripe intent</span>
+                                                <code>{attempt.providerIntentId}</code>
+                                            </div>
+                                            <div>
+                                                <span className="payment-recovery-label">Checkout</span>
+                                                <code>{attempt.checkoutId}</code>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => reconcile(attempt.id)}
+                                            disabled={pendingId !== null || isTerminal}
+                                            aria-busy={isPending || undefined}
+                                        >
+                                            {isPending
+                                                ? 'Refreshing payment status…'
+                                                : isTerminal
+                                                    ? 'Payment reconciled'
+                                                    : 'Refresh payment status'}
+                                        </button>
+                                    </article>
+                                );
+                            })}
+                        </div>
+                    )}
+                </>
             )}
         </section>
     );
