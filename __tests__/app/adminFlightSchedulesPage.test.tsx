@@ -1,6 +1,7 @@
 /** @jest-environment node */
 
 import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 jest.mock('@/lib/prisma', () => ({
     prisma: {
@@ -28,13 +29,29 @@ import { prisma } from '@/lib/prisma';
 const flightFindMany = prisma.flight.findMany as unknown as jest.Mock;
 const scheduleFindMany = prisma.flightSchedule.findMany as unknown as jest.Mock;
 
+function childrenOf(node: React.ReactElement<Record<string, any>>): React.ReactNode {
+    if (node.props.children !== undefined) {
+        return node.props.children;
+    }
+    if (typeof node.type === 'function') {
+        let rendered: React.ReactNode = null;
+        const Component = node.type as (props: Record<string, any>) => React.ReactNode;
+        renderToStaticMarkup(
+            React.createElement(() => {
+                rendered = Component(node.props);
+                return null;
+            }),
+        );
+        return rendered;
+    }
+    return undefined;
+}
+
 function textContent(node: React.ReactNode): string {
     if (typeof node === 'string' || typeof node === 'number') return String(node);
-    if (!React.isValidElement(node)) return '';
+    if (!React.isValidElement<Record<string, any>>(node)) return '';
 
-    return React.Children.toArray(
-        (node.props as { children?: React.ReactNode }).children,
-    ).map(textContent).join(' ');
+    return React.Children.toArray(childrenOf(node)).map(textContent).join(' ');
 }
 
 describe('/admin/flights schedule list', () => {
@@ -114,9 +131,7 @@ function findElement(
     if (!React.isValidElement<Record<string, any>>(node)) return null;
     if (predicate(node)) return node;
 
-    const children = React.Children.toArray(
-        (node.props as { children?: React.ReactNode }).children,
-    );
+    const children = React.Children.toArray(childrenOf(node));
     for (const child of children) {
         const found = findElement(child, predicate);
         if (found) return found;
