@@ -1072,6 +1072,46 @@ describe('ProfileClient interactive dashboard', () => {
             expect(screen.getByRole('status')).toHaveFocus();
         });
 
+        it('passes reward booking props to ItineraryRebookingDialog for a disrupted reward itinerary', () => {
+            const disruptedRewardBooking = {
+                ...disruptedRoundTrip,
+                isRewardBooking: true,
+                pointsRedeemed: 15000,
+            };
+            renderBookings([disruptedRewardBooking], {
+                202: [{
+                    fromLegId: 502,
+                    originalFlightNumber: 'GA900',
+                    originalDepartureDate: new Date('2026-06-22T17:00:00Z'),
+                    from: 'Detroit, USA',
+                    to: 'Seattle, USA',
+                    flights: [{
+                        id: 303,
+                        flightNumber: 'MA901',
+                        airline: 'Mona Airways',
+                        from: 'Detroit, USA',
+                        to: 'Seattle, USA',
+                        departureDate: new Date('2026-06-24T17:00:00Z'),
+                        durationMinutes: 290,
+                        status: 'ON_TIME',
+                        firstClassRows: 0,
+                        businessRows: 0,
+                        premiumEconomyRows: 0,
+                        economyRows: 3,
+                        seatPattern: 'AB-CD',
+                    }],
+                }],
+            });
+
+            fireEvent.click(screen.getByRole('button', { name: 'Select replacement seats' }));
+            const dialog = screen.getByRole('dialog');
+            const waiver = within(dialog).getByTestId('rebooking-reward-waiver');
+            expect(waiver).toHaveTextContent('Reward Disruption Waiver:');
+            expect(waiver).toHaveTextContent(
+                'Your 15,000 pts redemption and taxes are protected — no additional points required.',
+            );
+        });
+
         it('gives a truthful fallback when the comparable window has no flight', () => {
             renderBookings([disruptedRoundTrip], {
                 202: [{

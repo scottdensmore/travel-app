@@ -193,6 +193,8 @@ function ReplacementFlightsPreview({
                     cancelledLegs={booking.legs.filter(leg => leg.flight?.status === 'CANCELLED')}
                     groups={groups}
                     onSuccess={onSuccess}
+                    isRewardBooking={booking.isRewardBooking}
+                    pointsRedeemed={booking.pointsRedeemed}
                 />
             )}
         </section>

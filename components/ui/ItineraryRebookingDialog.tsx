@@ -33,6 +33,8 @@ interface ItineraryRebookingDialogProps {
     cancelledLegs: CancelledLeg[];
     groups: ReplacementFlightGroup[];
     onSuccess: () => void;
+    isRewardBooking?: boolean;
+    pointsRedeemed?: number | null;
 }
 
 const seatKey = (legId: number, passengerId: string) => `${legId}:${passengerId}`;
@@ -44,6 +46,8 @@ export default function ItineraryRebookingDialog({
     cancelledLegs,
     groups,
     onSuccess,
+    isRewardBooking,
+    pointsRedeemed,
 }: ItineraryRebookingDialogProps) {
     const router = useRouter();
     const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -196,6 +200,26 @@ export default function ItineraryRebookingDialog({
                             Choose one replacement flight and one seat for every traveller.
                             Your original fare is protected.
                         </p>
+                        {isRewardBooking && (
+                            <div
+                                className="rebooking-reward-waiver"
+                                data-testid="rebooking-reward-waiver"
+                                style={{
+                                    marginBottom: '12px',
+                                    padding: '8px 12px',
+                                    borderRadius: '8px',
+                                    backgroundColor: 'rgba(126, 34, 206, 0.18)',
+                                    border: '1px solid rgba(192, 132, 252, 0.45)',
+                                    color: '#e9d5ff',
+                                    fontSize: '0.85rem',
+                                }}
+                            >
+                                <strong>Reward Disruption Waiver:</strong>{' '}
+                                {typeof pointsRedeemed === 'number' && pointsRedeemed > 0
+                                    ? `Your ${pointsRedeemed.toLocaleString('en-US')} pts redemption and taxes are protected — no additional points required.`
+                                    : 'Your reward redemption and taxes are protected — no additional points required.'}
+                            </div>
+                        )}
                         {error && (
                             <div ref={errorRef} className="rebooking-error" role="alert" tabIndex={-1}>
                                 {error}
