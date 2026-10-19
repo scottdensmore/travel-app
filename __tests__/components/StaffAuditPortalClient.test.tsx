@@ -121,4 +121,58 @@ describe('StaffAuditPortalClient', () => {
         });
         expect(await screen.findByText(/Permanently removed 5 audit record\(s\)/i)).toBeInTheDocument();
     });
+
+    it('includes User Points Adjustment in action filter dropdown, filters via searchStaffAuditLogsAction, and renders badge in audit table', async () => {
+        const { searchStaffAuditLogsAction } = require('@/app/actions/staffAuditActions');
+        const pointsLog = {
+            id: 'log-points-1',
+            actorId: 'u2',
+            actorEmail: 'support@example.com',
+            actorRole: 'SUPPORT' as const,
+            action: 'USER_POINTS_ADJUSTMENT',
+            targetType: 'User',
+            targetId: 'target-user-99',
+            beforeState: { points: 1000 },
+            afterState: { points: 1500 },
+            reason: 'Goodwill gesture for delayed flight',
+            metadata: { delta: 500 },
+            ipAddress: '127.0.0.1',
+            createdAt: new Date().toISOString(),
+            actor: { name: 'Support Agent', image: null },
+        };
+        (searchStaffAuditLogsAction as jest.Mock).mockResolvedValueOnce({
+            success: true,
+            logs: [pointsLog],
+            totalCount: 1,
+        });
+
+        render(
+            <StaffAuditPortalClient
+                initialLogs={sampleLogs}
+                initialTotalCount={1}
+            />
+        );
+
+        const actionSelect = screen.getByLabelText(/action/i) as HTMLSelectElement;
+        const option = screen.getByRole('option', { name: 'User Points Adjustment' }) as HTMLOptionElement;
+        expect(option).toBeInTheDocument();
+        expect(option.value).toBe('USER_POINTS_ADJUSTMENT');
+
+        fireEvent.change(actionSelect, { target: { value: 'USER_POINTS_ADJUSTMENT' } });
+        expect(actionSelect.value).toBe('USER_POINTS_ADJUSTMENT');
+
+        const applyBtn = screen.getByRole('button', { name: /apply filters/i });
+        fireEvent.click(applyBtn);
+
+        expect(searchStaffAuditLogsAction).toHaveBeenCalledWith({
+            limit: 50,
+            action: 'USER_POINTS_ADJUSTMENT',
+        });
+
+        const badge = await screen.findByText('USER_POINTS_ADJUSTMENT');
+        expect(badge).toBeInTheDocument();
+        expect(screen.getByText('Goodwill gesture for delayed flight')).toBeInTheDocument();
+        expect(screen.getByText('support@example.com')).toBeInTheDocument();
+    });
 });
+
