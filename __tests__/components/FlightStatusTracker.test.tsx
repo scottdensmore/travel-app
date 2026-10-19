@@ -268,4 +268,84 @@ describe('FlightStatusTracker', () => {
         expect(screen.getByText(/Estimated:/i)).toBeInTheDocument();
         expect(screen.getByText(/14:20 EDT/i)).toBeInTheDocument();
     });
+
+    it('renders per-cabin award seat availability badge when awardSeats are present and > 0 on a non-cancelled flight', () => {
+        const flightWithAwardSeats = {
+            ...mockFlightResult,
+            id: 301,
+            status: 'ON_TIME' as const,
+            awardSeatsFirst: 1,
+            awardSeatsBusiness: 2,
+            awardSeatsPremiumEconomy: 3,
+            awardSeatsEconomy: 4,
+        };
+        const flightWithPartialAwardSeats = {
+            ...mockDelayedFlightResult,
+            id: 302,
+            awardSeatsFirst: null,
+            awardSeatsBusiness: undefined,
+            awardSeatsPremiumEconomy: 0,
+            awardSeatsEconomy: 5,
+        };
+
+        render(
+            <FlightStatusTracker
+                initialFlights={[flightWithAwardSeats, flightWithPartialAwardSeats]}
+                initialSearch={null}
+                coverage="today"
+            />
+        );
+
+        const badge301 = screen.getByTestId('tracker-award-seats-301');
+        expect(badge301).toBeInTheDocument();
+        expect(badge301).toHaveTextContent('Award seats: 1F · 2J · 3W · 4Y (10 total)');
+
+        const badge302 = screen.getByTestId('tracker-award-seats-302');
+        expect(badge302).toBeInTheDocument();
+        expect(badge302).toHaveTextContent('Award seats: 0F · 0J · 0W · 5Y (5 total)');
+    });
+
+    it('omits award seat badge when flight is CANCELLED, all award seats are 0, or none are defined', () => {
+        const cancelledFlightWithAwardSeats = {
+            ...mockFlightResult,
+            id: 303,
+            status: 'CANCELLED' as const,
+            phase: 'CANCELLED' as const,
+            awardSeatsFirst: 1,
+            awardSeatsBusiness: 2,
+            awardSeatsPremiumEconomy: 3,
+            awardSeatsEconomy: 4,
+        };
+        const zeroAwardSeatsFlight = {
+            ...mockFlightResult,
+            id: 304,
+            status: 'ON_TIME' as const,
+            awardSeatsFirst: 0,
+            awardSeatsBusiness: 0,
+            awardSeatsPremiumEconomy: 0,
+            awardSeatsEconomy: 0,
+        };
+        const undefinedAwardSeatsFlight = {
+            ...mockFlightResult,
+            id: 305,
+            status: 'ON_TIME' as const,
+        };
+
+        render(
+            <FlightStatusTracker
+                initialFlights={[
+                    cancelledFlightWithAwardSeats,
+                    zeroAwardSeatsFlight,
+                    undefinedAwardSeatsFlight,
+                ]}
+                initialSearch={null}
+                coverage="today"
+            />
+        );
+
+        expect(screen.queryByTestId('tracker-award-seats-303')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('tracker-award-seats-304')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('tracker-award-seats-305')).not.toBeInTheDocument();
+    });
 });
+
