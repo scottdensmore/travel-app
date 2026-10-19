@@ -428,4 +428,49 @@ describe('FlightScheduleForm', () => {
         });
         expect(mockSaveFlightScheduleAction).not.toHaveBeenCalled();
     });
+
+    it('renders live cabin capacity and award quota summary when seating config is expanded and updates dynamically', () => {
+        render(<FlightScheduleForm />);
+
+        expect(screen.queryByTestId('schedule-seating-capacity-summary')).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: /Customize Seating Configuration/i }));
+
+        const summary = screen.getByTestId('schedule-seating-capacity-summary');
+        // Default: 3F, 3J, 4W, 20Y with ABC-DEF (6 seats/row) => 18F, 18J, 24W, 120Y = 180 total; awards 1 + 2 + 2 + 4 = 9
+        expect(summary).toHaveTextContent('Capacity: 180 total seats (18F · 18J · 24W · 120Y) · 9 award seats');
+
+        // Change rows and award seats
+        fireEvent.change(screen.getByLabelText(/First Class Rows/i), { target: { value: '2' } });
+        fireEvent.change(screen.getByLabelText(/Seat Pattern/i), { target: { value: 'AC-DF' } });
+        fireEvent.change(screen.getByLabelText('Economy Award Seats'), { target: { value: '10' } });
+
+        // Now 4 seats/row: 2*4=8F, 3*4=12J, 4*4=16W, 20*4=80Y => 116 total; awards 1 + 2 + 2 + 10 = 15
+        expect(summary).toHaveTextContent('Capacity: 116 total seats (8F · 12J · 16W · 80Y) · 15 award seats');
+    });
+
+    it('shows validation error when a cabin award seat quota exceeds physical cabin capacity', async () => {
+        render(<FlightScheduleForm />);
+
+        fireEvent.change(screen.getByLabelText(/Flight Number \*/i), { target: { value: 'AA123' } });
+        fireEvent.change(screen.getByLabelText(/Airline Name \*/i), { target: { value: 'American Airlines' } });
+        fireEvent.change(screen.getByLabelText(/From \(Origin\) \*/i), { target: { value: 'New York, USA' } });
+        fireEvent.change(screen.getByLabelText(/To \(Destination\) \*/i), { target: { value: 'London, UK' } });
+        fireEvent.change(screen.getByLabelText(/Departure \(HH:MM\) \*/i), { target: { value: '08:00' } });
+        fireEvent.change(screen.getByLabelText(/Duration \(minutes\) \*/i), { target: { value: '245' } });
+        fireEvent.change(screen.getByLabelText(/Price \(\$\) \*/i), { target: { value: '850' } });
+        fireEvent.click(screen.getByLabelText('Mon'));
+
+        fireEvent.click(screen.getByRole('button', { name: /Customize Seating Configuration/i }));
+        // First class has 3 rows * 6 seats = 18 physical seats; set award quota to 19
+        fireEvent.change(screen.getByLabelText('First Class Award Seats'), { target: { value: '19' } });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create Schedule' }));
+
+        await waitFor(() => {
+            expect(screen.getByText(/Award seat quota cannot exceed physical cabin capacity\./i)).toBeInTheDocument();
+        });
+        expect(mockSaveFlightScheduleAction).not.toHaveBeenCalled();
+    });
 });
+
