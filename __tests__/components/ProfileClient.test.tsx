@@ -1694,5 +1694,195 @@ describe('ProfileClient interactive dashboard', () => {
                 });
             });
         });
+
+        describe('My Bookings search and status/reward filter', () => {
+            const filterTestBookings = [
+                {
+                    ...sampleBookings[0],
+                    id: 301,
+                    reference: 'MA-CONF-1001',
+                    status: 'CONFIRMED',
+                    isRewardBooking: false,
+                    legs: [{
+                        id: 701,
+                        sequence: 1,
+                        flight: {
+                            id: 401,
+                            flightNumber: 'GA101',
+                            airline: 'Gemini Airways',
+                            from: 'Seattle (SEA)',
+                            to: 'Detroit (DTW)',
+                            departureDate: '2026-06-15T08:00:00Z',
+                            priceCents: 35000,
+                            status: 'ON_TIME',
+                        },
+                        seatAssignments: [{ passengerId: 'p-1', seatNumber: '12A', cabinClass: 'ECONOMY' }],
+                    }],
+                },
+                {
+                    ...sampleBookings[0],
+                    id: 302,
+                    reference: 'MA-REWARD-2002',
+                    status: 'CONFIRMED',
+                    isRewardBooking: true,
+                    pointsRedeemed: 25000,
+                    totalPriceCents: 1120,
+                    legs: [{
+                        id: 702,
+                        sequence: 1,
+                        flight: {
+                            id: 402,
+                            flightNumber: 'NW450',
+                            airline: 'Northwest Sky',
+                            from: 'Boston (BOS)',
+                            to: 'Chicago (ORD)',
+                            departureDate: '2026-06-18T10:00:00Z',
+                            priceCents: 28000,
+                            status: 'ON_TIME',
+                        },
+                        seatAssignments: [{ passengerId: 'p-1', seatNumber: '8C', cabinClass: 'ECONOMY' }],
+                    }],
+                },
+                {
+                    ...sampleBookings[0],
+                    id: 303,
+                    reference: 'MA-DISRUPT-3003',
+                    status: 'DISRUPTED',
+                    isRewardBooking: false,
+                    legs: [
+                        {
+                            id: 703,
+                            sequence: 1,
+                            flight: {
+                                id: 403,
+                                flightNumber: 'DL777',
+                                airline: 'Delta Wings',
+                                from: 'Atlanta (ATL)',
+                                to: 'Miami (MIA)',
+                                departureDate: '2026-06-20T09:00:00Z',
+                                priceCents: 22000,
+                                status: 'ON_TIME',
+                            },
+                            seatAssignments: [{ passengerId: 'p-1', seatNumber: '14B', cabinClass: 'ECONOMY' }],
+                        },
+                        {
+                            id: 704,
+                            sequence: 2,
+                            flight: {
+                                id: 404,
+                                flightNumber: 'DL778',
+                                airline: 'Delta Wings',
+                                from: 'Miami (MIA)',
+                                to: 'Tokyo (HND)',
+                                departureDate: '2026-06-25T13:00:00Z',
+                                priceCents: 89000,
+                                status: 'CANCELLED',
+                            },
+                            seatAssignments: [{ passengerId: 'p-1', seatNumber: '15A', cabinClass: 'ECONOMY' }],
+                        },
+                    ],
+                },
+                {
+                    ...sampleBookings[0],
+                    id: 304,
+                    reference: 'MA-CANCEL-4004',
+                    status: 'CANCELLED',
+                    isRewardBooking: false,
+                    legs: [{
+                        id: 705,
+                        sequence: 1,
+                        flight: {
+                            id: 405,
+                            flightNumber: 'UA888',
+                            airline: 'United Star',
+                            from: 'Denver (DEN)',
+                            to: 'London (LHR)',
+                            departureDate: '2026-06-28T18:00:00Z',
+                            priceCents: 64000,
+                            status: 'ON_TIME',
+                        },
+                        seatAssignments: [{ passengerId: 'p-1', seatNumber: '20F', cabinClass: 'ECONOMY' }],
+                    }],
+                },
+            ];
+
+            it('filters My Bookings rows when searching by booking reference, flight number, or route (including multi-leg)', () => {
+                renderBookings(filterTestBookings);
+
+                const searchInput = screen.getByTestId('profile-bookings-search');
+                expect(searchInput).toHaveAttribute('aria-label', 'Search my bookings');
+
+                // Initially all 4 bookings are visible
+                expect(screen.getByTestId('booking-row-301')).toBeInTheDocument();
+                expect(screen.getByTestId('booking-row-302')).toBeInTheDocument();
+                expect(screen.getByTestId('booking-row-303')).toBeInTheDocument();
+                expect(screen.getByTestId('booking-row-304')).toBeInTheDocument();
+
+                // Search by booking reference (case-insensitive)
+                fireEvent.change(searchInput, { target: { value: 'ma-reward-2002' } });
+                expect(screen.getByTestId('booking-row-302')).toBeInTheDocument();
+                expect(screen.queryByTestId('booking-row-301')).not.toBeInTheDocument();
+                expect(screen.queryByTestId('booking-row-303')).not.toBeInTheDocument();
+                expect(screen.queryByTestId('booking-row-304')).not.toBeInTheDocument();
+
+                // Search by flight number on second leg of multi-leg booking
+                fireEvent.change(searchInput, { target: { value: 'dl778' } });
+                expect(screen.getByTestId('booking-row-303')).toBeInTheDocument();
+                expect(screen.queryByTestId('booking-row-301')).not.toBeInTheDocument();
+                expect(screen.queryByTestId('booking-row-302')).not.toBeInTheDocument();
+
+                // Search by route/airport
+                fireEvent.change(searchInput, { target: { value: 'London' } });
+                expect(screen.getByTestId('booking-row-304')).toBeInTheDocument();
+                expect(screen.queryByTestId('booking-row-301')).not.toBeInTheDocument();
+            });
+
+            it('filters My Bookings rows by status and reward type (CONFIRMED, DISRUPTED, CANCELLED, REWARD)', () => {
+                renderBookings(filterTestBookings);
+
+                const filterSelect = screen.getByTestId('profile-bookings-filter');
+                expect(filterSelect).toHaveAttribute('aria-label', 'Filter my bookings');
+
+                // Filter by Reward Bookings
+                fireEvent.change(filterSelect, { target: { value: 'REWARD' } });
+                expect(screen.getByTestId('booking-row-302')).toBeInTheDocument();
+                expect(screen.queryByTestId('booking-row-301')).not.toBeInTheDocument();
+                expect(screen.queryByTestId('booking-row-303')).not.toBeInTheDocument();
+                expect(screen.queryByTestId('booking-row-304')).not.toBeInTheDocument();
+
+                // Filter by Cancelled
+                fireEvent.change(filterSelect, { target: { value: 'CANCELLED' } });
+                expect(screen.getByTestId('booking-row-304')).toBeInTheDocument();
+                expect(screen.queryByTestId('booking-row-301')).not.toBeInTheDocument();
+                expect(screen.queryByTestId('booking-row-302')).not.toBeInTheDocument();
+                expect(screen.queryByTestId('booking-row-303')).not.toBeInTheDocument();
+
+                // Filter by Disrupted / Action Needed
+                fireEvent.change(filterSelect, { target: { value: 'DISRUPTED' } });
+                expect(screen.getByTestId('booking-row-303')).toBeInTheDocument();
+                expect(screen.queryByTestId('booking-row-301')).not.toBeInTheDocument();
+                expect(screen.queryByTestId('booking-row-302')).not.toBeInTheDocument();
+                expect(screen.queryByTestId('booking-row-304')).not.toBeInTheDocument();
+
+                // Filter by Confirmed
+                fireEvent.change(filterSelect, { target: { value: 'CONFIRMED' } });
+                expect(screen.getByTestId('booking-row-301')).toBeInTheDocument();
+                expect(screen.getByTestId('booking-row-302')).toBeInTheDocument();
+                expect(screen.queryByTestId('booking-row-303')).not.toBeInTheDocument();
+                expect(screen.queryByTestId('booking-row-304')).not.toBeInTheDocument();
+            });
+
+            it('renders "No bookings match the current filters." while keeping filter controls visible when no bookings match', () => {
+                renderBookings(filterTestBookings);
+
+                const searchInput = screen.getByTestId('profile-bookings-search');
+                fireEvent.change(searchInput, { target: { value: 'NONEXISTENT-FLIGHT-9999' } });
+
+                expect(screen.getByText('No bookings match the current filters.')).toBeInTheDocument();
+                expect(screen.getByTestId('profile-bookings-search')).toBeInTheDocument();
+                expect(screen.getByTestId('profile-bookings-filter')).toBeInTheDocument();
+                expect(screen.queryByTestId('booking-row-301')).not.toBeInTheDocument();
+            });
+        });
     });
 });

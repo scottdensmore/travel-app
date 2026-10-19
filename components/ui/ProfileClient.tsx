@@ -66,13 +66,23 @@ interface BookingLeg {
 interface Booking {
     id: number;
     reference: string;
+    bookingReference?: string;
     createdAt: Date | string;
     status: string; // "CONFIRMED", "DISRUPTED" or "CANCELLED"
+    disruptionStatus?: string;
     totalPriceCents: number | null;
     isRewardBooking?: boolean;
     pointsRedeemed?: number | null;
+    flight?: Flight | null;
     // The itinerary. One leg today; a round trip adds the inbound (#69).
     legs: BookingLeg[];
+    segments?: Array<{
+        flight?: Flight | null;
+        flightNumber?: string;
+        airline?: string;
+        from?: string;
+        to?: string;
+    }>;
     passengers: Passenger[];
     paymentReceipt?: {
         amountCents: number;
@@ -371,6 +381,61 @@ export default function ProfileClient({
     const targetLegIdRef = useRef<number | null>(null);
     const bookingsRegionRef = useRef<HTMLDivElement | null>(null);
     const receiptBookings = bookings.filter(booking => booking.paymentReceipt);
+    const [bookingSearchQuery, setBookingSearchQuery] = useState<string>('');
+    const [bookingFilter, setBookingFilter] = useState<'ALL' | 'CONFIRMED' | 'DISRUPTED' | 'CANCELLED' | 'REWARD'>('ALL');
+
+    const filteredBookings = bookings.filter((booking) => {
+        const isBookingDisrupted = Boolean(
+            booking.status === 'DISRUPTED'
+            || (booking.disruptionStatus && booking.disruptionStatus !== 'NONE')
+            || booking.flight?.status === 'DELAYED'
+            || booking.flight?.status === 'CANCELLED'
+            || booking.legs?.some(
+                leg => leg.flight?.status === 'DELAYED' || leg.flight?.status === 'CANCELLED',
+            ),
+        );
+
+        const matchesFilter =
+            bookingFilter === 'ALL'
+            || (bookingFilter === 'CONFIRMED' && booking.status === 'CONFIRMED')
+            || (bookingFilter === 'DISRUPTED' && isBookingDisrupted)
+            || (bookingFilter === 'CANCELLED' && booking.status === 'CANCELLED')
+            || (bookingFilter === 'REWARD' && Boolean(booking.isRewardBooking));
+
+        if (!matchesFilter) return false;
+
+        const query = bookingSearchQuery.trim().toLowerCase();
+        if (!query) return true;
+
+        const searchableFields: Array<string | undefined | null> = [
+            booking.reference,
+            booking.bookingReference,
+            booking.flight?.flightNumber,
+            booking.flight?.airline,
+            booking.flight?.from,
+            booking.flight?.to,
+            ...(booking.legs ?? []).flatMap(leg => [
+                leg.flight?.flightNumber,
+                leg.flight?.airline,
+                leg.flight?.from,
+                leg.flight?.to,
+            ]),
+            ...(booking.segments ?? []).flatMap(segment => [
+                segment.flight?.flightNumber,
+                segment.flight?.airline,
+                segment.flight?.from,
+                segment.flight?.to,
+                segment.flightNumber,
+                segment.airline,
+                segment.from,
+                segment.to,
+            ]),
+        ];
+
+        return searchableFields.some(
+            field => typeof field === 'string' && field.toLowerCase().includes(query),
+        );
+    });
 
     useEffect(() => {
         if (refundFeedback?.focus) refundFeedbackRef.current?.focus();
@@ -918,6 +983,62 @@ export default function ProfileClient({
                         </p>
                     )}
                     {bookings.length > 0 ? (
+                        <>
+                            <div
+                                className="profile-bookings-filter-bar"
+                                style={{
+                                    display: 'flex',
+                                    flexWrap: 'wrap',
+                                    gap: '0.75rem',
+                                    marginBottom: '1rem',
+                                    alignItems: 'center',
+                                }}
+                            >
+                                <input
+                                    id="profile-bookings-search"
+                                    type="search"
+                                    aria-label="Search my bookings"
+                                    data-testid="profile-bookings-search"
+                                    placeholder="Search reference, flight #, or airport..."
+                                    value={bookingSearchQuery}
+                                    onChange={(e) => setBookingSearchQuery(e.target.value)}
+                                    style={{
+                                        flex: '1 1 220px',
+                                        padding: '0.45rem 0.75rem',
+                                        borderRadius: '0.375rem',
+                                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                                        background: 'rgba(255, 255, 255, 0.06)',
+                                        color: '#ffffff',
+                                        fontSize: '0.875rem',
+                                    }}
+                                />
+                                <select
+                                    id="profile-bookings-filter"
+                                    aria-label="Filter my bookings"
+                                    data-testid="profile-bookings-filter"
+                                    value={bookingFilter}
+                                    onChange={(e) =>
+                                        setBookingFilter(
+                                            e.target.value as 'ALL' | 'CONFIRMED' | 'DISRUPTED' | 'CANCELLED' | 'REWARD',
+                                        )
+                                    }
+                                    style={{
+                                        padding: '0.45rem 0.75rem',
+                                        borderRadius: '0.375rem',
+                                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                                        background: '#17142d',
+                                        color: '#ffffff',
+                                        fontSize: '0.875rem',
+                                    }}
+                                >
+                                    <option value="ALL">All Bookings</option>
+                                    <option value="CONFIRMED">Confirmed</option>
+                                    <option value="DISRUPTED">Disrupted / Action Needed</option>
+                                    <option value="CANCELLED">Cancelled</option>
+                                    <option value="REWARD">Reward Bookings</option>
+                                </select>
+                            </div>
+                            {filteredBookings.length > 0 ? (
                         <div
                             ref={bookingsRegionRef}
                             className="overflow-x-auto"
@@ -941,7 +1062,7 @@ export default function ProfileClient({
                                         <th className="pb-2 text-right">Actions</th>
                                     </tr>
                                 </thead>
-                                {bookings.map((booking) => {
+                                {filteredBookings.map((booking) => {
                                     // Every leg is a row of its own, so the browser
                                     // keeps each flight aligned with its route and
                                     // date at any width. Booking-level cells span
@@ -1190,6 +1311,10 @@ export default function ProfileClient({
                                 })}
                             </table>
                         </div>
+                            ) : (
+                                <p className="text-gray-500 italic">No bookings match the current filters.</p>
+                            )}
+                        </>
                     ) : (
                         <p className="text-gray-500 italic">You have no bookings yet.</p>
                     )}
