@@ -489,3 +489,97 @@ describe('FlightStatusBoard award seats availability badge', () => {
     });
 });
 
+describe('FlightStatusBoard award availability filter', () => {
+    it('filters the board to only upcoming, non-cancelled flights with positive award seats when checked', () => {
+        render(
+            <FlightStatusBoard
+                flights={[
+                    {
+                        ...mockFlights[0],
+                        id: 501,
+                        flightNumber: 'GA501',
+                        departureDate: '2026-06-15T08:00:00Z',
+                        status: 'ON_TIME',
+                        awardSeatsEconomy: 4,
+                        awardSeatsBusiness: 2,
+                    },
+                    {
+                        ...mockFlights[0],
+                        id: 502,
+                        flightNumber: 'GA502',
+                        departureDate: '2026-06-15T08:00:00Z',
+                        status: 'ON_TIME',
+                        awardSeatsFirst: 0,
+                        awardSeatsBusiness: 0,
+                        awardSeatsPremiumEconomy: 0,
+                        awardSeatsEconomy: 0,
+                    },
+                    {
+                        ...mockFlights[0],
+                        id: 503,
+                        flightNumber: 'GA503',
+                        departureDate: '2026-06-15T08:00:00Z',
+                        status: 'CANCELLED',
+                        awardSeatsEconomy: 5,
+                    },
+                    {
+                        ...mockFlights[0],
+                        id: 504,
+                        flightNumber: 'GA504',
+                        departureDate: '2026-06-15T05:00:00Z',
+                        durationMinutes: 60,
+                        status: 'ON_TIME',
+                        awardSeatsEconomy: 5,
+                    },
+                ]}
+                renderedAt={defaultRenderedAt}
+                coverage={coverage}
+            />
+        );
+
+        expect(screen.getByText('GA501')).toBeInTheDocument();
+        expect(screen.getByText('GA502')).toBeInTheDocument();
+        expect(screen.getByText('GA503')).toBeInTheDocument();
+        expect(screen.getByText('GA504')).toBeInTheDocument();
+
+        const awardFilterCheckbox = screen.getByTestId('flight-board-award-filter');
+        expect(awardFilterCheckbox).not.toBeChecked();
+        expect(screen.getByLabelText('Award seats available')).toBe(awardFilterCheckbox);
+
+        fireEvent.click(awardFilterCheckbox);
+
+        expect(awardFilterCheckbox).toBeChecked();
+        expect(screen.getByText('GA501')).toBeInTheDocument();
+        expect(screen.queryByText('GA502')).not.toBeInTheDocument();
+        expect(screen.queryByText('GA503')).not.toBeInTheDocument();
+        expect(screen.queryByText('GA504')).not.toBeInTheDocument();
+        expect(screen.getByRole('status')).toHaveTextContent('1 flight shown');
+    });
+
+    it('displays the award empty state message when awardOnly is checked and no flights have available award seats', () => {
+        render(
+            <FlightStatusBoard
+                flights={[
+                    {
+                        ...mockFlights[0],
+                        id: 505,
+                        flightNumber: 'GA505',
+                        departureDate: '2026-06-15T08:00:00Z',
+                        status: 'ON_TIME',
+                        awardSeatsEconomy: 0,
+                    },
+                ]}
+                renderedAt={defaultRenderedAt}
+                coverage={coverage}
+            />
+        );
+
+        const awardFilterCheckbox = screen.getByTestId('flight-board-award-filter');
+        fireEvent.click(awardFilterCheckbox);
+
+        expect(
+            screen.getByText('No upcoming flights with available award seats match the current filters.')
+        ).toBeInTheDocument();
+    });
+});
+
