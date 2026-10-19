@@ -288,4 +288,60 @@ describe('ItineraryRebookingDialog', () => {
         expect(alert).not.toHaveTextContent('private rebooking failure');
         expect(alert).toHaveFocus();
     });
+
+    it('renders the reward disruption waiver callout when isRewardBooking is true with pointsRedeemed', () => {
+        render(
+            <ItineraryRebookingDialog
+                bookingId={42}
+                bookingReference="MA-42424242424242424242"
+                passengers={passengers}
+                cancelledLegs={cancelledLegs}
+                groups={groups}
+                onSuccess={mockOnSuccess}
+                isRewardBooking={true}
+                pointsRedeemed={15000}
+            />,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Select replacement seats' }));
+        const dialog = screen.getByRole('dialog');
+        expect(within(dialog).getByText(/Your original fare is protected\./)).toBeInTheDocument();
+
+        const waiver = within(dialog).getByTestId('rebooking-reward-waiver');
+        expect(waiver).toHaveTextContent('Reward Disruption Waiver:');
+        expect(waiver).toHaveTextContent(
+            'Your 15,000 pts redemption and taxes are protected — no additional points required.',
+        );
+    });
+
+    it('renders the generic reward disruption waiver callout when isRewardBooking is true without pointsRedeemed', () => {
+        render(
+            <ItineraryRebookingDialog
+                bookingId={42}
+                bookingReference="MA-42424242424242424242"
+                passengers={passengers}
+                cancelledLegs={cancelledLegs}
+                groups={groups}
+                onSuccess={mockOnSuccess}
+                isRewardBooking={true}
+                pointsRedeemed={null}
+            />,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Select replacement seats' }));
+        const dialog = screen.getByRole('dialog');
+        const waiver = within(dialog).getByTestId('rebooking-reward-waiver');
+        expect(waiver).toHaveTextContent('Reward Disruption Waiver:');
+        expect(waiver).toHaveTextContent(
+            'Your reward redemption and taxes are protected — no additional points required.',
+        );
+    });
+
+    it('does not render the reward disruption waiver callout when isRewardBooking is false or omitted', () => {
+        renderDialog();
+        fireEvent.click(screen.getByRole('button', { name: 'Select replacement seats' }));
+        const dialog = screen.getByRole('dialog');
+        expect(within(dialog).queryByTestId('rebooking-reward-waiver')).not.toBeInTheDocument();
+    });
 });
+
