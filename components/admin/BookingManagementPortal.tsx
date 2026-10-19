@@ -30,6 +30,7 @@ export interface SupportBookingPassenger {
     id: string;
     firstName: string;
     lastName: string;
+    cabinClass?: string;
     seatAssignments?: SupportBookingSeatAssignment[];
 }
 
@@ -1079,11 +1080,34 @@ export default function BookingManagementPortal({
                                     const legId = leg?.id ?? 1;
                                     const key = `${p.id}_${legId}`;
                                     const currentSeat = seatChanges[key] || p.seatAssignments?.[0]?.seatNumber || '';
+                                    const bookedCabin = (
+                                        p.cabinClass ||
+                                        p.seatAssignments?.[0]?.cabinClass ||
+                                        'ECONOMY'
+                                    ).replace('_', ' ');
+                                    const originalSeat = p.seatAssignments?.[0]?.seatNumber || 'Unassigned';
 
                                     return (
                                         <div key={p.id} className="p-3 bg-gray-900/60 rounded border border-gray-800 text-xs">
                                             <div className="font-semibold text-purple-200 mb-1">
                                                 Passenger: {p.firstName} {p.lastName}
+                                            </div>
+                                            <div
+                                                data-testid={`support-seat-modal-meta-${p.id}`}
+                                                className="flex items-center gap-2 mb-2 text-[11px] text-gray-300"
+                                            >
+                                                <span
+                                                    data-testid={`support-seat-modal-cabin-${p.id}`}
+                                                    className="px-2 py-0.5 rounded bg-purple-900/50 border border-purple-700/50 text-purple-200 font-medium"
+                                                >
+                                                    Cabin: {bookedCabin}
+                                                </span>
+                                                <span
+                                                    data-testid={`support-seat-modal-current-seat-${p.id}`}
+                                                    className="px-2 py-0.5 rounded bg-gray-800 border border-gray-700 text-gray-300 font-mono"
+                                                >
+                                                    Current: {originalSeat}
+                                                </span>
                                             </div>
                                             <div className="flex items-center gap-3 mt-2">
                                                 <label htmlFor={`seat-${p.id}`} className="text-gray-400">
