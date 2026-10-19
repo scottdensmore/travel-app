@@ -343,5 +343,22 @@ describe('ItineraryRebookingDialog', () => {
         const dialog = screen.getByRole('dialog');
         expect(within(dialog).queryByTestId('rebooking-reward-waiver')).not.toBeInTheDocument();
     });
+
+    it('displays accurate open seat counts per passenger cabin subtracting occupied seats', async () => {
+        mockGetOccupiedSeats.mockResolvedValue(['2A', '2B', '1A', '1B', '1C']);
+        renderDialog();
+        fireEvent.click(screen.getByRole('button', { name: 'Select replacement seats' }));
+        const dialog = screen.getByRole('dialog');
+        fireEvent.change(within(dialog).getAllByLabelText(/Replacement flight for/)[0], {
+            target: { value: '101' },
+        });
+
+        await waitFor(() => {
+            expect(within(dialog).getByTestId('rebooking-open-seats-11-ada')).toHaveTextContent('6 open seats');
+        });
+        expect(within(dialog).getByTestId('rebooking-open-seats-11-grace')).toHaveTextContent('1 open seat');
+        expect(within(dialog).getByText('Economy')).toBeInTheDocument();
+        expect(within(dialog).getByText('Business')).toBeInTheDocument();
+    });
 });
 
