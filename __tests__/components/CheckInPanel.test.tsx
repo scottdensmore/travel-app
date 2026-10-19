@@ -1069,6 +1069,123 @@ describe('seat confirmation and seat change during check-in', () => {
             expect(screen.queryByText('REWARD TICKET')).not.toBeInTheDocument();
         });
     });
+
+    describe('search and eligibility/booking type filter', () => {
+        const sampleLegs: CheckInLegView[] = [
+            leg({
+                bookingId: 1,
+                legId: 101,
+                reference: 'MA-ALPHA111',
+                airline: 'Gemini Airways',
+                flightNumber: 'GA-100',
+                from: 'Seattle, USA',
+                to: 'Tokyo, Japan',
+                allowed: true,
+                reason: 'OPEN',
+                statusLabel: 'Check-in open',
+                isRewardBooking: false,
+            }),
+            leg({
+                bookingId: 2,
+                legId: 102,
+                reference: 'MA-BRAVO222',
+                airline: 'Nova Air',
+                flightNumber: 'NV-250',
+                from: 'London, UK',
+                to: 'Paris, France',
+                allowed: false,
+                reason: 'ALREADY_CHECKED_IN',
+                statusLabel: 'Checked in',
+                awaiting: 0,
+                isRewardBooking: true,
+                pointsRedeemed: 30000,
+                travellers: [
+                    { id: 'p2', name: 'Grace Hopper', seat: 'Seat 2A', cabin: 'Business', checkedIn: true },
+                ],
+            }),
+            leg({
+                bookingId: 3,
+                legId: 103,
+                reference: 'MA-CHARLIE333',
+                airline: 'Orbit Lines',
+                flightNumber: 'OL-404',
+                from: 'Sydney, Australia',
+                to: 'Auckland, New Zealand',
+                allowed: false,
+                reason: 'NOT_YET_OPEN',
+                statusLabel: 'Check-in not open yet',
+                hasOpened: false,
+                isRewardBooking: false,
+            }),
+        ];
+
+        it('does not render filter controls when there are no check-in legs', () => {
+            render(<CheckInPanel legs={[]} />);
+
+            expect(screen.queryByTestId('checkin-search')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('checkin-status-filter')).not.toBeInTheDocument();
+            expect(screen.getByText(/no flights in the next month/i)).toBeInTheDocument();
+        });
+
+        it('filters check-in cards by confirmation reference, flight number, or route', () => {
+            render(<CheckInPanel legs={sampleLegs} />);
+
+            const searchInput = screen.getByTestId('checkin-search');
+            expect(screen.getAllByRole('region')).toHaveLength(3);
+
+            // Search by confirmation reference (case-insensitive)
+            fireEvent.change(searchInput, { target: { value: 'bravo222' } });
+            expect(screen.getAllByRole('region')).toHaveLength(1);
+            expect(screen.getByRole('region', { name: /London, UK to Paris, France/ })).toBeInTheDocument();
+
+            // Search by flight number
+            fireEvent.change(searchInput, { target: { value: 'OL-404' } });
+            expect(screen.getAllByRole('region')).toHaveLength(1);
+            expect(screen.getByRole('region', { name: /Sydney, Australia to Auckland, New Zealand/ })).toBeInTheDocument();
+
+            // Search by route / city
+            fireEvent.change(searchInput, { target: { value: 'Tokyo' } });
+            expect(screen.getAllByRole('region')).toHaveLength(1);
+            expect(screen.getByRole('region', { name: /Seattle, USA to Tokyo, Japan/ })).toBeInTheDocument();
+        });
+
+        it('filters check-in cards by Eligible Now, Checked In, and Reward Bookings', () => {
+            render(<CheckInPanel legs={sampleLegs} />);
+
+            const statusSelect = screen.getByTestId('checkin-status-filter');
+
+            // Filter by Eligible Now
+            fireEvent.change(statusSelect, { target: { value: 'ELIGIBLE' } });
+            expect(screen.getAllByRole('region')).toHaveLength(1);
+            expect(screen.getByRole('region', { name: /Seattle, USA to Tokyo, Japan/ })).toBeInTheDocument();
+
+            // Filter by Checked In
+            fireEvent.change(statusSelect, { target: { value: 'CHECKED_IN' } });
+            expect(screen.getAllByRole('region')).toHaveLength(1);
+            expect(screen.getByRole('region', { name: /London, UK to Paris, France/ })).toBeInTheDocument();
+
+            // Filter by Reward Bookings
+            fireEvent.change(statusSelect, { target: { value: 'REWARD' } });
+            expect(screen.getAllByRole('region')).toHaveLength(1);
+            expect(screen.getByRole('region', { name: /London, UK to Paris, France/ })).toBeInTheDocument();
+
+            // Reset to All Flights
+            fireEvent.change(statusSelect, { target: { value: 'ALL' } });
+            expect(screen.getAllByRole('region')).toHaveLength(3);
+        });
+
+        it('renders empty filter message while keeping filter bar visible when no items match', () => {
+            render(<CheckInPanel legs={sampleLegs} />);
+
+            const searchInput = screen.getByTestId('checkin-search');
+            fireEvent.change(searchInput, { target: { value: 'NONEXISTENT-999' } });
+
+            expect(screen.queryAllByRole('region')).toHaveLength(0);
+            expect(screen.getByText('No check-in flights match the current filters.')).toBeInTheDocument();
+            expect(screen.getByTestId('checkin-search')).toBeInTheDocument();
+            expect(screen.getByTestId('checkin-status-filter')).toBeInTheDocument();
+        });
+    });
 });
 
 
