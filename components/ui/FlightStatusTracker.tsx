@@ -110,6 +110,30 @@ function getProgressPercent(phase: FlightPhase): number {
     }
 }
 
+type PhaseFilter =
+    | 'ALL'
+    | 'ON_TIME'
+    | 'DELAYED'
+    | 'BOARDING'
+    | 'DEPARTED'
+    | 'ARRIVED'
+    | 'AWARD_AVAILABLE';
+
+function hasAvailableAwardSeats(flight: FlightStatusResult): boolean {
+    const hasAwardSeatsDefined =
+        typeof flight.awardSeatsFirst === 'number' ||
+        typeof flight.awardSeatsBusiness === 'number' ||
+        typeof flight.awardSeatsPremiumEconomy === 'number' ||
+        typeof flight.awardSeatsEconomy === 'number';
+    const totalAward = hasAwardSeatsDefined
+        ? (flight.awardSeatsFirst ?? 0) +
+          (flight.awardSeatsBusiness ?? 0) +
+          (flight.awardSeatsPremiumEconomy ?? 0) +
+          (flight.awardSeatsEconomy ?? 0)
+        : 0;
+    return flight.status !== 'CANCELLED' && hasAwardSeatsDefined && totalAward > 0;
+}
+
 export default function FlightStatusTracker({
     initialFlights = [],
     initialSearch = null,
@@ -135,6 +159,7 @@ export default function FlightStatusTracker({
     );
 
     const [flights, setFlights] = useState<FlightStatusResult[]>(initialFlights);
+    const [phaseFilter, setPhaseFilter] = useState<PhaseFilter>('ALL');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [hasSearched, setHasSearched] = useState(
@@ -148,6 +173,39 @@ export default function FlightStatusTracker({
         }
     }, [initialFlights, initialSearch]);
 
+    const handleTabSwitch = (nextMode: 'flightNumber' | 'route') => {
+        setMode(nextMode);
+        setError(null);
+        setPhaseFilter('ALL');
+    };
+
+    const filteredFlights = flights.filter((flight) => {
+        switch (phaseFilter) {
+            case 'ON_TIME':
+                return (
+                    (flight.phase as string) === 'ON_TIME' ||
+                    (flight.phase === 'UPCOMING' && flight.status === 'ON_TIME' && !flight.delayReason)
+                );
+            case 'DELAYED':
+                return (
+                    flight.phase === 'DELAYED' ||
+                    flight.status === 'DELAYED' ||
+                    Boolean(flight.delayReason)
+                );
+            case 'BOARDING':
+                return flight.phase === 'BOARDING';
+            case 'DEPARTED':
+                return flight.phase === 'DEPARTED';
+            case 'ARRIVED':
+                return flight.phase === 'ARRIVED';
+            case 'AWARD_AVAILABLE':
+                return hasAvailableAwardSeats(flight);
+            case 'ALL':
+            default:
+                return true;
+        }
+    });
+
     const handleSearchByFlightNumber = async (e?: React.FormEvent) => {
         e?.preventDefault();
         const trimmedNumber = flightNumber.trim().toUpperCase();
@@ -155,6 +213,7 @@ export default function FlightStatusTracker({
 
         setIsLoading(true);
         setError(null);
+        setPhaseFilter('ALL');
 
         const dateVal = flightDate.trim() || undefined;
         const searchInput: FlightStatusSearchInput = {
@@ -198,6 +257,7 @@ export default function FlightStatusTracker({
 
         setIsLoading(true);
         setError(null);
+        setPhaseFilter('ALL');
 
         const dateVal = routeDate.trim() || undefined;
         const searchInput: FlightStatusSearchInput = {
@@ -301,10 +361,7 @@ export default function FlightStatusTracker({
                     id="tab-flight-number"
                     aria-selected={mode === 'flightNumber'}
                     aria-controls="panel-flight-number"
-                    onClick={() => {
-                        setMode('flightNumber');
-                        setError(null);
-                    }}
+                    onClick={() => handleTabSwitch('flightNumber')}
                     style={{
                         padding: '0.75rem 1.25rem',
                         fontSize: '1rem',
@@ -326,10 +383,7 @@ export default function FlightStatusTracker({
                     id="tab-route"
                     aria-selected={mode === 'route'}
                     aria-controls="panel-route"
-                    onClick={() => {
-                        setMode('route');
-                        setError(null);
-                    }}
+                    onClick={() => handleTabSwitch('route')}
                     style={{
                         padding: '0.75rem 1.25rem',
                         fontSize: '1rem',
@@ -636,7 +690,75 @@ export default function FlightStatusTracker({
                 </div>
             ) : flights.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    {flights.map((flight) => {
+                    {flights.length > 1 && (
+                        <div
+                            style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                flexWrap: 'wrap',
+                                gap: '0.75rem',
+                                padding: '0.75rem 1rem',
+                                backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                                borderRadius: '12px',
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                            }}
+                        >
+                            <label
+                                htmlFor="tracker-phase-filter"
+                                style={{
+                                    fontSize: '0.875rem',
+                                    color: 'rgba(255, 255, 255, 0.8)',
+                                    fontWeight: '500',
+                                }}
+                            >
+                                Filter by Status:
+                            </label>
+                            <select
+                                id="tracker-phase-filter"
+                                aria-label="Filter flight status results"
+                                data-testid="tracker-phase-filter"
+                                value={phaseFilter}
+                                onChange={(e) => setPhaseFilter(e.target.value as PhaseFilter)}
+                                style={{
+                                    padding: '0.5rem 0.75rem',
+                                    borderRadius: '8px',
+                                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                                    backgroundColor: '#181720',
+                                    color: '#fff',
+                                    fontSize: '0.875rem',
+                                    cursor: 'pointer',
+                                }}
+                            >
+                                <option value="ALL">All Statuses</option>
+                                <option value="ON_TIME">On Time</option>
+                                <option value="DELAYED">Delayed</option>
+                                <option value="BOARDING">Now Boarding</option>
+                                <option value="DEPARTED">Departed</option>
+                                <option value="ARRIVED">Arrived</option>
+                                <option value="AWARD_AVAILABLE">Award Seats Available</option>
+                            </select>
+                        </div>
+                    )}
+
+                    {filteredFlights.length === 0 ? (
+                        <p
+                            data-testid="tracker-no-filter-matches"
+                            style={{
+                                padding: '2rem 1.5rem',
+                                textAlign: 'center',
+                                backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                                borderRadius: '16px',
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                color: 'rgba(255, 255, 255, 0.6)',
+                                margin: 0,
+                            }}
+                        >
+                            No flights match the selected status filter.
+                        </p>
+                    ) : null}
+
+                    {filteredFlights.map((flight) => {
                         const badge = getBadgeDetails(flight);
                         const progress = getProgressPercent(flight.phase);
                         const isDelayed = flight.phase === 'DELAYED' || flight.status === 'DELAYED' || Boolean(flight.delayReason);
@@ -669,10 +791,7 @@ export default function FlightStatusTracker({
                               (flight.awardSeatsPremiumEconomy ?? 0) +
                               (flight.awardSeatsEconomy ?? 0)
                             : 0;
-                        const showAwardSeats =
-                            flight.status !== 'CANCELLED' &&
-                            hasAwardSeatsDefined &&
-                            totalAward > 0;
+                        const showAwardSeats = hasAvailableAwardSeats(flight);
 
                         return (
                             <div
@@ -1001,6 +1120,25 @@ export default function FlightStatusTracker({
                                         >
                                             Award seats: {flight.awardSeatsFirst ?? 0}F · {flight.awardSeatsBusiness ?? 0}J · {flight.awardSeatsPremiumEconomy ?? 0}W · {flight.awardSeatsEconomy ?? 0}Y ({totalAward} total)
                                         </span>
+                                    )}
+                                    {showAwardSeats && (
+                                        <Link
+                                            href={`/book?flight=${flight.id}&reward=true`}
+                                            data-testid={`tracker-book-points-${flight.id}`}
+                                            style={{
+                                                padding: '0.5rem 1.25rem',
+                                                borderRadius: '8px',
+                                                backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                                                color: '#6ee7b7',
+                                                fontWeight: '600',
+                                                fontSize: '0.875rem',
+                                                textDecoration: 'none',
+                                                border: '1px solid rgba(16, 185, 129, 0.35)',
+                                                transition: 'background-color 0.2s',
+                                            }}
+                                        >
+                                            Book with Points
+                                        </Link>
                                     )}
                                     <Link
                                         href={`/book?flight=${flight.id}`}
