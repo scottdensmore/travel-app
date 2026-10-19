@@ -63,4 +63,54 @@ describe('verifyRepoPolicy Node 22 baseline and Dockerfile guard', () => {
         expect(result.success).toBe(true);
         expect(result.violations).toEqual([]);
     });
+
+    it.each(['^22.19.17', '~22.0.0', '22.19.17', '22'])(
+        'passes when devDependencies["@types/node"] targets Node 22 (%s)',
+        (versionRange) => {
+            const pkgPath = path.join(tempDir, 'package.json');
+            const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+            pkg.devDependencies['@types/node'] = versionRange;
+            fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
+
+            const output = { log: jest.fn(), error: jest.fn() };
+            const result = verifyRepoPolicy({ repoRoot: tempDir, output: output as unknown as Console });
+
+            expect(result.success).toBe(true);
+            expect(result.violations).toEqual([]);
+        }
+    );
+
+    it.each(['^25.0.0', '^20.11.0', '24.0.0'])(
+        'flags devDependencies["@types/node"] when it drifts from the Node 22 major line (%s)',
+        (versionRange) => {
+            const pkgPath = path.join(tempDir, 'package.json');
+            const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+            pkg.devDependencies['@types/node'] = versionRange;
+            fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
+
+            const output = { log: jest.fn(), error: jest.fn() };
+            const result = verifyRepoPolicy({ repoRoot: tempDir, output: output as unknown as Console });
+
+            expect(result.success).toBe(false);
+            expect(result.violations).toContain(
+                `package.json: devDependencies["@types/node"] must target the Node 22 major line (found: '${versionRange}').`
+            );
+        }
+    );
+
+    it('flags when devDependencies["@types/node"] is missing', () => {
+        const pkgPath = path.join(tempDir, 'package.json');
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+        delete pkg.devDependencies['@types/node'];
+        fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
+
+        const output = { log: jest.fn(), error: jest.fn() };
+        const result = verifyRepoPolicy({ repoRoot: tempDir, output: output as unknown as Console });
+
+        expect(result.success).toBe(false);
+        expect(result.violations).toContain(
+            `package.json: devDependencies["@types/node"] must target the Node 22 major line (found: 'none').`
+        );
+    });
 });
+
