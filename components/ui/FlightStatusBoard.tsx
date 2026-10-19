@@ -19,7 +19,29 @@ interface Flight {
     durationMinutes?: number | null;
     priceCents: number;
     status: FlightStatus;
+    awardSeatsFirst?: number | null;
+    awardSeatsBusiness?: number | null;
+    awardSeatsPremiumEconomy?: number | null;
+    awardSeatsEconomy?: number | null;
 }
+
+function totalAwardSeats(flight: Flight): number | null {
+    if (
+        typeof flight.awardSeatsFirst !== 'number' &&
+        typeof flight.awardSeatsBusiness !== 'number' &&
+        typeof flight.awardSeatsPremiumEconomy !== 'number' &&
+        typeof flight.awardSeatsEconomy !== 'number'
+    ) {
+        return null;
+    }
+    return (
+        (flight.awardSeatsFirst ?? 0) +
+        (flight.awardSeatsBusiness ?? 0) +
+        (flight.awardSeatsPremiumEconomy ?? 0) +
+        (flight.awardSeatsEconomy ?? 0)
+    );
+}
+
 
 interface FlightStatusBoardProps {
     flights: Flight[];
@@ -264,6 +286,12 @@ export default function FlightStatusBoard({ flights, renderedAt, coverage }: Fli
                                     const arrival = flight.durationMinutes
                                         ? flightArrival({ ...flight, durationMinutes: flight.durationMinutes })
                                         : null;
+                                    const awardTotal = totalAwardSeats(flight);
+                                    const showAwardBadge =
+                                        phase === 'UPCOMING' &&
+                                        flight.status !== 'CANCELLED' &&
+                                        awardTotal !== null &&
+                                        awardTotal > 0;
                                     return (
                                         <tr key={flight.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.06)', transition: 'background-color 0.2s' }} className="hover:bg-white/5 transition-colors">
                                             <td style={{ padding: '1.25rem 1.5rem' }}>
@@ -313,6 +341,26 @@ export default function FlightStatusBoard({ flights, renderedAt, coverage }: Fli
                                             </td>
                                             <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right', fontWeight: 'bold', color: '#34d399' }}>
                                                 {formatPrice(flightFareCents(flight))}
+                                                {showAwardBadge && (
+                                                    <div style={{ marginTop: '0.35rem' }}>
+                                                        <span
+                                                            data-testid={`flight-award-badge-${flight.id}`}
+                                                            style={{
+                                                                padding: '0.15rem 0.5rem',
+                                                                borderRadius: '9999px',
+                                                                fontSize: '0.75rem',
+                                                                fontWeight: '600',
+                                                                display: 'inline-block',
+                                                                backgroundColor: 'rgba(192, 132, 252, 0.15)',
+                                                                color: '#c084fc',
+                                                                border: '1px solid rgba(192, 132, 252, 0.3)',
+                                                                whiteSpace: 'nowrap',
+                                                            }}
+                                                        >
+                                                            {awardTotal} award {awardTotal === 1 ? 'seat' : 'seats'}
+                                                        </span>
+                                                    </div>
+                                                )}
                                             </td>
                                         </tr>
                                     );

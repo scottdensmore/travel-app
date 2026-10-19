@@ -395,3 +395,97 @@ describe('FlightStatusBoard filtering and search', () => {
         expect(screen.getByRole('heading', { name: 'No flights found' })).toBeInTheDocument();
     });
 });
+
+describe('FlightStatusBoard award seats availability badge', () => {
+    it('renders the award seats badge for an upcoming ON_TIME flight with positive award seats', () => {
+        render(
+            <FlightStatusBoard
+                flights={[
+                    {
+                        ...mockFlights[0],
+                        id: 401,
+                        departureDate: '2026-06-15T08:00:00Z',
+                        status: 'ON_TIME',
+                        awardSeatsEconomy: 4,
+                        awardSeatsBusiness: 2,
+                    },
+                ]}
+                renderedAt={defaultRenderedAt}
+                coverage={coverage}
+            />
+        );
+
+        const badge = screen.getByTestId('flight-award-badge-401');
+        expect(badge).toBeInTheDocument();
+        expect(badge).toHaveTextContent('6 award seats');
+    });
+
+    it('renders singular "1 award seat" when total award seats is 1', () => {
+        render(
+            <FlightStatusBoard
+                flights={[
+                    {
+                        ...mockFlights[0],
+                        id: 402,
+                        departureDate: '2026-06-15T08:00:00Z',
+                        status: 'ON_TIME',
+                        awardSeatsFirst: 1,
+                        awardSeatsBusiness: 0,
+                        awardSeatsPremiumEconomy: 0,
+                        awardSeatsEconomy: 0,
+                    },
+                ]}
+                renderedAt={defaultRenderedAt}
+                coverage={coverage}
+            />
+        );
+
+        const badge = screen.getByTestId('flight-award-badge-402');
+        expect(badge).toBeInTheDocument();
+        expect(badge).toHaveTextContent('1 award seat');
+    });
+
+    it('does not render the award seats badge when all award seat fields are 0, or flight is CANCELLED or ARRIVED', () => {
+        render(
+            <FlightStatusBoard
+                flights={[
+                    {
+                        ...mockFlights[0],
+                        id: 403,
+                        flightNumber: 'GA403',
+                        departureDate: '2026-06-15T08:00:00Z',
+                        status: 'ON_TIME',
+                        awardSeatsFirst: 0,
+                        awardSeatsBusiness: 0,
+                        awardSeatsPremiumEconomy: 0,
+                        awardSeatsEconomy: 0,
+                    },
+                    {
+                        ...mockFlights[0],
+                        id: 404,
+                        flightNumber: 'GA404',
+                        departureDate: '2026-06-15T08:00:00Z',
+                        status: 'CANCELLED',
+                        awardSeatsEconomy: 5,
+                    },
+                    {
+                        ...mockFlights[0],
+                        id: 405,
+                        flightNumber: 'GA405',
+                        departureDate: '2026-06-15T05:00:00Z',
+                        durationMinutes: 60,
+                        status: 'ON_TIME',
+                        awardSeatsEconomy: 5,
+                    },
+                ]}
+                renderedAt={defaultRenderedAt}
+                coverage={coverage}
+            />
+        );
+
+        expect(screen.queryByTestId('flight-award-badge-403')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('flight-award-badge-404')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('flight-award-badge-405')).not.toBeInTheDocument();
+    });
+});
+
