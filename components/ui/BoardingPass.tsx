@@ -16,6 +16,7 @@ export interface BoardingPassProps {
     hasKtn?: boolean;
     ktn?: string;
     isRewardBooking?: boolean;
+    pointsRedeemed?: number | null;
 }
 
 /**
@@ -42,6 +43,7 @@ export default function BoardingPass({
     hasKtn = false,
     ktn,
     isRewardBooking = false,
+    pointsRedeemed,
 }: BoardingPassProps) {
     const group = boardingGroup || (priorityBoarding ? 'GROUP 1' : 'GROUP 3');
     const isPreCheck = Boolean(hasKtn || ktn);
@@ -145,6 +147,12 @@ export default function BoardingPass({
                     <dt>Baggage</dt>
                     <dd>BAGS: {bagCount}</dd>
                 </div>
+                {isRewardBooking && typeof pointsRedeemed === 'number' && pointsRedeemed > 0 && (
+                    <div data-testid="boarding-pass-redemption">
+                        <dt>Redemption</dt>
+                        <dd>{pointsRedeemed.toLocaleString('en-US')} pts</dd>
+                    </div>
+                )}
             </dl>
 
             <footer className="checkin-boarding-pass-foot">
