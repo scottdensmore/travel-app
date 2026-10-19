@@ -7,10 +7,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const guard = fileURLToPath(new URL("../deploy/postgres-layout-guard.sh", import.meta.url));
-const check = (...args) => spawnSync("/bin/sh", [guard, "--check-layout", ...args], {
+const checkWith = (allowNew, ...args) => spawnSync("/bin/sh", [guard, "--check-layout", ...args], {
   encoding: "utf8",
-  env: { PATH: "/usr/bin:/bin" },
+  env: { PATH: "/usr/bin:/bin", TRAVEL_POSTGRES_ALLOW_NEW_CLUSTER: allowNew ? "true" : "false" },
 });
+const check = (...args) => checkWith(false, ...args);
 
 function volume(files, run) {
   const root = mkdtempSync(join(tmpdir(), "travel-pg-layout-"));
@@ -29,11 +30,17 @@ function volume(files, run) {
   }
 }
 
-test("accepts an empty volume without creating data", () => volume([], (root) => {
+test("refuses silent initialization of an empty volume", () => volume([], (root) => {
   const result = check(root);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Refusing to silently initialize/);
+  assert.equal(existsSync(join(root, "18")), false);
+}));
+
+test("allows an explicitly confirmed new empty volume without creating data", () => volume([], (root) => {
+  const result = checkWith(true, root);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, "");
-  assert.equal(result.stderr, "");
   assert.equal(existsSync(join(root, "18")), false);
 }));
 
@@ -73,3 +80,19 @@ test("requires exactly one root in read-only check mode", () => {
   assert.equal(check().status, 64);
   assert.equal(check("one", "two").status, 64);
 });
+
+test("new-cluster opt-in cannot bypass legacy data", () => volume([
+  ["PG_VERSION", "15\n"],
+], (root) => assert.equal(checkWith(true, root).status, 1)));
+
+test("refuses a mismatched database version under the target path", () => volume([
+  ["18/docker/PG_VERSION", "15\n"],
+], (root) => assert.equal(check(root).status, 1)));
+
+test("refuses unrecognized volume contents even with new-cluster opt-in", () => volume([
+  ["unexpected-file", "synthetic data"],
+], (root) => assert.equal(checkWith(true, root).status, 1)));
+
+test("refuses incomplete target layouts without a version marker", () => volume([
+  ["18/docker/base/fixture", "synthetic database bytes"],
+], (root) => assert.equal(checkWith(true, root).status, 1)));

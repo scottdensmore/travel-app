@@ -14,6 +14,27 @@ check_layout() {
             "See docs/postgres18-volume-layout.md before changing data." >&2
         return 1
     fi
+    if [ -f "$volume_root/18/docker/PG_VERSION" ]; then
+        version=""
+        IFS= read -r version < "$volume_root/18/docker/PG_VERSION" || true
+        if [ "$version" != "18" ]; then
+            printf '%s\n' "The target directory is not a PostgreSQL 18 cluster; refusing startup." >&2
+            return 1
+        fi
+        return 0
+    fi
+    for path in "$volume_root"/* "$volume_root"/.[!.]* "$volume_root"/..?*; do
+        if [ -e "$path" ] || [ -L "$path" ]; then
+            printf '%s\n' "Unrecognized PostgreSQL volume contents; refusing initialization." >&2
+            return 1
+        fi
+    done
+    if [ "${TRAVEL_POSTGRES_ALLOW_NEW_CLUSTER:-false}" != "true" ]; then
+        printf '%s\n' \
+            "No PostgreSQL 18 cluster found. Refusing to silently initialize an empty database." \
+            "Locate and preserve existing data first. Only a verified new installation may set TRAVEL_POSTGRES_ALLOW_NEW_CLUSTER=true." >&2
+        return 1
+    fi
 }
 
 if [ "$#" -gt 0 ] && [ "$1" = "--check-layout" ]; then

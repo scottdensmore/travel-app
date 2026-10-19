@@ -85,6 +85,7 @@ services:
     restart: always
     environment:
       PGDATA: /var/lib/postgresql/18/docker
+      TRAVEL_POSTGRES_ALLOW_NEW_CLUSTER: "${TRAVEL_POSTGRES_ALLOW_NEW_CLUSTER:-false}"
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: travel_app
