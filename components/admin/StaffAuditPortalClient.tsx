@@ -29,6 +29,7 @@ export interface StaffAuditPortalClientProps {
 const ACTION_OPTIONS = [
     { value: 'ALL', label: 'All Actions' },
     { value: 'USER_ROLE_UPDATE', label: 'User Role Update' },
+    { value: 'USER_POINTS_ADJUSTMENT', label: 'User Points Adjustment' },
     { value: 'SCHEDULE_TERMS_UPDATE', label: 'Schedule Terms Update' },
     { value: 'SCHEDULE_SET_ACTIVE', label: 'Schedule Set Active' },
     { value: 'SCHEDULE_DELETE', label: 'Schedule Delete' },
@@ -208,6 +209,9 @@ export default function StaffAuditPortalClient({
         }
         if (act.includes('ROLE')) {
             return { bg: 'rgba(167, 139, 250, 0.2)', border: 'rgba(167, 139, 250, 0.4)', text: '#a78bfa' };
+        }
+        if (act.includes('POINTS')) {
+            return { bg: 'rgba(52, 211, 153, 0.2)', border: 'rgba(52, 211, 153, 0.4)', text: '#34d399' };
         }
         if (act.includes('MODERATE')) {
             return { bg: 'rgba(251, 191, 36, 0.2)', border: 'rgba(251, 191, 36, 0.4)', text: '#fbbf24' };
