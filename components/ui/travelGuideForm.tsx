@@ -82,6 +82,19 @@ const TravelGuideForm: React.FC = () => {
     setShowAddButtons(newShowAddButtons);
   };
 
+  const removeHighlight = (index: number) => {
+    if (highlights.length <= 1) {
+      return;
+    }
+    const newHighlights = highlights.filter((_, i) => i !== index);
+    setHighlights(newHighlights);
+    const newShowAddButtons = showAddButtons.filter((_, i) => i !== index);
+    if (newShowAddButtons.length > 0) {
+      newShowAddButtons[newShowAddButtons.length - 1] = true;
+    }
+    setShowAddButtons(newShowAddButtons);
+  };
+
   const fetchCoordinates = async (cityName: string, countryName: string) => {
     try {
       const result = await geocodeCityAction({ city: cityName, country: countryName });
@@ -165,6 +178,13 @@ const TravelGuideForm: React.FC = () => {
           {coverImage && (
             <div className="mb-4">
               <Image src={coverImage} alt="Cover Preview" width={320} height={180} unoptimized className="max-w-xs h-auto rounded shadow" />
+              <button
+                type="button"
+                data-testid="remove-cover-image"
+                onClick={() => setCoverImage(null)}
+              >
+                Remove cover image
+              </button>
             </div>
           )}
         </div>
@@ -211,6 +231,17 @@ const TravelGuideForm: React.FC = () => {
                 value={highlight}
                 onChange={(e) => handleHighlightChange(index, e.target.value)}
               />
+              {highlights.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeHighlight(index)}
+                  aria-label={`Remove highlight ${index + 1}`}
+                  data-testid={`remove-highlight-${index}`}
+                  className="highlight-remove-button"
+                >
+                  -
+                </button>
+              )}
               {showAddButtons[index] && (
                 <button
                   type="button"
