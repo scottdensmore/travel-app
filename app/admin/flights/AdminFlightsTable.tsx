@@ -53,6 +53,8 @@ interface AdminFlightsTableProps {
 
 export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableProps) {
     const [selectedFlight, setSelectedFlight] = useState<Flight | null>(null);
+    const [searchQuery, setSearchQuery] = useState<string>('');
+    const [statusFilter, setStatusFilter] = useState<string>('ALL');
     const dialogRef = useRef<HTMLDivElement>(null);
     const closeButtonRef = useRef<HTMLButtonElement>(null);
     const manifestTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -104,6 +106,18 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
         };
     }, [selectedFlight]);
 
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    const filteredFlights = initialFlights.filter(flight => {
+        const matchesStatus = statusFilter === 'ALL' || flight.status === statusFilter;
+        const matchesSearch =
+            normalizedQuery === '' ||
+            flight.flightNumber.toLowerCase().includes(normalizedQuery) ||
+            flight.airline.toLowerCase().includes(normalizedQuery) ||
+            flight.from.toLowerCase().includes(normalizedQuery) ||
+            flight.to.toLowerCase().includes(normalizedQuery);
+        return matchesStatus && matchesSearch;
+    });
+
     const manifestPassengers = selectedFlight
         ? selectedFlight.bookings.flatMap(b =>
               b.passengers.map(p => ({
@@ -120,6 +134,51 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                 <h2 style={{ fontSize: '1.5rem', margin: '0 0 1rem 0', color: '#c084fc', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '8px' }}>
                     Active occurrences (Next 7 Days)
                 </h2>
+                {initialFlights.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem', alignItems: 'center' }}>
+                        <input
+                            id="admin-flights-search"
+                            type="search"
+                            aria-label="Search flights by number, airline, or route"
+                            data-testid="admin-flights-search"
+                            placeholder="Search flight #, airline, or route..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            style={{
+                                flex: '1 1 240px',
+                                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                border: '1px solid rgba(255, 255, 255, 0.1)',
+                                color: '#fff',
+                                borderRadius: '6px',
+                                padding: '6px 12px',
+                                fontSize: '0.85rem',
+                                outline: 'none',
+                            }}
+                        />
+                        <select
+                            id="admin-flights-status-filter"
+                            aria-label="Filter flights by status"
+                            data-testid="admin-flights-status-filter"
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value)}
+                            style={{
+                                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                border: '1px solid rgba(255, 255, 255, 0.1)',
+                                color: '#fff',
+                                borderRadius: '6px',
+                                padding: '6px 12px',
+                                fontSize: '0.85rem',
+                                cursor: 'pointer',
+                                outline: 'none',
+                            }}
+                        >
+                            <option value="ALL" style={{ backgroundColor: '#181720', color: '#fff' }}>All Statuses</option>
+                            <option value="ON_TIME" style={{ backgroundColor: '#181720', color: '#fff' }}>On Time (ON_TIME)</option>
+                            <option value="DELAYED" style={{ backgroundColor: '#181720', color: '#fff' }}>Delayed (DELAYED)</option>
+                            <option value="CANCELLED" style={{ backgroundColor: '#181720', color: '#fff' }}>Cancelled (CANCELLED)</option>
+                        </select>
+                    </div>
+                )}
                 <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                     <table style={{ width: '100%', minWidth: '800px', borderCollapse: 'collapse', textAlign: 'left' }}>
                         <thead>
@@ -135,7 +194,7 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                             </tr>
                         </thead>
                         <tbody>
-                            {initialFlights.map(flight => {
+                            {filteredFlights.map(flight => {
                                 const activeBookings = flight.bookings.filter(b => b.status !== 'CANCELLED').length;
                                 const cancelledBookings = flight.bookings.filter(b => b.status === 'CANCELLED').length;
                                 
@@ -209,6 +268,13 @@ export default function AdminFlightsTable({ initialFlights }: AdminFlightsTableP
                                     </tr>
                                 );
                             })}
+                            {initialFlights.length > 0 && filteredFlights.length === 0 && (
+                                <tr>
+                                    <td colSpan={8} style={{ padding: '24px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.4)' }}>
+                                        No flights match the current filters.
+                                    </td>
+                                </tr>
+                            )}
                             {initialFlights.length === 0 && (
                                 <tr>
                                     <td colSpan={8} style={{ padding: '24px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.4)' }}>
