@@ -231,5 +231,44 @@ describe('ManualOccurrenceBuilder', () => {
             );
         });
     });
+
+    it('renders live cabin capacity and award quota summary when a template is selected and updates dynamically', () => {
+        render(<ManualOccurrenceBuilder schedules={sampleSchedules} />);
+
+        expect(screen.queryByTestId('manual-occurrence-capacity-summary')).not.toBeInTheDocument();
+
+        // Select schedule 10: 3F, 5J, 6W, 25Y with AC-DF (4 seats/row) => 12F, 20J, 24W, 100Y = 156 total; default awards 1 + 2 + 2 + 4 = 9
+        fireEvent.change(screen.getByLabelText(/Flight Template \*/i), { target: { value: '10' } });
+
+        const summary = screen.getByTestId('manual-occurrence-capacity-summary');
+        expect(summary).toHaveTextContent('Capacity: 156 total seats (12F · 20J · 24W · 100Y) · 9 award seats');
+
+        // Change rows, seat pattern, and award seats
+        fireEvent.change(screen.getByLabelText(/First Class Rows/i), { target: { value: '2' } });
+        fireEvent.change(screen.getByLabelText(/Seat Pattern/i), { target: { value: 'ABC-DEF' } });
+        fireEvent.change(screen.getByLabelText('Economy Award Seats'), { target: { value: '10' } });
+
+        // Now 6 seats/row: 2*6=12F, 5*6=30J, 6*6=36W, 25*6=150Y => 228 total; awards 1 + 2 + 2 + 10 = 15
+        expect(summary).toHaveTextContent('Capacity: 228 total seats (12F · 30J · 36W · 150Y) · 15 award seats');
+    });
+
+    it('shows validation error when a cabin award seat quota exceeds physical cabin capacity', async () => {
+        render(<ManualOccurrenceBuilder schedules={sampleSchedules} />);
+
+        fireEvent.change(screen.getByLabelText(/Flight Template \*/i), { target: { value: '10' } });
+        fireEvent.change(screen.getByLabelText(/Start Date \*/i), { target: { value: '2026-07-10' } });
+        fireEvent.change(screen.getByLabelText(/End Date \*/i), { target: { value: '2026-07-20' } });
+
+        // Schedule 10 has 3 first class rows * 4 seats/row (AC-DF) = 12 physical seats; set award quota to 13
+        fireEvent.change(screen.getByLabelText('First Class Award Seats'), { target: { value: '13' } });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Generate Occurrences' }));
+
+        await waitFor(() => {
+            expect(screen.getByText(/Award seat quota cannot exceed physical cabin capacity\./i)).toBeInTheDocument();
+        });
+        expect(mockGenerateAction).not.toHaveBeenCalled();
+    });
 });
+
 
