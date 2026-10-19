@@ -127,6 +127,47 @@ describe('customerSupportService notes & documents', () => {
         );
     });
 
+    it('forwards isRewardBooking and pointsRedeemed in resendConfirmationEmail when booking is a reward booking', async () => {
+        const mockBooking = {
+            id: 102,
+            reference: 'MA-RWD102',
+            isRewardBooking: true,
+            pointsRedeemed: 25000,
+            user: { email: 'reward@example.com' },
+            legs: [
+                {
+                    flight: {
+                        airline: 'Mona Airways',
+                        flightNumber: 'MA002',
+                        fromAirportCode: 'SFO',
+                        toAirportCode: 'JFK',
+                        departureDate: new Date('2026-10-01T12:00:00Z'),
+                    },
+                },
+            ],
+            passengers: [
+                {
+                    firstName: 'Alice',
+                    lastName: 'Smith',
+                    seatAssignments: [{ seatNumber: '12A', cabinClass: 'ECONOMY' }],
+                },
+            ],
+        };
+        (prisma.booking.findUniqueOrThrow as jest.Mock).mockResolvedValue(mockBooking);
+
+        const result = await resendConfirmationEmail(102);
+        expect(result).toEqual({ success: true, sentTo: 'reward@example.com' });
+        expect(sendTravelDocumentsEmail).toHaveBeenCalledWith(
+            expect.objectContaining({
+                to: 'reward@example.com',
+                bookingReference: 'MA-RWD102',
+                flightNumber: 'MA002',
+                isRewardBooking: true,
+                pointsRedeemed: 25000,
+            })
+        );
+    });
+
     it('throws error when booking has no customer email address in resendConfirmationEmail', async () => {
         const mockBooking = {
             id: 101,

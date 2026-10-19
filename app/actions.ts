@@ -1250,6 +1250,12 @@ export async function resendBoardingPassAction(
         toDestination: routedFlight.to,
         departureReadable,
         passengers,
+        ...(leg.booking.isRewardBooking
+            ? {
+                  isRewardBooking: true,
+                  pointsRedeemed: leg.booking.pointsRedeemed ?? null,
+              }
+            : {}),
     });
 
     return {
