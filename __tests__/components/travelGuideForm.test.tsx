@@ -332,4 +332,66 @@ describe('TravelGuideForm', () => {
 
         global.FileReader = originalFileReader;
     });
+
+    it('supports removing highlight rows and keeps the + button on the last row', () => {
+        render(<TravelGuideForm />);
+
+        // Only 1 row initially -> no remove button rendered
+        expect(screen.queryByTestId('remove-highlight-0')).not.toBeInTheDocument();
+
+        // Populate first highlight and add a second row
+        const firstInput = screen.getByPlaceholderText('Add Highlight');
+        fireEvent.change(firstInput, { target: { value: 'Eiffel Tower' } });
+        fireEvent.click(screen.getByRole('button', { name: '+' }));
+
+        const inputsAfterAdd = screen.getAllByPlaceholderText('Add Highlight');
+        expect(inputsAfterAdd).toHaveLength(2);
+        fireEvent.change(inputsAfterAdd[1], { target: { value: 'Louvre' } });
+
+        // Both rows should now have remove buttons
+        expect(screen.getByTestId('remove-highlight-0')).toBeInTheDocument();
+        expect(screen.getByTestId('remove-highlight-1')).toBeInTheDocument();
+
+        // Remove the last row (index 1) -> remaining row (index 0) should still have the '+' button
+        fireEvent.click(screen.getByTestId('remove-highlight-1'));
+
+        const remainingInputs = screen.getAllByPlaceholderText('Add Highlight');
+        expect(remainingInputs).toHaveLength(1);
+        expect(remainingInputs[0]).toHaveValue('Eiffel Tower');
+        expect(screen.queryByTestId('remove-highlight-0')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: '+' })).toBeInTheDocument();
+    });
+
+    it('supports clearing a selected cover image preview via remove-cover-image button', async () => {
+        const validPngDataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+        const dummyFileReader = {
+            readAsDataURL: jest.fn().mockImplementation(function(this: any) {
+                this.result = validPngDataUrl;
+                if (this.onloadend) this.onloadend();
+            }),
+            onloadend: null as any,
+            result: '',
+        };
+        const originalFileReader = global.FileReader;
+        global.FileReader = jest.fn().mockImplementation(() => dummyFileReader) as any;
+
+        render(<TravelGuideForm />);
+
+        expect(screen.queryByTestId('remove-cover-image')).not.toBeInTheDocument();
+
+        const fileInput = screen.getByLabelText(/Cover Image:/i);
+        const file = new File(['foo'], 'foo.png', { type: 'image/png' });
+        fireEvent.change(fileInput, { target: { files: [file] } });
+
+        expect(await screen.findByAltText('Cover Preview')).toBeInTheDocument();
+        const removeButton = screen.getByTestId('remove-cover-image');
+        expect(removeButton).toHaveTextContent('Remove cover image');
+
+        fireEvent.click(removeButton);
+
+        expect(screen.queryByAltText('Cover Preview')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('remove-cover-image')).not.toBeInTheDocument();
+
+        global.FileReader = originalFileReader;
+    });
 });
