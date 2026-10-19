@@ -32,7 +32,7 @@ describe('UserRoleManagementClient', () => {
         jest.clearAllMocks();
     });
 
-    it('renders user table with points balance and filters by search text', () => {
+    it('renders user table with points balance and filters by search text (name or email)', () => {
         render(<UserRoleManagementClient initialUsers={mockUsers} />);
 
         expect(screen.getByText('User Role Management')).toBeInTheDocument();
@@ -41,11 +41,43 @@ describe('UserRoleManagementClient', () => {
         expect(screen.getByText('50,000 pts')).toBeInTheDocument();
         expect(screen.getByText('12,000 pts')).toBeInTheDocument();
 
-        const searchInput = screen.getByPlaceholderText(/search users/i);
-        fireEvent.change(searchInput, { target: { value: 'alice' } });
+        const searchInput = screen.getByTestId('user-management-search');
+        fireEvent.change(searchInput, { target: { value: 'Alice' } });
 
         expect(screen.getByText('alice@example.com')).toBeInTheDocument();
         expect(screen.queryByText('bob@example.com')).not.toBeInTheDocument();
+
+        fireEvent.change(searchInput, { target: { value: 'bob@example.com' } });
+        expect(screen.queryByText('alice@example.com')).not.toBeInTheDocument();
+        expect(screen.getByText('bob@example.com')).toBeInTheDocument();
+    });
+
+    it('filters users by role and displays empty filter message when no users match', () => {
+        render(<UserRoleManagementClient initialUsers={mockUsers} />);
+
+        const roleFilter = screen.getByTestId('user-management-role-filter');
+
+        fireEvent.change(roleFilter, { target: { value: 'ADMIN' } });
+        expect(screen.getByText('alice@example.com')).toBeInTheDocument();
+        expect(screen.queryByText('bob@example.com')).not.toBeInTheDocument();
+
+        fireEvent.change(roleFilter, { target: { value: 'USER' } });
+        expect(screen.queryByText('alice@example.com')).not.toBeInTheDocument();
+        expect(screen.getByText('bob@example.com')).toBeInTheDocument();
+
+        fireEvent.change(roleFilter, { target: { value: 'SUPPORT' } });
+        expect(screen.queryByText('alice@example.com')).not.toBeInTheDocument();
+        expect(screen.queryByText('bob@example.com')).not.toBeInTheDocument();
+        expect(screen.getByText('No users match the current filters.')).toBeInTheDocument();
+
+        fireEvent.change(roleFilter, { target: { value: 'ALL' } });
+        expect(screen.getByText('alice@example.com')).toBeInTheDocument();
+        expect(screen.getByText('bob@example.com')).toBeInTheDocument();
+    });
+
+    it('renders empty state when initialUsers is empty', () => {
+        render(<UserRoleManagementClient initialUsers={[]} />);
+        expect(screen.getByText('No users found.')).toBeInTheDocument();
     });
 
     it('prompts for reason and step-up code when changing role', async () => {
@@ -53,9 +85,8 @@ describe('UserRoleManagementClient', () => {
 
         render(<UserRoleManagementClient initialUsers={mockUsers} />);
 
-        const roleSelects = screen.getAllByRole('combobox');
-        // Bob is index 1
-        fireEvent.change(roleSelects[1], { target: { value: 'SUPPORT' } });
+        const bobRoleSelect = screen.getByLabelText('Change role for bob@example.com');
+        fireEvent.change(bobRoleSelect, { target: { value: 'SUPPORT' } });
 
         // Reason dialog appears
         expect(screen.getByText(/reason for role change/i)).toBeInTheDocument();

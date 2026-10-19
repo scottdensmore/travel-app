@@ -24,7 +24,8 @@ export default function UserRoleManagementClient({
     initialUsers,
 }: UserRoleManagementClientProps) {
     const [users, setUsers] = useState<UserItem[]>(initialUsers);
-    const [search, setSearch] = useState<string>('');
+    const [searchQuery, setSearchQuery] = useState<string>('');
+    const [roleFilter, setRoleFilter] = useState<string>('ALL');
     const [feedback, setFeedback] = useState<{ message: string; isError: boolean } | null>(null);
 
     // Pending role change state
@@ -51,12 +52,15 @@ export default function UserRoleManagementClient({
     const [stepUpError, setStepUpError] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-    // Filter users based on search
+    // Filter users based on search and role
     const filteredUsers = users.filter((u) => {
-        if (!search.trim()) return true;
-        const q = search.toLowerCase();
-        const matchesName = u.name?.toLowerCase().includes(q) ?? false;
-        const matchesEmail = u.email?.toLowerCase().includes(q) ?? false;
+        const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
+        if (!matchesRole) return false;
+        const trimmedSearch = searchQuery.trim();
+        if (trimmedSearch === '') return true;
+        const q = trimmedSearch.toLowerCase();
+        const matchesName = (u.name ?? '').toLowerCase().includes(q);
+        const matchesEmail = (u.email ?? '').toLowerCase().includes(q);
         return matchesName || matchesEmail;
     });
 
@@ -286,12 +290,15 @@ export default function UserRoleManagementClient({
                     </p>
                 </div>
 
-                <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                     <input
-                        type="text"
-                        placeholder="Search users by name or email..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
+                        id="user-management-search"
+                        type="search"
+                        aria-label="Search users by name or email"
+                        data-testid="user-management-search"
+                        placeholder="Search by name or email..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
                         style={{
                             width: '280px',
                             padding: '10px 14px',
@@ -303,6 +310,29 @@ export default function UserRoleManagementClient({
                             outline: 'none',
                         }}
                     />
+                    <select
+                        id="user-management-role-filter"
+                        aria-label="Filter users by role"
+                        data-testid="user-management-role-filter"
+                        value={roleFilter}
+                        onChange={(e) => setRoleFilter(e.target.value)}
+                        style={{
+                            padding: '10px 14px',
+                            borderRadius: '8px',
+                            border: '1px solid rgba(255, 255, 255, 0.2)',
+                            background: '#17142d',
+                            color: '#fff',
+                            fontSize: '0.9rem',
+                            cursor: 'pointer',
+                            outline: 'none',
+                        }}
+                    >
+                        <option value="ALL">All Roles</option>
+                        <option value="ADMIN">ADMIN</option>
+                        <option value="OPS">OPS</option>
+                        <option value="SUPPORT">SUPPORT</option>
+                        <option value="USER">USER</option>
+                    </select>
                 </div>
             </div>
 
@@ -432,10 +462,17 @@ export default function UserRoleManagementClient({
                                     </tr>
                                 );
                             })}
-                            {filteredUsers.length === 0 && (
+                            {users.length === 0 && (
                                 <tr>
                                     <td colSpan={5} style={{ padding: '36px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.4)' }}>
-                                        No users found matching &quot;{search}&quot;.
+                                        No users found.
+                                    </td>
+                                </tr>
+                            )}
+                            {users.length > 0 && filteredUsers.length === 0 && (
+                                <tr>
+                                    <td colSpan={5} style={{ padding: '36px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.4)' }}>
+                                        No users match the current filters.
                                     </td>
                                 </tr>
                             )}
