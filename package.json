@@ -17,7 +17,7 @@
     "inventory:check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/check-inventory.ts",
     "airports:generate": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/generate-airports.ts",
     "airports:check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/generate-airports.ts --check",
-    "verify:repo": "node scripts/verify-repo-policy.mjs"
+    "verify:repo": "node scripts/verify-repo-policy.mjs && node --test scripts/check-postgres-layout.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

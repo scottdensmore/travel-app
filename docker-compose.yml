@@ -80,15 +80,19 @@ services:
 
   db:
     image: postgres:18-alpine
+    entrypoint: ["/bin/sh", "/usr/local/bin/travel-postgres-layout-guard.sh"]
+    command: ["postgres"]
     restart: always
     environment:
+      PGDATA: /var/lib/postgresql/18/docker
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: travel_app
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - db_data:/var/lib/postgresql
+      - ./deploy/postgres-layout-guard.sh:/usr/local/bin/travel-postgres-layout-guard.sh:ro
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres -d travel_app" ]
       interval: 5s
