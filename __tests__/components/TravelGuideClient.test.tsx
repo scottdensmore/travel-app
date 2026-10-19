@@ -694,3 +694,94 @@ describe('selecting a city', () => {
         expect(scrollIntoView).not.toHaveBeenCalled();
     });
 });
+
+describe('destination search and favourites filtering', () => {
+    const stubTopology = { type: 'Topology', objects: {} };
+    let realFetch: typeof fetch;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockGeographies = [{ rsmKey: '1' }];
+        realFetch = global.fetch;
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            json: () => Promise.resolve(stubTopology),
+        }) as unknown as typeof fetch;
+    });
+
+    afterEach(() => {
+        global.fetch = realFetch;
+    });
+
+    it('filters destinations by city name, country, or highlight (case-insensitive)', async () => {
+        render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
+        await screen.findByTestId('geography');
+
+        const searchInput = screen.getByTestId('travel-guide-search');
+        expect(searchInput).toHaveAttribute('aria-label', 'Search destinations');
+        expect(searchInput).toHaveAttribute('placeholder', 'Search city, country, or highlight...');
+
+        // Search by city name
+        fireEvent.change(searchInput, { target: { value: 'paris' } });
+        expect(screen.queryByRole('button', { name: 'Detroit, USA' })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Paris, France' })).toBeInTheDocument();
+
+        // Search by country
+        fireEvent.change(searchInput, { target: { value: 'usa' } });
+        expect(screen.getByRole('button', { name: 'Detroit, USA' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Paris, France' })).not.toBeInTheDocument();
+
+        // Search by highlight
+        fireEvent.change(searchInput, { target: { value: 'louvre' } });
+        expect(screen.queryByRole('button', { name: 'Detroit, USA' })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Paris, France' })).toBeInTheDocument();
+
+        // Clear search
+        fireEvent.change(searchInput, { target: { value: '   ' } });
+        expect(screen.getByRole('button', { name: 'Detroit, USA' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Paris, France' })).toBeInTheDocument();
+    });
+
+    it('filters destinations by Favourites Only and updates dynamically when favourites are toggled', async () => {
+        mockToggleFavorite.mockResolvedValue({ isFavorite: true });
+
+        render(<TravelGuideClient cities={sampleCities} initialFavorites={[2]} />);
+        await screen.findByTestId('geography');
+
+        const filterSelect = screen.getByTestId('travel-guide-filter');
+        expect(filterSelect).toHaveAttribute('aria-label', 'Filter destinations');
+
+        // Filter to Favourites Only -> only Paris (id: 2) should appear in list
+        fireEvent.change(filterSelect, { target: { value: 'FAVORITES' } });
+        expect(screen.queryByRole('button', { name: 'Detroit, USA' })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Paris, France' })).toBeInTheDocument();
+
+        // Detroit is still selected in the detail panel; favourite Detroit from the detail panel
+        fireEvent.click(screen.getByRole('button', { name: '🤍 Favorite' }));
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: 'Detroit, USA' })).toBeInTheDocument();
+        });
+
+        // Switch back to All Destinations
+        fireEvent.change(filterSelect, { target: { value: 'ALL' } });
+        expect(screen.getByRole('button', { name: 'Detroit, USA' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Paris, France' })).toBeInTheDocument();
+    });
+
+    it('renders no-matches message while keeping search and filter controls visible when no cities match', async () => {
+        render(<TravelGuideClient cities={sampleCities} initialFavorites={[]} />);
+        await screen.findByTestId('geography');
+
+        const searchInput = screen.getByTestId('travel-guide-search');
+        fireEvent.change(searchInput, { target: { value: 'nonexistent destination' } });
+
+        expect(screen.getByTestId('travel-guide-no-matches')).toHaveTextContent(
+            'No destinations match the current filters.'
+        );
+        expect(screen.getByTestId('travel-guide-search')).toBeInTheDocument();
+        expect(screen.getByTestId('travel-guide-filter')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Detroit, USA' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Paris, France' })).not.toBeInTheDocument();
+    });
+});
+

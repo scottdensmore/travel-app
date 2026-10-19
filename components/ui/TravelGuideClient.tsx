@@ -51,6 +51,8 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
     const currentUserId = session?.user?.id;
     const [selectedCityName, setSelectedCityName] = useState<string | null>(DEFAULT_CITY_NAME);
     const [favorites, setFavorites] = useState<Set<number>>(new Set(initialFavorites));
+    const [searchQuery, setSearchQuery] = useState<string>('');
+    const [destinationFilter, setDestinationFilter] = useState<'ALL' | 'FAVORITES'>('ALL');
     const [isPending, startTransition] = useTransition();
     const [reviewContent, setReviewContent] = useState('');
     const [reviewRating, setReviewRating] = useState(5);
@@ -248,6 +250,18 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
 
     const selectedCity = cities.find(city => city.city === selectedCityName) ?? null;
 
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    const filteredCities = cities.filter((city) => {
+        const matchesFilter = destinationFilter === 'ALL' || favorites.has(city.id);
+        if (!matchesFilter) return false;
+        if (normalizedQuery === '') return true;
+        return (
+            city.city.toLowerCase().includes(normalizedQuery) ||
+            city.country.toLowerCase().includes(normalizedQuery) ||
+            Boolean(city.highlights?.some((h) => h.toLowerCase().includes(normalizedQuery)))
+        );
+    });
+
     return (
         <div className="guide page-container">
             <div className="map">
@@ -394,37 +408,92 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
                     {cities.length === 0 ? (
                         <p className="guide-empty">No destination guides yet.</p>
                     ) : (
-                        <ul>
-                            {cities.map((city) => {
-                                const isSelected = city.city === selectedCityName;
-                                return (
-                                    <li key={city.id} id={city.city} className={isSelected ? 'selected' : undefined}>
-                                        <button
-                                            type="button"
-                                            className="guide-city-select"
-                                            aria-pressed={isSelected}
-                                            onClick={() => selectCity(city.city)}
-                                        >
-                                            {city.city}, {city.country}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => toggleFavorite(city.id)}
-                                            disabled={isPending}
-                                            className="guide-favourite"
-                                            aria-pressed={favorites.has(city.id)}
-                                            aria-label={
-                                                favorites.has(city.id)
-                                                    ? `Remove ${city.city} from favourites`
-                                                    : `Add ${city.city} to favourites`
-                                            }
-                                        >
-                                            {favorites.has(city.id) ? '❤️' : '🤍'}
-                                        </button>
-                                    </li>
-                                );
-                            })}
-                        </ul>
+                        <>
+                            <div
+                                className="guide-filter-bar"
+                                style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '8px',
+                                    marginBottom: '12px',
+                                }}
+                            >
+                                <input
+                                    id="travel-guide-search"
+                                    type="search"
+                                    aria-label="Search destinations"
+                                    data-testid="travel-guide-search"
+                                    placeholder="Search city, country, or highlight..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    style={{
+                                        minHeight: '44px',
+                                        padding: '0.5rem 0.75rem',
+                                        borderRadius: '6px',
+                                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                                        background: '#17142d',
+                                        color: '#fff',
+                                        width: '100%',
+                                    }}
+                                />
+                                <select
+                                    id="travel-guide-filter"
+                                    aria-label="Filter destinations"
+                                    data-testid="travel-guide-filter"
+                                    value={destinationFilter}
+                                    onChange={(e) => setDestinationFilter(e.target.value as 'ALL' | 'FAVORITES')}
+                                    style={{
+                                        minHeight: '44px',
+                                        padding: '0.5rem 0.75rem',
+                                        borderRadius: '6px',
+                                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                                        background: '#17142d',
+                                        color: '#fff',
+                                        width: '100%',
+                                    }}
+                                >
+                                    <option value="ALL">All Destinations</option>
+                                    <option value="FAVORITES">Favourites Only</option>
+                                </select>
+                            </div>
+                            {filteredCities.length === 0 ? (
+                                <p className="guide-empty" data-testid="travel-guide-no-matches">
+                                    No destinations match the current filters.
+                                </p>
+                            ) : (
+                                <ul>
+                                    {filteredCities.map((city) => {
+                                        const isSelected = city.city === selectedCityName;
+                                        return (
+                                            <li key={city.id} id={city.city} className={isSelected ? 'selected' : undefined}>
+                                                <button
+                                                    type="button"
+                                                    className="guide-city-select"
+                                                    aria-pressed={isSelected}
+                                                    onClick={() => selectCity(city.city)}
+                                                >
+                                                    {city.city}, {city.country}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => toggleFavorite(city.id)}
+                                                    disabled={isPending}
+                                                    className="guide-favourite"
+                                                    aria-pressed={favorites.has(city.id)}
+                                                    aria-label={
+                                                        favorites.has(city.id)
+                                                            ? `Remove ${city.city} from favourites`
+                                                            : `Add ${city.city} to favourites`
+                                                    }
+                                                >
+                                                    {favorites.has(city.id) ? '❤️' : '🤍'}
+                                                </button>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            )}
+                        </>
                     )}
                 </div>
 
