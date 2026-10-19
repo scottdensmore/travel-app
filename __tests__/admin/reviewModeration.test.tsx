@@ -459,4 +459,86 @@ describe('ReviewModerationClient', () => {
         expect(screen.getByText(/Subsequent moderator approval note/i)).toBeInTheDocument();
         expect(screen.getByText(/Admin Staff/i)).toBeInTheDocument();
     });
+
+    it('filters reviews by star rating (5 Stars and 1 Star)', () => {
+        const ratingReviews = [
+            ...multiReviews,
+            {
+                id: 'rev-five-star',
+                content: 'Outstanding five star experience in Rome.',
+                rating: 5,
+                status: 'PENDING_MODERATION',
+                createdAt: new Date('2026-01-05T00:00:00Z'),
+                updatedAt: new Date('2026-01-05T00:00:00Z'),
+                cityGuide: { id: 4, city: 'Rome', country: 'Italy' },
+                user: { id: 'u-5', name: 'Happy Explorer', email: 'happy@example.com' },
+                reports: [],
+            },
+        ];
+
+        render(
+            <ReviewModerationClient
+                initialReviews={ratingReviews as any}
+                initialAudits={mockAudits as any}
+            />
+        );
+
+        const ratingSelect = screen.getByTestId('review-moderation-rating-filter');
+        expect(ratingSelect).toHaveAttribute('aria-label', 'Filter reviews by rating');
+
+        // Filter by 5 Stars
+        fireEvent.change(ratingSelect, { target: { value: '5' } });
+        expect(screen.getByText(/Outstanding five star experience in Rome/i)).toBeInTheDocument();
+        expect(screen.queryByText(/Spam link to external website/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Unchecked review waiting for approval/i)).not.toBeInTheDocument();
+
+        // Filter by 1 Star
+        fireEvent.change(ratingSelect, { target: { value: '1' } });
+        expect(screen.getByText(/Spam link to external website/i)).toBeInTheDocument();
+        expect(screen.queryByText(/Outstanding five star experience in Rome/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Unchecked review waiting for approval/i)).not.toBeInTheDocument();
+
+        // Reset to All Ratings
+        fireEvent.change(ratingSelect, { target: { value: 'ALL' } });
+        expect(screen.getByText(/Outstanding five star experience in Rome/i)).toBeInTheDocument();
+        expect(screen.getByText(/Spam link to external website/i)).toBeInTheDocument();
+        expect(screen.getByText(/Unchecked review waiting for approval/i)).toBeInTheDocument();
+    });
+
+    it('searches reviews by review text, reviewer name/email, and city guide across tabs and shows empty filter message when none match', () => {
+        render(
+            <ReviewModerationClient
+                initialReviews={multiReviews as any}
+                initialAudits={mockAudits as any}
+            />
+        );
+
+        const searchInput = screen.getByTestId('review-moderation-search');
+        expect(searchInput).toHaveAttribute('aria-label', 'Search reviews');
+
+        // Search by reviewer name on Needs Attention tab
+        fireEvent.change(searchInput, { target: { value: 'New Traveler' } });
+        expect(screen.getByText(/Unchecked review waiting for approval/i)).toBeInTheDocument();
+        expect(screen.queryByText(/Spam link to external website/i)).not.toBeInTheDocument();
+
+        // Search by review text
+        fireEvent.change(searchInput, { target: { value: 'Spam link' } });
+        expect(screen.getByText(/Spam link to external website/i)).toBeInTheDocument();
+        expect(screen.queryByText(/Unchecked review waiting for approval/i)).not.toBeInTheDocument();
+
+        // Search by city guide
+        fireEvent.change(searchInput, { target: { value: 'Paris' } });
+        expect(screen.getByText(/Spam link to external website/i)).toBeInTheDocument();
+        expect(screen.queryByText(/Unchecked review waiting for approval/i)).not.toBeInTheDocument();
+
+        // Search with no matching results displays empty filter message
+        fireEvent.change(searchInput, { target: { value: 'nonexistent-review-query-xyz' } });
+        expect(screen.getByText('No reviews match the current filters.')).toBeInTheDocument();
+
+        // Reset search and filter by a non-matching rating (e.g., 2 Stars)
+        fireEvent.change(searchInput, { target: { value: '' } });
+        const ratingSelect = screen.getByTestId('review-moderation-rating-filter');
+        fireEvent.change(ratingSelect, { target: { value: '2' } });
+        expect(screen.getByText('No reviews match the current filters.')).toBeInTheDocument();
+    });
 });

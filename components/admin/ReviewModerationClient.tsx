@@ -54,7 +54,8 @@ export default function ReviewModerationClient({
         setReviews(initialReviews);
     }, [initialReviews]);
     const [activeTab, setActiveTab] = useState<TabType>('needs_attention');
-    const [searchQuery, setSearchQuery] = useState('');
+    const [searchQuery, setSearchQuery] = useState<string>('');
+    const [ratingFilter, setRatingFilter] = useState<string>('ALL');
     const [notes, setNotes] = useState<Record<string, string>>({});
     const [expandedReports, setExpandedReports] = useState<Record<string, boolean>>({});
     const [deleteModalReview, setDeleteModalReview] = useState<ReviewItem | null>(null);
@@ -78,8 +79,8 @@ export default function ReviewModerationClient({
 
     const totalModeratedActions = audits.length;
 
-    // Filtered reviews based on active tab
-    const displayedReviews = useMemo(() => {
+    // Reviews in current status tab before search/rating filters
+    const tabReviews = useMemo(() => {
         if (activeTab === 'needs_attention') {
             return reviews.filter(
                 r => r.status === 'PENDING_MODERATION' || r.reports?.some(rep => rep.status === 'PENDING')
@@ -89,25 +90,40 @@ export default function ReviewModerationClient({
             return reviews.filter(r => r.status === 'HIDDEN');
         }
         if (activeTab === 'all') {
-            if (!searchQuery.trim()) return reviews;
-            const q = searchQuery.toLowerCase();
-            return reviews.filter(r => {
-                const city = (r.cityGuide?.city || '').toLowerCase();
-                const country = (r.cityGuide?.country || '').toLowerCase();
-                const author = (r.user?.name || '').toLowerCase();
-                const email = (r.user?.email || '').toLowerCase();
-                const content = (r.content || '').toLowerCase();
-                return (
-                    city.includes(q) ||
-                    country.includes(q) ||
-                    author.includes(q) ||
-                    email.includes(q) ||
-                    content.includes(q)
-                );
-            });
+            return reviews;
         }
         return [];
-    }, [reviews, activeTab, searchQuery]);
+    }, [reviews, activeTab]);
+
+    // Filtered reviews based on active tab, rating filter, and search query
+    const displayedReviews = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase();
+        return tabReviews.filter(r => {
+            const matchesRating =
+                ratingFilter === 'ALL' || Number(r.rating) === Number(ratingFilter);
+            if (!matchesRating) return false;
+            if (!q) return true;
+
+            const city = (r.cityGuide?.city || '').toLowerCase();
+            const country = (r.cityGuide?.country || '').toLowerCase();
+            const author = (r.user?.name || '').toLowerCase();
+            const email = (r.user?.email || '').toLowerCase();
+            const content = (r.content || '').toLowerCase();
+            const reportReasonMatch = r.reports?.some(
+                rep =>
+                    (rep.reason || '').toLowerCase().includes(q) ||
+                    (rep.details || '').toLowerCase().includes(q)
+            );
+            return (
+                city.includes(q) ||
+                country.includes(q) ||
+                author.includes(q) ||
+                email.includes(q) ||
+                content.includes(q) ||
+                Boolean(reportReasonMatch)
+            );
+        });
+    }, [tabReviews, ratingFilter, searchQuery]);
 
     const toggleExpand = (reviewId: string) => {
         setExpandedReports(prev => ({ ...prev, [reviewId]: !prev[reviewId] }));
@@ -364,27 +380,45 @@ export default function ReviewModerationClient({
                     aria-labelledby={`tab-${activeTab.replace('_', '-')}`}
                     className="space-y-4"
                 >
-                    {/* Search Bar for All Reviews */}
-                    {activeTab === 'all' && (
-                        <div className="mb-4">
-                            <input
-                                type="text"
-                                placeholder="Search reviews by city, country, author, or content..."
-                                value={searchQuery}
-                                onChange={e => setSearchQuery(e.target.value)}
-                                className="w-full px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
-                            />
-                        </div>
-                    )}
+                    {/* Search & Rating Filter Controls */}
+                    <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                        <input
+                            id="review-moderation-search"
+                            type="search"
+                            aria-label="Search reviews"
+                            data-testid="review-moderation-search"
+                            placeholder="Search reviews by reviewer, guide, or comment..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            className="flex-1 px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                        />
+                        <select
+                            id="review-moderation-rating-filter"
+                            aria-label="Filter reviews by rating"
+                            data-testid="review-moderation-rating-filter"
+                            value={ratingFilter}
+                            onChange={e => setRatingFilter(e.target.value)}
+                            className="px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-purple-500"
+                        >
+                            <option value="ALL">All Ratings</option>
+                            <option value="5">5 Stars</option>
+                            <option value="4">4 Stars</option>
+                            <option value="3">3 Stars</option>
+                            <option value="2">2 Stars</option>
+                            <option value="1">1 Star</option>
+                        </select>
+                    </div>
 
                     {/* Review Cards List */}
                     {displayedReviews.length === 0 ? (
                         <div className="admin-card p-8 text-center text-gray-500 bg-gray-800/80 border border-gray-700/60 rounded-xl">
-                            {activeTab === 'needs_attention'
+                            {tabReviews.length > 0 && (searchQuery.trim() !== '' || ratingFilter !== 'ALL')
+                                ? 'No reviews match the current filters.'
+                                : activeTab === 'needs_attention'
                                 ? 'No reviews currently need attention.'
                                 : activeTab === 'hidden'
                                 ? 'No hidden reviews found.'
-                                : 'No reviews match your search query.'}
+                                : 'No reviews match the current filters.'}
                         </div>
                     ) : (
                         displayedReviews.map(review => {
