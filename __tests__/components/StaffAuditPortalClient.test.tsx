@@ -174,5 +174,65 @@ describe('StaffAuditPortalClient', () => {
         expect(screen.getByText('Goodwill gesture for delayed flight')).toBeInTheDocument();
         expect(screen.getByText('support@example.com')).toBeInTheDocument();
     });
+
+    it('filters displayed rows via quick filter by target ID, reason, or actor email and shows empty state when no rows match', () => {
+        const multipleLogs = [
+            ...sampleLogs,
+            {
+                id: 'log-2',
+                actorId: 'u2',
+                actorEmail: 'ops@example.com',
+                actorRole: 'OPERATIONS' as const,
+                action: 'SCHEDULE_SET_ACTIVE',
+                targetType: 'FlightSchedule',
+                targetId: 'sched-42',
+                beforeState: { isActive: false },
+                afterState: { isActive: true },
+                reason: 'Seasonal route activation',
+                metadata: null,
+                ipAddress: '127.0.0.1',
+                createdAt: new Date().toISOString(),
+                actor: { name: 'Ops User', image: null },
+            },
+        ];
+
+        render(
+            <StaffAuditPortalClient
+                initialLogs={multipleLogs}
+                initialTotalCount={2}
+            />
+        );
+
+        const quickFilterInput = screen.getByTestId('audit-quick-filter');
+        expect(screen.getByText('admin@example.com')).toBeInTheDocument();
+        expect(screen.getByText('ops@example.com')).toBeInTheDocument();
+
+        // Filter by target ID
+        fireEvent.change(quickFilterInput, { target: { value: 'sched-42' } });
+        expect(screen.queryByText('admin@example.com')).not.toBeInTheDocument();
+        expect(screen.getByText('ops@example.com')).toBeInTheDocument();
+
+        // Filter by reason (case-insensitive)
+        fireEvent.change(quickFilterInput, { target: { value: 'promotion' } });
+        expect(screen.getByText('admin@example.com')).toBeInTheDocument();
+        expect(screen.queryByText('ops@example.com')).not.toBeInTheDocument();
+
+        // Filter by actor email
+        fireEvent.change(quickFilterInput, { target: { value: 'OPS@EXAMPLE.COM' } });
+        expect(screen.queryByText('admin@example.com')).not.toBeInTheDocument();
+        expect(screen.getByText('ops@example.com')).toBeInTheDocument();
+
+        // Non-matching filter shows empty state
+        fireEvent.change(quickFilterInput, { target: { value: 'nonexistent-query-xyz' } });
+        expect(screen.queryByText('admin@example.com')).not.toBeInTheDocument();
+        expect(screen.queryByText('ops@example.com')).not.toBeInTheDocument();
+        expect(screen.getByText('No audit logs on this page match the quick filter.')).toBeInTheDocument();
+
+        // Clearing filter restores all rows
+        fireEvent.change(quickFilterInput, { target: { value: '   ' } });
+        expect(screen.getByText('admin@example.com')).toBeInTheDocument();
+        expect(screen.getByText('ops@example.com')).toBeInTheDocument();
+    });
 });
+
 
