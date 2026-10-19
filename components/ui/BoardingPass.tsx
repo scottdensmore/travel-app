@@ -15,6 +15,7 @@ export interface BoardingPassProps {
     boardingGroup?: string;
     hasKtn?: boolean;
     ktn?: string;
+    isRewardBooking?: boolean;
 }
 
 /**
@@ -40,6 +41,7 @@ export default function BoardingPass({
     boardingGroup,
     hasKtn = false,
     ktn,
+    isRewardBooking = false,
 }: BoardingPassProps) {
     const group = boardingGroup || (priorityBoarding ? 'GROUP 1' : 'GROUP 3');
     const isPreCheck = Boolean(hasKtn || ktn);
@@ -86,6 +88,24 @@ export default function BoardingPass({
                                 }}
                             >
                                 TSA PreCheck
+                            </span>
+                        )}
+                        {isRewardBooking && (
+                            <span
+                                className="checkin-reward-ticket-badge"
+                                data-testid="boarding-pass-reward-badge"
+                                style={{
+                                    display: 'inline-block',
+                                    background: '#7e22ce',
+                                    color: '#ffffff',
+                                    fontWeight: 'bold',
+                                    fontSize: '0.7rem',
+                                    padding: '2px 8px',
+                                    borderRadius: '4px',
+                                    letterSpacing: '0.05em',
+                                }}
+                            >
+                                REWARD TICKET
                             </span>
                         )}
                     </div>
