@@ -278,6 +278,12 @@ export default function UserRoleManagementClient({
         }
     };
 
+    const parsedDelta = Number(pointsAmountInput.trim());
+    const hasValidPreviewDelta =
+        pointsAmountInput.trim() !== '' && Number.isInteger(parsedDelta) && parsedDelta !== 0;
+    const currentPointsBalance = pendingPointsUser?.spendablePoints ?? 0;
+    const projectedPointsBalance = currentPointsBalance + (hasValidPreviewDelta ? parsedDelta : 0);
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
@@ -740,6 +746,20 @@ export default function UserRoleManagementClient({
                                         boxSizing: 'border-box',
                                     }}
                                 />
+                                {hasValidPreviewDelta && (
+                                    <div
+                                        data-testid="points-adjustment-projected-balance"
+                                        style={{
+                                            marginTop: '6px',
+                                            fontSize: '0.8rem',
+                                            fontWeight: 600,
+                                            color: projectedPointsBalance < 0 ? '#f87171' : '#34d399',
+                                        }}
+                                    >
+                                        Projected balance: {projectedPointsBalance.toLocaleString('en-US')} pts
+                                        {projectedPointsBalance < 0 ? ' (Warning: resulting balance is negative)' : ''}
+                                    </div>
+                                )}
                             </div>
 
                             <div>
