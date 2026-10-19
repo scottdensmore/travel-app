@@ -785,3 +785,106 @@ describe('destination search and favourites filtering', () => {
     });
 });
 
+describe('city guide reviews rating filter and average rating summary', () => {
+    const stubTopology = { type: 'Topology', objects: {} };
+    let realFetch: typeof fetch;
+
+    const multiReviewCities = [
+        {
+            id: 1,
+            city: 'Detroit',
+            country: 'USA',
+            latlong: [42.3314, -83.0458],
+            description: 'Motor City',
+            highlights: ['Motown Museum', 'Detroit Institute of Arts'],
+            coverImage: null,
+            reviews: [
+                {
+                    id: 'r1',
+                    content: 'Great music history!',
+                    rating: 5,
+                    user: { name: 'Alice', image: null },
+                },
+                {
+                    id: 'r2',
+                    content: 'Nice art museum, cold winter.',
+                    rating: 4,
+                    user: { name: 'Bob', image: null },
+                },
+            ],
+        },
+        {
+            id: 2,
+            city: 'Paris',
+            country: 'France',
+            latlong: [48.8566, 2.3522],
+            description: 'City of Lights',
+            highlights: ['Eiffel Tower', 'Louvre Museum'],
+            coverImage: '/img/paris.jpg',
+            reviews: [
+                {
+                    id: 'r3',
+                    content: 'Unforgettable views.',
+                    rating: 5,
+                    user: { name: 'Claire', image: null },
+                },
+            ],
+        },
+    ];
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockGeographies = [{ rsmKey: '1' }];
+        realFetch = global.fetch;
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            json: () => Promise.resolve(stubTopology),
+        }) as unknown as typeof fetch;
+    });
+
+    afterEach(() => {
+        global.fetch = realFetch;
+    });
+
+    it('renders the average rating badge and review count when a city has reviews', async () => {
+        render(<TravelGuideClient cities={multiReviewCities} initialFavorites={[]} />);
+        await screen.findByTestId('geography');
+
+        expect(screen.getByRole('heading', { name: 'Reviews' })).toBeInTheDocument();
+        expect(screen.getByTestId('guide-average-rating')).toHaveTextContent('4.5 ★ (2 reviews)');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Paris, France' }));
+        expect(screen.getByTestId('guide-average-rating')).toHaveTextContent('5.0 ★ (1 review)');
+    });
+
+    it('filters city reviews by star rating, shows empty state when none match, and resets when switching cities', async () => {
+        render(<TravelGuideClient cities={multiReviewCities} initialFavorites={[]} />);
+        await screen.findByTestId('geography');
+
+        const ratingFilter = screen.getByTestId('guide-reviews-rating-filter');
+        expect(ratingFilter).toHaveAttribute('aria-label', 'Filter reviews by rating');
+        expect(ratingFilter).toHaveValue('ALL');
+        expect(screen.getByText('Great music history!')).toBeInTheDocument();
+        expect(screen.getByText('Nice art museum, cold winter.')).toBeInTheDocument();
+
+        // Filter to 5 Stars
+        fireEvent.change(ratingFilter, { target: { value: '5' } });
+        expect(screen.getByText('Great music history!')).toBeInTheDocument();
+        expect(screen.queryByText('Nice art museum, cold winter.')).not.toBeInTheDocument();
+
+        // Filter to 1 Star -> no matches
+        fireEvent.change(ratingFilter, { target: { value: '1' } });
+        expect(screen.queryByText('Great music history!')).not.toBeInTheDocument();
+        expect(screen.queryByText('Nice art museum, cold winter.')).not.toBeInTheDocument();
+        expect(screen.getByTestId('guide-reviews-no-matches')).toHaveTextContent(
+            'No reviews match the selected rating filter.'
+        );
+        expect(screen.getByTestId('guide-reviews-rating-filter')).toBeInTheDocument();
+
+        // Switching cities resets the rating filter back to ALL
+        fireEvent.click(screen.getByRole('button', { name: 'Paris, France' }));
+        expect(screen.getByTestId('guide-reviews-rating-filter')).toHaveValue('ALL');
+        expect(screen.getByText('Unforgettable views.')).toBeInTheDocument();
+    });
+});
+

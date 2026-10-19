@@ -56,6 +56,7 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
     const [isPending, startTransition] = useTransition();
     const [reviewContent, setReviewContent] = useState('');
     const [reviewRating, setReviewRating] = useState(5);
+    const [reviewRatingFilter, setReviewRatingFilter] = useState<string>('ALL');
     const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
     const [reportingReviewId, setReportingReviewId] = useState<string | null>(null);
     const [isSubmittingReview, setIsSubmittingReview] = useState(false);
@@ -140,6 +141,7 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
         setSelectedCityName(cityName);
         setReviewContent('');
         setReviewRating(5);
+        setReviewRatingFilter('ALL');
         setEditingReviewId(null);
         setReportingReviewId(null);
         setFeedback(null);
@@ -540,101 +542,164 @@ export default function TravelGuideClient({ cities, initialFavorites }: { cities
                         <hr />
 
                         <h4>Reviews</h4>
-                        {selectedCity.reviews && selectedCity.reviews.length > 0 ? (
-                            <ul className="guide-reviews">
-                                {selectedCity.reviews.map(r => {
-                                    const isAuthor = Boolean(currentUserId && (r.userId === currentUserId || r.user?.id === currentUserId));
-                                    const isEdited = Boolean(
-                                        r.createdAt &&
-                                        r.updatedAt &&
-                                        new Date(r.updatedAt).getTime() - new Date(r.createdAt).getTime() > 60_000
-                                    );
-                                    const isModerationPending = Boolean(r.status && r.status !== 'APPROVED');
+                        {selectedCity.reviews && selectedCity.reviews.length > 0 ? (() => {
+                            const averageRating = (
+                                selectedCity.reviews.reduce((sum, r) => sum + r.rating, 0) /
+                                selectedCity.reviews.length
+                            ).toFixed(1);
+                            const filteredReviews =
+                                reviewRatingFilter === 'ALL'
+                                    ? selectedCity.reviews
+                                    : selectedCity.reviews.filter((r) => r.rating === Number(reviewRatingFilter));
 
-                                    return (
-                                        <li key={r.id}>
-                                            <div className="guide-review-head">
-                                                <Image src={r.user?.image || "/img/my-profile-photo.jpg"} alt={r.user?.name || "User"} width={32} height={32} unoptimized style={{ borderRadius: '50%', objectFit: 'cover' }} />
-                                                <strong>{r.user?.name || "Traveler"}</strong>
-                                                <span className="guide-stars" aria-label={`${r.rating} out of 5`}>
-                                                    {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}
-                                                </span>
-                                                {isEdited && (
-                                                    <span
-                                                        className="guide-review-edited"
-                                                        title={r.updatedAt ? `Edited on ${new Date(r.updatedAt).toLocaleDateString()}` : 'Edited'}
-                                                        style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)', fontStyle: 'italic', marginLeft: '4px' }}
-                                                    >
-                                                        (edited)
-                                                    </span>
-                                                )}
-                                                {isModerationPending && (
-                                                    <span
-                                                        className="guide-review-status-badge"
-                                                        style={{
-                                                            fontSize: '0.75rem',
-                                                            padding: '2px 6px',
-                                                            borderRadius: '4px',
-                                                            backgroundColor: 'rgba(234, 179, 8, 0.2)',
-                                                            color: '#facc15',
-                                                            border: '1px solid rgba(234, 179, 8, 0.4)',
-                                                            marginLeft: '6px',
-                                                        }}
-                                                    >
-                                                        Under Moderator Review
-                                                    </span>
-                                                )}
-                                                <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                                    {isAuthor && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                                setEditingReviewId(r.id);
-                                                                setReviewContent(r.content);
-                                                                setReviewRating(r.rating);
-                                                            }}
-                                                            aria-label="Edit review"
-                                                            className="guide-review-edit"
-                                                            style={{
-                                                                background: 'transparent',
-                                                                border: '1px solid rgba(255, 255, 255, 0.2)',
-                                                                borderRadius: '4px',
-                                                                color: '#c084fc',
-                                                                fontSize: '0.75rem',
-                                                                padding: '2px 8px',
-                                                                cursor: 'pointer',
-                                                            }}
-                                                        >
-                                                            Edit
-                                                        </button>
-                                                    )}
-                                                    {!isAuthor && currentUserId && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setReportingReviewId(r.id)}
-                                                            aria-label="Report review"
-                                                            className="guide-review-report"
-                                                            style={{
-                                                                background: 'transparent',
-                                                                border: '1px solid rgba(255, 255, 255, 0.2)',
-                                                                borderRadius: '4px',
-                                                                color: '#f87171',
-                                                                fontSize: '0.75rem',
-                                                                padding: '2px 8px',
-                                                                cursor: 'pointer',
-                                                            }}
-                                                        >
-                                                            Report Review
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <p>{r.content}</p>
-                                        </li>
-                                    );
-                                })}
-                            </ul>
-                        ) : (
+                            return (
+                                <>
+                                    <div
+                                        className="guide-reviews-summary-bar"
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            gap: '8px',
+                                            flexWrap: 'wrap',
+                                            marginBottom: '12px',
+                                        }}
+                                    >
+                                        <span
+                                            data-testid="guide-average-rating"
+                                            style={{
+                                                fontSize: '0.9rem',
+                                                fontWeight: 600,
+                                                color: '#facc15',
+                                            }}
+                                        >
+                                            {averageRating} ★ ({selectedCity.reviews.length} {selectedCity.reviews.length === 1 ? 'review' : 'reviews'})
+                                        </span>
+                                        <select
+                                            id="guide-reviews-rating-filter"
+                                            aria-label="Filter reviews by rating"
+                                            data-testid="guide-reviews-rating-filter"
+                                            value={reviewRatingFilter}
+                                            onChange={(e) => setReviewRatingFilter(e.target.value)}
+                                            style={{
+                                                minHeight: '36px',
+                                                padding: '0.35rem 0.6rem',
+                                                borderRadius: '6px',
+                                                border: '1px solid rgba(255, 255, 255, 0.15)',
+                                                background: '#17142d',
+                                                color: '#fff',
+                                            }}
+                                        >
+                                            <option value="ALL">All Ratings</option>
+                                            <option value="5">5 Stars</option>
+                                            <option value="4">4 Stars</option>
+                                            <option value="3">3 Stars</option>
+                                            <option value="2">2 Stars</option>
+                                            <option value="1">1 Star</option>
+                                        </select>
+                                    </div>
+                                    {filteredReviews.length === 0 ? (
+                                        <p className="guide-empty" data-testid="guide-reviews-no-matches">
+                                            No reviews match the selected rating filter.
+                                        </p>
+                                    ) : (
+                                        <ul className="guide-reviews">
+                                            {filteredReviews.map(r => {
+                                                const isAuthor = Boolean(currentUserId && (r.userId === currentUserId || r.user?.id === currentUserId));
+                                                const isEdited = Boolean(
+                                                    r.createdAt &&
+                                                    r.updatedAt &&
+                                                    new Date(r.updatedAt).getTime() - new Date(r.createdAt).getTime() > 60_000
+                                                );
+                                                const isModerationPending = Boolean(r.status && r.status !== 'APPROVED');
+
+                                                return (
+                                                    <li key={r.id}>
+                                                        <div className="guide-review-head">
+                                                            <Image src={r.user?.image || "/img/my-profile-photo.jpg"} alt={r.user?.name || "User"} width={32} height={32} unoptimized style={{ borderRadius: '50%', objectFit: 'cover' }} />
+                                                            <strong>{r.user?.name || "Traveler"}</strong>
+                                                            <span className="guide-stars" aria-label={`${r.rating} out of 5`}>
+                                                                {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}
+                                                            </span>
+                                                            {isEdited && (
+                                                                <span
+                                                                    className="guide-review-edited"
+                                                                    title={r.updatedAt ? `Edited on ${new Date(r.updatedAt).toLocaleDateString()}` : 'Edited'}
+                                                                    style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)', fontStyle: 'italic', marginLeft: '4px' }}
+                                                                >
+                                                                    (edited)
+                                                                </span>
+                                                            )}
+                                                            {isModerationPending && (
+                                                                <span
+                                                                    className="guide-review-status-badge"
+                                                                    style={{
+                                                                        fontSize: '0.75rem',
+                                                                        padding: '2px 6px',
+                                                                        borderRadius: '4px',
+                                                                        backgroundColor: 'rgba(234, 179, 8, 0.2)',
+                                                                        color: '#facc15',
+                                                                        border: '1px solid rgba(234, 179, 8, 0.4)',
+                                                                        marginLeft: '6px',
+                                                                    }}
+                                                                >
+                                                                    Under Moderator Review
+                                                                </span>
+                                                            )}
+                                                            <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                                {isAuthor && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setEditingReviewId(r.id);
+                                                                            setReviewContent(r.content);
+                                                                            setReviewRating(r.rating);
+                                                                        }}
+                                                                        aria-label="Edit review"
+                                                                        className="guide-review-edit"
+                                                                        style={{
+                                                                            background: 'transparent',
+                                                                            border: '1px solid rgba(255, 255, 255, 0.2)',
+                                                                            borderRadius: '4px',
+                                                                            color: '#c084fc',
+                                                                            fontSize: '0.75rem',
+                                                                            padding: '2px 8px',
+                                                                            cursor: 'pointer',
+                                                                        }}
+                                                                    >
+                                                                        Edit
+                                                                    </button>
+                                                                )}
+                                                                {!isAuthor && currentUserId && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setReportingReviewId(r.id)}
+                                                                        aria-label="Report review"
+                                                                        className="guide-review-report"
+                                                                        style={{
+                                                                            background: 'transparent',
+                                                                            border: '1px solid rgba(255, 255, 255, 0.2)',
+                                                                            borderRadius: '4px',
+                                                                            color: '#f87171',
+                                                                            fontSize: '0.75rem',
+                                                                            padding: '2px 8px',
+                                                                            cursor: 'pointer',
+                                                                        }}
+                                                                    >
+                                                                        Report Review
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <p>{r.content}</p>
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
+                                    )}
+                                </>
+                            );
+                        })() : (
                             <p className="guide-empty">No reviews yet. Be the first!</p>
                         )}
 
