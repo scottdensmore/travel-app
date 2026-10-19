@@ -75,6 +75,10 @@ export async function updateNotificationPreferencesAction(
     }
 }
 
+const getAdminNotificationDeliveriesSchema = adminNotificationDeliveriesQuerySchema.extend({
+    type: z.string().optional(),
+});
+
 export async function getAdminNotificationDeliveriesAction(
     input?: unknown
 ): Promise<ActionResult<{ deliveries: NotificationDeliveryWithNotification[]; totalCount: number }>> {
@@ -83,12 +87,12 @@ export async function getAdminNotificationDeliveriesAction(
         return actionValidationFailure('Unauthorized: Staff access with NOTIFICATIONS_READ permission required.');
     }
 
-    const parsed = parseActionInput(adminNotificationDeliveriesQuerySchema, input ?? {});
+    const parsed = parseActionInput(getAdminNotificationDeliveriesSchema, input ?? {});
     if (!parsed.ok) {
         return parsed;
     }
 
-    const { status, channel, page, pageSize, search } = parsed.data;
+    const { status, channel, type, page, pageSize, search } = parsed.data;
 
     try {
         const where: Prisma.NotificationDeliveryWhereInput = {};
@@ -97,6 +101,11 @@ export async function getAdminNotificationDeliveriesAction(
         }
         if (channel) {
             where.channel = channel;
+        }
+        if (type && type !== 'ALL') {
+            where.notification = {
+                type,
+            };
         }
         if (search?.trim()) {
             const query = search.trim();

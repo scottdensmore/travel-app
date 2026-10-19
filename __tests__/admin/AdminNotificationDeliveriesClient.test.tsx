@@ -95,7 +95,7 @@ describe('AdminNotificationDeliveriesClient', () => {
         // Deliveries content
         expect(screen.getByText('traveler@example.com')).toBeInTheDocument();
         expect(screen.getByText('SMTP Timeout 504')).toBeInTheDocument();
-        expect(screen.getByText('Flight Delayed')).toBeInTheDocument();
+        expect(screen.getAllByText('Flight Delayed').length).toBeGreaterThanOrEqual(1);
         expect(screen.getByText('Your flight is delayed by 45 mins.')).toBeInTheDocument();
 
         expect(screen.getByText('user-2')).toBeInTheDocument();
@@ -275,6 +275,43 @@ describe('AdminNotificationDeliveriesClient', () => {
             expect(actions.getAdminNotificationDeliveriesAction).toHaveBeenCalledWith(
                 expect.objectContaining({ page: 1, pageSize: 50 })
             );
+        });
+    });
+
+    it('filters deliveries by notification type using getAdminNotificationDeliveriesAction', async () => {
+        (actions.getAdminNotificationDeliveriesAction as jest.Mock).mockResolvedValue({
+            ok: true,
+            data: { deliveries: [mockDeliveries[1]], totalCount: 1 },
+        });
+
+        render(
+            <AdminNotificationDeliveriesClient
+                initialDeliveries={mockDeliveries as any}
+                totalCount={3}
+            />
+        );
+
+        const typeSelect = screen.getByTestId('notification-type-filter');
+        expect(typeSelect).toHaveAttribute('aria-label', 'Filter by notification type');
+
+        fireEvent.change(typeSelect, { target: { value: 'POINTS' } });
+
+        await waitFor(() => {
+            expect(actions.getAdminNotificationDeliveriesAction).toHaveBeenCalledWith(
+                expect.objectContaining({ type: 'POINTS' })
+            );
+        });
+
+        fireEvent.change(typeSelect, { target: { value: 'ALL' } });
+
+        await waitFor(() => {
+            expect(actions.getAdminNotificationDeliveriesAction).toHaveBeenLastCalledWith({
+                status: undefined,
+                channel: undefined,
+                search: undefined,
+                page: 1,
+                pageSize: 50,
+            });
         });
     });
 });
