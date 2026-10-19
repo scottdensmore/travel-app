@@ -125,6 +125,12 @@ export default function FlightScheduleTermsForm({
         }
     };
 
+    const liveAwardFirst = Math.max(0, Number(awardSeatsFirst || 0));
+    const liveAwardBusiness = Math.max(0, Number(awardSeatsBusiness || 0));
+    const liveAwardPremEcon = Math.max(0, Number(awardSeatsPremiumEconomy || 0));
+    const liveAwardEconomy = Math.max(0, Number(awardSeatsEconomy || 0));
+    const totalAwardSeats = liveAwardFirst + liveAwardBusiness + liveAwardPremEcon + liveAwardEconomy;
+
     return (
         <section aria-labelledby="schedule-terms-heading" className="admin-card" style={{ marginBottom: 0 }}>
             <h2 id="schedule-terms-heading" style={{ color: '#c084fc', margin: '0 0 8px', fontSize: '1.35rem' }}>
@@ -241,6 +247,16 @@ export default function FlightScheduleTermsForm({
                         />
                     </label>
                 </div>
+                <p
+                    data-testid="schedule-terms-award-summary"
+                    style={{
+                        margin: 0,
+                        fontSize: '0.85rem',
+                        color: 'rgba(255, 255, 255, 0.75)',
+                    }}
+                >
+                    Total award inventory per flight: {totalAwardSeats} {totalAwardSeats === 1 ? 'seat' : 'seats'} ({liveAwardFirst}F · {liveAwardBusiness}J · {liveAwardPremEcon}W · {liveAwardEconomy}Y)
+                </p>
                 <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', color: '#e5e7eb', lineHeight: 1.5 }}>
                     <input
                         type="checkbox"

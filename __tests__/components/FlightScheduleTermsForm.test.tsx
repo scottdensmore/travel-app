@@ -238,6 +238,47 @@ describe('FlightScheduleTermsForm', () => {
             awardSeatsEconomy: 8,
         }));
     });
+
+    it('renders live award inventory summary and updates dynamically when any cabin input changes', () => {
+        render(
+            <FlightScheduleTermsForm
+                flightScheduleId={17}
+                durationMinutes={245}
+                priceCents={35_000}
+                safeFutureCount={1}
+                protectedCount={4}
+                initialAwardSeatsFirst={2}
+                initialAwardSeatsBusiness={3}
+                initialAwardSeatsPremiumEconomy={4}
+                initialAwardSeatsEconomy={6}
+            />,
+        );
+
+        const summary = screen.getByTestId('schedule-terms-award-summary');
+        expect(summary).toHaveTextContent(
+            'Total award inventory per flight: 15 seats (2F · 3J · 4W · 6Y)',
+        );
+
+        fireEvent.change(screen.getByLabelText('First award seats'), { target: { value: '1' } });
+        expect(summary).toHaveTextContent(
+            'Total award inventory per flight: 14 seats (1F · 3J · 4W · 6Y)',
+        );
+
+        fireEvent.change(screen.getByLabelText('Business award seats'), { target: { value: '0' } });
+        expect(summary).toHaveTextContent(
+            'Total award inventory per flight: 11 seats (1F · 0J · 4W · 6Y)',
+        );
+
+        fireEvent.change(screen.getByLabelText('Prem Econ award seats'), { target: { value: '0' } });
+        expect(summary).toHaveTextContent(
+            'Total award inventory per flight: 7 seats (1F · 0J · 0W · 6Y)',
+        );
+
+        fireEvent.change(screen.getByLabelText('Economy award seats'), { target: { value: '0' } });
+        expect(summary).toHaveTextContent(
+            'Total award inventory per flight: 1 seat (1F · 0J · 0W · 0Y)',
+        );
+    });
 });
 
 function renderForm() {
