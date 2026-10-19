@@ -487,5 +487,82 @@ describe('BookingManagementPortal', () => {
             );
         });
     });
+
+    it('renders support-rebook-reward-notice when opening Rebook Itinerary modal for a reward booking', async () => {
+        const rewardBookings = [
+            {
+                ...mockBookings[0],
+                id: 404,
+                reference: 'MA-RWD404',
+                isRewardBooking: true,
+                pointsRedeemed: 15000,
+                totalPriceCents: 1010,
+                currency: 'USD',
+            },
+        ];
+
+        render(
+            <BookingManagementPortal
+                initialData={{
+                    bookings: rewardBookings,
+                    totalCount: 1,
+                    page: 1,
+                    pageSize: 25,
+                    totalPages: 1,
+                }}
+                searchAction={mockSearchAction}
+                cancelAction={mockCancelAction}
+                rebookAction={mockRebookAction}
+            />
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: /rebook itinerary/i }));
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        const rewardNotice = screen.getByTestId('support-rebook-reward-notice');
+        expect(rewardNotice).toBeInTheDocument();
+        expect(rewardNotice).toHaveTextContent('15,000 pts redeemed');
+        expect(rewardNotice).toHaveTextContent(
+            'original reward redemption and taxes are preserved with no additional points charged'
+        );
+    });
+
+    it('does not render support-rebook-reward-notice when opening Rebook Itinerary modal for a cash booking', async () => {
+        const cashBookings = [
+            {
+                ...mockBookings[0],
+                id: 405,
+                reference: 'MA-CSH405',
+                isRewardBooking: false,
+            },
+        ];
+
+        render(
+            <BookingManagementPortal
+                initialData={{
+                    bookings: cashBookings,
+                    totalCount: 1,
+                    page: 1,
+                    pageSize: 25,
+                    totalPages: 1,
+                }}
+                searchAction={mockSearchAction}
+                cancelAction={mockCancelAction}
+                rebookAction={mockRebookAction}
+            />
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: /rebook itinerary/i }));
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        expect(screen.queryByTestId('support-rebook-reward-notice')).not.toBeInTheDocument();
+    });
 });
+
 
