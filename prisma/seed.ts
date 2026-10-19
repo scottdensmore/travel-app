@@ -468,51 +468,14 @@ async function main() {
             cabinClass: 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST';
             isPast?: boolean;
             totalPriceCents: number;
+            isRewardBooking?: boolean;
+            pointsRedeemed?: number;
         }
     ) {
-        const existingBooking = await prisma.booking.findFirst({
+        let booking = await prisma.booking.findFirst({
             where: {
                 userId: user.id,
                 legs: { some: { flightId: flight.id } }
-            }
-        })
-        if (existingBooking) return existingBooking
-
-        const passengerId = randomUUID()
-        const retention = getPassengerDataRetentionDeadline(flight.departureDate)
-        const dobEnc = encryptPassengerData('1990-05-15', { passengerId, field: 'dateOfBirth' })
-        const passportEnc = encryptPassengerData('A12345678', { passengerId, field: 'passportNumber' })
-
-        const booking = await prisma.booking.create({
-            data: {
-                userId: user.id,
-                totalPriceCents: options.totalPriceCents,
-                currency: 'USD',
-                status: 'CONFIRMED',
-                legs: {
-                    create: [{
-                        sequence: 1,
-                        flightId: flight.id,
-                    }]
-                },
-                passengers: {
-                    create: [{
-                        id: passengerId,
-                        firstName: options.passengerName.first,
-                        lastName: options.passengerName.last,
-                        gender: 'M',
-                        dateOfBirthEncrypted: dobEnc,
-                        passportNumberEncrypted: passportEnc,
-                        sensitiveDataExpiresAt: retention,
-                        documentsConfirmedAt: new Date(),
-                    }]
-                },
-                statusChanges: {
-                    create: [{
-                        to: 'CONFIRMED',
-                        reason: options.isPast ? 'Flight journey completed' : 'Initial flight reservation confirmed',
-                    }]
-                }
             },
             include: {
                 passengers: true,
@@ -520,25 +483,102 @@ async function main() {
             }
         })
 
-        await prisma.seatAssignment.create({
-            data: {
-                passengerId: booking.passengers[0].id,
-                legId: booking.legs[0].id,
-                flightId: flight.id,
-                seatNumber: options.seatNumber,
-                cabinClass: options.cabinClass,
-                checkedInAt: options.isPast ? flight.departureDate : null,
+        if (!booking) {
+            const passengerId = randomUUID()
+            const retention = getPassengerDataRetentionDeadline(flight.departureDate)
+            const dobEnc = encryptPassengerData('1990-05-15', { passengerId, field: 'dateOfBirth' })
+            const passportEnc = encryptPassengerData('A12345678', { passengerId, field: 'passportNumber' })
+
+            booking = await prisma.booking.create({
+                data: {
+                    userId: user.id,
+                    totalPriceCents: options.totalPriceCents,
+                    currency: 'USD',
+                    status: 'CONFIRMED',
+                    isRewardBooking: Boolean(options.isRewardBooking),
+                    pointsRedeemed: options.pointsRedeemed ?? null,
+                    legs: {
+                        create: [{
+                            sequence: 1,
+                            flightId: flight.id,
+                        }]
+                    },
+                    passengers: {
+                        create: [{
+                            id: passengerId,
+                            firstName: options.passengerName.first,
+                            lastName: options.passengerName.last,
+                            gender: 'M',
+                            dateOfBirthEncrypted: dobEnc,
+                            passportNumberEncrypted: passportEnc,
+                            sensitiveDataExpiresAt: retention,
+                            documentsConfirmedAt: new Date(),
+                        }]
+                    },
+                    statusChanges: {
+                        create: [{
+                            to: 'CONFIRMED',
+                            reason: options.isPast ? 'Flight journey completed' : 'Initial flight reservation confirmed',
+                        }]
+                    }
+                },
+                include: {
+                    passengers: true,
+                    legs: true,
+                }
+            })
+
+            await prisma.seatAssignment.create({
+                data: {
+                    passengerId: booking.passengers[0].id,
+                    legId: booking.legs[0].id,
+                    flightId: flight.id,
+                    seatNumber: options.seatNumber,
+                    cabinClass: options.cabinClass,
+                    checkedInAt: options.isPast ? flight.departureDate : null,
+                }
+            })
+
+            if (!options.isRewardBooking) {
+                await prisma.passengerAncillary.createMany({
+                    data: [
+                        { passengerId: booking.passengers[0].id, type: 'CARRY_ON', priceCents: 3500 },
+                        { passengerId: booking.passengers[0].id, type: 'CHECKED_BAG_1', priceCents: 4500 },
+                    ]
+                })
             }
-        })
 
-        await prisma.passengerAncillary.createMany({
-            data: [
-                { passengerId: booking.passengers[0].id, type: 'CARRY_ON', priceCents: 3500 },
-                { passengerId: booking.passengers[0].id, type: 'CHECKED_BAG_1', priceCents: 4500 },
-            ]
-        })
+            console.log(`Created ${options.isPast ? 'past' : 'upcoming'} ${options.isRewardBooking ? 'reward ' : ''}test booking ${booking.reference} for ${user.email}`)
+        }
 
-        console.log(`Created ${options.isPast ? 'past' : 'upcoming'} test booking ${booking.reference} for ${user.email}`)
+        if (!options.isRewardBooking) {
+            const existingEarn = await prisma.pointsLedgerEntry.findFirst({
+                where: {
+                    userId: user.id,
+                    bookingId: booking.id,
+                    type: 'FLIGHT_EARN',
+                }
+            })
+            if (!existingEarn) {
+                const latest = await prisma.pointsLedgerEntry.findFirst({
+                    where: { userId: user.id },
+                    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+                })
+                const earnedPoints = Math.floor(options.totalPriceCents / 100) * 5
+                await prisma.pointsLedgerEntry.create({
+                    data: {
+                        userId: user.id,
+                        type: 'FLIGHT_EARN',
+                        amount: earnedPoints,
+                        balanceAfter: (latest?.balanceAfter ?? 0) + earnedPoints,
+                        bookingId: booking.id,
+                        description: `Points earned for booking #${booking.id}`,
+                    }
+                })
+                console.log(`Recorded ${earnedPoints} FLIGHT_EARN points for booking #${booking.id} (${user.email})`)
+            }
+        }
+
         return booking
     }
 
@@ -570,6 +610,55 @@ async function main() {
                 cabinClass: 'BUSINESS',
                 totalPriceCents: 185000,
             })
+        }
+
+        // 6b. Sample Reward Booking
+        const rewardFlight = await prisma.flight.findFirst({
+            where: {
+                departureDate: { gte: new Date() },
+                id: { not: upcomingFlight.id },
+            },
+            orderBy: { departureDate: 'asc' },
+        })
+
+        if (rewardFlight) {
+            const rewardBooking = await seedBookingForUser(travelerUser, rewardFlight, {
+                passengerName: { first: 'Alex', last: 'Traveler' },
+                seatNumber: '14C',
+                cabinClass: 'ECONOMY',
+                totalPriceCents: 1010,
+                isRewardBooking: true,
+                pointsRedeemed: 15000,
+            })
+
+            const existingRedemption = await prisma.pointsLedgerEntry.findFirst({
+                where: {
+                    userId: travelerUser.id,
+                    bookingId: rewardBooking.id,
+                    type: 'REWARD_REDEMPTION',
+                }
+            })
+
+            if (!existingRedemption) {
+                const latest = await prisma.pointsLedgerEntry.findFirst({
+                    where: { userId: travelerUser.id },
+                    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+                })
+                const currentBalance = latest?.balanceAfter ?? 50000
+                if (currentBalance >= 15000) {
+                    await prisma.pointsLedgerEntry.create({
+                        data: {
+                            userId: travelerUser.id,
+                            type: 'REWARD_REDEMPTION',
+                            amount: -15000,
+                            balanceAfter: currentBalance - 15000,
+                            bookingId: rewardBooking.id,
+                            description: `Reward flight redemption for booking #${rewardBooking.id}`,
+                        }
+                    })
+                    console.log(`Recorded 15000 REWARD_REDEMPTION points for booking #${rewardBooking.id} (${travelerUser.email})`)
+                }
+            }
         }
     }
 
