@@ -73,6 +73,7 @@ const HIDDEN_BUT_ANNOUNCED: React.CSSProperties = {
 export default function FlightStatusBoard({ flights, renderedAt, coverage }: FlightStatusBoardProps) {
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<'ALL' | FlightPhase>('ALL');
+    const [awardOnly, setAwardOnly] = useState<boolean>(false);
 
     const matchesQuery = (flight: Flight) => {
         const query = searchQuery.toLowerCase().trim();
@@ -95,10 +96,22 @@ export default function FlightStatusBoard({ flights, renderedAt, coverage }: Fli
                 statusFilter === 'ALL' ||
                 phase === statusFilter;
 
-            return matchesQuery(flight) && matchesStatus;
+            if (!matchesQuery(flight) || !matchesStatus) {
+                return false;
+            }
+
+            if (awardOnly) {
+                return (
+                    phase === 'UPCOMING' &&
+                    flight.status !== 'CANCELLED' &&
+                    (totalAwardSeats(flight) ?? 0) > 0
+                );
+            }
+
+            return true;
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [phasedFlights, searchQuery, statusFilter]);
+    }, [phasedFlights, searchQuery, statusFilter, awardOnly]);
 
     /**
      * The empty state has four causes and they need four answers. One string
@@ -107,6 +120,10 @@ export default function FlightStatusBoard({ flights, renderedAt, coverage }: Fli
      * neither of which was anything they had done (#153).
      */
     const emptyStateMessage = () => {
+        if (awardOnly) {
+            return 'No upcoming flights with available award seats match the current filters.';
+        }
+
         const query = searchQuery.trim();
         const status = statusFilter === 'ALL' ? null : getStatusLabel(statusFilter);
         const filterDescription = statusFilter === 'UPCOMING' ||
@@ -245,6 +262,27 @@ export default function FlightStatusBoard({ flights, renderedAt, coverage }: Fli
                             <option value="CANCELLED">Cancelled</option>
                         </select>
                     </div>
+                    <label
+                        htmlFor="flight-board-award-filter"
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            color: 'rgba(255, 255, 255, 0.85)',
+                            fontSize: '0.9rem',
+                            cursor: 'pointer',
+                            userSelect: 'none',
+                        }}
+                    >
+                        <input
+                            id="flight-board-award-filter"
+                            type="checkbox"
+                            data-testid="flight-board-award-filter"
+                            checked={awardOnly}
+                            onChange={(e) => setAwardOnly(e.target.checked)}
+                        />
+                        <span>Award seats available</span>
+                    </label>
                 </div>
 
                 <div style={{ 
