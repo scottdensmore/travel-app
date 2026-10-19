@@ -1,6 +1,7 @@
 /** @jest-environment node */
 
 import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { getServerSession } from 'next-auth';
 import AdminDashboard from '@/app/admin/page';
 import { prisma } from '@/lib/prisma';
@@ -22,6 +23,24 @@ jest.mock('@/lib/prisma', () => ({
     },
 }));
 
+function childrenOf(node: React.ReactElement<Record<string, any>>): React.ReactNode {
+    if (node.props.children !== undefined) {
+        return node.props.children;
+    }
+    if (typeof node.type === 'function') {
+        let rendered: React.ReactNode = null;
+        const Component = node.type as (props: Record<string, any>) => React.ReactNode;
+        renderToStaticMarkup(
+            React.createElement(() => {
+                rendered = Component(node.props);
+                return null;
+            }),
+        );
+        return rendered;
+    }
+    return undefined;
+}
+
 function findLinks(node: unknown): Array<{ href: string; children?: React.ReactNode }> {
     if (!React.isValidElement(node)) return [];
     const links: Array<{ href: string; children?: React.ReactNode }> = [];
@@ -42,10 +61,8 @@ function findLinks(node: unknown): Array<{ href: string; children?: React.ReactN
 
 function textContent(node: React.ReactNode): string {
     if (typeof node === 'string' || typeof node === 'number') return String(node);
-    if (!React.isValidElement(node)) return '';
-    return React.Children.toArray(
-        (node.props as { children?: React.ReactNode }).children
-    ).map(textContent).join(' ');
+    if (!React.isValidElement<Record<string, any>>(node)) return '';
+    return React.Children.toArray(childrenOf(node)).map(textContent).join(' ');
 }
 
 describe('AdminDashboard navigation cards', () => {

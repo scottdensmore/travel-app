@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma';
 import { flightRouteInclude, withLegRouteLabels } from '@/lib/flightRoute';
 import Link from 'next/link';
 import { activeItineraryLegWhere, outboundFlight } from '@/lib/bookingItinerary';
+import AdminRecentBookingsClient from '@/components/admin/AdminRecentBookingsClient';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,7 +32,7 @@ export default async function AdminDashboard() {
     const canViewAuditLogs = hasStaffPermission(session, StaffPermission.AUDIT_LOGS_VIEW);
 
     // Recent bookings - only queried if staff member has BOOKINGS_READ permission
-    const recentBookings = canReadBookings
+    const recentBookings = (canReadBookings
         ? await prisma.booking.findMany({
             take: 5,
             orderBy: { createdAt: 'desc' },
@@ -49,7 +50,16 @@ export default async function AdminDashboard() {
                 },
             },
         })
-        : [];
+        : []
+    ).map((booking) => {
+        const legs = booking.legs.map(withLegRouteLabels);
+        const flight = outboundFlight({ ...booking, legs });
+        return {
+            ...booking,
+            legs,
+            routeLabel: flight ? `${flight.from} → ${flight.to}` : '—',
+        };
+    });
 
     return (
         <div className="page-container admin p-8" style={{ marginTop: '100px', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -232,60 +242,7 @@ export default async function AdminDashboard() {
                     <h2 style={{ fontSize: '1.5rem', margin: '0 0 1rem 0', color: '#c084fc', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '8px' }}>
                         Recent Bookings
                     </h2>
-                    <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                            <thead>
-                                <tr style={{ borderBottom: '2px solid rgba(255, 255, 255, 0.08)' }}>
-                                    <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>User</th>
-                                    <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Flight</th>
-                                    <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Route</th>
-                                    <th style={{ padding: '8px 12px', color: '#a78bfa', fontSize: '0.85rem', textTransform: 'uppercase' }}>Date</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {recentBookings.map((booking) => {
-                                    const flight = outboundFlight({ ...booking, legs: booking.legs.map(withLegRouteLabels) });
-                                    return (
-                                        <tr key={booking.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
-                                            <td style={{ padding: '12px', fontSize: '0.9rem', color: '#fff' }}>
-                                                {booking.user?.name || booking.user?.email || 'Guest'}
-                                            </td>
-                                            <td style={{ padding: '12px', fontSize: '0.9rem', color: '#fff' }}>
-                                                <span>{flight ? `${flight.airline} ${flight.flightNumber}` : '—'}</span>
-                                                {booking.isRewardBooking && (
-                                                    <span style={{
-                                                        marginLeft: '8px',
-                                                        padding: '2px 6px',
-                                                        borderRadius: '9999px',
-                                                        fontSize: '0.7rem',
-                                                        fontWeight: 700,
-                                                        backgroundColor: 'rgba(167, 139, 250, 0.18)',
-                                                        color: '#c4b5fd',
-                                                        border: '1px solid rgba(167, 139, 250, 0.35)',
-                                                    }}>
-                                                        Reward
-                                                    </span>
-                                                )}
-                                            </td>
-                                            <td style={{ padding: '12px', fontSize: '0.9rem', color: '#fff' }}>
-                                                {flight ? `${flight.from} → ${flight.to}` : '—'}
-                                            </td>
-                                            <td style={{ padding: '12px', fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.6)' }}>
-                                                {new Date(booking.createdAt).toLocaleDateString()}
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                                {recentBookings.length === 0 && (
-                                    <tr>
-                                        <td colSpan={4} style={{ padding: '24px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.4)' }}>
-                                            No recent bookings.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                    <AdminRecentBookingsClient bookings={recentBookings} />
                 </div>
             )}
         </div>
