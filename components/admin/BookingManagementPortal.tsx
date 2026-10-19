@@ -1191,6 +1191,18 @@ export default function BookingManagementPortal({
                                 <p className="text-xs text-gray-400 mt-0.5">
                                     Booking Reference: <span className="font-mono text-purple-200">{activeRebookBooking.reference}</span>
                                 </p>
+                                {activeRebookBooking.isRewardBooking && (
+                                    <p
+                                        data-testid="support-rebook-reward-notice"
+                                        className="text-xs text-amber-300 mt-1 font-medium"
+                                    >
+                                        Reward Booking:{' '}
+                                        {typeof activeRebookBooking.pointsRedeemed === 'number' && activeRebookBooking.pointsRedeemed > 0
+                                            ? `${activeRebookBooking.pointsRedeemed.toLocaleString('en-US')} pts redeemed`
+                                            : 'Points redemption'}{' '}
+                                        (original reward redemption and taxes are preserved with no additional points charged)
+                                    </p>
+                                )}
                             </div>
                             <button
                                 type="button"
