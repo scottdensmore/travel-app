@@ -233,6 +233,153 @@ describe('StaffAuditPortalClient', () => {
         expect(screen.getByText('admin@example.com')).toBeInTheDocument();
         expect(screen.getByText('ops@example.com')).toBeInTheDocument();
     });
+
+    it('filters displayed audit logs by actor role using audit-role-filter', () => {
+        const roleLogs = [
+            ...sampleLogs,
+            {
+                id: 'log-support',
+                actorId: 'u-sup',
+                actorEmail: 'support@example.com',
+                actorRole: 'SUPPORT' as const,
+                action: 'USER_POINTS_ADJUSTMENT',
+                targetType: 'User',
+                targetId: 'target-sup',
+                beforeState: { points: 100 },
+                afterState: { points: 200 },
+                reason: 'Support credit',
+                metadata: null,
+                ipAddress: '127.0.0.1',
+                createdAt: new Date().toISOString(),
+                actor: { name: 'Support Agent', image: null },
+            },
+            {
+                id: 'log-ops',
+                actorId: 'u-ops',
+                actorEmail: 'ops@example.com',
+                actorRole: 'OPERATIONS' as const,
+                action: 'SCHEDULE_SET_ACTIVE',
+                targetType: 'FlightSchedule',
+                targetId: 'sched-ops',
+                beforeState: { isActive: false },
+                afterState: { isActive: true },
+                reason: 'Ops schedule activation',
+                metadata: null,
+                ipAddress: '127.0.0.1',
+                createdAt: new Date().toISOString(),
+                actor: { name: 'Ops Agent', image: null },
+            },
+            {
+                id: 'log-mod',
+                actorId: 'u-mod',
+                actorEmail: 'mod@example.com',
+                actorRole: 'MODERATOR' as const,
+                action: 'REVIEW_MODERATE',
+                targetType: 'Review',
+                targetId: 'rev-mod',
+                beforeState: { status: 'PENDING' },
+                afterState: { status: 'APPROVED' },
+                reason: 'Moderator approval',
+                metadata: null,
+                ipAddress: '127.0.0.1',
+                createdAt: new Date().toISOString(),
+                actor: { name: 'Mod Agent', image: null },
+            },
+        ];
+
+        render(
+            <StaffAuditPortalClient
+                initialLogs={roleLogs}
+                initialTotalCount={4}
+            />
+        );
+
+        const roleFilterSelect = screen.getByTestId('audit-role-filter') as HTMLSelectElement;
+        expect(roleFilterSelect.value).toBe('ALL');
+
+        // Filter by ADMIN
+        fireEvent.change(roleFilterSelect, { target: { value: 'ADMIN' } });
+        expect(screen.getByText('admin@example.com')).toBeInTheDocument();
+        expect(screen.queryByText('support@example.com')).not.toBeInTheDocument();
+        expect(screen.queryByText('ops@example.com')).not.toBeInTheDocument();
+        expect(screen.queryByText('mod@example.com')).not.toBeInTheDocument();
+
+        // Filter by SUPPORT
+        fireEvent.change(roleFilterSelect, { target: { value: 'SUPPORT' } });
+        expect(screen.queryByText('admin@example.com')).not.toBeInTheDocument();
+        expect(screen.getByText('support@example.com')).toBeInTheDocument();
+        expect(screen.queryByText('ops@example.com')).not.toBeInTheDocument();
+        expect(screen.queryByText('mod@example.com')).not.toBeInTheDocument();
+
+        // Filter by OPERATIONS
+        fireEvent.change(roleFilterSelect, { target: { value: 'OPERATIONS' } });
+        expect(screen.queryByText('admin@example.com')).not.toBeInTheDocument();
+        expect(screen.queryByText('support@example.com')).not.toBeInTheDocument();
+        expect(screen.getByText('ops@example.com')).toBeInTheDocument();
+        expect(screen.queryByText('mod@example.com')).not.toBeInTheDocument();
+
+        // Filter by MODERATOR
+        fireEvent.change(roleFilterSelect, { target: { value: 'MODERATOR' } });
+        expect(screen.queryByText('admin@example.com')).not.toBeInTheDocument();
+        expect(screen.queryByText('support@example.com')).not.toBeInTheDocument();
+        expect(screen.queryByText('ops@example.com')).not.toBeInTheDocument();
+        expect(screen.getByText('mod@example.com')).toBeInTheDocument();
+
+        // Restore ALL
+        fireEvent.change(roleFilterSelect, { target: { value: 'ALL' } });
+        expect(screen.getByText('admin@example.com')).toBeInTheDocument();
+        expect(screen.getByText('support@example.com')).toBeInTheDocument();
+        expect(screen.getByText('ops@example.com')).toBeInTheDocument();
+        expect(screen.getByText('mod@example.com')).toBeInTheDocument();
+    });
+
+    it('clears both audit-quick-filter and audit-role-filter back to all initial logs when Reset is clicked', () => {
+        const multipleLogs = [
+            ...sampleLogs,
+            {
+                id: 'log-2',
+                actorId: 'u2',
+                actorEmail: 'ops@example.com',
+                actorRole: 'OPERATIONS' as const,
+                action: 'SCHEDULE_SET_ACTIVE',
+                targetType: 'FlightSchedule',
+                targetId: 'sched-42',
+                beforeState: { isActive: false },
+                afterState: { isActive: true },
+                reason: 'Seasonal route activation',
+                metadata: null,
+                ipAddress: '127.0.0.1',
+                createdAt: new Date().toISOString(),
+                actor: { name: 'Ops User', image: null },
+            },
+        ];
+
+        render(
+            <StaffAuditPortalClient
+                initialLogs={multipleLogs}
+                initialTotalCount={2}
+            />
+        );
+
+        const quickFilterInput = screen.getByTestId('audit-quick-filter') as HTMLInputElement;
+        const roleFilterSelect = screen.getByTestId('audit-role-filter') as HTMLSelectElement;
+
+        fireEvent.change(roleFilterSelect, { target: { value: 'MODERATOR' } });
+        expect(screen.getByText('No audit logs on this page match the quick filter.')).toBeInTheDocument();
+
+        fireEvent.change(quickFilterInput, { target: { value: 'sched-42' } });
+        expect(quickFilterInput.value).toBe('sched-42');
+        expect(roleFilterSelect.value).toBe('MODERATOR');
+
+        const resetBtn = screen.getByRole('button', { name: /reset/i });
+        fireEvent.click(resetBtn);
+
+        expect(quickFilterInput.value).toBe('');
+        expect(roleFilterSelect.value).toBe('ALL');
+        expect(screen.getByText('admin@example.com')).toBeInTheDocument();
+        expect(screen.getByText('ops@example.com')).toBeInTheDocument();
+    });
 });
+
 
 

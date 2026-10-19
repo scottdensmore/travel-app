@@ -54,6 +54,7 @@ export default function StaffAuditPortalClient({
     const [targetType, setTargetType] = useState<string>('');
     const [targetId, setTargetId] = useState<string>('');
     const [quickFilter, setQuickFilter] = useState<string>('');
+    const [roleFilter, setRoleFilter] = useState<string>('ALL');
 
     // Selected log for diff modal
     const [selectedLog, setSelectedLog] = useState<AuditLogItem | null>(null);
@@ -118,6 +119,8 @@ export default function StaffAuditPortalClient({
         setAction('ALL');
         setTargetType('');
         setTargetId('');
+        setQuickFilter('');
+        setRoleFilter('ALL');
         setLogs(initialLogs);
         setTotalCount(initialTotalCount);
         setSearchError(null);
@@ -230,18 +233,20 @@ export default function StaffAuditPortalClient({
     };
 
     const normalizedQuickFilter = quickFilter.trim().toLowerCase();
-    const displayedLogs = normalizedQuickFilter
-        ? logs.filter((log) =>
-              [
-                  log.targetId,
-                  log.targetType,
-                  log.reason,
-                  log.actorEmail,
-                  log.actorId,
-                  log.action,
-              ].some((field) => (field ?? '').toLowerCase().includes(normalizedQuickFilter))
-          )
-        : logs;
+    const displayedLogs = logs.filter((log) => {
+        const matchesRole = roleFilter === 'ALL' || log.actorRole === roleFilter;
+        const matchesQuick =
+            !normalizedQuickFilter ||
+            [
+                log.targetId,
+                log.targetType,
+                log.reason,
+                log.actorEmail,
+                log.actorId,
+                log.action,
+            ].some((field) => (field ?? '').toLowerCase().includes(normalizedQuickFilter));
+        return matchesRole && matchesQuick;
+    });
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -543,6 +548,28 @@ export default function StaffAuditPortalClient({
                             boxSizing: 'border-box',
                         }}
                     />
+                    <select
+                        id="audit-role-filter"
+                        aria-label="Filter displayed audit logs by actor role"
+                        data-testid="audit-role-filter"
+                        value={roleFilter}
+                        onChange={(e) => setRoleFilter(e.target.value)}
+                        style={{
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(255, 255, 255, 0.2)',
+                            background: '#17142d',
+                            color: '#fff',
+                            fontSize: '0.85rem',
+                            boxSizing: 'border-box',
+                        }}
+                    >
+                        <option value="ALL">All Roles</option>
+                        <option value="ADMIN">ADMIN</option>
+                        <option value="SUPPORT">SUPPORT</option>
+                        <option value="OPERATIONS">OPERATIONS</option>
+                        <option value="MODERATOR">MODERATOR</option>
+                    </select>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
