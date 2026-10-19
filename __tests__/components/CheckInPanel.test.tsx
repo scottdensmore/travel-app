@@ -1043,6 +1043,32 @@ describe('seat confirmation and seat change during check-in', () => {
             expect(screen.queryByTestId('reward-booking-badge')).not.toBeInTheDocument();
             expect(screen.queryByText('Reward Booking')).not.toBeInTheDocument();
         });
+
+        it('renders REWARD TICKET badge on checked-in boarding pass when isRewardBooking is true', () => {
+            renderCheckInPanel({
+                legOverrides: {
+                    isRewardBooking: true,
+                    pointsRedeemed: 25000,
+                },
+            });
+
+            const badge = screen.getByTestId('boarding-pass-reward-badge');
+            expect(badge).toBeInTheDocument();
+            expect(badge).toHaveTextContent('REWARD TICKET');
+        });
+
+        it('does not render REWARD TICKET badge on checked-in boarding pass for cash bookings', () => {
+            renderCheckInPanel({
+                legOverrides: {
+                    isRewardBooking: false,
+                    pointsRedeemed: null,
+                },
+            });
+
+            expect(screen.queryByTestId('boarding-pass-reward-badge')).not.toBeInTheDocument();
+            expect(screen.queryByText('REWARD TICKET')).not.toBeInTheDocument();
+        });
     });
 });
+
 

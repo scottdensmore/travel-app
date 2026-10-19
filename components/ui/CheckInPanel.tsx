@@ -646,6 +646,7 @@ export default function CheckInPanel({ legs }: { legs: CheckInLegView[] }) {
                                                                 priorityBoarding={hasPriority}
                                                                 boardingGroup={boardingGroup}
                                                                 hasKtn={Boolean(traveller.hasKtn || traveller.ktn)}
+                                                                isRewardBooking={leg.isRewardBooking}
                                                             />
                                                         );
                                                     })}
