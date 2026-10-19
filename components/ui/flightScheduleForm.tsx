@@ -62,6 +62,18 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
     const [awardSeatsPremiumEconomy, setAwardSeatsPremiumEconomy] = useState(initialSchedule?.awardSeatsPremiumEconomy?.toString() ?? '2');
     const [awardSeatsEconomy, setAwardSeatsEconomy] = useState(initialSchedule?.awardSeatsEconomy?.toString() ?? '4');
     const [showSeatingConfig, setShowSeatingConfig] = useState(false);
+
+    const seatsPerRow = seatPattern.replace(/[^A-Za-z]/g, '').length;
+    const fSeats = Math.max(0, Number(firstClassRows || 0)) * seatsPerRow;
+    const bSeats = Math.max(0, Number(businessRows || 0)) * seatsPerRow;
+    const peSeats = Math.max(0, Number(premiumEconomyRows || 0)) * seatsPerRow;
+    const eSeats = Math.max(0, Number(economyRows || 0)) * seatsPerRow;
+    const totalPhysicalSeats = fSeats + bSeats + peSeats + eSeats;
+    const totalAwardSeats =
+        Math.max(0, Number(awardSeatsFirst || 0)) +
+        Math.max(0, Number(awardSeatsBusiness || 0)) +
+        Math.max(0, Number(awardSeatsPremiumEconomy || 0)) +
+        Math.max(0, Number(awardSeatsEconomy || 0));
     
     const [error, setError] = useState<string | null>(null);
     /**
@@ -137,6 +149,17 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
             normalizedSeatPattern = validateSeatingLayout(fRows, bRows, peRows, eRows, seatPattern);
         } catch (validationError) {
             setError(validationError instanceof Error ? validationError.message : 'Invalid seating layout.');
+            return;
+        }
+
+        const normalizedSeatsPerRow = normalizedSeatPattern.replace(/-/g, '').length;
+        if (
+            fAwardSeats > fRows * normalizedSeatsPerRow ||
+            bAwardSeats > bRows * normalizedSeatsPerRow ||
+            peAwardSeats > peRows * normalizedSeatsPerRow ||
+            eAwardSeats > eRows * normalizedSeatsPerRow
+        ) {
+            setError('Award seat quota cannot exceed physical cabin capacity.');
             return;
         }
 
@@ -568,6 +591,20 @@ export default function FlightScheduleForm({ initialSchedule }: { initialSchedul
                                     style={{ padding: '6px 10px', fontSize: '0.85rem' }}
                                 />
                             </div>
+                        </div>
+
+                        <div
+                            data-testid="schedule-seating-capacity-summary"
+                            style={{
+                                fontSize: '0.8rem',
+                                color: 'rgba(255, 255, 255, 0.75)',
+                                padding: '8px 10px',
+                                borderRadius: '6px',
+                                backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                                border: '1px solid rgba(139, 92, 246, 0.25)',
+                            }}
+                        >
+                            Capacity: {totalPhysicalSeats} total seats ({fSeats}F · {bSeats}J · {peSeats}W · {eSeats}Y) · {totalAwardSeats} award seats
                         </div>
                     </div>
                 )}
