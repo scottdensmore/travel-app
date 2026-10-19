@@ -1,48 +1,14 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { formatPrice } from '@/lib/bookingPricing';
-import {
-    FlightScheduleImpactService,
-    type ScheduleOccurrenceEligibility,
-} from '@/lib/flightScheduleImpact';
-import { durationLabel, flightDeparture } from '@/lib/flightTime';
+import { FlightScheduleImpactService } from '@/lib/flightScheduleImpact';
+import { durationLabel } from '@/lib/flightTime';
 import FlightScheduleTermsForm from '@/components/ui/FlightScheduleTermsForm';
 import FlightScheduleActivationForm from '@/components/ui/FlightScheduleActivationForm';
 import FlightScheduleDeletionForm from '@/components/ui/FlightScheduleDeletionForm';
+import ScheduleOccurrencesTableClient from '@/components/admin/ScheduleOccurrencesTableClient';
 
 export const dynamic = 'force-dynamic';
-
-const ELIGIBILITY: Record<ScheduleOccurrenceEligibility, {
-    label: string;
-    detail: string;
-    color: string;
-}> = {
-    SAFE_FUTURE: {
-        label: 'Safe future',
-        detail: 'No booking history, active checkout, or operational override.',
-        color: '#4ade80',
-    },
-    HISTORICAL: {
-        label: 'Historical',
-        detail: 'Departure is at or before this preview time.',
-        color: '#d1d5db',
-    },
-    BOOKING_HISTORY: {
-        label: 'Booking history',
-        detail: 'At least one booking has included this occurrence.',
-        color: '#fbbf24',
-    },
-    ACTIVE_CHECKOUT: {
-        label: 'Active checkout',
-        detail: 'A customer currently holds at least one seat.',
-        color: '#fbbf24',
-    },
-    OPERATIONAL_OVERRIDE: {
-        label: 'Operational override',
-        detail: 'Staff has changed this occurrence from on time.',
-        color: '#fbbf24',
-    },
-};
 
 function countLabel(count: number, singular: string, plural = `${singular}s`) {
     return `${count} ${count === 1 ? singular : plural}`;
@@ -153,70 +119,7 @@ export default async function ScheduleImpactPage({
                 <h2 id="linked-occurrences-heading" style={{ color: '#c084fc', margin: '0 0 1rem', fontSize: '1.35rem' }}>
                     Linked occurrences
                 </h2>
-                <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', minWidth: '820px', borderCollapse: 'collapse', textAlign: 'left' }}>
-                        <thead>
-                            <tr style={{ borderBottom: '2px solid rgba(255, 255, 255, 0.1)' }}>
-                                <th style={headingStyle}>Occurrence</th>
-                                <th style={headingStyle}>Departure</th>
-                                <th style={headingStyle}>Current values</th>
-                                <th style={headingStyle}>Customer commitments</th>
-                                <th style={headingStyle}>Preview classification</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {impact.occurrences.map(occurrence => {
-                                const departure = flightDeparture(occurrence);
-                                const eligibility = ELIGIBILITY[occurrence.eligibility];
-                                return (
-                                    <tr key={occurrence.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.06)' }}>
-                                        <td style={cellStyle}>
-                                            <strong style={{ color: '#fff' }}>{occurrence.airline} {occurrence.flightNumber}</strong>
-                                            <div style={secondaryStyle}>{occurrence.from} → {occurrence.to}</div>
-                                        </td>
-                                        <td style={{ ...cellStyle, whiteSpace: 'nowrap' }}>
-                                            <span style={{ color: '#fff' }}>{departure.readableDate}</span>
-                                            <div style={secondaryStyle}>{departure.time} {departure.zoneLabel}</div>
-                                        </td>
-                                        <td style={cellStyle}>
-                                            <span style={{ color: '#fff' }}>
-                                                {occurrence.durationMinutes === null
-                                                    ? 'Duration unavailable'
-                                                    : durationLabel(occurrence.durationMinutes)} · {formatPrice(occurrence.priceCents)}
-                                            </span>
-                                            <div style={secondaryStyle}>Status: {occurrence.status.replaceAll('_', ' ')}</div>
-                                            {(occurrence.awardSeatsFirst !== undefined
-                                                || occurrence.awardSeatsBusiness !== undefined
-                                                || occurrence.awardSeatsPremiumEconomy !== undefined
-                                                || occurrence.awardSeatsEconomy !== undefined) && (
-                                                <div style={secondaryStyle}>
-                                                    {`Award seats: ${occurrence.awardSeatsFirst ?? 0}F · ${occurrence.awardSeatsBusiness ?? 0}J · ${occurrence.awardSeatsPremiumEconomy ?? 0}W · ${occurrence.awardSeatsEconomy ?? 0}Y`}
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td style={cellStyle}>
-                                            {occurrence.bookingIds.length > 0
-                                                ? occurrence.bookingIds.map(id => `Booking #${id}`).join(', ')
-                                                : 'No booking history'}
-                                            {occurrence.hasActiveCheckout && <div style={{ color: '#fbbf24', marginTop: '4px' }}>Active checkout</div>}
-                                        </td>
-                                        <td style={cellStyle}>
-                                            <strong style={{ color: eligibility.color }}>{eligibility.label}</strong>
-                                            <div style={secondaryStyle}>{eligibility.detail}</div>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                            {impact.occurrences.length === 0 && (
-                                <tr>
-                                    <td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.55)' }}>
-                                        No linked occurrences exist for this template.
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+                <ScheduleOccurrencesTableClient occurrences={impact.occurrences} />
             </section>
         </main>
     );
@@ -230,23 +133,3 @@ function SummaryCard({ value, label, color }: { value: string; label: string; co
         </div>
     );
 }
-
-const headingStyle = {
-    padding: '8px 12px',
-    color: '#a78bfa',
-    fontSize: '0.8rem',
-    textTransform: 'uppercase' as const,
-};
-
-const cellStyle = {
-    padding: '12px',
-    color: '#e5e7eb',
-    fontSize: '0.88rem',
-    verticalAlign: 'top' as const,
-};
-
-const secondaryStyle = {
-    color: 'rgba(255, 255, 255, 0.58)',
-    fontSize: '0.78rem',
-    marginTop: '4px',
-};

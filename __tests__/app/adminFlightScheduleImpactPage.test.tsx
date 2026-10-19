@@ -44,15 +44,31 @@ import ScheduleImpactPage from '@/app/admin/flights/schedules/[scheduleId]/page'
 
 type AnyPropsElement = React.ReactElement<Record<string, any>>;
 
+function childrenOf(node: AnyPropsElement): React.ReactNode {
+    if (node.props.children !== undefined) {
+        return node.props.children;
+    }
+    if (typeof node.type === 'function') {
+        let rendered: React.ReactNode = null;
+        const Component = node.type as (props: Record<string, any>) => React.ReactNode;
+        renderToStaticMarkup(
+            React.createElement(() => {
+                rendered = Component(node.props);
+                return null;
+            }),
+        );
+        return rendered;
+    }
+    return undefined;
+}
+
 function findElements(
     node: React.ReactNode,
     predicate: (element: AnyPropsElement) => boolean,
 ): AnyPropsElement[] {
     if (!React.isValidElement<Record<string, any>>(node)) return [];
     const matches = predicate(node) ? [node] : [];
-    const children = React.Children.toArray(
-        (node.props as { children?: React.ReactNode }).children,
-    );
+    const children = React.Children.toArray(childrenOf(node));
     return matches.concat(children.flatMap(child => findElements(child, predicate)));
 }
 
