@@ -104,6 +104,20 @@ function checkEngines(packageJson, violations) {
 }
 
 /**
+ * Check 2b: Verify Dockerfile base image uses the Node 22 LTS line when present.
+ */
+function checkDockerfile(repoRoot, violations) {
+    const dockerfilePath = path.join(repoRoot, 'Dockerfile');
+    if (!fs.existsSync(dockerfilePath)) {
+        return;
+    }
+    const dockerfileContent = fs.readFileSync(dockerfilePath, 'utf8');
+    if (!/^FROM\s+node:22(?:\b|[-.])/m.test(dockerfileContent)) {
+        violations.push('Dockerfile base image must use the Node 22 LTS line (FROM node:22) to match package.json engines.node (>=22 <23).');
+    }
+}
+
+/**
  * Check 3: Verify dev/build/test tooling stays out of dependencies.
  */
 function checkDependencySeparation(packageJson, violations) {
@@ -316,8 +330,9 @@ export function verifyRepoPolicy({ repoRoot = path.resolve(path.dirname(fileURLT
 
     // 2. Engines baseline
     checkEngines(packageJson, violations);
-    if (!violations.some((v) => v.startsWith('package.json: \'engines.node\''))) {
-        output.log('✔ package.json Node 22 engine baseline verified.');
+    checkDockerfile(repoRoot, violations);
+    if (!violations.some((v) => v.startsWith('package.json: \'engines.node\'') || v.startsWith('Dockerfile base image'))) {
+        output.log('✔ package.json and Dockerfile Node 22 baseline verified.');
     }
 
     // 3. Dependency separation
