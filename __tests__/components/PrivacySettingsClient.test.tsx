@@ -51,6 +51,17 @@ describe('PrivacySettingsClient Component', () => {
         expect(screen.getByRole('button', { name: 'Delete My Account' })).toBeEnabled();
     });
 
+    it('renders explicit included categories in the data export summary including loyalty ledger and reward redemptions', () => {
+        render(<PrivacySettingsClient {...defaultProps} />);
+
+        const categoriesList = screen.getByTestId('privacy-export-included-categories');
+        expect(categoriesList).toBeInTheDocument();
+        expect(categoriesList).toHaveTextContent('Account profile & timezone preferences');
+        expect(categoriesList).toHaveTextContent('Flight bookings & reward redemptions');
+        expect(categoriesList).toHaveTextContent('Loyalty points balance & ledger history');
+        expect(categoriesList).toHaveTextContent('City guide reviews & notification preferences');
+    });
+
     it('displays pre-flight warning and disables deletion when active flights exist', () => {
         const blockedProps = {
             ...defaultProps,

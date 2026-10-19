@@ -125,13 +125,13 @@ export default function PrivacySettingsClient({
                     </p>
                     <div className="privacy-archive-includes">
                         <strong>Your export includes:</strong>
-                        <ul>
-                            <li>User profile details and preferences</li>
-                            <li>Active and past booking history</li>
+                        <ul data-testid="privacy-export-included-categories">
+                            <li>Account profile &amp; timezone preferences</li>
+                            <li>Flight bookings &amp; reward redemptions</li>
+                            <li>Loyalty points balance &amp; ledger history</li>
+                            <li>City guide reviews &amp; notification preferences</li>
                             <li>Passenger records and seat assignments</li>
-                            <li>Travel reviews and ratings</li>
                             <li>Saved city guide favorites</li>
-                            <li>Account notifications and status points activity</li>
                         </ul>
                         <p className="privacy-security-note">
                             🔒 <em>Sensitive security credentials (passwords, salts, TOTP secret keys, and internal encryption keys) are strictly excluded.</em>
