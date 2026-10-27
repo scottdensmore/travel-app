@@ -1,4 +1,5 @@
 /** @jest-environment node */
+import { createPrismaAdapter } from '@/lib/prismaAdapter';
 
 import { randomUUID } from 'crypto';
 import { PrismaClient } from '@prisma/client';
@@ -173,7 +174,7 @@ describe('audited flight schedule duration and fare updates', () => {
         const actor = await createActor();
         const schedule = await createSchedule();
         const flight = await createFlight(schedule.id, 72);
-        const blocker = new PrismaClient();
+        const blocker = new PrismaClient({ adapter: createPrismaAdapter() });
         let releaseBlocker!: () => void;
         const release = new Promise<void>(resolve => { releaseBlocker = resolve; });
         let locked!: () => void;

@@ -1,4 +1,5 @@
 import { Prisma, PrismaClient } from '@prisma/client';
+import { createPrismaAdapter } from './prismaAdapter';
 import { isLevelEnabled, logger } from './logger';
 
 export function sanitizePrismaErrorMessage(error: unknown): void {
@@ -43,11 +44,12 @@ function extendClient(client: PrismaClient): PrismaClient {
 function createPrismaClient(): PrismaClient {
     if (isDevelopment) {
         const developmentLog: Prisma.LogLevel[] = ['query', 'warn', 'error'];
-        const client = new PrismaClient({ log: developmentLog });
+        const client = new PrismaClient({ adapter: createPrismaAdapter(), log: developmentLog });
         return extendClient(client);
     }
 
     const client = new PrismaClient({
+        adapter: createPrismaAdapter(),
         log: [
             { emit: 'event', level: 'warn' },
             { emit: 'event', level: 'error' },

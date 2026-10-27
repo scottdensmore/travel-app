@@ -1,4 +1,3 @@
-// @ts-expect-error d3-geo lacks bundled type definitions
 import { geoEqualEarth } from 'd3-geo';
 import CityGuideData from '@/lib/data/CityGuideData';
 import {

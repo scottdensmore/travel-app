@@ -94,6 +94,7 @@ Install the locked dependencies:
 
 ```bash
 npm ci
+npx prisma generate
 ```
 
 ### Full Compose stack
@@ -125,6 +126,28 @@ The seed command creates the reference data and flight inventory needed by
 search. Deployments that do not run the Compose scheduler must invoke
 `npm run inventory:generate` on their own schedule and monitor
 `npm run inventory:check`.
+
+## Prisma 7 configuration
+
+`prisma.config.ts` supplies the schema, migration directory, and explicit seed
+command. It loads `.env` for CLI commands without overriding existing environment
+variables. Generation and builds require no database; queries require
+`DATABASE_URL` and cannot fall back to ambient PostgreSQL connection settings.
+
+The client continues to use the supported `prisma-client-js` generator and
+`@prisma/client` imports, including the existing CommonJS seed and inventory
+runners. PostgreSQL connections now use `@prisma/adapter-pg`. Every independent
+client owns its pool, which is closed by `$disconnect()`.
+
+The adapter uses node-postgres pooling (10 connections by default), a 5-second
+connection/acquisition timeout, and a 5-minute idle timeout. These pool defaults
+are not identical to the old Rust engine's CPU-sized pool and separate queue
+timeout; Prisma-specific URL pool parameters are not node-postgres settings.
+TLS follows node-postgres verification rules; this migration does not disable
+certificate validation. Review connection-pool/TLS configuration before any
+production rollout. Existing schema models and SQL migrations are unchanged.
+Idle connections are unreferenced so completed CLI processes can exit naturally;
+checked-out connections remain referenced until their work completes.
 
 ## Verification
 

@@ -1,4 +1,5 @@
 /** @jest-environment node */
+import { createPrismaAdapter } from '@/lib/prismaAdapter';
 
 /**
  * Prisma's `error` log level carries customer data, because a Postgres error
@@ -362,7 +363,7 @@ describe('prisma error message sanitization', () => {
 
     it('sanitizes a thrown Prisma error object so it contains no sensitive customer data', async () => {
         const { PrismaClient, Prisma } = require('@prisma/client') as typeof import('@prisma/client');
-        const prismaClient = new PrismaClient();
+        const prismaClient = new PrismaClient({ adapter: createPrismaAdapter() });
 
         // Simulate internal Prisma engine throwing a row-leaking error on query execution
         (prismaClient as unknown as { _executeRequest: () => Promise<never> })._executeRequest = async () => {

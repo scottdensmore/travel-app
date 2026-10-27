@@ -1,7 +1,8 @@
 /** @jest-environment node */
 
 import Stripe from 'stripe';
-import { handleStripeWebhook, POST } from '@/app/api/stripe/webhook/route';
+import { POST } from '@/app/api/stripe/webhook/route';
+import { handleStripeWebhook } from '@/lib/stripeWebhookHandler';
 
 function request(body: string, signature?: string): Request {
     return new Request('http://localhost/api/stripe/webhook', {
