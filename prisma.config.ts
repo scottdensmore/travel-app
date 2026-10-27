@@ -9,7 +9,7 @@ export default defineConfig({
     schema: 'prisma/schema.prisma',
     migrations: {
         path: 'prisma/migrations',
-        seed: `ts-node --compiler-options '{"module":"CommonJS"}' prisma/seed.ts`,
+        seed: 'ts-node --project tsconfig.seed.json prisma/seed.ts',
     },
     // Generation/typechecking does not need a database. Commands that access
     // one still fail when DATABASE_URL is absent; never supply a fallback DB.
