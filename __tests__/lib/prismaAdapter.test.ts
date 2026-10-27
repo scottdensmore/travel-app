@@ -27,6 +27,7 @@ describe('Prisma PostgreSQL adapter configuration', () => {
             connectionString: process.env.DATABASE_URL,
             connectionTimeoutMillis: 5_000,
             idleTimeoutMillis: 300_000,
+            allowExitOnIdle: true,
         });
         connectPool.mockResolvedValueOnce({});
         await adapter.connect();

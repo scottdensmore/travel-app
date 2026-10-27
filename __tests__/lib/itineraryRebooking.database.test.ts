@@ -213,7 +213,11 @@ describe('immutable itinerary rebooking records', () => {
         await expect(prisma.$executeRaw`
             INSERT INTO "ItineraryLeg" ("bookingId", "sequence", "flightId")
             VALUES (${saved.booking.id}, 1, ${anotherFlight.id})
-        `).rejects.toThrow(/Key \(\"bookingId\", sequence\)=\(.+, 1\) already exists/);
+        `).rejects.toMatchObject({
+            code: 'P2010',
+            // Assert the exact invariant without depending on leaked row values.
+            message: expect.stringMatching(/Code: `23505`[\s\S]*ItineraryLeg_active_booking_sequence_key/),
+        });
     });
 
     it('requires every new leg to start active', async () => {

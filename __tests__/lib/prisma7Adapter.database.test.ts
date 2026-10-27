@@ -1,5 +1,7 @@
 /** @jest-environment node */
 import { randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { PrismaClient } from '@prisma/client';
 import { createPrismaAdapter } from '@/lib/prismaAdapter';
 import { prisma } from '@/lib/prisma';
@@ -67,4 +69,23 @@ describe('Prisma 7 PostgreSQL adapter regressions', () => {
         expect(errorLog).toHaveBeenCalled();
         expect(JSON.stringify([...errorLog.mock.calls, ...warnLog.mock.calls])).not.toContain(marker);
     });
+
+    it('lets a completed CLI process exit naturally after its last query', async () => {
+        const script = [
+            "const { PrismaClient } = require('@prisma/client');",
+            "const { createPrismaAdapter } = require('./lib/prismaAdapter');",
+            'const client = new PrismaClient({ adapter: createPrismaAdapter() });',
+            "client.user.count().then(() => console.log('query completed')).catch(() => { process.exitCode = 1; });",
+        ].join('\n');
+        // Intentionally no $disconnect/process.exit: this detects an idle pool
+        // keeping a completed process alive, without concealing active work.
+        const { stdout } = await promisify(execFile)(process.execPath, [
+            '-r', 'ts-node/register', '-e', script,
+        ], {
+            cwd: process.cwd(),
+            env: { ...process.env, TS_NODE_PROJECT: 'tsconfig.seed.json' },
+            timeout: 10_000,
+        });
+        expect(stdout).toContain('query completed');
+    }, 15_000);
 });

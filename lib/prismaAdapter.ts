@@ -7,6 +7,9 @@ class DatabaseUrlAdapter extends PrismaPg {
             // node-postgres otherwise waits indefinitely for a connection.
             connectionTimeoutMillis: 5_000,
             idleTimeoutMillis: 300_000,
+            // Idle sockets must not keep completed CLI/test processes alive.
+            // pg refs a checked-out client while a query is in progress.
+            allowExitOnIdle: true,
         });
     }
 

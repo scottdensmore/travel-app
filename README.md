@@ -146,6 +146,8 @@ timeout; Prisma-specific URL pool parameters are not node-postgres settings.
 TLS follows node-postgres verification rules; this migration does not disable
 certificate validation. Review connection-pool/TLS configuration before any
 production rollout. Existing schema models and SQL migrations are unchanged.
+Idle connections are unreferenced so completed CLI processes can exit naturally;
+checked-out connections remain referenced until their work completes.
 
 ## Verification
 
