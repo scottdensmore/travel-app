@@ -1,4 +1,5 @@
 /** @jest-environment node */
+import { createPrismaAdapter } from '@/lib/prismaAdapter';
 
 import { randomUUID } from 'crypto';
 import { PrismaClient } from '@prisma/client';
@@ -88,7 +89,7 @@ describe('flight schedule activation in PostgreSQL', () => {
 
     it('waits for an in-flight generator lock before reporting deactivation success', async () => {
         const schedule = await createSchedule();
-        const blocker = new PrismaClient();
+        const blocker = new PrismaClient({ adapter: createPrismaAdapter() });
         let releaseLock!: () => void;
         let lockHeld!: () => void;
         const release = new Promise<void>(resolve => { releaseLock = resolve; });
@@ -123,7 +124,7 @@ describe('flight schedule activation in PostgreSQL', () => {
 
     it('holds the shared generation-state lock until the product callback finishes', async () => {
         const schedule = await createSchedule();
-        const contender = new PrismaClient();
+        const contender = new PrismaClient({ adapter: createPrismaAdapter() });
         let releaseCallback!: () => void;
         let callbackEntered!: () => void;
         const release = new Promise<void>(resolve => { releaseCallback = resolve; });
@@ -160,8 +161,8 @@ describe('flight schedule activation in PostgreSQL', () => {
 
     it('holds the schedule row lock against a direct competing update', async () => {
         const schedule = await createSchedule();
-        const holderClient = new PrismaClient();
-        const contender = new PrismaClient();
+        const holderClient = new PrismaClient({ adapter: createPrismaAdapter() });
+        const contender = new PrismaClient({ adapter: createPrismaAdapter() });
         let releaseRowLock!: () => void;
         let rowLocked!: () => void;
         const release = new Promise<void>(resolve => { releaseRowLock = resolve; });
@@ -200,7 +201,7 @@ describe('flight schedule activation in PostgreSQL', () => {
 
     it('does not create from a stale active candidate after deactivation wins the lock', async () => {
         const schedule = await createSchedule();
-        const blocker = new PrismaClient();
+        const blocker = new PrismaClient({ adapter: createPrismaAdapter() });
         let releaseLock!: () => void;
         let lockHeld!: () => void;
         const release = new Promise<void>(resolve => { releaseLock = resolve; });

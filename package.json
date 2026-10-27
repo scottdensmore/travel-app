@@ -40,7 +40,8 @@
     "recharts": "^3.10.1",
     "stripe": "^23.0.1",
     "tailwind-merge": "^2.5.2",
-    "zod": "^4.6.7"
+    "zod": "^4.6.7",
+    "@prisma/adapter-pg": "^7.10.1"
   },
   "devDependencies": {
     "@babel/core": "^8.0.9",
@@ -66,10 +67,8 @@
     "tailwindcss": "^3.4.1",
     "tailwindcss-animate": "^1.0.7",
     "ts-node": "^10.9.2",
-    "typescript": "^5"
-  },
-  "prisma": {
-    "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
+    "typescript": "^5",
+    "dotenv": "17.4.2"
   },
   "overrides": {
     "react": "$react",

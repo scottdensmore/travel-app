@@ -40,6 +40,9 @@ jobs:
       - name: Run unit tests
         run: npm run test:unit
 
+      - name: Build production app
+        run: npm run build
+
   security:
     name: Security
     runs-on: ubuntu-latest
@@ -133,11 +136,11 @@ jobs:
       - name: Run migrations
         run: npx prisma migrate deploy
 
-      - name: Seed database
-        run: npx prisma db seed
-
       - name: Generate Prisma client
         run: npx prisma generate
+
+      - name: Seed database
+        run: npx prisma db seed
 
       - name: Run database tests
         run: npm run test:database

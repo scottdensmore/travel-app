@@ -1,4 +1,5 @@
 /** @jest-environment node */
+import { createPrismaAdapter } from '@/lib/prismaAdapter';
 
 import { randomUUID } from 'crypto';
 import { PrismaClient } from '@prisma/client';
@@ -236,7 +237,7 @@ describe('permanent flight schedule deletion', () => {
         );
         created.flightIds.push(flight.id);
 
-        const blocker = new PrismaClient();
+        const blocker = new PrismaClient({ adapter: createPrismaAdapter() });
         let releaseBlocker!: () => void;
         const release = new Promise<void>(resolve => { releaseBlocker = resolve; });
         let locked!: () => void;

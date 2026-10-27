@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client'
+import { createPrismaAdapter } from '../lib/prismaAdapter'
 import { randomUUID } from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import { encryptPassengerData, getPassengerDataRetentionDeadline } from '../lib/passengerDataProtection'
@@ -11,7 +12,7 @@ import FlightScheduleService from '../lib/FlightScheduleService'
 import { airportLocalInstant } from '../lib/flightTime'
 import { prisma as applicationPrisma } from '../lib/prisma'
 
-const prisma = new PrismaClient()
+const prisma = new PrismaClient({ adapter: createPrismaAdapter() })
 
 async function main() {
     console.log('Start seeding ...')

@@ -1,4 +1,5 @@
 /** @jest-environment node */
+import { createPrismaAdapter } from '@/lib/prismaAdapter';
 import { randomUUID } from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import { getServerSession } from 'next-auth';
@@ -351,7 +352,7 @@ describe('checkInLegAction', () => {
         const assignment = leg.seatAssignments[0];
         mockedSession.mockResolvedValue({ user: { id: user.id, role: 'USER' } });
 
-        const blocker = new PrismaClient();
+        const blocker = new PrismaClient({ adapter: createPrismaAdapter() });
         let announceLocked!: () => void;
         let releaseLock!: () => void;
         const locked = new Promise<void>(resolve => { announceLocked = resolve; });
