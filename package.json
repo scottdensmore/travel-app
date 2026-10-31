@@ -39,7 +39,7 @@
     "react-simple-maps": "^3.0.0",
     "recharts": "^3.10.1",
     "stripe": "^23.0.1",
-    "tailwind-merge": "^2.5.2",
+    "tailwind-merge": "^2.6.0",
     "zod": "^4.6.7",
     "@prisma/adapter-pg": "^7.10.1"
   },

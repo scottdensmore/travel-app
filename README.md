@@ -149,6 +149,13 @@ production rollout. Existing schema models and SQL migrations are unchanged.
 Idle connections are unreferenced so completed CLI processes can exit naturally;
 checked-out connections remain referenced until their work completes.
 
+## Tailwind compatibility
+
+The app uses Tailwind CSS 3. Keep `tailwind-merge` on the compatible 2.x line
+(currently 2.6.0); its 3.x releases target Tailwind CSS 4 and do not recognize
+all Tailwind 3 utility conflicts, including gradient backgrounds. Upgrade the
+Tailwind framework and merge helper together if moving to Tailwind 4.
+
 ## Verification
 
 The standard checks are:
