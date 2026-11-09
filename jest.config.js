@@ -14,7 +14,8 @@ const customJestConfig = {
     '^@/(.*)$': '<rootDir>/$1',
   },
   testPathIgnorePatterns: ['<rootDir>/.next/', '<rootDir>/node_modules/', '<rootDir>/e2e/'],
-  transformIgnorePatterns: ['node_modules/(?!(d3-.*|internmap)/)'],
+  // Table v9 and its store dependencies are ESM-only; let Next/Jest transform them.
+  transformIgnorePatterns: ['node_modules/(?!(d3-.*|internmap|@tanstack/(?:react-table|table-core|react-store|store))/)'],
 }
 
 // Matches the extensions Jest's default testMatch would pick up, so a
