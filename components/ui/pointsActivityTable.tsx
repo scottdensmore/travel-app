@@ -6,13 +6,14 @@ import { PointsActivityDisplayData } from '@/lib/types/PointsActivity'
 import {
   createColumnHelper,
   flexRender,
-  getCoreRowModel,
-  useReactTable,
+  tableFeatures,
+  useTable,
 } from '@tanstack/react-table'
 
-const columnHelper = createColumnHelper<PointsActivityDisplayData>()
+const features = tableFeatures({})
+const columnHelper = createColumnHelper<typeof features, PointsActivityDisplayData>()
 
-const columns = (accountTimeZone: string) => [
+const columns = (accountTimeZone: string) => columnHelper.columns([
   columnHelper.accessor('description', {
     header: () => "Description",
     cell: info => info.getValue()
@@ -26,7 +27,7 @@ const columns = (accountTimeZone: string) => [
     header: () => <div style={{ textAlign: 'right' }}>Points</div>,
     cell: info => <div style={{ textAlign: 'right' }}>{info.renderValue()?.toLocaleString()}</div>
   })
-]
+])
 
 const PointsActivityTable: React.FC<{
   accountTimeZone: string;
@@ -51,13 +52,11 @@ const PointsActivityTable: React.FC<{
     )
   }, [data, normalizedQuery])
 
-  // TanStack Table returns functions that React Compiler cannot memoize safely;
-  // the compiler intentionally leaves this component un-memoized.
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const table = useReactTable({
+  const tableColumns = React.useMemo(() => columns(accountTimeZone), [accountTimeZone])
+  const table = useTable({
+    features,
     data: filteredData,
-    columns: columns(accountTimeZone),
-    getCoreRowModel: getCoreRowModel(),
+    columns: tableColumns,
   })
 
   const rows = table.getRowModel().rows
@@ -112,7 +111,7 @@ const PointsActivityTable: React.FC<{
             ) : (
               rows.map(row => (
                 <tr key={row.id}>
-                  {row.getVisibleCells().map(cell => (
+                  {row.getAllCells().map(cell => (
                     <td key={cell.id}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>

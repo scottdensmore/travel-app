@@ -81,5 +81,40 @@ describe('PointsActivityTable', () => {
             .toHaveTextContent('No matching points activity found.');
         expect(screen.queryByText('Flight booking')).not.toBeInTheDocument();
     });
+
+    it('updates rows and timezone without losing the active search', () => {
+        const { rerender } = render(
+            <PointsActivityTable
+                accountTimeZone="UTC"
+                activityData={[
+                    { description: 'Flight booking', date: 'April 1', points: 1200 },
+                    { description: 'Lounge access', date: 'April 2', points: -500 },
+                ]}
+            />,
+        );
+        fireEvent.change(screen.getByRole('searchbox'), { target: { value: ' lounge ' } });
+        expect(screen.getByText('Lounge access')).toBeInTheDocument();
+        expect(screen.queryByText('Flight booking')).not.toBeInTheDocument();
+
+        rerender(
+            <PointsActivityTable
+                accountTimeZone="America/New_York"
+                activityData={[
+                    { description: 'Lounge refund', date: 'April 3', points: 500 },
+                    { description: 'Flight refund', date: 'April 4', points: -1200 },
+                ]}
+            />,
+        );
+        expect(screen.getByRole('searchbox')).toHaveValue(' lounge ');
+        expect(screen.getByRole('columnheader', {
+            name: 'Activity time (America/New_York)',
+        })).toBeInTheDocument();
+        expect(screen.getByText('Lounge refund')).toBeInTheDocument();
+        expect(screen.queryByText('Lounge access')).not.toBeInTheDocument();
+        expect(screen.queryByText('Flight refund')).not.toBeInTheDocument();
+
+        fireEvent.change(screen.getByRole('searchbox'), { target: { value: '' } });
+        expect(screen.getByText('Flight refund')).toBeInTheDocument();
+    });
 });
 

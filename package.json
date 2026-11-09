@@ -17,7 +17,7 @@
     "inventory:check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/check-inventory.ts",
     "airports:generate": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/generate-airports.ts",
     "airports:check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/generate-airports.ts --check",
-    "verify:repo": "node scripts/verify-repo-policy.mjs && node --test scripts/check-postgres-layout.mjs && node --test scripts/check-deepmerge-security.cjs"
+    "verify:repo": "node scripts/verify-repo-policy.mjs && node --test scripts/check-postgres-layout.mjs && node --test scripts/check-deepmerge-security.cjs && node --test scripts/check-jest-esm-policy.cjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
@@ -25,7 +25,7 @@
     "@radix-ui/react-icons": "^1.3.2",
     "@stripe/react-stripe-js": "^7.0.1",
     "@stripe/stripe-js": "^10.0.0",
-    "@tanstack/react-table": "^8.20.5",
+    "@tanstack/react-table": "^9.3.1",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
