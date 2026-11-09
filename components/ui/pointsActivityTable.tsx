@@ -13,7 +13,7 @@ import {
 const features = tableFeatures({})
 const columnHelper = createColumnHelper<typeof features, PointsActivityDisplayData>()
 
-const columns = (accountTimeZone: string) => [
+const columns = (accountTimeZone: string) => columnHelper.columns([
   columnHelper.accessor('description', {
     header: () => "Description",
     cell: info => info.getValue()
@@ -27,7 +27,7 @@ const columns = (accountTimeZone: string) => [
     header: () => <div style={{ textAlign: 'right' }}>Points</div>,
     cell: info => <div style={{ textAlign: 'right' }}>{info.renderValue()?.toLocaleString()}</div>
   })
-]
+])
 
 const PointsActivityTable: React.FC<{
   accountTimeZone: string;
