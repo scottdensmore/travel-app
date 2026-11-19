@@ -67,10 +67,11 @@
     "tailwindcss": "^3.4.1",
     "tailwindcss-animate": "^1.0.7",
     "ts-node": "^10.9.2",
-    "typescript": "^5",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
     "dotenv": "18.0.10",
     "@scottdensmore/minimatch-compat": "https://raw.githubusercontent.com/scottdensmore/my-first-commit/c0e4d986ea9c65a23fce7c26da3986fedd53f385/vendor/minimatch-compat-1.0.0.tgz",
-    "@scottdensmore/deepmerge-safe": "https://raw.githubusercontent.com/scottdensmore/travel-app/ef0f359212229a2943088e05fd1967c12a3ee1ff/vendor/deepmerge-safe-1.0.0.tgz"
+    "@scottdensmore/deepmerge-safe": "https://raw.githubusercontent.com/scottdensmore/travel-app/ef0f359212229a2943088e05fd1967c12a3ee1ff/vendor/deepmerge-safe-1.0.0.tgz",
+    "@typescript/native": "npm:typescript@^7.0.2"
   },
   "overrides": {
     "react": "$react",
