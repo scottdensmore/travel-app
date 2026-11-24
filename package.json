@@ -64,7 +64,7 @@
     "jest-environment-jsdom": "^30.5.2",
     "postcss": "^8.5.18",
     "prisma": "^7.10.1",
-    "tailwindcss": "^3.4.1",
+    "tailwindcss": "^4.3.5",
     "tailwindcss-animate": "^1.0.7",
     "ts-node": "^10.9.2",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
