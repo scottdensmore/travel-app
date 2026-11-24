@@ -114,6 +114,9 @@
     },
     "jest-config": {
       "deepmerge": "$@scottdensmore/deepmerge-safe"
+    },
+    "@prisma/config": {
+      "effect": "^3.22.5"
     }
   }
 }
